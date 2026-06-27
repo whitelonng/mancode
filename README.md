@@ -1,6 +1,6 @@
 # mancode
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-MVP--1%20in%20progress-yellow?style=flat-square)](./docs/10-mvp-scope.md)
 [![Platform](https://img.shields.io/badge/platform-Claude%20Code-5865F2?style=flat-square)](https://claude.ai/code)
 
@@ -311,7 +311,7 @@ Once MVP-1 releases, contributions welcome for:
 
 ## License
 
-MIT © 2026
+GNU Affero General Public License v3.0 © 2026
 
 ---
 
@@ -619,7 +619,7 @@ MVP-1 发布后，欢迎贡献：
 
 ## 许可证
 
-MIT © 2026
+GNU Affero General Public License v3.0 © 2026
 
 ---
 
