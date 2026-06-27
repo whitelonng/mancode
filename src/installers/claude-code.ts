@@ -74,14 +74,22 @@ async function installSoloSkill(skillsDir: string): Promise<void> {
   await writeFile(skillDst, SOLO_SKILL, 'utf-8');
 }
 
-interface ClaudeHook {
+interface ClaudeHookItem {
+  type: 'command';
   command: string;
+  [key: string]: unknown;
+}
+
+interface ClaudeMatcherGroup {
+  hooks: ClaudeHookItem[];
   [key: string]: unknown;
 }
 
 interface ClaudeSettings {
   hooks?: {
-    [event: string]: ClaudeHook[];
+    [event: string]: {
+      [matcherName: string]: ClaudeMatcherGroup;
+    };
   };
   skills?: {
     [name: string]: string;
@@ -92,10 +100,20 @@ interface ClaudeSettings {
 /**
  * 幂等更新 .claude/settings.json。
  *
- * docs/15-adapters.md §2.1 要求：
- * - 先过滤掉旧 mancode hook（按 command 里的 'mancode/hooks/' 标记判断）
- * - 再 push 新版本
- * - 不覆盖用户已有 hooks/skills
+ * Claude Code hooks schema (官方格式):
+ * {
+ *   "hooks": {
+ *     "SessionStart": {
+ *       "default": { "hooks": [{ "type": "command", "command": "..." }] },
+ *       "mancode": { "hooks": [{ "type": "command", "command": "..." }] }
+ *     }
+ *   }
+ * }
+ *
+ * 幂等策略：
+ * - 删除旧的 "mancode" matcher group（如有）
+ * - 创建新的 "mancode" matcher group
+ * - 不覆盖用户已有的其他 matcher groups（如 "default"）
  */
 async function updateClaudeSettings(claudeDir: string): Promise<void> {
   const settingsPath = path.join(claudeDir, 'settings.json');
@@ -109,30 +127,34 @@ async function updateClaudeSettings(claudeDir: string): Promise<void> {
     // 文件不存在或解析失败，用空对象
   }
 
-  // 幂等合并：先过滤旧 mancode hook
-  const MANCODE_TAG = '.mancode/hooks/';
-  const isMancodeHook = (h: ClaudeHook) =>
-    typeof h?.command === 'string' && h.command.includes(MANCODE_TAG);
-
+  // 初始化 hooks 对象
   settings.hooks = settings.hooks || {};
-  for (const event of [
-    'SessionStart',
-    'UserPromptSubmit',
-    'PreToolUse',
-    'PostToolUse',
-  ]) {
-    settings.hooks[event] = (settings.hooks[event] || []).filter(
-      (h) => !isMancodeHook(h),
-    );
+
+  // 为每个需要的事件创建 "mancode" matcher group
+  for (const event of ['SessionStart', 'UserPromptSubmit']) {
+    settings.hooks[event] = settings.hooks[event] || {};
+    // 删除旧的 mancode group（幂等）
+    settings.hooks[event].mancode = undefined;
   }
 
-  // Push 新 hook
-  settings.hooks.SessionStart.push({
-    command: 'bash .mancode/hooks/session-start.sh',
-  });
-  settings.hooks.UserPromptSubmit.push({
-    command: 'bash .mancode/hooks/user-prompt-submit.sh',
-  });
+  // 创建新的 mancode matcher groups
+  settings.hooks.SessionStart.mancode = {
+    hooks: [
+      {
+        type: 'command',
+        command: 'bash .mancode/hooks/session-start.sh',
+      },
+    ],
+  };
+
+  settings.hooks.UserPromptSubmit.mancode = {
+    hooks: [
+      {
+        type: 'command',
+        command: 'bash .mancode/hooks/user-prompt-submit.sh',
+      },
+    ],
+  };
 
   // 添加 solo skill
   settings.skills = settings.skills || {};

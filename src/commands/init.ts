@@ -86,6 +86,20 @@ export async function init(
     return EXIT_NOT_A_PROJECT_DIR;
   }
 
+  // 2.1 校验是项目目录（至少有 .git 或 package.json）
+  const isGitRepo = await pathExists(path.join(rootDir, '.git'));
+  const hasPackageJson = await pathExists(path.join(rootDir, 'package.json'));
+
+  if (!isGitRepo && !hasPackageJson) {
+    console.error(`✗  Not a project directory: ${rootDir}`);
+    console.error('   (No .git or package.json found)');
+    console.error('');
+    console.error(
+      '   Run mancode init in a git repository or Node.js project.',
+    );
+    return EXIT_NOT_A_PROJECT_DIR;
+  }
+
   try {
     // 3. 检测系统依赖
     console.log('✓  检测系统依赖...');

@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,6 +23,8 @@ describe('mancode init', () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'mancode-init-'));
+    // 创建 .git 使其成为项目目录（所有测试都需要）
+    await mkdir(path.join(dir, '.git'), { recursive: true });
   });
 
   afterEach(async () => {
@@ -65,12 +74,13 @@ describe('mancode init', () => {
     const logContent = await readFile(logPath, 'utf-8');
     expect(logContent).toBe('');
 
-    // 验证 .claude/settings.json
+    // 验证 .claude/settings.json（新 schema: matcher group）
     const settingsPath = path.join(dir, '.claude', 'settings.json');
     const settingsRaw = await readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsRaw);
-    expect(settings.hooks.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].command).toContain(
+    expect(settings.hooks.SessionStart.mancode.hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart.mancode.hooks[0].type).toBe('command');
+    expect(settings.hooks.SessionStart.mancode.hooks[0].command).toContain(
       '.mancode/hooks/session-start.sh',
     );
     expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
@@ -114,6 +124,7 @@ describe('mancode init', () => {
   });
 
   it('returns EXIT_OK when .mancode dir pre-exists but no state.json', async () => {
+    // .git 已在 beforeEach 创建
     await mkdir(path.join(dir, '.mancode'), { recursive: true });
     const code = await init(dir);
     expect(code).toBe(EXIT_OK);
@@ -128,13 +139,25 @@ describe('mancode init', () => {
     expect(code).toBe(EXIT_NOT_A_PROJECT_DIR);
   });
 
+  it('returns EXIT_NOT_A_PROJECT_DIR for empty directory (no .git or package.json)', async () => {
+    // tmpdir 是空目录，没有 .git 或 package.json
+    const emptyDir = await mkdtemp(path.join(tmpdir(), 'mancode-empty-'));
+    const code = await init(emptyDir);
+    expect(code).toBe(EXIT_NOT_A_PROJECT_DIR);
+    await rm(emptyDir, { recursive: true, force: true });
+  });
+
   it('merges hooks idempotently into existing .claude/settings.json', async () => {
-    // 用户已有 .claude/settings.json
+    // 用户已有 .claude/settings.json（使用新 schema）
     const claudeDir = path.join(dir, '.claude');
     await mkdir(claudeDir, { recursive: true });
     const existingSettings = {
       hooks: {
-        SessionStart: [{ command: 'echo "user hook"' }],
+        SessionStart: {
+          default: {
+            hooks: [{ type: 'command', command: 'echo "user hook"' }],
+          },
+        },
       },
       skills: {
         custom: '.claude/skills/custom.md',
@@ -153,10 +176,17 @@ describe('mancode init', () => {
     const settingsRaw = await readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsRaw);
 
-    // 用户 hook 应该保留
-    expect(settings.hooks.SessionStart).toHaveLength(2);
-    expect(settings.hooks.SessionStart[0].command).toBe('echo "user hook"');
-    expect(settings.hooks.SessionStart[1].command).toContain('.mancode/hooks/');
+    // 用户的 "default" matcher group 应该保留
+    expect(settings.hooks.SessionStart.default.hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart.default.hooks[0].command).toBe(
+      'echo "user hook"',
+    );
+
+    // mancode matcher group 应该存在
+    expect(settings.hooks.SessionStart.mancode.hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart.mancode.hooks[0].command).toContain(
+      '.mancode/hooks/',
+    );
 
     // 用户 skill 应该保留
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');

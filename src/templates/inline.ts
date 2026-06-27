@@ -33,36 +33,10 @@ MODE=$(json_get "currentMode" "$STATE_FILE")
 TECH_STACK=$(json_get "techStack" "$STATE_FILE")
 UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
 
-contributors=$(git shortlog -sn --all 2>/dev/null | wc -l | xargs || echo 0)
-has_remote=$( { git remote -v 2>/dev/null || true; } | grep -E "github\\.com|gitlab\\.com|bitbucket\\.org" | wc -l | xargs || echo 0)
-recent_active=$(git shortlog -sn --since='30 days ago' 2>/dev/null | wc -l | xargs || echo 0)
-
-contributors="\${contributors//[!0-9]/}"
-has_remote="\${has_remote//[!0-9]/}"
-recent_active="\${recent_active//[!0-9]/}"
-contributors="\${contributors:-0}"
-has_remote="\${has_remote:-0}"
-recent_active="\${recent_active:-0}"
-
-TEAM_MODE_AUTO="false"
-if [ "$contributors" -gt 1 ] && [ "$has_remote" -gt 0 ] && [ "$recent_active" -gt 1 ]; then
-    TEAM_MODE_AUTO="true"
-fi
-
 echo "mancode_mode: \${MODE:-solo}"
 echo "project_type: $TECH_STACK"
 echo "ui_library: $UI_LIBRARY"
-echo "team_mode_auto: $TEAM_MODE_AUTO"
 echo ""
-
-if [ "$TEAM_MODE_AUTO" = "true" ]; then
-    echo "## mancode · team mode detected"
-    echo ""
-    echo "检测到多人协作项目（$contributors 个贡献者，最近 30 天有 $recent_active 人活跃）。"
-    echo ""
-    echo "建议使用 \\\`/manteam\\\` 模式以启用团队记忆和协调功能。"
-    echo ""
-fi
 
 echo "## mancode · \${MODE:-solo} mode"
 echo ""
@@ -119,7 +93,15 @@ if [ "$MODE" = "solo" ] || [ -z "$MODE" ]; then
     echo ""
 fi
 
-USER_PROMPT="$1"
+# Claude Code 通过 stdin 传入 JSON: {"prompt": "...", ...}
+# 读取 prompt 字段
+if [ "$HAS_JQ" = "1" ]; then
+    USER_PROMPT=$(jq -r '.prompt // ""' 2>/dev/null || echo "")
+else
+    # 无 jq fallback: 读取整个输入作为 prompt
+    USER_PROMPT=$(cat)
+fi
+
 if echo "$USER_PROMPT" | grep -qiE "button|component|page|style|ui|design|layout|css|tailwind"; then
     AESTHETICS_FILE="$PROJECT_ROOT/.mancode/aesthetics/style-tokens.json"
     if [ -f "$AESTHETICS_FILE" ]; then
