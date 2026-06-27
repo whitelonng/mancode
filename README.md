@@ -1,7 +1,7 @@
 # mancode
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-MVP--1%20in%20progress-yellow?style=flat-square)](./docs/10-mvp-scope.md)
+[![Status](https://img.shields.io/badge/status-MVP--1%20in%20progress-yellow?style=flat-square)]()
 [![Platform](https://img.shields.io/badge/platform-Claude%20Code-5865F2?style=flat-square)](https://claude.ai/code)
 
 **AI coding agent harness. Five modes: practice to playoffs. Stop your AI from over-engineering. Elbow out bloat. Score clean.**
@@ -102,7 +102,7 @@ mancode automatically detects your project:
 - **Tech stack**: React/Vue/Svelte, TypeScript, Tailwind/styled-components
 - **UI library**: shadcn/ui, MUI, Ant Design, headlessUI
 - **Design tokens**: colors, fonts, spacing, components
-- **Team status**: >1 active contributor → auto-suggests `/manteam`
+- **Team status** *(MVP-2)*: >1 active contributor → auto-suggests `/manteam`
 
 ### Aesthetic Matching
 When you work on frontend:
@@ -272,8 +272,6 @@ mancode/
 | **MVP-3** | 2-3 weeks | Multi-platform (Cursor, Codex, Copilot) |
 | **Public Release** | After MVP-3 | npm stable release + marketplace + docs + demos |
 
-See [docs/10-mvp-scope.md](./docs/10-mvp-scope.md) for details.
-
 ---
 
 ## FAQ
@@ -426,7 +424,7 @@ mancode 自动检测你的项目：
 - **技术栈**：React/Vue/Svelte、TypeScript、Tailwind/styled-components
 - **UI 库**：shadcn/ui、MUI、Ant Design、headlessUI
 - **设计 token**：颜色、字体、间距、组件
-- **团队状态**：>1 活跃贡献者 → 自动建议 `/manteam`
+- **团队状态** *（MVP-2）*：>1 活跃贡献者 → 自动建议 `/manteam`
 
 ### 审美匹配
 前端任务时：
@@ -595,8 +593,6 @@ mancode/
 | **MVP-2** | 3-4 周 | /man8、/man、/manteam、/manps 模式 + 教练组 |
 | **MVP-3** | 2-3 周 | 多平台（Cursor、Codex、Copilot）|
 | **公开发布** | MVP-3 后 | npm 稳定版 + 市场 + 文档 + 演示 |
-
-详见 [docs/10-mvp-scope.md](./docs/10-mvp-scope.md)。
 
 ---
 
