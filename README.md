@@ -45,6 +45,20 @@ solo           # Default: quiet, efficient, respects your style
                # Old TODOs, unused deps, stale patterns
 ```
 
+## The System
+
+| What | Tagline | 中文 |
+|---|---|---|
+| **solo** | Practice day. Save your gas. | 日常训练，省着点打。 |
+| **/man8** | 4 AM. Already warmed up. | 凌晨 4 点，已经热身完了。 |
+| **/man** | Playoffs. Every possession counts. | 季后赛，每球必争。 |
+| **/manteam** | Five on the floor, one mind. | 上场五人，一条心。 |
+| **/manps** | Knock the rust off before tip-off. | 开季前，先把锈磨掉。 |
+| **Aesthetics** | Soft side. | 柔情瞬间。 |
+| **Coaching Staff** | Your agent's crew. | 你的教练组。 |
+
+*Honoring the professional spirit. / 致敬职业精神。*
+
 **Key difference**: The default is light. Heavy modes are opt-in when you need rigor.
 
 ---
@@ -352,6 +366,20 @@ solo           # 默认：安静、高效、尊重你的风格
 /manps         # 季前赛：项目健康检查 + 清理
                # 旧 TODO、未使用依赖、过时模式
 ```
+
+## 系统概览
+
+| 内容 | 口号 | English |
+|---|---|---|
+| **solo** | 日常训练，省着点打。 | Practice day. Save your gas. |
+| **/man8** | 凌晨 4 点，已经热身完了。 | 4 AM. Already warmed up. |
+| **/man** | 季后赛，每球必争。 | Playoffs. Every possession counts. |
+| **/manteam** | 上场五人，一条心。 | Five on the floor, one mind. |
+| **/manps** | 开季前，先把锈磨掉。 | Knock the rust off before tip-off. |
+| **审美** | 柔情瞬间。 | Soft side. |
+| **教练组** | 你的教练组。 | Your agent's crew. |
+
+*致敬职业精神。 / Honoring the professional spirit.*
 
 **核心区别**：默认轻量。需要严格流程时按需选择。
 
