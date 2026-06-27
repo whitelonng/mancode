@@ -29,13 +29,18 @@ if [ ! -f "$STATE_FILE" ]; then
     exit 0
 fi
 
+# 清洗函数：去换行、限制长度（防止脏数据污染 prompt）
+sanitize() {
+    printf '%s' "\$1" | tr '\\n\\r' ' ' | head -c 200
+}
+
 MODE=$(json_get "currentMode" "$STATE_FILE")
 TECH_STACK=$(json_get "techStack" "$STATE_FILE")
 UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
 
 echo "mancode_mode: \${MODE:-solo}"
-echo "project_type: $TECH_STACK"
-echo "ui_library: $UI_LIBRARY"
+echo "project_type: $(sanitize "$TECH_STACK")"
+echo "ui_library: $(sanitize "$UI_LIBRARY")"
 echo ""
 
 echo "## mancode · \${MODE:-solo} mode"
@@ -48,7 +53,7 @@ echo "   - 检查 src/ 是否已有类似实现"
 echo "   - 复用现有组件、函数、样式"
 echo ""
 echo "2. **应用项目审美 token**（前端任务）"
-echo "   - UI library: $UI_LIBRARY"
+echo "   - UI library: $(sanitize "$UI_LIBRARY")"
 echo "   - 使用项目已有的设计 token"
 echo ""
 echo "3. **最小改动**"

@@ -33,7 +33,14 @@ export interface ProjectType {
  * - jq 可选（无则警告，hook 走 grep/sed fallback）
  */
 export async function detectSystemDeps(): Promise<SystemDeps> {
+  const ALLOWED_COMMANDS = new Set(['bash', 'git', 'jq', 'node']);
+
   const check = async (cmd: string): Promise<boolean> => {
+    // 白名单验证（防御性编程）
+    if (!ALLOWED_COMMANDS.has(cmd)) {
+      throw new Error(`Unsupported dependency check: ${cmd}`);
+    }
+
     try {
       await execAsync(`command -v ${cmd}`, { shell: '/bin/bash' });
       return true;
@@ -67,14 +74,17 @@ export async function detectProjectType(
 
   try {
     await access(pkgPath);
-  } catch {
-    // 无 package.json → 不是 Node 项目，返回空
-    return {
-      hasFrontend: false,
-      hasBackend: false,
-      techStack: [],
-      uiLibrary: null,
-    };
+  } catch (err) {
+    // 只在文件不存在时返回空，其他错误（权限、磁盘错误等）抛出
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        hasFrontend: false,
+        hasBackend: false,
+        techStack: [],
+        uiLibrary: null,
+      };
+    }
+    throw err;
   }
 
   const raw = await readFile(pkgPath, 'utf-8');
