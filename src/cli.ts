@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { program } from 'commander';
 import { init } from './commands/init.js';
+import { install } from './commands/install.js';
+import { refreshStyle } from './commands/refresh-style.js';
+import { status } from './commands/status.js';
 import { VERSION } from './version.js';
 
 program
@@ -23,6 +26,35 @@ program
     process.exitCode = code;
   });
 
-// TODO(MVP-1): add `status`, `install` subcommands
+program
+  .command('install [platform]')
+  .description('Install platform adapter (MVP-1: claude-code only)')
+  .option('--force', 'Reinstall even if already installed')
+  .option('--minimal', 'Minimal install (MVP-2)')
+  .action(async (platform, options) => {
+    const code = await install(
+      process.cwd(),
+      platform ?? 'claude-code',
+      options,
+    );
+    process.exitCode = code;
+  });
+
+program
+  .command('status')
+  .description('Show current mancode project status')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    const code = await status(process.cwd(), options);
+    process.exitCode = code;
+  });
+
+program
+  .command('refresh-style')
+  .description('Rescan project design tokens and update style-tokens.json')
+  .action(async () => {
+    const code = await refreshStyle(process.cwd());
+    process.exitCode = code;
+  });
 
 program.parse();

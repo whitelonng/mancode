@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { installClaudeCode } from '../installers/claude-code.js';
 import { detectProjectType, detectSystemDeps } from '../system/detect.js';
+import { scanAesthetics } from '../system/scan-aesthetics.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -159,7 +160,41 @@ export async function init(
       uiLibrary: project.uiLibrary,
     });
 
-    // 7. 完成
+    // 7. 审美扫描（前端项目才扫）
+    let styleLine = '  .mancode/aesthetics/        # style-tokens.json (空)';
+    if (project.hasFrontend) {
+      console.log('✓  扫描审美 token...');
+      const tokens = await scanAesthetics(rootDir, project.uiLibrary);
+      const tokensPath = path.join(
+        mancodeDir,
+        'aesthetics',
+        'style-tokens.json',
+      );
+      await fs.writeFile(
+        tokensPath,
+        `${JSON.stringify(tokens, null, 2)}\n`,
+        'utf-8',
+      );
+
+      if (tokens.matchLevel === 'high') {
+        const colorCount = Object.keys(tokens.colors).length;
+        const fontCount = Object.keys(tokens.fonts).length;
+        console.log(
+          `   ${colorCount} colors, ${fontCount} fonts (match: high)`,
+        );
+        styleLine = `  .mancode/aesthetics/        # style-tokens.json (${colorCount} colors)`;
+      } else if (tokens.matchLevel === 'low') {
+        console.log('   Tailwind detected, no config found (match: low)');
+        styleLine =
+          '  .mancode/aesthetics/        # style-tokens.json (low match)';
+      } else {
+        console.log('   No design tokens found (match: none)');
+        styleLine =
+          '  .mancode/aesthetics/        # style-tokens.json (no tokens)';
+      }
+    }
+
+    // 8. 完成
     console.log('');
     console.log('✓  mancode initialized.');
     console.log('');
@@ -169,7 +204,7 @@ export async function init(
     console.log(
       '  .mancode/hooks/             # SessionStart + UserPromptSubmit',
     );
-    console.log('  .mancode/aesthetics/        # style-tokens.json (空)');
+    console.log(styleLine);
     console.log('  .mancode/logs/              # hooks.log');
     console.log('  .claude/settings.json       # hook 注册');
     console.log('  .claude/skills/mancode-solo.md');

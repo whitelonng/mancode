@@ -19,15 +19,18 @@ export const DEFAULT_CONFIG = {
 };
 
 /**
- * 空的 style-tokens.json（MVP-1 不扫描，留空）。
+ * 空的 style-tokens.json（非前端项目或 matchLevel=none 时用）。
  *
- * 审美扫描在后续 step 补齐，见 docs/13-scanning.md。
+ * 结构对齐 src/system/scan-aesthetics.ts 的 AestheticsTokens。
+ * 审美扫描见 docs/13-scanning.md。
  */
 export const EMPTY_STYLE_TOKENS = {
+  version: '1.0',
+  lastScanned: null,
   colors: {},
   fonts: {},
-  spacing: {},
-  components: [],
   uiLibrary: null,
-  scannedAt: null,
+  darkMode: null,
+  matchLevel: 'none',
+  sourceFiles: [],
 };
