@@ -81,16 +81,13 @@ interface ClaudeHookItem {
 }
 
 interface ClaudeMatcherGroup {
+  matcher?: string;
   hooks: ClaudeHookItem[];
   [key: string]: unknown;
 }
 
 interface ClaudeSettings {
-  hooks?: {
-    [event: string]: {
-      [matcherName: string]: ClaudeMatcherGroup;
-    };
-  };
+  hooks?: Record<string, unknown>;
   skills?: {
     [name: string]: string;
   };
@@ -103,17 +100,17 @@ interface ClaudeSettings {
  * Claude Code hooks schema (官方格式):
  * {
  *   "hooks": {
- *     "SessionStart": {
- *       "default": { "hooks": [{ "type": "command", "command": "..." }] },
- *       "mancode": { "hooks": [{ "type": "command", "command": "..." }] }
- *     }
+ *     "SessionStart": [
+ *       { "hooks": [{ "type": "command", "command": "..." }] }
+ *     ]
  *   }
  * }
  *
  * 幂等策略：
- * - 删除旧的 "mancode" matcher group（如有）
- * - 创建新的 "mancode" matcher group
- * - 不覆盖用户已有的其他 matcher groups（如 "default"）
+ * - 兼容旧版数组 hook item、错误对象 map、官方 matcher group 数组
+ * - 过滤旧 mancode hook（按 command 里的 .mancode/hooks/ 判断）
+ * - 追加新的 mancode matcher group
+ * - 不覆盖用户已有 matcher groups
  */
 async function updateClaudeSettings(claudeDir: string): Promise<void> {
   const settingsPath = path.join(claudeDir, 'settings.json');
@@ -130,32 +127,14 @@ async function updateClaudeSettings(claudeDir: string): Promise<void> {
   // 初始化 hooks 对象
   settings.hooks = settings.hooks || {};
 
-  // 为每个需要的事件创建 "mancode" matcher group
-  for (const event of ['SessionStart', 'UserPromptSubmit']) {
-    settings.hooks[event] = settings.hooks[event] || {};
-    // 删除旧的 mancode group（幂等）
-    // biome-ignore lint/performance/noDelete: Must use delete to remove property from JSON output
-    delete settings.hooks[event].mancode;
-  }
-
-  // 创建新的 mancode matcher groups
-  settings.hooks.SessionStart.mancode = {
-    hooks: [
-      {
-        type: 'command',
-        command: 'bash .mancode/hooks/session-start.sh',
-      },
-    ],
-  };
-
-  settings.hooks.UserPromptSubmit.mancode = {
-    hooks: [
-      {
-        type: 'command',
-        command: 'bash .mancode/hooks/user-prompt-submit.sh',
-      },
-    ],
-  };
+  settings.hooks.SessionStart = [
+    ...normalizeHookGroups(settings.hooks.SessionStart),
+    createCommandGroup('bash .mancode/hooks/session-start.sh'),
+  ];
+  settings.hooks.UserPromptSubmit = [
+    ...normalizeHookGroups(settings.hooks.UserPromptSubmit),
+    createCommandGroup('bash .mancode/hooks/user-prompt-submit.sh'),
+  ];
 
   // 添加 solo skill
   settings.skills = settings.skills || {};
@@ -164,4 +143,78 @@ async function updateClaudeSettings(claudeDir: string): Promise<void> {
   // 写回
   const content = `${JSON.stringify(settings, null, 2)}\n`;
   await writeFile(settingsPath, content, 'utf-8');
+}
+
+function createCommandGroup(command: string): ClaudeMatcherGroup {
+  return {
+    hooks: [
+      {
+        type: 'command',
+        command,
+      },
+    ],
+  };
+}
+
+function normalizeHookGroups(value: unknown): ClaudeMatcherGroup[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => {
+      const group = normalizeMatcherGroup(entry);
+      if (group) return [group];
+
+      const hook = normalizeHookItem(entry);
+      if (hook && !isMancodeHook(hook)) return [{ hooks: [hook] }];
+
+      return [];
+    });
+  }
+
+  if (isRecord(value)) {
+    return Object.values(value).flatMap((entry) => {
+      const group = normalizeMatcherGroup(entry);
+      return group ? [group] : [];
+    });
+  }
+
+  return [];
+}
+
+function normalizeMatcherGroup(value: unknown): ClaudeMatcherGroup | null {
+  if (!isRecord(value) || !Array.isArray(value.hooks)) {
+    return null;
+  }
+
+  const hooks = value.hooks
+    .map(normalizeHookItem)
+    .filter((hook): hook is ClaudeHookItem => hook !== null)
+    .filter((hook) => !isMancodeHook(hook));
+
+  if (hooks.length === 0) {
+    return null;
+  }
+
+  return {
+    ...value,
+    hooks,
+  } as ClaudeMatcherGroup;
+}
+
+function normalizeHookItem(value: unknown): ClaudeHookItem | null {
+  if (!isRecord(value) || typeof value.command !== 'string') {
+    return null;
+  }
+
+  return {
+    ...value,
+    type: 'command',
+    command: value.command,
+  } as ClaudeHookItem;
+}
+
+function isMancodeHook(hook: ClaudeHookItem): boolean {
+  return hook.command.includes('.mancode/hooks/');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

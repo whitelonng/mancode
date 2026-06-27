@@ -74,14 +74,19 @@ describe('mancode init', () => {
     const logContent = await readFile(logPath, 'utf-8');
     expect(logContent).toBe('');
 
-    // 验证 .claude/settings.json（新 schema: matcher group）
+    // 验证 .claude/settings.json（官方 schema: matcher group 数组）
     const settingsPath = path.join(dir, '.claude', 'settings.json');
     const settingsRaw = await readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsRaw);
-    expect(settings.hooks.SessionStart.mancode.hooks).toHaveLength(1);
-    expect(settings.hooks.SessionStart.mancode.hooks[0].type).toBe('command');
-    expect(settings.hooks.SessionStart.mancode.hooks[0].command).toContain(
+    expect(settings.hooks.SessionStart).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].type).toBe('command');
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain(
       '.mancode/hooks/session-start.sh',
+    );
+    expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain(
+      '.mancode/hooks/user-prompt-submit.sh',
     );
     expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
 
@@ -148,16 +153,16 @@ describe('mancode init', () => {
   });
 
   it('merges hooks idempotently into existing .claude/settings.json', async () => {
-    // 用户已有 .claude/settings.json（使用新 schema）
+    // 用户已有 .claude/settings.json（使用官方 matcher group 数组 schema）
     const claudeDir = path.join(dir, '.claude');
     await mkdir(claudeDir, { recursive: true });
     const existingSettings = {
       hooks: {
-        SessionStart: {
-          default: {
+        SessionStart: [
+          {
             hooks: [{ type: 'command', command: 'echo "user hook"' }],
           },
-        },
+        ],
       },
       skills: {
         custom: '.claude/skills/custom.md',
@@ -176,20 +181,89 @@ describe('mancode init', () => {
     const settingsRaw = await readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsRaw);
 
-    // 用户的 "default" matcher group 应该保留
-    expect(settings.hooks.SessionStart.default.hooks).toHaveLength(1);
-    expect(settings.hooks.SessionStart.default.hooks[0].command).toBe(
+    // 用户 matcher group 应该保留
+    expect(settings.hooks.SessionStart).toHaveLength(2);
+    expect(settings.hooks.SessionStart[0].hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(
       'echo "user hook"',
     );
 
     // mancode matcher group 应该存在
-    expect(settings.hooks.SessionStart.mancode.hooks).toHaveLength(1);
-    expect(settings.hooks.SessionStart.mancode.hooks[0].command).toContain(
+    expect(settings.hooks.SessionStart[1].hooks).toHaveLength(1);
+    expect(settings.hooks.SessionStart[1].hooks[0].command).toContain(
       '.mancode/hooks/',
     );
 
     // 用户 skill 应该保留
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
     expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
+  });
+
+  it('migrates legacy hook settings and removes old mancode hooks on --force', async () => {
+    const claudeDir = path.join(dir, '.claude');
+    const mancodeDir = path.join(dir, '.mancode');
+    await mkdir(claudeDir, { recursive: true });
+    await mkdir(mancodeDir, { recursive: true });
+    await writeFile(
+      path.join(mancodeDir, 'state.json'),
+      JSON.stringify(
+        {
+          version: VERSION,
+          currentMode: 'solo',
+          platform: 'claude-code',
+          initializedAt: new Date().toISOString(),
+          techStack: 'Unknown',
+          uiLibrary: 'None',
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const existingSettings = {
+      hooks: {
+        SessionStart: [
+          { command: 'bash .mancode/hooks/session-start.sh' },
+          { command: 'echo "legacy user hook"' },
+        ],
+        UserPromptSubmit: {
+          mancode: {
+            hooks: [{ type: 'command', command: 'bash .mancode/hooks/old.sh' }],
+          },
+        },
+      },
+      skills: {
+        custom: '.claude/skills/custom.md',
+      },
+    };
+    await writeFile(
+      path.join(claudeDir, 'settings.json'),
+      JSON.stringify(existingSettings, null, 2),
+      'utf-8',
+    );
+
+    const code = await init(dir, { force: true });
+
+    const settingsRaw = await readFile(
+      path.join(claudeDir, 'settings.json'),
+      'utf-8',
+    );
+    const settings = JSON.parse(settingsRaw);
+
+    expect(code).toBe(EXIT_OK);
+    expect(Array.isArray(settings.hooks.SessionStart)).toBe(true);
+    expect(settings.hooks.SessionStart).toHaveLength(2);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(
+      'echo "legacy user hook"',
+    );
+    expect(settings.hooks.SessionStart[1].hooks[0].command).toBe(
+      'bash .mancode/hooks/session-start.sh',
+    );
+    expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toBe(
+      'bash .mancode/hooks/user-prompt-submit.sh',
+    );
+    expect(settings.skills.custom).toBe('.claude/skills/custom.md');
   });
 });
