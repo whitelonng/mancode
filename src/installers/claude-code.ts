@@ -134,7 +134,8 @@ async function updateClaudeSettings(claudeDir: string): Promise<void> {
   for (const event of ['SessionStart', 'UserPromptSubmit']) {
     settings.hooks[event] = settings.hooks[event] || {};
     // 删除旧的 mancode group（幂等）
-    settings.hooks[event].mancode = undefined;
+    // biome-ignore lint/performance/noDelete: Must use delete to remove property from JSON output
+    delete settings.hooks[event].mancode;
   }
 
   // 创建新的 mancode matcher groups

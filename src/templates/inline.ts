@@ -79,7 +79,8 @@ json_get() {
 
 MODE=$(json_get "currentMode" "$STATE_FILE")
 
-if [ "$MODE" = "solo" ] || [ -z "$MODE" ]; then
+# 只在 solo 模式下输出 3 问
+if [ "$MODE" = "solo" ]; then
     echo "## 动手前，先想三个问题："
     echo ""
     echo "1. **为什么做？**"
@@ -94,12 +95,22 @@ if [ "$MODE" = "solo" ] || [ -z "$MODE" ]; then
 fi
 
 # Claude Code 通过 stdin 传入 JSON: {"prompt": "...", ...}
-# 读取 prompt 字段
+# 先读取完整输入，再解析
+INPUT=$(cat)
+
 if [ "$HAS_JQ" = "1" ]; then
-    USER_PROMPT=$(jq -r '.prompt // ""' 2>/dev/null || echo "")
+    USER_PROMPT=$(echo "$INPUT" | jq -r '.prompt // ""' 2>/dev/null)
+    # jq 失败或返回空，fallback 到原始输入
+    if [ -z "$USER_PROMPT" ]; then
+        USER_PROMPT="$INPUT"
+    fi
 else
-    # 无 jq fallback: 读取整个输入作为 prompt
-    USER_PROMPT=$(cat)
+    # 无 jq: 使用 sed 提取 JSON 中的 prompt 字段
+    USER_PROMPT=$(echo "$INPUT" | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+    # sed 失败，fallback 到原始输入
+    if [ -z "$USER_PROMPT" ]; then
+        USER_PROMPT="$INPUT"
+    fi
 fi
 
 if echo "$USER_PROMPT" | grep -qiE "button|component|page|style|ui|design|layout|css|tailwind"; then
