@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
 import {
@@ -40,10 +40,14 @@ export async function installClaudeCode(
   // 3. 写入 hooks
   await installHooks(path.join(mancodeDir, 'hooks'));
 
-  // 4. 写入 style-tokens.json（空，MVP-1 不扫描）
+  // 4. 写入 style-tokens.json（仅在不存在时写入空模板）
+  // installClaudeCode 是骨架安装器，审美扫描是 init/refresh-style 的职责。
+  // 跳过已存在的文件避免 install --force 擦除已扫描的 token。
   const tokensPath = path.join(mancodeDir, 'aesthetics', 'style-tokens.json');
-  const tokensContent = `${JSON.stringify(EMPTY_STYLE_TOKENS, null, 2)}\n`;
-  await writeFile(tokensPath, tokensContent, 'utf-8');
+  if (!(await pathExists(tokensPath))) {
+    const tokensContent = `${JSON.stringify(EMPTY_STYLE_TOKENS, null, 2)}\n`;
+    await writeFile(tokensPath, tokensContent, 'utf-8');
+  }
 
   // 5. 创建空 hooks.log
   const logPath = path.join(mancodeDir, 'logs', 'hooks.log');
@@ -217,4 +221,13 @@ function isMancodeHook(hook: ClaudeHookItem): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
