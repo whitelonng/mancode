@@ -5,9 +5,19 @@
 # 内部开发文档（包含借鉴对象名，不公开）
 DEVELOPMENT.md
 LEGAL.md
+*.backup
 
 # 设计文档（内部参考，不公开）
 docs/
+
+# Claude Code 开发配置（本地测试用）
+.claude/
+
+# 技术实现文档（包含借鉴对象名和完整实现细节，不公开）
+docs/12-lifecycle.md
+docs/13-scanning.md
+docs/14-orchestration.md
+docs/15-adapters.md
 
 # Node.js
 node_modules/
