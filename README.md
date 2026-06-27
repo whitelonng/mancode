@@ -6,9 +6,19 @@
 
 **AI coding agent harness. One tool, five modes. Professional-grade output.**
 
+**AI 编码代理调度框架。一个工具，五种模式。专业级输出。**
+
 Default: quiet and efficient. When needed: hardcore, methodical, team-aware. Like a pro team — practice mode stays light; playoffs mode brings full rigor.
 
+默认：安静高效。需要时：硬核、系统化、团队感知。像职业球队——日常训练轻装上阵，季后赛全力以赴。
+
 ---
+
+[English](#english) | [中文](#中文)
+
+---
+
+## English
 
 ## The Problem
 
@@ -312,3 +322,311 @@ Built with inspiration from modern AI agent workflows. Special focus on:
 - **Project context awareness** (not generic one-size-fits-all)
 - **Team coordination** (multi-dev memory)
 - **Mode flexibility** (light default, opt-in rigor)
+
+---
+---
+
+# 中文
+
+## 问题
+
+当前的 AI 代理：
+- 🔴 **默认过度设计** — 你只想加个退出按钮，它给你整个 auth 中间件
+- 🔴 **忘记项目风格** — 你整个项目用 shadcn/ui，它输出 MUI 代码
+- 🔴 **没有团队记忆** — 两个开发者同一代码库，代理不知道彼此的改动
+- 🔴 **只有一个速度** — "修个错字"和"重构认证流程"得到同样的仪式感
+
+## 解决方案
+
+**mancode** 提供 **五种模式** 应对不同任务：
+
+```
+solo           # 默认：安静、高效、尊重你的风格
+               # 修复、功能、重构 — 无多余仪式
+
+/man8          # 凌晨四点热身：先调研 + 计划再动手
+               # 需要先研究时使用
+
+/man           # 季后赛：完整 8 步流程 + 双重代码审查
+               # 关键功能、生产变更
+
+/manteam       # 团队赛：多开发者记忆 + 协调
+               # 检测到 >1 活跃贡献者时自动建议
+
+/manps         # 季前赛：项目健康检查 + 清理
+               # 旧 TODO、未使用依赖、过时模式
+```
+
+**核心区别**：默认轻量。需要严格流程时按需选择。
+
+---
+
+## 前 / 后对比
+
+### 之前（原生 Claude Code）
+```
+你："给设置页面加个退出按钮"
+
+Claude：创建新组件，新样式，新颜色变量，
+        不复用已有的 Button 组件，猜颜色，
+        输出 80 行代码。
+```
+
+### 之后（mancode solo 模式）
+```
+你："给设置页面加个退出按钮"
+
+man：扫描项目 → 找到 Button 组件 → 使用 primary 颜色
+     → 输出 3 行：
+
+     <Button variant="default" onClick={handleLogout}>
+       退出登录
+     </Button>
+```
+
+**为什么？** mancode：
+1. **扫描你项目的现有模式**（组件、颜色、UI 库）
+2. **应用 YAGNI**（已存在 → 复用 → 标准库 → 最小实现）
+3. **记住团队上下文**（提交、贡献者、风格决策）
+
+---
+
+## 工作原理
+
+### 自动检测
+mancode 自动检测你的项目：
+- **技术栈**：React/Vue/Svelte、TypeScript、Tailwind/styled-components
+- **UI 库**：shadcn/ui、MUI、Ant Design、headlessUI
+- **设计 token**：颜色、字体、间距、组件
+- **团队状态**：>1 活跃贡献者 → 自动建议 `/manteam`
+
+### 审美匹配
+前端任务时：
+```javascript
+// mancode 扫描：
+tailwind.config.js  → primary: #3b82f6, font: Inter
+package.json        → 已安装 shadcn/ui
+src/components/     → 已有 Button、Input、Card 组件
+
+// 然后用你的风格输出代码：
+<Button className="bg-primary">  // 使用 #3b82f6，不是通用的 "blue"
+```
+
+### 团队记忆（Codex 平台）
+使用 Codex CLI 时，mancode 写入 `AGENTS.md`：
+```markdown
+<!-- 用户的长期记忆 -->
+## 经验教训
+2026-06-20: 不要用 lodash.merge 处理 React state
+
+## 架构决策  
+2026-06-15: 选择 shadcn/ui 而非 MUI（团队熟悉度）
+
+<!-- mancode 管理区 -->
+<!-- mancode:start -->
+## mancode 配置
+[自动生成，请勿编辑]
+<!-- mancode:end -->
+```
+
+**边界**：mancode 只修改受控区块。你的笔记保持安全。
+
+---
+
+## 安装
+
+**状态**：MVP-1 开发中。Alpha 版本即将发布。
+
+```bash
+# Alpha 版本发布后：
+npm install -g mancode@alpha
+
+# 在项目中初始化
+cd your-project
+mancode init
+
+# 或作为 Claude Code 插件（市场即将上线）
+# /plugin install mancode
+```
+
+**平台支持**：
+- ✅ **Claude Code**（MVP-1 目标）
+- 🔄 Cursor、Codex CLI、GitHub Copilot（MVP-3）
+- 📋 Windsurf、Cline、Roo Code（计划中）
+
+---
+
+## 命令
+
+### MVP-1（当前开发）
+
+```bash
+mancode init              # 初始化 .mancode/ 目录 + solo 模式
+mancode status            # 显示项目状态、模式、最近活动
+mancode version           # 显示版本
+```
+
+**在 Claude Code 中**（初始化后）：
+```
+# 正常工作即可 — solo 模式自动生效
+"加个退出按钮"
+"修复登录 bug"  
+"重构认证模块"
+```
+
+### MVP-2 即将推出
+
+```bash
+/man8                     # 凌晨四点热身：侦查 + 计划
+/man                      # 季后赛：完整 8 步流程
+/manps                    # 季前赛：健康检查
+/manteam                  # 团队模式（或自动检测）
+/mansolo                  # 回到 solo 模式
+```
+
+---
+
+## 模式说明
+
+| 模式 | 何时使用 | 做什么 |
+|---|---|---|
+| **solo**（默认） | 日常工作 | 安静、高效、风格感知。复用现有代码。 |
+| **/man8**（MVP-2） | 需要研究 | Scout 调查代码库 → 草拟计划 → 等待批准 |
+| **/man**（MVP-2） | 关键功能 | 完整 8 步：侦查 → 计划 → 编码 → 审查（进攻）→ 修复 → 审查（防守）→ 修复 → 合并 |
+| **/manteam**（MVP-2） | 团队项目 | 多开发者记忆、提交模板、协调 |
+| **/manps**（MVP-2） | 项目清理 | 扫描技术债、未使用依赖、过时 TODO、缺失测试 |
+
+**哲学**：默认轻量。需要时选择严格。
+
+---
+
+## 设计原则
+
+### 1. YAGNI 阶梯
+写新代码前，检查：
+1. 代码库已存在？→ **复用它**
+2. 标准库能做？→ **用它**
+3. 平台原生特性？→ **用它**
+4. 已安装依赖？→ **用它**
+5. 一行能解决？→ **一行**
+6. 只有以上都不行：写最小实现
+
+### 2. 审美一致性
+- 扫描项目现有设计 token（颜色、字体、间距）
+- 复用组件，不重新创建
+- 匹配命名规范
+- 应用项目风格指南
+
+### 3. 团队记忆
+- 跟踪贡献者、提交、决策
+- 避免冲突变更
+- 向所有代理提供项目上下文
+
+### 4. 外科手术式修改
+- 只改任务要求的部分
+- 不"顺便重构"
+- 不格式化无关代码
+- 保持 diff 最小
+
+---
+
+## 架构
+
+```
+mancode/
+├── CLI                         # npm 包 + 平台适配器
+│   ├── mancode init           # 设置 .mancode/ 目录
+│   ├── mancode status         # 显示当前状态
+│   └── mancode install <platform>
+│
+├── Hooks（Claude Code）        # 自动注入上下文
+│   ├── session-start          # 读取 .mancode/state.json
+│   └── user-prompt-submit     # 问：为什么？已有什么？最少改多少？
+│
+├── Skills（5 种模式）           # SKILL.md 文件
+│   ├── solo.md                # 默认模式
+│   ├── man8.md                # 凌晨四点热身
+│   ├── man.md                 # 季后赛（8 步）
+│   ├── manteam.md             # 团队模式
+│   └── manps.md               # 季前赛清理
+│
+└── Agents（教练组）             # 多代理编排
+    ├── Scout                  # 调查代码库
+    ├── Head Coach             # 主决策者
+    ├── Film Analyst (Offense) # 代码质量审查
+    └── Film Analyst (Defense) # 安全/边界审查
+```
+
+---
+
+## 路线图
+
+| 阶段 | 时间线 | 重点 |
+|---|---|---|
+| **MVP-1** | 2-3 周 | solo 模式 + 审美 + hooks（仅 Claude Code）|
+| **MVP-2** | 3-4 周 | /man8、/man、/manteam、/manps 模式 + 教练组 |
+| **MVP-3** | 2-3 周 | 多平台（Cursor、Codex、Copilot）|
+| **公开发布** | MVP-3 后 | npm 稳定版 + 市场 + 文档 + 演示 |
+
+详见 [docs/10-mvp-scope.md](./docs/10-mvp-scope.md)。
+
+---
+
+## 常见问题
+
+### 为什么不直接用 Cursor/Claude 等？
+
+mancode 是**调度框架**，不是替代品。它与你的代理协同工作，添加：
+- 项目感知上下文（风格、模式、团队）
+- 模式切换（轻量 vs 严格）
+- YAGNI 强制执行
+- 团队记忆
+
+理解为：代理之上的工作流层。
+
+### 它能用在我的代理上吗？
+
+MVP-1 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHub Copilot。
+
+架构基于适配器 — 其他平台可以添加。
+
+### 会改变我现有的工作流吗？
+
+**solo 模式**（默认）是无感的。它增强代理输出但不添加仪式感。
+
+重型模式（`/man`、`/manteam`）是需要结构时按需选择。
+
+### 隐私/安全如何？
+
+- **本地优先**：所有扫描保存在 `.mancode/` 目录
+- **无遥测**：mancode 不上报数据
+- **Git 忽略**：`.mancode/` 默认在 .gitignore（可选提交）
+- **受控边界**：AGENTS.md 有明确管理区（仅 Codex）
+
+---
+
+## 贡献
+
+**状态**：设计阶段完成，实施开始。
+
+MVP-1 发布后，欢迎贡献：
+- 平台适配器（Windsurf、Cline 等）
+- 额外模式
+- 其他 UI 库的审美扫描
+- 语言支持（目前专注于 JS/TS 生态）
+
+---
+
+## 许可证
+
+MIT © 2026
+
+---
+
+## 致谢
+
+从现代 AI 代理工作流中汲取灵感。特别专注于：
+- **极简主义而非极繁主义**（YAGNI 为核心）
+- **项目上下文感知**（非通用一刀切）
+- **团队协调**（多开发者记忆）
+- **模式灵活性**（默认轻量，按需严格）
