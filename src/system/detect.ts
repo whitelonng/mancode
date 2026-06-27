@@ -109,11 +109,30 @@ export async function detectProjectType(
 
   // UI 库
   let uiLibrary: string | null = null;
-  if (deps.some((d) => d.includes('shadcn') || d === '@radix-ui/react-icons'))
+
+  // shadcn/ui 检测：Radix 依赖 + src/components/ui 目录
+  const hasRadix = deps.some((d) => d.startsWith('@radix-ui/'));
+  const uiDir = path.join(projectRoot, 'src', 'components', 'ui');
+  const hasUiDir = await pathExists(uiDir);
+
+  if (hasRadix && hasUiDir) {
     uiLibrary = 'shadcn/ui';
-  else if (deps.includes('@mui/material')) uiLibrary = 'MUI';
-  else if (deps.includes('antd')) uiLibrary = 'Ant Design';
-  else if (deps.includes('@headlessui/react')) uiLibrary = 'headlessUI';
+  } else if (deps.includes('@mui/material')) {
+    uiLibrary = 'MUI';
+  } else if (deps.includes('antd')) {
+    uiLibrary = 'Ant Design';
+  } else if (deps.includes('@headlessui/react')) {
+    uiLibrary = 'headlessUI';
+  }
 
   return { hasFrontend, hasBackend, techStack, uiLibrary };
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
