@@ -1,0 +1,62 @@
+{
+  "name": "mancode",
+  "version": "0.1.0-alpha.1",
+  "description": "AI coding agent harness. Five modes: practice to playoffs.",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "author": "",
+  "homepage": "https://github.com/whitelonng/mancode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whitelonng/mancode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/whitelonng/mancode/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "ai-agent",
+    "harness",
+    "cli",
+    "yagni",
+    "coding-agent",
+    "cursor",
+    "codex"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "mancode": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check src tests",
+    "format": "biome format --write src tests",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.6"
+  }
+}

@@ -24,7 +24,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+# 注意：package-lock.json 必须提交，保证依赖版本一致
 yarn.lock
 pnpm-lock.yaml
 
