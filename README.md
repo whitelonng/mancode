@@ -4,13 +4,9 @@
 [![Status](https://img.shields.io/badge/status-MVP--1%20in%20progress-yellow?style=flat-square)](./docs/10-mvp-scope.md)
 [![Platform](https://img.shields.io/badge/platform-Claude%20Code-5865F2?style=flat-square)](https://claude.ai/code)
 
-**AI coding agent harness. One tool, five modes. Professional-grade output.**
+**AI coding agent harness. Five modes: practice to playoffs. Stop your AI from over-engineering. Elbow out bloat. Score clean.**
 
-**AI 编码代理调度框架。一个工具，五种模式。专业级输出。**
-
-Default: quiet and efficient. When needed: hardcore, methodical, team-aware. Like a pro team — practice mode stays light; playoffs mode brings full rigor.
-
-默认：安静高效。需要时：硬核、系统化、团队感知。像职业球队——日常训练轻装上阵，季后赛全力以赴。
+**AI 编码代理调度框架。五种模式：训练到季后赛。别让你的 AI 过度设计一切。像个 man 一样，肘开冗余，干净得分。**
 
 ---
 
