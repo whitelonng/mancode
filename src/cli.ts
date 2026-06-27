@@ -13,8 +13,13 @@ program
   .description(
     'Initialize mancode in the current project (MVP-1: Claude Code only)',
   )
-  .action(async () => {
-    const code = await init();
+  .option('--force', 'Reinstall even if already initialized')
+  .option('--yes', 'Skip all confirmations (CI mode)')
+  .option('--team', 'Force enable team mode (MVP-2)')
+  .option('--no-team', 'Force disable team mode (MVP-2)')
+  .option('--style <name>', 'Specify aesthetic style (MVP-2)')
+  .action(async (options) => {
+    const code = await init(process.cwd(), options);
     process.exitCode = code;
   });
 

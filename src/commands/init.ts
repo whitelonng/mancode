@@ -1,26 +1,18 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { installClaudeCode } from '../installers/claude-code.js';
+import { detectProjectType, detectSystemDeps } from '../system/detect.js';
 import { VERSION } from '../version.js';
 
 /**
  * 退出码契约 — 见 docs/08-cli-spec.md §2.5
- *
- * 注意：`1 = already initialized` 是文档定义的语义，不是通用错误。
- * shell 脚本可以靠 `[ "$?" -eq 1 ]` 判断需要 `--force`。
- *
- * 完整退出码（设计目标）：
- *   0 = 成功
- *   1 = 已初始化过（用 --force 重装）
- *   2 = 不是项目目录（找不到 package.json / .git）
- *   3 = 用户取消
- *   4 = 网络错误
- *
- * 当前实现仅覆盖 0 / 1 / 2；3、4 等 Step 2 完整版补齐。
  */
 export const EXIT_OK = 0;
 export const EXIT_ALREADY_INITIALIZED = 1;
 export const EXIT_NOT_A_PROJECT_DIR = 2;
+export const EXIT_USER_CANCEL = 3;
+export const EXIT_NETWORK_ERROR = 4;
 
 /**
  * mancode state 文件的内容。
@@ -29,49 +21,109 @@ export const EXIT_NOT_A_PROJECT_DIR = 2;
  * 的 SessionStart hook 读取逻辑（json_get "currentMode"）保持一致。
  */
 export interface MancodeState {
-  /** mancode 写入此文件时的版本号 */
   version: string;
-  /** 当前激活的模式。MVP-1 只有 solo */
   currentMode: 'solo';
-  /** 当前适配的平台。MVP-1 只有 claude-code */
   platform: 'claude-code';
-  /** ISO 8601 字符串，记录首次初始化时间 */
   initializedAt: string;
+  techStack: string;
+  uiLibrary: string;
+}
+
+export interface InitOptions {
+  /** --force: 覆盖已有配置 */
+  force?: boolean;
+  /** --yes: 跳过所有确认（CI 用）*/
+  yes?: boolean;
+  /** --team / --no-team: 强制启用/禁用团队模式（MVP-2）*/
+  team?: boolean;
+  /** --style <name>: 指定审美风格（MVP-2）*/
+  style?: string;
 }
 
 /**
- * `mancode init` 命令（最小版本）。
+ * `mancode init` 命令（完整版）。
  *
- * 行为：
- * - 在 rootDir/.mancode/ 下创建 state.json
- * - 已存在 state.json 时返回 EXIT_ALREADY_INITIALIZED（不报错，但语义上"非成功"）
- * - rootDir 不存在或不可写时返回 EXIT_NOT_A_PROJECT_DIR
+ * 职责（docs/08-cli-spec.md §2.1-2.4）：
+ * 1. 检测系统依赖（bash/git/jq）
+ * 2. 检测项目类型（frontend/backend/tech stack）
+ * 3. 创建 8 个文件/目录（.mancode/ + .claude/）
+ * 4. 支持 --force / --yes / --team / --style 参数
  *
- * TODO(Step 2 完整版)：补齐 8 个文件 + 交互流程 + options
- *   详见 docs/08-cli-spec.md §2.2-2.4
+ * MVP-1 实现范围：
+ * - ✅ 系统依赖检测 + 警告
+ * - ✅ 项目类型检测（基于 package.json）
+ * - ✅ 创建 8 个文件
+ * - ✅ --force / --yes 参数
+ * - ⏸️ --team / --style（MVP-2）
+ * - ⏸️ 交互式确认（MVP-1 暂用 --yes 默认静默安装）
  *
  * @param rootDir 目标项目根目录，默认 process.cwd()
+ * @param options CLI 参数
  * @returns 退出码（见上方常量）
  */
-export async function init(rootDir: string = process.cwd()): Promise<number> {
+export async function init(
+  rootDir: string = process.cwd(),
+  options: InitOptions = {},
+): Promise<number> {
   const mancodeDir = path.join(rootDir, '.mancode');
   const stateFile = path.join(mancodeDir, 'state.json');
 
-  // 幂等：已初始化 → 退出码 1（提示用 --force，但 --force 在 Step 2 完整版才实现）
+  // 1. 幂等检查
   if (await pathExists(stateFile)) {
-    console.log('ℹ️  mancode already initialized.');
-    console.log(`   ${stateFile}`);
-    console.log('   Run `mancode init --force` to reinstall (coming soon).');
-    return EXIT_ALREADY_INITIALIZED;
+    if (!options.force) {
+      console.log('ℹ️  mancode already initialized.');
+      console.log(`   ${stateFile}`);
+      console.log('   Run `mancode init --force` to reinstall.');
+      return EXIT_ALREADY_INITIALIZED;
+    }
+    // --force: 继续，覆盖已有配置
+    console.log('⚠️  Reinstalling with --force...');
   }
 
-  // 校验目标目录存在且可写
+  // 2. 校验目标目录存在
   if (!(await pathExists(rootDir))) {
     console.error(`✗  Target directory does not exist: ${rootDir}`);
     return EXIT_NOT_A_PROJECT_DIR;
   }
 
   try {
+    // 3. 检测系统依赖
+    console.log('✓  检测系统依赖...');
+    const deps = await detectSystemDeps();
+
+    if (!deps.bash || !deps.git) {
+      console.error('✗  Missing required dependencies:');
+      if (!deps.bash) console.error('   - bash (required)');
+      if (!deps.git) console.error('   - git (required)');
+      console.error('');
+      console.error('   Install them and try again.');
+      return EXIT_NOT_A_PROJECT_DIR;
+    }
+
+    if (!deps.jq) {
+      console.log(
+        '⚠️  jq not found (optional). Hooks will use grep/sed fallback (slightly slower).',
+      );
+    } else {
+      console.log('   bash ✓ git ✓ jq ✓');
+    }
+
+    // 4. 检测项目类型
+    console.log('✓  检测项目类型...');
+    const project = await detectProjectType(rootDir);
+    const techStackStr = project.techStack.join(' + ') || 'Unknown';
+    const uiLibraryStr = project.uiLibrary || 'None';
+
+    if (project.techStack.length > 0) {
+      console.log(`   ${techStackStr}`);
+      if (project.uiLibrary) {
+        console.log(`   UI: ${uiLibraryStr}`);
+      }
+    } else {
+      console.log('   (No package.json found, skipping tech detection)');
+    }
+
+    // 5. 创建 .mancode/state.json
     await fs.mkdir(mancodeDir, { recursive: true });
 
     const state: MancodeState = {
@@ -79,21 +131,43 @@ export async function init(rootDir: string = process.cwd()): Promise<number> {
       currentMode: 'solo',
       platform: 'claude-code',
       initializedAt: new Date().toISOString(),
+      techStack: techStackStr,
+      uiLibrary: uiLibraryStr,
     };
 
-    const content = `${JSON.stringify(state, null, 2)}\n`;
-    await fs.writeFile(stateFile, content, 'utf-8');
+    const stateContent = `${JSON.stringify(state, null, 2)}\n`;
+    await fs.writeFile(stateFile, stateContent, 'utf-8');
 
+    // 6. 安装 Claude Code 适配（8 个文件）
+    console.log('✓  安装 Claude Code 适配...');
+    await installClaudeCode(rootDir, {
+      techStack: project.techStack,
+      uiLibrary: project.uiLibrary,
+    });
+
+    // 7. 完成
+    console.log('');
     console.log('✓  mancode initialized.');
-    console.log(`   ${stateFile}`);
+    console.log('');
+    console.log('Created:');
+    console.log('  .mancode/state.json         # 项目状态');
+    console.log('  .mancode/config.json        # 配置');
+    console.log(
+      '  .mancode/hooks/             # SessionStart + UserPromptSubmit',
+    );
+    console.log('  .mancode/aesthetics/        # style-tokens.json (空)');
+    console.log('  .mancode/logs/              # hooks.log');
+    console.log('  .claude/settings.json       # hook 注册');
+    console.log('  .claude/skills/mancode-solo.md');
     console.log('');
     console.log('Next:');
-    console.log('  mancode status    # Show project state');
+    console.log('  mancode status              # Show project state');
+    console.log('  (Restart Claude Code to load hooks)');
+
     return EXIT_OK;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`✗  mancode init failed: ${msg}`);
-    // ENOTDIR / EACCES / EROFS 等通常意味着目标不是可写目录
     return EXIT_NOT_A_PROJECT_DIR;
   }
 }
