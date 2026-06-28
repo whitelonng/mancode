@@ -31,6 +31,8 @@ export async function installClaudeCode(
   await mkdir(path.join(mancodeDir, 'hooks'), { recursive: true });
   await mkdir(path.join(mancodeDir, 'aesthetics'), { recursive: true });
   await mkdir(path.join(mancodeDir, 'logs'), { recursive: true });
+  // MVP-2: workflow 目录存放 /man8 /man 的任务进度
+  await mkdir(path.join(mancodeDir, 'workflows'), { recursive: true });
 
   // 2. 写入 config.json
   const configPath = path.join(mancodeDir, 'config.json');

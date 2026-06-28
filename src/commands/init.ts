@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { installClaudeCode } from '../installers/claude-code.js';
+import { detectTeamStatus } from '../system/detect-team.js';
 import { detectProjectType, detectSystemDeps } from '../system/detect.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
 import { VERSION } from '../version.js';
@@ -20,14 +21,25 @@ export const EXIT_NETWORK_ERROR = 4;
  *
  * 字段命名采用 camelCase（JSON 输出），与 docs/12-lifecycle.md
  * 的 SessionStart hook 读取逻辑（json_get "currentMode"）保持一致。
+ *
+ * MVP-2 新增字段（currentTask / currentWorkflowMode / skippedSteps /
+ * teamModeAutoDetected / contributors）支持 /man /man8 流程和团队检测。
  */
 export interface MancodeState {
   version: string;
-  currentMode: 'solo';
+  currentMode: 'solo' | 'man8' | 'man';
+  lastMode: 'solo' | 'man8' | 'man';
   platform: 'claude-code';
   initializedAt: string;
   techStack: string;
   uiLibrary: string;
+  // MVP-2: workflow 状态
+  currentTask: string | null;
+  currentWorkflowMode: 'man8' | 'man' | null;
+  skippedSteps: string[];
+  // MVP-2: 团队检测
+  teamModeAutoDetected: boolean;
+  contributors: number;
 }
 
 export interface InitOptions {
@@ -138,16 +150,30 @@ export async function init(
       console.log('   (No package.json found, skipping tech detection)');
     }
 
+    // 4.1 检测多人协作（MVP-2）
+    const team = await detectTeamStatus(rootDir);
+    if (team.isTeam) {
+      console.log(
+        `   team: ${team.contributors} contributors (auto-team available in MVP-3)`,
+      );
+    }
+
     // 5. 创建 .mancode/state.json
     await fs.mkdir(mancodeDir, { recursive: true });
 
     const state: MancodeState = {
       version: VERSION,
       currentMode: 'solo',
+      lastMode: 'solo',
       platform: 'claude-code',
       initializedAt: new Date().toISOString(),
       techStack: techStackStr,
       uiLibrary: uiLibraryStr,
+      currentTask: null,
+      currentWorkflowMode: null,
+      skippedSteps: [],
+      teamModeAutoDetected: team.isTeam,
+      contributors: team.contributors,
     };
 
     const stateContent = `${JSON.stringify(state, null, 2)}\n`;
