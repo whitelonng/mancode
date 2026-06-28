@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import {
   type StatusResult,
   status,
 } from '../src/commands/status.js';
+import { createWorkflow } from '../src/system/workflow.js';
 import { VERSION } from '../src/version.js';
 
 describe('mancode status', () => {
@@ -51,6 +52,11 @@ describe('mancode status', () => {
     expect(result.hooks.sessionStart).toBe(true);
     expect(result.hooks.userPromptSubmit).toBe(true);
     expect(result.hooks.registered).toBe(true);
+    expect(result.hookInjection.cap).toBe(800);
+    expect(typeof result.hookInjection.tokens).toBe('number');
+    expect(result.team.isTeam).toBe(false);
+    expect(result.team.contributors).toBeGreaterThanOrEqual(1);
+    expect(result.currentWorkflow).toBeNull();
   });
 
   it('project name comes from package.json name field', async () => {
@@ -116,12 +122,40 @@ describe('mancode status', () => {
     expect(output).toContain('solo (default)');
     expect(output).toContain('Style:');
     expect(output).toContain('Initialized:');
+    expect(output).toContain('Team:');
+    expect(output).toContain('Hook injection:');
     expect(output).toContain('Installed platforms:');
     expect(output).toContain('Claude Code');
     expect(output).toContain('Hooks:');
     expect(output).toContain('session-start.sh');
     expect(output).toContain('user-prompt-submit.sh');
     expect(output).toContain('settings.json');
+  });
+
+  it('shows active workflow in JSON and text output', async () => {
+    await silentInit(dir);
+    const workflowMeta = await createWorkflow(
+      dir,
+      'active workflow task',
+      'man',
+    );
+    const statePath = path.join(dir, '.mancode', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+    state.currentMode = 'man';
+    state.currentTask = workflowMeta.taskId;
+    state.currentWorkflowMode = 'man';
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+
+    const jsonLogs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(jsonLogs.join('\n'));
+    expect(result.currentWorkflow?.taskId).toBe(workflowMeta.taskId);
+    expect(result.currentWorkflow?.currentStep).toBe(1);
+
+    const textLogs = await captureLog(() => status(dir));
+    const output = textLogs.join('\n');
+    expect(output).toContain('Workflow:');
+    expect(output).toContain(workflowMeta.taskId);
+    expect(output).toContain('Step 1/8');
   });
 
   it('returns EXIT_CORRUPT_STATE for malformed state.json', async () => {

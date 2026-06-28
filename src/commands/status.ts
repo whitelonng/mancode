@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { detectTeamStatus } from '../system/detect-team.js';
+import { readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -24,6 +26,10 @@ export interface StatusState {
   initializedAt: string;
   techStack: string;
   uiLibrary: string;
+  currentTask?: string | null;
+  currentWorkflowMode?: string | null;
+  teamModeAutoDetected?: boolean;
+  contributors?: number;
 }
 
 export interface StatusOptions {
@@ -48,6 +54,20 @@ export interface StatusResult {
     tokens: number;
     cap: number;
   };
+  team: {
+    isTeam: boolean;
+    contributors: number;
+    recentActive: number;
+    hasRemote: boolean;
+    autoDetected: boolean;
+  };
+  currentWorkflow: {
+    taskId: string;
+    task: string;
+    mode: 'man8' | 'man';
+    currentStep: number;
+    status: string;
+  } | null;
 }
 
 /**
@@ -94,12 +114,21 @@ export async function status(
     return EXIT_CORRUPT_STATE;
   }
 
-  // 3. 并行收集：项目名、hooks 状态、已安装平台、hook 注入预算
-  const [project, hooksStatus, platforms, hookInjection] = await Promise.all([
+  // 3. 并行收集：项目名、hooks 状态、已安装平台、hook 注入预算、团队状态、当前 workflow
+  const [
+    project,
+    hooksStatus,
+    platforms,
+    hookInjection,
+    teamStatus,
+    currentWorkflow,
+  ] = await Promise.all([
     getProjectName(rootDir),
     checkHooks(rootDir),
     getInstalledPlatforms(rootDir, state.platform),
     estimateHookInjection(rootDir),
+    detectTeamStatus(rootDir),
+    getCurrentWorkflow(rootDir, state.currentTask ?? null),
   ]);
 
   const result: StatusResult = {
@@ -112,6 +141,11 @@ export async function status(
     initializedAt: state.initializedAt || 'unknown',
     hooks: hooksStatus,
     hookInjection,
+    team: {
+      ...teamStatus,
+      autoDetected: state.teamModeAutoDetected ?? teamStatus.isTeam,
+    },
+    currentWorkflow,
   };
 
   // 4. 输出
@@ -122,6 +156,22 @@ export async function status(
   }
 
   return EXIT_OK;
+}
+
+async function getCurrentWorkflow(
+  rootDir: string,
+  taskId: string | null,
+): Promise<StatusResult['currentWorkflow']> {
+  if (!taskId) return null;
+  const meta = await readWorkflow(rootDir, taskId);
+  if (!meta) return null;
+  return {
+    taskId: meta.taskId,
+    task: meta.task,
+    mode: meta.mode,
+    currentStep: meta.currentStep,
+    status: meta.status,
+  };
 }
 
 /**
@@ -306,6 +356,15 @@ function printText(r: StatusResult): void {
   console.log(`Mode:        ${modeLabel}`);
   console.log(`Style:       ${r.uiLibrary}`);
   console.log(`Initialized: ${r.initializedAt}`);
+  console.log(
+    `Team:        ${r.team.isTeam ? `detected (${r.team.contributors} contributors)` : 'solo'}`,
+  );
+  if (r.currentWorkflow) {
+    const stepMax = r.currentWorkflow.mode === 'man' ? 8 : 3;
+    console.log(
+      `Workflow:    ${r.currentWorkflow.taskId} (Step ${r.currentWorkflow.currentStep}/${stepMax}, ${r.currentWorkflow.status})`,
+    );
+  }
   console.log('');
   console.log('Installed platforms:');
   for (const p of r.platforms) {

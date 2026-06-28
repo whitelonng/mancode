@@ -4,6 +4,7 @@ import { init } from './commands/init.js';
 import { install } from './commands/install.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
+import { workflow } from './commands/workflow.js';
 import { VERSION } from './version.js';
 
 program
@@ -46,6 +47,22 @@ program
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     const code = await status(process.cwd(), options);
+    process.exitCode = code;
+  });
+
+program
+  .command('workflow <subcommand> [arg]')
+  .description('Manage mancode workflows')
+  .option('--dry-run', 'Preview clean without deleting')
+  .option('--older-than <duration>', 'Clean workflows older than (e.g. 30d)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (subcommand, arg, options) => {
+    const code = await workflow(
+      process.cwd(),
+      subcommand,
+      arg ? [arg] : [],
+      options,
+    );
     process.exitCode = code;
   });
 
