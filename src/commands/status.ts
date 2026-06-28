@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -42,6 +43,10 @@ export interface StatusResult {
     sessionStart: boolean;
     userPromptSubmit: boolean;
     registered: boolean;
+  };
+  hookInjection: {
+    tokens: number;
+    cap: number;
   };
 }
 
@@ -89,11 +94,12 @@ export async function status(
     return EXIT_CORRUPT_STATE;
   }
 
-  // 3. 并行收集：项目名、hooks 状态、已安装平台
-  const [project, hooksStatus, platforms] = await Promise.all([
+  // 3. 并行收集：项目名、hooks 状态、已安装平台、hook 注入预算
+  const [project, hooksStatus, platforms, hookInjection] = await Promise.all([
     getProjectName(rootDir),
     checkHooks(rootDir),
     getInstalledPlatforms(rootDir, state.platform),
+    estimateHookInjection(rootDir),
   ]);
 
   const result: StatusResult = {
@@ -105,6 +111,7 @@ export async function status(
     uiLibrary: state.uiLibrary || 'None',
     initializedAt: state.initializedAt || 'unknown',
     hooks: hooksStatus,
+    hookInjection,
   };
 
   // 4. 输出
@@ -235,6 +242,58 @@ function hasHookCommand(value: unknown, needle: string): boolean {
 }
 
 /**
+ * 估算 UserPromptSubmit hook 的注入大小。
+ *
+ * 用一个前端相关 fake prompt 触发审美 token 摘要，stdout bytes / 4 ≈ tokens。
+ */
+async function estimateHookInjection(
+  rootDir: string,
+): Promise<{ tokens: number; cap: number }> {
+  const hookPath = path.join(
+    rootDir,
+    '.mancode',
+    'hooks',
+    'user-prompt-submit.sh',
+  );
+  if (!(await pathExists(hookPath))) {
+    return { tokens: 0, cap: 800 };
+  }
+
+  try {
+    const output = await runHookEstimate(rootDir, hookPath);
+    return {
+      tokens: Math.ceil(Buffer.byteLength(output, 'utf-8') / 4),
+      cap: 800,
+    };
+  } catch {
+    return { tokens: 0, cap: 800 };
+  }
+}
+
+function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('bash', [hookPath], {
+      cwd: rootDir,
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+
+    let stdout = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`hook exited with ${code}`));
+    });
+    child.stdin.end(
+      JSON.stringify({ prompt: 'design a button component with tailwind css' }),
+    );
+  });
+}
+
+/**
  * 文本格式输出（默认），字段命名对齐 docs/08-cli-spec.md §4.3。
  */
 function printText(r: StatusResult): void {
@@ -260,6 +319,9 @@ function printText(r: StatusResult): void {
   );
   console.log(
     `  ${r.hooks.registered ? '✓' : '✗'} registered in .claude/settings.json`,
+  );
+  console.log(
+    `  Hook injection: ~${r.hookInjection.tokens} tokens (cap ${r.hookInjection.cap})`,
   );
   console.log('');
 }

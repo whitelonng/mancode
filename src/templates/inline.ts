@@ -12,7 +12,9 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
 
 HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
+if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
+    command -v jq >/dev/null 2>&1 && HAS_JQ=1
+fi
 
 json_get() {
     local key="$1"
@@ -70,7 +72,9 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
 
 HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
+if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
+    command -v jq >/dev/null 2>&1 && HAS_JQ=1
+fi
 
 json_get() {
     local key="$1"
@@ -121,10 +125,28 @@ fi
 if echo "$USER_PROMPT" | grep -qiE "button|component|page|style|ui|design|layout|css|tailwind"; then
     AESTHETICS_FILE="$PROJECT_ROOT/.mancode/aesthetics/style-tokens.json"
     if [ -f "$AESTHETICS_FILE" ]; then
-        echo "## 审美 token 已加载"
-        echo ""
-        echo "使用项目已有的设计 token（颜色、字体、组件）。"
-        echo ""
+        if [ "$HAS_JQ" = "1" ]; then
+            # 提取摘要 + cap（docs/07 §4.1：colors ≤8, fonts ≤4, 总 < 800 tokens）
+            UI=$(jq -r '.uiLibrary // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            DARK=$(jq -r '.darkMode // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            MATCH=$(jq -r '.matchLevel // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            COLORS=$(jq -r '.colors | to_entries | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            FONTS=$(jq -r '.fonts | to_entries | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+
+            echo "## 审美 token 摘要"
+            [ -n "$UI" ] && echo "UI: $UI"
+            [ -n "$DARK" ] && echo "Dark: $DARK"
+            [ -n "$MATCH" ] && echo "Match: $MATCH"
+            [ -n "$COLORS" ] && echo "Colors (前 8): $COLORS"
+            [ -n "$FONTS" ] && echo "Fonts (前 4): $FONTS"
+            echo "完整 token: .mancode/aesthetics/style-tokens.json"
+            echo ""
+        else
+            # 无 jq: 只输出指针（cap 无法严格执行）
+            echo "## 审美 token"
+            echo "读取 .mancode/aesthetics/style-tokens.json"
+            echo ""
+        fi
     fi
 fi
 `;
