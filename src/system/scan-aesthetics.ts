@@ -10,7 +10,7 @@ import path from 'node:path';
  */
 export interface AestheticsTokens {
   version: string;
-  lastScanned: string;
+  lastScanned: string | null;
   colors: Record<string, string>;
   fonts: Record<string, string[]>;
   uiLibrary: string | null;
@@ -66,7 +66,7 @@ export async function scanAesthetics(
         fonts = extractTopLevelArrayValues(fontsBlock);
       }
     }
-    darkMode = extractDarkMode(content);
+    darkMode = extractDarkMode(stripJsComments(content));
   }
 
   // 2. 判断 matchLevel
@@ -82,7 +82,7 @@ export async function scanAesthetics(
   }
 
   return {
-    version: '1.0',
+    version: '1.0.0',
     lastScanned: new Date().toISOString(),
     colors,
     fonts,
@@ -204,7 +204,7 @@ function extractTopLevelStringValues(block: string): Record<string, string> {
   for (const { key, value } of pairs) {
     // 值必须是引号包裹的字符串（不是对象、不是数组）
     const strMatch = value.match(/^['"]([^'"]+)['"]$/);
-    if (strMatch) {
+    if (strMatch && isSafeColorValue(strMatch[1])) {
       result[key] = strMatch[1];
     }
   }
@@ -392,6 +392,68 @@ function parseValue(
 function extractDarkMode(content: string): string | null {
   const match = content.match(/darkMode\s*:\s*['"](\w+)['"]/);
   return match ? match[1] : null;
+}
+
+/**
+ * 去掉 JS/TS 注释，避免从注释里的示例配置误提取 darkMode。
+ * 保留字符串内容，防止 URL 或文字里的 // 被误删。
+ */
+function stripJsComments(content: string): string {
+  let result = '';
+  let i = 0;
+  let quote: '"' | "'" | '`' | null = null;
+
+  while (i < content.length) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (quote) {
+      result += ch;
+      if (ch === '\\') {
+        i++;
+        if (i < content.length) result += content[i];
+      } else if (ch === quote) {
+        quote = null;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      result += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      while (i < content.length && content[i] !== '\n') i++;
+      result += '\n';
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (
+        i < content.length &&
+        !(content[i] === '*' && content[i + 1] === '/')
+      ) {
+        if (content[i] === '\n') result += '\n';
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+function isSafeColorValue(value: string): boolean {
+  return /^[#\w\s,.%()/+-]+$/.test(value);
 }
 
 /**

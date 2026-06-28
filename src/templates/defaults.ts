@@ -25,7 +25,7 @@ export const DEFAULT_CONFIG = {
  * 审美扫描见 docs/13-scanning.md。
  */
 export const EMPTY_STYLE_TOKENS = {
-  version: '1.0',
+  version: '1.0.0',
   lastScanned: null,
   colors: {},
   fonts: {},

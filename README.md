@@ -1,7 +1,7 @@
 # mancode
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-MVP--1%20in%20progress-yellow?style=flat-square)]()
+[![Status](https://img.shields.io/badge/status-MVP--1%20complete-green?style=flat-square)]()
 [![Platform](https://img.shields.io/badge/platform-Claude%20Code-5865F2?style=flat-square)](https://claude.ai/code)
 
 **AI coding agent harness. Five modes: practice to playoffs. Stop your AI from over-engineering. Elbow out bloat. Score clean.**
@@ -139,10 +139,10 @@ When using Codex CLI, mancode writes to `AGENTS.md`:
 
 ## Install
 
-**Status**: MVP-1 in progress. Alpha release coming soon.
+**Status**: MVP-1 complete. Alpha release.
 
 ```bash
-# Once alpha releases:
+# Install globally
 npm install -g mancode@alpha
 
 # Initialize in your project
@@ -162,12 +162,22 @@ mancode init
 
 ## Commands
 
-### MVP-1 (Current Development)
+### MVP-1 (Available Now)
 
 ```bash
-mancode init              # Initialize .mancode/ directory + solo mode
-mancode status            # Show project status, mode, recent activity
-mancode version           # Show version
+mancode init              # Initialize .mancode/ + solo mode + aesthetic scan
+mancode status            # Show project status, mode, style, hooks
+mancode status --json     # Output as JSON (for scripts)
+mancode install [platform]# Install/reinstall platform adapter
+mancode refresh-style     # Rescan Tailwind config, update style-tokens.json
+mancode version           # Show mancode/node/platform versions
+```
+
+**Options**:
+```bash
+mancode init --force      # Reinstall (keep scanned tokens)
+mancode init --yes        # Skip confirmations (CI mode)
+mancode install --force   # Reinstall adapter (keep scanned tokens)
 ```
 
 **In Claude Code** (after init):
@@ -461,10 +471,10 @@ src/components/     → 已有 Button、Input、Card 组件
 
 ## 安装
 
-**状态**：MVP-1 开发中。Alpha 版本即将发布。
+**状态**：MVP-1 完成。Alpha 版本。
 
 ```bash
-# Alpha 版本发布后：
+# 全局安装
 npm install -g mancode@alpha
 
 # 在项目中初始化
@@ -484,12 +494,22 @@ mancode init
 
 ## 命令
 
-### MVP-1（当前开发）
+### MVP-1（现已可用）
 
 ```bash
-mancode init              # 初始化 .mancode/ 目录 + solo 模式
-mancode status            # 显示项目状态、模式、最近活动
-mancode version           # 显示版本
+mancode init              # 初始化 .mancode/ + solo 模式 + 审美扫描
+mancode status            # 显示项目状态、模式、风格、hooks
+mancode status --json     # JSON 输出（脚本用）
+mancode install [platform]# 安装/重装平台适配
+mancode refresh-style     # 重扫 Tailwind 配置，更新 style-tokens.json
+mancode version           # 显示 mancode/node/平台版本
+```
+
+**参数**：
+```bash
+mancode init --force      # 重装（保留已扫描 token）
+mancode init --yes        # 跳过确认（CI 用）
+mancode install --force   # 重装适配（保留已扫描 token）
 ```
 
 **在 Claude Code 中**（初始化后）：

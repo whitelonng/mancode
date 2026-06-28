@@ -45,6 +45,7 @@ describe('scanAesthetics', () => {
     );
 
     const result = await scanAesthetics(dir, 'shadcn/ui');
+    expect(result.version).toBe('1.0.0');
     expect(result.matchLevel).toBe('high');
     expect(result.sourceFiles).toContain('tailwind.config.js');
     expect(result.sourceFiles).toContain('package.json');
@@ -87,6 +88,20 @@ describe('scanAesthetics', () => {
     expect(result.darkMode).toBe('class');
   });
 
+  it('does not extract darkMode from comments', async () => {
+    await writeFile(
+      path.join(dir, 'tailwind.config.js'),
+      `module.exports = {
+  // darkMode: 'class',
+  theme: { extend: {} },
+};`,
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+    expect(result.darkMode).toBeNull();
+  });
+
   it('handles tailwind.config.ts', async () => {
     await writeFile(
       path.join(dir, 'tailwind.config.ts'),
@@ -116,6 +131,27 @@ describe('scanAesthetics', () => {
     expect(result.colors).not.toHaveProperty('500');
     expect(result.colors).not.toHaveProperty('600');
     // background 是字符串值，被提取
+    expect(result.colors).toHaveProperty('background', '#ffffff');
+  });
+
+  it('skips unsafe color values', async () => {
+    await writeFile(
+      path.join(dir, 'tailwind.config.js'),
+      `module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '$(echo injected)',
+        background: '#ffffff',
+      },
+    },
+  },
+};`,
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+    expect(result.colors).not.toHaveProperty('primary');
     expect(result.colors).toHaveProperty('background', '#ffffff');
   });
 

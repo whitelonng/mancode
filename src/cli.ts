@@ -4,6 +4,7 @@ import { init } from './commands/init.js';
 import { install } from './commands/install.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
+import { version } from './commands/version.js';
 import { VERSION } from './version.js';
 
 program
@@ -55,6 +56,13 @@ program
   .action(async () => {
     const code = await refreshStyle(process.cwd());
     process.exitCode = code;
+  });
+
+program
+  .command('version')
+  .description('Show version, node version, and platform')
+  .action(() => {
+    version();
   });
 
 program.parse();
