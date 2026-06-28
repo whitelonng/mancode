@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
 import {
   SESSION_START_HOOK,
@@ -59,7 +60,10 @@ export async function installClaudeCode(
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
   await installSoloSkill(path.join(claudeDir, 'skills'));
 
-  // 7. 更新 .claude/settings.json（幂等合并）
+  // 7. 创建 .claude/agents/ 并写入教练组（MVP-2）
+  await installAgents(path.join(claudeDir, 'agents'));
+
+  // 8. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir);
 }
 
@@ -78,6 +82,20 @@ async function installHooks(hooksDir: string): Promise<void> {
 async function installSoloSkill(skillsDir: string): Promise<void> {
   const skillDst = path.join(skillsDir, 'mancode-solo.md');
   await writeFile(skillDst, SOLO_SKILL, 'utf-8');
+}
+
+/**
+ * 写入教练组 agent 文件（MVP-2）。
+ *
+ * 每个 agent 渲染为 .claude/agents/<name>.md（YAML frontmatter + body）。
+ * `--force` 重装时直接覆盖（内容随 mancode 版本演进）。
+ */
+async function installAgents(agentsDir: string): Promise<void> {
+  await mkdir(agentsDir, { recursive: true });
+  for (const agent of ALL_AGENTS) {
+    const content = renderAgent(agent);
+    await writeFile(path.join(agentsDir, `${agent.name}.md`), content, 'utf-8');
+  }
 }
 
 interface ClaudeHookItem {
