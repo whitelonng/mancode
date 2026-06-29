@@ -88,13 +88,82 @@ describe('mancode init', () => {
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain(
       '.mancode/hooks/user-prompt-submit.sh',
     );
-    expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
+    expect(settings.skills).toBeUndefined();
 
     // 验证 solo skill
-    const skillPath = path.join(dir, '.claude', 'skills', 'mancode-solo.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md');
     const skillContent = await readFile(skillPath, 'utf-8');
+    expect(skillContent).toContain('name: solo');
     expect(skillContent).toContain('mancode · solo mode');
     expect(skillContent).toContain('YAGNI');
+
+    // 验证 MVP-2 slash skills 使用 Claude Code 官方目录结构
+    const man8Skill = await readFile(
+      path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(man8Skill).toContain('name: man8');
+
+    const skillNames = await readdir(path.join(dir, '.claude', 'skills'));
+    expect(skillNames.sort()).toEqual([
+      'man',
+      'man8',
+      'manps',
+      'mansolo',
+      'manteam',
+      'solo',
+    ]);
+  });
+
+  it('persists --team / --no-team / --style options', async () => {
+    const teamCode = await init(dir, { team: true, style: 'brutalist' });
+    expect(teamCode).toBe(EXIT_OK);
+
+    const teamState: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const teamConfig = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+    expect(teamState.teamModeAutoDetected).toBe(true);
+    expect(teamConfig.forceTeamMode).toBe(true);
+    expect(teamConfig.defaultStyle).toBe('brutalist');
+
+    const otherDir = await mkdtemp(
+      path.join(tmpdir(), 'mancode-init-no-team-'),
+    );
+    await mkdir(path.join(otherDir, '.git'), { recursive: true });
+    try {
+      const noTeamCode = await init(otherDir, { team: false });
+      expect(noTeamCode).toBe(EXIT_OK);
+      const noTeamState: MancodeState = JSON.parse(
+        await readFile(path.join(otherDir, '.mancode', 'state.json'), 'utf-8'),
+      );
+      const noTeamConfig = JSON.parse(
+        await readFile(path.join(otherDir, '.mancode', 'config.json'), 'utf-8'),
+      );
+      expect(noTeamState.teamModeAutoDetected).toBe(false);
+      expect(noTeamConfig.forceTeamMode).toBe(false);
+      expect(noTeamConfig.defaultStyle).toBeNull();
+    } finally {
+      await rm(otherDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not claim package.json is missing when it has no known deps', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ name: 'empty-node-project', version: '1.0.0' }),
+      'utf-8',
+    );
+
+    const logs = await captureLog(() => init(dir));
+    const output = logs.join('\n');
+
+    expect(output).toContain(
+      'package.json found, no known framework dependencies',
+    );
+    expect(output).not.toContain('No package.json found');
   });
 
   it('returns EXIT_ALREADY_INITIALIZED on second run without --force', async () => {
@@ -196,7 +265,7 @@ describe('mancode init', () => {
 
     // 用户 skill 应该保留
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
-    expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
+    expect(settings.skills.solo).toBeUndefined();
   });
 
   it('migrates legacy hook settings and removes old mancode hooks on --force', async () => {
@@ -265,5 +334,18 @@ describe('mancode init', () => {
       'bash .mancode/hooks/user-prompt-submit.sh',
     );
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
+    expect(settings.skills.man8).toBeUndefined();
   });
 });
+
+async function captureLog(fn: () => Promise<unknown>): Promise<string[]> {
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+  }
+  return logs;
+}

@@ -1,6 +1,9 @@
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { detectTeamStatus } from '../system/detect-team.js';
+import { readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -23,6 +26,10 @@ export interface StatusState {
   initializedAt: string;
   techStack: string;
   uiLibrary: string;
+  currentTask?: string | null;
+  currentWorkflowMode?: string | null;
+  teamModeAutoDetected?: boolean;
+  contributors?: number;
 }
 
 export interface StatusOptions {
@@ -43,6 +50,29 @@ export interface StatusResult {
     userPromptSubmit: boolean;
     registered: boolean;
   };
+  hookInjection: {
+    tokens: number;
+    cap: number;
+  };
+  team: {
+    isTeam: boolean;
+    contributors: number;
+    recentActive: number;
+    hasRemote: boolean;
+    autoDetected: boolean;
+  };
+  currentWorkflow: {
+    taskId: string;
+    task: string;
+    mode: 'man8' | 'man';
+    currentStep: number;
+    status: string;
+  } | null;
+}
+
+interface StatusConfig {
+  platforms?: string[];
+  forceTeamMode?: boolean;
 }
 
 /**
@@ -89,22 +119,36 @@ export async function status(
     return EXIT_CORRUPT_STATE;
   }
 
-  // 3. 并行收集：项目名、hooks 状态、已安装平台
-  const [project, hooksStatus, platforms] = await Promise.all([
+  // 3. 并行收集：项目名、hooks 状态、已安装平台、hook 注入预算、团队状态、当前 workflow
+  const [
+    project,
+    hooksStatus,
+    config,
+    hookInjection,
+    teamStatus,
+    currentWorkflow,
+  ] = await Promise.all([
     getProjectName(rootDir),
     checkHooks(rootDir),
-    getInstalledPlatforms(rootDir, state.platform),
+    readConfig(rootDir),
+    estimateHookInjection(rootDir),
+    detectTeamStatus(rootDir),
+    getCurrentWorkflow(rootDir, state.currentTask ?? null),
   ]);
+  const effectiveTeam = getEffectiveTeamStatus(state, config, teamStatus);
 
   const result: StatusResult = {
     version: state.version || VERSION,
     project,
     techStack: state.techStack || 'Unknown',
     mode: state.currentMode || 'solo',
-    platforms,
+    platforms: getInstalledPlatforms(config, state.platform),
     uiLibrary: state.uiLibrary || 'None',
     initializedAt: state.initializedAt || 'unknown',
     hooks: hooksStatus,
+    hookInjection,
+    team: effectiveTeam,
+    currentWorkflow,
   };
 
   // 4. 输出
@@ -115,6 +159,22 @@ export async function status(
   }
 
   return EXIT_OK;
+}
+
+async function getCurrentWorkflow(
+  rootDir: string,
+  taskId: string | null,
+): Promise<StatusResult['currentWorkflow']> {
+  if (!taskId) return null;
+  const meta = await readWorkflow(rootDir, taskId);
+  if (!meta) return null;
+  return {
+    taskId: meta.taskId,
+    task: meta.task,
+    mode: meta.mode,
+    currentStep: meta.currentStep,
+    status: meta.status,
+  };
 }
 
 /**
@@ -136,23 +196,45 @@ async function getProjectName(rootDir: string): Promise<string> {
 /**
  * 从 config.json 读取已安装平台列表，fallback 到 state.platform。
  */
-async function getInstalledPlatforms(
-  rootDir: string,
-  fallback: string,
-): Promise<string[]> {
+async function readConfig(rootDir: string): Promise<StatusConfig> {
   try {
     const raw = await fs.readFile(
       path.join(rootDir, '.mancode', 'config.json'),
       'utf-8',
     );
-    const config = JSON.parse(raw) as { platforms?: string[] };
-    if (Array.isArray(config.platforms) && config.platforms.length > 0) {
-      return config.platforms;
-    }
+    return JSON.parse(raw) as StatusConfig;
   } catch {
-    // config.json 不存在或解析失败——fallback
+    // config.json 不存在或解析失败——调用方使用 fallback
+    return {};
+  }
+}
+
+function getInstalledPlatforms(
+  config: StatusConfig,
+  fallback: string,
+): string[] {
+  if (Array.isArray(config.platforms) && config.platforms.length > 0) {
+    return config.platforms;
   }
   return fallback ? [fallback] : [];
+}
+
+function getEffectiveTeamStatus(
+  state: StatusState,
+  config: StatusConfig,
+  detected: StatusResult['team'],
+): StatusResult['team'] {
+  const configuredTeam =
+    config.forceTeamMode === true
+      ? true
+      : (state.teamModeAutoDetected ?? detected.isTeam);
+
+  return {
+    ...detected,
+    isTeam: configuredTeam,
+    contributors: Math.max(detected.contributors, state.contributors ?? 0, 1),
+    autoDetected: state.teamModeAutoDetected ?? detected.isTeam,
+  };
 }
 
 /**
@@ -235,6 +317,58 @@ function hasHookCommand(value: unknown, needle: string): boolean {
 }
 
 /**
+ * 估算 UserPromptSubmit hook 的注入大小。
+ *
+ * 用一个前端相关 fake prompt 触发审美 token 摘要，stdout bytes / 4 ≈ tokens。
+ */
+async function estimateHookInjection(
+  rootDir: string,
+): Promise<{ tokens: number; cap: number }> {
+  const hookPath = path.join(
+    rootDir,
+    '.mancode',
+    'hooks',
+    'user-prompt-submit.sh',
+  );
+  if (!(await pathExists(hookPath))) {
+    return { tokens: 0, cap: 800 };
+  }
+
+  try {
+    const output = await runHookEstimate(rootDir, hookPath);
+    return {
+      tokens: Math.ceil(Buffer.byteLength(output, 'utf-8') / 4),
+      cap: 800,
+    };
+  } catch {
+    return { tokens: 0, cap: 800 };
+  }
+}
+
+function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('bash', [hookPath], {
+      cwd: rootDir,
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+
+    let stdout = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`hook exited with ${code}`));
+    });
+    child.stdin.end(
+      JSON.stringify({ prompt: 'design a button component with tailwind css' }),
+    );
+  });
+}
+
+/**
  * 文本格式输出（默认），字段命名对齐 docs/08-cli-spec.md §4.3。
  */
 function printText(r: StatusResult): void {
@@ -247,6 +381,15 @@ function printText(r: StatusResult): void {
   console.log(`Mode:        ${modeLabel}`);
   console.log(`Style:       ${r.uiLibrary}`);
   console.log(`Initialized: ${r.initializedAt}`);
+  console.log(
+    `Team:        ${r.team.isTeam ? `detected (${r.team.contributors} contributors)` : 'solo'}`,
+  );
+  if (r.currentWorkflow) {
+    const stepMax = r.currentWorkflow.mode === 'man' ? 8 : 3;
+    console.log(
+      `Workflow:    ${r.currentWorkflow.taskId} (Step ${r.currentWorkflow.currentStep}/${stepMax}, ${r.currentWorkflow.status})`,
+    );
+  }
   console.log('');
   console.log('Installed platforms:');
   for (const p of r.platforms) {
@@ -260,6 +403,9 @@ function printText(r: StatusResult): void {
   );
   console.log(
     `  ${r.hooks.registered ? '✓' : '✗'} registered in .claude/settings.json`,
+  );
+  console.log(
+    `  Hook injection: ~${r.hookInjection.tokens} tokens (cap ${r.hookInjection.cap})`,
   );
   console.log('');
 }

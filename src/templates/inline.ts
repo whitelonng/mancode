@@ -12,7 +12,9 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
 
 HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
+if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
+    command -v jq >/dev/null 2>&1 && HAS_JQ=1
+fi
 
 json_get() {
     local key="$1"
@@ -21,6 +23,16 @@ json_get() {
         jq -r ".$key // empty" "$file" 2>/dev/null || true
     else
         grep "\\"$key\\"" "$file" 2>/dev/null | sed 's/.*: "\\(.*\\)".*/\\1/' || true
+    fi
+}
+
+json_any_get() {
+    local key="$1"
+    local file="$2"
+    if [ "$HAS_JQ" = "1" ]; then
+        jq -r ".$key // empty" "$file" 2>/dev/null || true
+    else
+        grep "\\"$key\\"" "$file" 2>/dev/null | head -n 1 | sed -E 's/.*: *"?([^",}]*)"?[,]?.*/\\1/' || true
     fi
 }
 
@@ -37,6 +49,8 @@ sanitize() {
 MODE=$(json_get "currentMode" "$STATE_FILE")
 TECH_STACK=$(json_get "techStack" "$STATE_FILE")
 UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
+TEAM_AUTO=$(json_any_get "teamModeAutoDetected" "$STATE_FILE")
+CONTRIBUTORS=$(json_any_get "contributors" "$STATE_FILE")
 
 echo "mancode_mode: \${MODE:-solo}"
 echo "project_type: $(sanitize "$TECH_STACK")"
@@ -59,6 +73,14 @@ echo ""
 echo "3. **最小改动**"
 echo "   - 只改用户要求的部分"
 echo "   - 不重构无关代码"
+
+if [ "$TEAM_AUTO" = "true" ] && [ "\${MODE:-solo}" = "solo" ]; then
+    echo ""
+    echo "### 团队协作提醒"
+    echo "检测到团队项目（contributors: \${CONTRIBUTORS:-2}）。"
+    echo '- 涉及多人协作、交接、PR、共享模块时，优先使用 /manteam <task>。'
+    echo '- 只做个人小改动时，可以继续 solo；需要退出流程用 /mansolo。'
+fi
 `;
 
 export const USER_PROMPT_SUBMIT_HOOK = `#!/bin/bash
@@ -71,7 +93,9 @@ STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
 AESTHETICS_FILE="$PROJECT_ROOT/.mancode/aesthetics/style-tokens.json"
 
 HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
+if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
+    command -v jq >/dev/null 2>&1 && HAS_JQ=1
+fi
 
 json_get() {
     local key="$1"
@@ -124,93 +148,45 @@ else
     fi
 fi
 
+if [ "$MODE" = "solo" ] && echo "$USER_PROMPT" | grep -qiE "先(别|不要|看|看看|调研|分析|评估)|给.*方案|给.*计划|怎么.*做|如何.*做|怎么.*实现|如何.*实现|应该怎么|怎么.*拆|拆分|只给.*计划|不要.*改代码|别.*改代码|不要.*动代码|别.*动代码|评估.*风险|风险.*评估|设计.*方案|架构|迁移|集成|\\b(plan|planning|research|investigate|approach|proposal|architecture|risk|migration|integration)\\b|how (should|would|to)|do not (edit|modify|change)|don.t (edit|modify|change)|no code changes|without changing code"; then
+    echo "## mancode 自动路由"
+    echo ""
+    echo "这个请求是规划/调研类任务。不要直接进入 solo 实施。"
+    echo "必须先调用 Skill tool，skill='man8'，把用户原始请求作为 task，执行 Scout 调研和 Head Coach plan。"
+    echo "如果用户明确要求不要改代码，生成 plan 后停在确认步骤。"
+    echo ""
+fi
+
 # 前端任务关键词检测（用 \b 词边界避免子串误匹配）
-if echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|design|layout|css|tailwind|color|font|theme|card|input|modal|dialog|header|footer|sidebar|dropdown|tooltip|toast|avatar|badge)\\b"; then
+if echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|ui|design|layout|css|tailwind|color|font|theme|card|input|modal|dialog|header|footer|sidebar|dropdown|tooltip|toast|avatar|badge)\\b"; then
     if [ -f "$AESTHETICS_FILE" ]; then
         MATCH_LEVEL=$(json_get "matchLevel" "$AESTHETICS_FILE")
 
         if [ "$MATCH_LEVEL" = "high" ]; then
-            # 有完整设计 token，注入实际值
-            echo "## 审美 token（必须遵循）"
-            echo ""
-            echo "已从项目扫描到设计 token，前端任务必须使用以下值："
-            echo ""
-
-            UI_LIB=$(json_get "uiLibrary" "$AESTHETICS_FILE")
-            if [ -n "$UI_LIB" ] && [ "$UI_LIB" != "null" ]; then
-                echo "- **UI 库**: $(sanitize "$UI_LIB")"
-                echo "  优先复用已有组件，不要自己造"
-                echo ""
-            fi
-
-            DARK_MODE=$(json_get "darkMode" "$AESTHETICS_FILE")
-            if [ -n "$DARK_MODE" ] && [ "$DARK_MODE" != "null" ]; then
-                echo "- **Dark mode**: $(sanitize "$DARK_MODE")"
-                echo ""
-            fi
-
-            # 注入 colors（有 jq 时用 jq 遍历，无 jq 时提示读文件）
             if [ "$HAS_JQ" = "1" ]; then
-                COLORS_COUNT=$(jq -r '.colors | length' "$AESTHETICS_FILE" 2>/dev/null || echo 0)
-                if [ "$COLORS_COUNT" -gt 0 ] 2>/dev/null; then
-                    echo "- **颜色**（不要引入新颜色，只用这些）:"
-                    jq -r '.colors | to_entries[] | "\\(.key): \\(.value)"' "$AESTHETICS_FILE" 2>/dev/null | while IFS= read -r line; do
-                        echo "  - $(sanitize "$line")"
-                    done
-                    echo ""
-                fi
+            # 提取摘要 + cap（docs/07 §4.1：colors ≤8, fonts ≤4, 总 < 800 tokens）
+            UI=$(jq -r '.uiLibrary // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            DARK=$(jq -r '.darkMode // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            MATCH=$(jq -r '.matchLevel // empty' "$AESTHETICS_FILE" 2>/dev/null)
+            COLORS=$(jq -r '.colors | to_entries | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            FONTS=$(jq -r '.fonts | to_entries | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
 
-                FONTS_COUNT=$(jq -r '.fonts | length' "$AESTHETICS_FILE" 2>/dev/null || echo 0)
-                if [ "$FONTS_COUNT" -gt 0 ] 2>/dev/null; then
-                    echo "- **字体**（不要引入新字体，只用这些）:"
-                    jq -r '.fonts | to_entries[] | "\\(.key): \\(.value | join(\", \"))"' "$AESTHETICS_FILE" 2>/dev/null | while IFS= read -r line; do
-                        echo "  - $(sanitize "$line")"
-                    done
-                    echo ""
-                fi
-            else
-                echo "- **颜色/字体**: 见 .mancode/aesthetics/style-tokens.json"
-                echo "  读取该文件获取项目的 colors 和 fonts"
-                echo ""
-            fi
-
-            echo "### 禁止事项"
-            echo "- ❌ 不要引入项目色板以外的新颜色"
-            echo "- ❌ 不要用 inline style 写颜色值"
-            echo "- ❌ 不要引入新字体"
-            echo "- ❌ 不要自己造已有 UI 库的组件"
+            echo "## 审美 token 摘要"
+            [ -n "$UI" ] && echo "UI: $UI"
+            [ -n "$DARK" ] && echo "Dark: $DARK"
+            [ -n "$MATCH" ] && echo "Match: $MATCH"
+            [ -n "$COLORS" ] && echo "Colors (前 8): $COLORS"
+            [ -n "$FONTS" ] && echo "Fonts (前 4): $FONTS"
+            echo "完整 token: .mancode/aesthetics/style-tokens.json"
             echo ""
-
-        elif [ "$MATCH_LEVEL" = "low" ]; then
-            echo "## 审美提示"
-            echo ""
-            echo "检测到 Tailwind CSS 依赖，但未找到 tailwind.config 配置文件。"
-            echo "建议运行 'mancode refresh-style' 重新扫描，或手动添加 tailwind.config.js。"
-            echo ""
-
-        elif [ "$MATCH_LEVEL" = "none" ]; then
-            # 无设计 token，给 3 个风格选项
-            echo "## 审美提示（新项目）"
-            echo ""
-            echo "未检测到项目设计风格。选一个基线风格，或描述你想要的："
-            echo ""
-            echo "**🅐 Minimal Pro**（极简专业）"
-            echo "  - 主色: #0f172a | 字体: Inter | 圆角: 0.5rem"
-            echo "  - 适合: SaaS、Dashboard、技术产品"
-            echo ""
-            echo "**🅑 Bold Expressive**（大胆表达）"
-            echo "  - 主色: #6366f1 | 字体: Geist | 圆角: 0.75rem"
-            echo "  - 适合: 营销站、创意产品"
-            echo ""
-            echo "**🅒 Warm Friendly**（温暖友好）"
-            echo "  - 主色: #f97316 | 字体: Nunito | 圆角: 1rem"
-            echo "  - 适合: 工具、社区、内容产品"
-            echo ""
-            echo "输入 a / b / c，或描述你想要的风格。"
-            echo "选定后运行 'mancode refresh-style' 更新 token。"
+        else
+            # 无 jq: 只输出指针（cap 无法严格执行）
+            echo "## 审美 token"
+            echo "读取 .mancode/aesthetics/style-tokens.json"
             echo ""
         fi
     fi
+fi
 fi
 `;
 
