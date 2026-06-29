@@ -26,6 +26,16 @@ json_get() {
     fi
 }
 
+json_any_get() {
+    local key="$1"
+    local file="$2"
+    if [ "$HAS_JQ" = "1" ]; then
+        jq -r ".$key // empty" "$file" 2>/dev/null || true
+    else
+        grep "\\"$key\\"" "$file" 2>/dev/null | head -n 1 | sed -E 's/.*: *"?([^",}]*)"?[,]?.*/\\1/' || true
+    fi
+}
+
 if [ ! -f "$STATE_FILE" ]; then
     echo "ℹ️ mancode 未初始化。运行 \\\`mancode init\\\` 开始。"
     exit 0
@@ -39,6 +49,8 @@ sanitize() {
 MODE=$(json_get "currentMode" "$STATE_FILE")
 TECH_STACK=$(json_get "techStack" "$STATE_FILE")
 UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
+TEAM_AUTO=$(json_any_get "teamModeAutoDetected" "$STATE_FILE")
+CONTRIBUTORS=$(json_any_get "contributors" "$STATE_FILE")
 
 echo "mancode_mode: \${MODE:-solo}"
 echo "project_type: $(sanitize "$TECH_STACK")"
@@ -61,6 +73,14 @@ echo ""
 echo "3. **最小改动**"
 echo "   - 只改用户要求的部分"
 echo "   - 不重构无关代码"
+
+if [ "$TEAM_AUTO" = "true" ] && [ "\${MODE:-solo}" = "solo" ]; then
+    echo ""
+    echo "### 团队协作提醒"
+    echo "检测到团队项目（contributors: \${CONTRIBUTORS:-2}）。"
+    echo '- 涉及多人协作、交接、PR、共享模块时，优先使用 /manteam <task>。'
+    echo '- 只做个人小改动时，可以继续 solo；需要退出流程用 /mansolo。'
+fi
 `;
 
 export const USER_PROMPT_SUBMIT_HOOK = `#!/bin/bash
@@ -120,6 +140,15 @@ else
     if [ -z "$USER_PROMPT" ]; then
         USER_PROMPT="$INPUT"
     fi
+fi
+
+if [ "$MODE" = "solo" ] && echo "$USER_PROMPT" | grep -qiE "先(别|不要|看|看看|调研|分析|评估)|给.*方案|给.*计划|怎么.*做|如何.*做|怎么.*实现|如何.*实现|应该怎么|怎么.*拆|拆分|只给.*计划|不要.*改代码|别.*改代码|不要.*动代码|别.*动代码|评估.*风险|风险.*评估|设计.*方案|架构|迁移|集成|\\b(plan|planning|research|investigate|approach|proposal|architecture|risk|migration|integration)\\b|how (should|would|to)|do not (edit|modify|change)|don.t (edit|modify|change)|no code changes|without changing code"; then
+    echo "## mancode 自动路由"
+    echo ""
+    echo "这个请求是规划/调研类任务。不要直接进入 solo 实施。"
+    echo "必须先调用 Skill tool，skill='man8'，把用户原始请求作为 task，执行 Scout 调研和 Head Coach plan。"
+    echo "如果用户明确要求不要改代码，生成 plan 后停在确认步骤。"
+    echo ""
 fi
 
 if echo "$USER_PROMPT" | grep -qiE "button|component|page|style|ui|design|layout|css|tailwind"; then

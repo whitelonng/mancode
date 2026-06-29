@@ -5,13 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { installClaudeCode } from '../src/installers/claude-code.js';
 import {
   MAN8_SKILL,
+  MANPS_SKILL,
   MANSOLO_SKILL,
+  MANTEAM_SKILL,
   MAN_SKILL,
   MVP2_SKILLS,
   renderSkill,
 } from '../src/templates/skills/index.js';
 
-describe('mvp-2 skills (man8 / man / mansolo)', () => {
+describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -37,13 +39,20 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
       }
     });
 
-    it('contains exactly 3 skills (man8, man, mansolo)', () => {
+    it('contains exactly 5 skills (man8, man, manteam, manps, mansolo)', () => {
       const names = MVP2_SKILLS.map((s) => s.name).sort();
-      expect(names).toEqual(['man', 'man8', 'mansolo']);
+      expect(names).toEqual(['man', 'man8', 'manps', 'mansolo', 'manteam']);
     });
   });
 
   describe('man8 skill content', () => {
+    it('is described as an automatically selected planning skill', () => {
+      expect(MAN8_SKILL.description).toMatch(/Automatically use/);
+      expect(MAN8_SKILL.description).toMatch(/先看看/);
+      expect(MAN8_SKILL.description).toMatch(/不要改代码/);
+      expect(MAN8_SKILL.description).toMatch(/architecture/);
+    });
+
     it('describes 3-step flow with Scout + Head Coach', () => {
       expect(MAN8_SKILL.body).toMatch(/Scout/);
       expect(MAN8_SKILL.body).toMatch(/Head Coach/);
@@ -60,6 +69,8 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
     it('references workflow dir and metadata.json', () => {
       expect(MAN8_SKILL.body).toMatch(/\.mancode\/workflows\//);
       expect(MAN8_SKILL.body).toMatch(/metadata\.json/);
+      expect(MAN8_SKILL.body).toMatch(/date -u/);
+      expect(MAN8_SKILL.body).toMatch(/不要凭空估算日期时间/);
     });
 
     it('uses Agent tool with subagent_type: scout', () => {
@@ -70,6 +81,22 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
     it('switches back to solo on user confirm', () => {
       expect(MAN8_SKILL.body).toMatch(/currentMode.*solo/);
     });
+
+    it('enters man8 mode immediately when triggered', () => {
+      expect(MAN8_SKILL.body).toMatch(/currentMode.*man8/);
+      expect(MAN8_SKILL.body).toMatch(/等待任务期间，当前模式仍是 `man8`/);
+    });
+
+    it('treats natural language planning requests as man8 tasks', () => {
+      expect(MAN8_SKILL.body).toMatch(/自动触发条件/);
+      expect(MAN8_SKILL.body).toMatch(/用户原始请求整体作为 task/);
+      expect(MAN8_SKILL.body).toMatch(/只有在显式输入 `\/man8` 且 task 为空/);
+    });
+
+    it('implements immediately after the user chooses solo implementation', () => {
+      expect(MAN8_SKILL.body).toMatch(/立即按 plan 实施/);
+      expect(MAN8_SKILL.body).toMatch(/不要再次要求用户输入/);
+    });
   });
 
   describe('man skill content', () => {
@@ -78,10 +105,11 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
       expect(MAN_SKILL.body).toMatch(/Head Coach/);
       expect(MAN_SKILL.body).toMatch(/film-analyst-offense/);
       expect(MAN_SKILL.body).toMatch(/film-analyst-defense/);
-      // 8 步流程
-      for (let i = 1; i <= 8; i++) {
-        expect(MAN_SKILL.body).toMatch(new RegExp(`Step ${i}`));
-      }
+      const stepHeadings = [
+        ...MAN_SKILL.body.matchAll(/^### Step (\d+):/gm),
+      ].map((match) => Number(match[1]));
+      expect(stepHeadings).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(MAN_SKILL.body).not.toMatch(/Step 9/);
     });
 
     it('references workflow files (scout-report.md, plan.md, film-report-*.md)', () => {
@@ -99,6 +127,11 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
     it('references core principles (fail twice, verify)', () => {
       expect(MAN_SKILL.body).toMatch(/失败两次/);
       expect(MAN_SKILL.body).toMatch(/build.*lint.*test|验证/);
+    });
+
+    it('enters man mode immediately when triggered', () => {
+      expect(MAN_SKILL.body).toMatch(/currentMode.*man/);
+      expect(MAN_SKILL.body).toMatch(/等待任务期间，当前模式仍是 `man`/);
     });
   });
 
@@ -120,11 +153,31 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
     });
   });
 
+  describe('manteam skill content', () => {
+    it('adds team coordination on top of the playoffs flow', () => {
+      expect(MANTEAM_SKILL.body).toMatch(/Team Context/);
+      expect(MANTEAM_SKILL.body).toMatch(/git log/);
+      expect(MANTEAM_SKILL.body).toMatch(/handoff\.md/);
+      expect(MANTEAM_SKILL.body).toMatch(/不覆盖/);
+    });
+  });
+
+  describe('manps skill content', () => {
+    it('describes a read-only preseason health check', () => {
+      expect(MANPS_SKILL.body).toMatch(/Preseason/);
+      expect(MANPS_SKILL.body).toMatch(/TODO\|FIXME/);
+      expect(MANPS_SKILL.body).toMatch(/preseason-report\.md/);
+      expect(MANPS_SKILL.body).toMatch(/不直接修改代码/);
+    });
+  });
+
   describe('renderSkill', () => {
-    it('produces pure markdown (no YAML frontmatter)', () => {
+    it('produces a Claude Code SKILL.md with YAML frontmatter', () => {
       const rendered = renderSkill(MAN8_SKILL);
-      expect(rendered.startsWith('# ')).toBe(true);
-      expect(rendered.startsWith('---')).toBe(false);
+      expect(rendered.startsWith('---\n')).toBe(true);
+      expect(rendered).toContain('name: man8');
+      expect(rendered).toContain('description: ');
+      expect(rendered).toContain('# mancode · /man8');
     });
 
     it('preserves body verbatim with trailing newline', () => {
@@ -134,12 +187,12 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
         body: '# title\n\nbody text',
       };
       const rendered = renderSkill(spec);
-      expect(rendered).toBe('# title\n\nbody text\n');
+      expect(rendered.endsWith('# title\n\nbody text\n')).toBe(true);
     });
   });
 
   describe('installMvp2Skills (via installClaudeCode)', () => {
-    it('creates 3 skill files in .claude/skills/', async () => {
+    it('creates project skill directories in .claude/skills/', async () => {
       await installClaudeCode(dir, { techStack: [], uiLibrary: null });
 
       for (const skill of MVP2_SKILLS) {
@@ -147,33 +200,31 @@ describe('mvp-2 skills (man8 / man / mansolo)', () => {
           dir,
           '.claude',
           'skills',
-          `mancode-${skill.name}.md`,
+          skill.name,
+          'SKILL.md',
         );
         const content = await readFile(file, 'utf-8');
         expect(content.length).toBeGreaterThan(100);
+        expect(content).toContain(`name: ${skill.name}`);
       }
     });
 
-    it('settings.json registers all 4 skills (solo + 3 mvp-2)', async () => {
+    it('does not register skills through non-standard settings.skills', async () => {
       await installClaudeCode(dir, { techStack: [], uiLibrary: null });
 
       const settingsPath = path.join(dir, '.claude', 'settings.json');
       const raw = await readFile(settingsPath, 'utf-8');
       const settings = JSON.parse(raw);
-      expect(settings.skills).toBeDefined();
-      expect(settings.skills.solo).toBe('.claude/skills/mancode-solo.md');
-      expect(settings.skills.man8).toBe('.claude/skills/mancode-man8.md');
-      expect(settings.skills.man).toBe('.claude/skills/mancode-man.md');
-      expect(settings.skills.mansolo).toBe('.claude/skills/mancode-mansolo.md');
+      expect(settings.skills).toBeUndefined();
     });
 
     it('reinstall overwrites skill files', async () => {
       await installClaudeCode(dir, { techStack: [], uiLibrary: null });
       await installClaudeCode(dir, { techStack: [], uiLibrary: null });
 
-      const skillPath = path.join(dir, '.claude', 'skills', 'mancode-man8.md');
+      const skillPath = path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md');
       const content = await readFile(skillPath, 'utf-8');
-      expect(content.startsWith('# ')).toBe(true);
+      expect(content.startsWith('---')).toBe(true);
     });
   });
 });

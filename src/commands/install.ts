@@ -12,9 +12,9 @@ export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_UNSUPPORTED_PLATFORM = 2;
 
 /**
- * MVP-1 支持的平台。
+ * 当前支持的平台。
  *
- * MVP-3 会加入 cursor / codex / copilot。
+ * 后续会加入 cursor / codex / copilot。
  */
 const SUPPORTED_PLATFORMS = new Set(['claude-code']);
 
@@ -57,7 +57,7 @@ export async function install(
   // 2. 验证平台名
   if (!SUPPORTED_PLATFORMS.has(platform)) {
     console.error(`✗  Unsupported platform: ${platform}`);
-    console.error('   Supported platforms (MVP-1):');
+    console.error('   Supported platforms:');
     console.error('     claude-code          Claude Code');
     console.error('');
     console.error('   Coming in MVP-3:');
@@ -88,6 +88,7 @@ export async function install(
   await installClaudeCode(rootDir, {
     techStack: project.techStack,
     uiLibrary: project.uiLibrary,
+    minimal: options.minimal,
   });
 
   // 5. 更新 config.json platforms

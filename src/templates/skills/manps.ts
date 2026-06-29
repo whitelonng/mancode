@@ -1,0 +1,86 @@
+import type { SkillSpec } from './index.js';
+
+/**
+ * /manps skill — Preseason（README MVP-2）。
+ *
+ * 项目健康检查：只读扫描技术债、旧 TODO、未使用依赖、测试缺口和陈旧模式，
+ * 输出可执行的 cleanup plan，不直接修改代码。
+ */
+export const MANPS_SKILL: SkillSpec = {
+  name: 'manps',
+  description:
+    'Preseason project health check. Scans for tech debt, stale TODOs, unused dependencies, missing tests, and risky patterns without changing code.',
+  body: `# mancode · /manps (Preseason)
+
+用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：只读扫描、分级排序、输出 cleanup plan。默认不改代码。
+
+## 输入
+
+- \`area\` 可选：目录、模块、功能名或主题。
+- 如果为空，扫描整个项目，但要控制范围，优先看根配置、src、tests、README。
+
+## 扫描清单
+
+### 1. Project Shape
+
+- 读取 \`package.json\`、README、测试配置、lint/build 脚本
+- 识别 tech stack、测试命令、构建命令
+- 读取 \`.mancode/state.json\` 和 \`.mancode/aesthetics/style-tokens.json\`（如存在）
+
+### 2. Tech Debt
+
+使用 \`rg\` 搜索：
+
+- \`TODO|FIXME|HACK|XXX|deprecated|legacy|temporary|workaround\`
+- 大文件、重复实现、明显死代码
+- 过时命名或与当前技术栈不一致的模式
+
+### 3. Dependency Health
+
+- 对照 \`package.json\` dependencies/devDependencies 与源码 import
+- 标记疑似未使用依赖，但不要直接删除
+- 标记缺少脚本的风险：无 test、无 lint、无 build
+
+### 4. Test Gaps
+
+- 找出有实现但无对应测试的核心模块
+- 标记高风险区域：auth、billing、data migration、file IO、CLI destructive ops
+- 给出最小补测建议
+
+### 5. Aesthetic Drift（前端项目）
+
+- 检查是否绕过已有 design tokens
+- 检查硬编码颜色、字体、spacing
+- 检查是否混用 UI library
+
+## 输出文件
+
+写入 \`.mancode/preseason-report.md\`：
+
+\`\`\`
+# mancode preseason report
+
+## Summary
+
+## P0: Must Fix Before Shipping
+
+## P1: Should Fix Soon
+
+## P2: Cleanup Backlog
+
+## Suggested Order
+
+## Commands Checked
+\`\`\`
+
+## 输出规则
+
+- 不直接修改代码
+- 不删除依赖
+- 不制造大型重构计划
+- 每条问题必须有文件路径或可复现命令
+- 优先给 3-7 条最高价值问题
+- 没发现问题就明确说没有 P0/P1，只列 residual risk
+
+收到 \`/manps\` 触发后立即扫描并生成报告。`,
+};

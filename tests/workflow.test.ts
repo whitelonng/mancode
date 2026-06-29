@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createWorkflow,
   deleteWorkflow,
@@ -19,6 +19,7 @@ describe('workflow helpers', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -67,6 +68,19 @@ describe('workflow helpers', () => {
       const raw = await readFile(metaPath, 'utf-8');
       const parsed = JSON.parse(raw);
       expect(parsed.task).toBe('add oauth');
+    });
+
+    it('allocates a unique id for duplicate tasks created in the same second', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-28T14:30:00.000Z'));
+
+      const first = await createWorkflow(dir, 'same task', 'man');
+      const second = await createWorkflow(dir, 'same task', 'man');
+
+      expect(first.taskId).toMatch(/-same-task$/);
+      expect(second.taskId).toBe(`${first.taskId}-2`);
+      expect(await readWorkflow(dir, first.taskId)).not.toBeNull();
+      expect(await readWorkflow(dir, second.taskId)).not.toBeNull();
     });
   });
 

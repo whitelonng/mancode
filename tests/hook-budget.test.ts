@@ -102,6 +102,105 @@ describe('UserPromptSubmit hook context budget', () => {
 
     expect(Buffer.byteLength(output, 'utf-8')).toBeLessThan(3200);
   });
+
+  it('routes planning/research prompts to the man8 skill', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: false,
+      contributors: 1,
+    });
+
+    const output = await runHook(
+      dir,
+      {},
+      {
+        prompt: '先别改代码，帮我看看这个项目怎么加登录功能，给我一个方案',
+      },
+    );
+
+    expect(output).toContain('## mancode 自动路由');
+    expect(output).toContain("skill='man8'");
+    expect(output).toContain('不要直接进入 solo 实施');
+  });
+
+  it('routes English planning prompts to the man8 skill', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: false,
+      contributors: 1,
+    });
+
+    const output = await runHook(
+      dir,
+      {},
+      {
+        prompt:
+          'Do not edit files yet. Investigate the best approach for adding authentication and give me a plan.',
+      },
+    );
+
+    expect(output).toContain('## mancode 自动路由');
+    expect(output).toContain("skill='man8'");
+  });
+
+  it('does not route small direct edits to man8', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: false,
+      contributors: 1,
+    });
+
+    const output = await runHook(
+      dir,
+      {},
+      {
+        prompt: '把 README 加一行 Usage',
+      },
+    );
+
+    expect(output).not.toContain('## mancode 自动路由');
+    expect(output).not.toContain("skill='man8'");
+  });
+});
+
+describe('SessionStart hook team reminder', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'mancode-session-start-'));
+    await installClaudeCode(dir, { techStack: [], uiLibrary: null });
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reminds team projects to use /manteam while in solo mode', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: true,
+      contributors: 3,
+    });
+
+    const output = await runSessionStartHook(dir);
+
+    expect(output).toContain('### 团队协作提醒');
+    expect(output).toContain('contributors: 3');
+    expect(output).toContain('/manteam <task>');
+  });
+
+  it('does not show the team reminder for solo projects', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: false,
+      contributors: 1,
+    });
+
+    const output = await runSessionStartHook(dir);
+
+    expect(output).not.toContain('### 团队协作提醒');
+    expect(output).not.toContain('/manteam <task>');
+  });
 });
 
 async function writeTokens(
@@ -128,7 +227,13 @@ async function writeTokens(
   );
 }
 
-function runHook(dir: string, env: NodeJS.ProcessEnv = {}): Promise<string> {
+function runHook(
+  dir: string,
+  env: NodeJS.ProcessEnv = {},
+  input: { prompt: string } = {
+    prompt: 'design a button component with tailwind css',
+  },
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       '/bin/bash',
@@ -156,8 +261,68 @@ function runHook(dir: string, env: NodeJS.ProcessEnv = {}): Promise<string> {
       else reject(new Error(`hook exited with ${code}: ${stderr}`));
     });
 
-    child.stdin.end(
-      JSON.stringify({ prompt: 'design a button component with tailwind css' }),
+    child.stdin.end(JSON.stringify(input));
+  });
+}
+
+async function writeState(
+  dir: string,
+  patch: {
+    currentMode: string;
+    teamModeAutoDetected: boolean;
+    contributors: number;
+  },
+): Promise<void> {
+  await writeFile(
+    path.join(dir, '.mancode', 'state.json'),
+    `${JSON.stringify(
+      {
+        version: '0.1.0-alpha.1',
+        currentMode: patch.currentMode,
+        lastMode: 'solo',
+        platform: 'claude-code',
+        initializedAt: '2026-06-28T00:00:00.000Z',
+        techStack: 'Unknown',
+        uiLibrary: 'None',
+        currentTask: null,
+        currentWorkflowMode: null,
+        skippedSteps: [],
+        teamModeAutoDetected: patch.teamModeAutoDetected,
+        contributors: patch.contributors,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf-8',
+  );
+}
+
+function runSessionStartHook(dir: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      '/bin/bash',
+      [path.join(dir, '.mancode', 'hooks', 'session-start.sh')],
+      {
+        cwd: dir,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     );
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`hook exited with ${code}: ${stderr}`));
+    });
   });
 }

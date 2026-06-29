@@ -188,6 +188,18 @@ describe('mancode status', () => {
     const result: StatusResult = JSON.parse(logs.join('\n'));
     expect(result.platforms).toEqual(['claude-code']);
   });
+
+  it('status respects --team forced mode from config/state', async () => {
+    const code = await silentInit(dir, { team: true });
+    expect(code).toBeUndefined();
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+    expect(result.team.isTeam).toBe(true);
+
+    const textLogs = await captureLog(() => status(dir));
+    expect(textLogs.join('\n')).toContain('Team:        detected');
+  });
 });
 
 /**
@@ -197,13 +209,16 @@ describe('mancode status', () => {
  * 如果 init 失败（返回非 0），抛出错误让测试直接挂掉——
  * 测试的前提条件没满足，没有继续的意义。
  */
-async function silentInit(dir: string): Promise<void> {
+async function silentInit(
+  dir: string,
+  options: Parameters<typeof init>[1] = {},
+): Promise<void> {
   const originalLog = console.log;
   const originalError = console.error;
   console.log = () => {};
   console.error = () => {};
   try {
-    const code = await init(dir);
+    const code = await init(dir, options);
     if (code !== 0) {
       throw new Error(`silentInit failed: init exited with ${code}`);
     }

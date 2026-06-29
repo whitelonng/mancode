@@ -29,7 +29,7 @@ program
 
 program
   .command('install [platform]')
-  .description('Install platform adapter (MVP-1: claude-code only)')
+  .description('Install platform adapter (Claude Code supported)')
   .option('--force', 'Reinstall even if already installed')
   .option('--minimal', 'Minimal install (MVP-2)')
   .action(async (platform, options) => {

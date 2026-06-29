@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
@@ -15,7 +15,7 @@ import { MVP2_SKILLS, renderSkill } from '../templates/skills/index.js';
  * 职责（docs/08-cli-spec.md §2.4）：
  * 1. 创建 .mancode/ 下 8 个文件/目录
  * 2. 创建 .claude/settings.json（幂等合并，不覆盖用户已有配置）
- * 3. 创建 .claude/skills/mancode-solo.md
+ * 3. 创建 .claude/skills/<name>/SKILL.md
  *
  * 幂等：重复运行不会丢失用户配置，hook 会去重。
  */
@@ -24,6 +24,7 @@ export async function installClaudeCode(
   options: {
     techStack: string[];
     uiLibrary: string | null;
+    minimal?: boolean;
   },
 ): Promise<void> {
   const mancodeDir = path.join(projectRoot, '.mancode');
@@ -60,10 +61,18 @@ export async function installClaudeCode(
   // 6. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
   await installSoloSkill(path.join(claudeDir, 'skills'));
-  await installMvp2Skills(path.join(claudeDir, 'skills'));
+  if (options.minimal) {
+    await uninstallMvp2Skills(path.join(claudeDir, 'skills'));
+  } else {
+    await installMvp2Skills(path.join(claudeDir, 'skills'));
+  }
 
   // 7. 创建 .claude/agents/ 并写入教练组（MVP-2）
-  await installAgents(path.join(claudeDir, 'agents'));
+  if (options.minimal) {
+    await rm(path.join(claudeDir, 'agents'), { recursive: true, force: true });
+  } else {
+    await installAgents(path.join(claudeDir, 'agents'));
+  }
 
   // 8. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir);
@@ -82,25 +91,51 @@ async function installHooks(hooksDir: string): Promise<void> {
 }
 
 async function installSoloSkill(skillsDir: string): Promise<void> {
-  const skillDst = path.join(skillsDir, 'mancode-solo.md');
-  await writeFile(skillDst, SOLO_SKILL, 'utf-8');
+  await installProjectSkill(skillsDir, {
+    name: 'solo',
+    description: 'Default mancode solo-mode guidance for small, focused tasks.',
+    body: SOLO_SKILL,
+  });
+  await removeLegacyFlatSkill(skillsDir, 'mancode-solo');
 }
 
 /**
- * 写入 MVP-2 skill 文件（/man8 /man /mansolo，docs/03）。
+ * 写入 MVP-2 skill 目录（/man8 /man /mansolo，docs/03）。
  *
- * 文件名：mancode-<name>.md（Claude Code 通过文件名识别命令）。
+ * 目录：.claude/skills/<name>/SKILL.md（Claude Code 通过目录名识别命令）。
  * `--force` 重装时直接覆盖（内容随 mancode 版本演进）。
  */
 async function installMvp2Skills(skillsDir: string): Promise<void> {
   for (const skill of MVP2_SKILLS) {
-    const content = renderSkill(skill);
-    await writeFile(
-      path.join(skillsDir, `mancode-${skill.name}.md`),
-      content,
-      'utf-8',
-    );
+    await installProjectSkill(skillsDir, skill);
+    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`);
   }
+}
+
+async function uninstallMvp2Skills(skillsDir: string): Promise<void> {
+  for (const skill of MVP2_SKILLS) {
+    await rm(path.join(skillsDir, skill.name), {
+      recursive: true,
+      force: true,
+    });
+    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`);
+  }
+}
+
+async function installProjectSkill(
+  skillsDir: string,
+  skill: { name: string; description: string; body: string },
+): Promise<void> {
+  const skillDir = path.join(skillsDir, skill.name);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, 'SKILL.md'), renderSkill(skill), 'utf-8');
+}
+
+async function removeLegacyFlatSkill(
+  skillsDir: string,
+  legacyName: string,
+): Promise<void> {
+  await rm(path.join(skillsDir, `${legacyName}.md`), { force: true });
 }
 
 /**
@@ -179,16 +214,27 @@ async function updateClaudeSettings(claudeDir: string): Promise<void> {
     createCommandGroup('bash .mancode/hooks/user-prompt-submit.sh'),
   ];
 
-  // 添加 solo skill + MVP-2 skills（man8 / man / mansolo）
-  settings.skills = settings.skills || {};
-  settings.skills.solo = '.claude/skills/mancode-solo.md';
-  settings.skills.man8 = '.claude/skills/mancode-man8.md';
-  settings.skills.man = '.claude/skills/mancode-man.md';
-  settings.skills.mansolo = '.claude/skills/mancode-mansolo.md';
+  removeLegacyMancodeSkillSettings(settings);
 
   // 写回
   const content = `${JSON.stringify(settings, null, 2)}\n`;
   await writeFile(settingsPath, content, 'utf-8');
+}
+
+function removeLegacyMancodeSkillSettings(settings: ClaudeSettings): void {
+  if (!settings.skills) return;
+  const legacyNames = new Set([
+    'solo',
+    'man8',
+    'man',
+    'manteam',
+    'manps',
+    'mansolo',
+  ]);
+  const retained = Object.fromEntries(
+    Object.entries(settings.skills).filter(([name]) => !legacyNames.has(name)),
+  );
+  settings.skills = Object.keys(retained).length > 0 ? retained : undefined;
 }
 
 function createCommandGroup(command: string): ClaudeMatcherGroup {

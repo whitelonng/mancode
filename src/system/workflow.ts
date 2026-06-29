@@ -76,9 +76,9 @@ export async function createWorkflow(
   task: string,
   mode: 'man8' | 'man',
 ): Promise<WorkflowMeta> {
-  const taskId = generateTaskId(task);
+  await mkdir(workflowsRoot(projectRoot), { recursive: true });
+  const taskId = await allocateTaskId(projectRoot, generateTaskId(task));
   const dir = workflowDir(projectRoot, taskId);
-  await mkdir(dir, { recursive: true });
 
   const now = new Date().toISOString();
   const meta: WorkflowMeta = {
@@ -94,6 +94,25 @@ export async function createWorkflow(
 
   await writeMetadata(dir, meta);
   return meta;
+}
+
+async function allocateTaskId(
+  projectRoot: string,
+  baseTaskId: string,
+): Promise<string> {
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const taskId = attempt === 0 ? baseTaskId : `${baseTaskId}-${attempt + 1}`;
+    try {
+      await mkdir(workflowDir(projectRoot, taskId));
+      return taskId;
+    } catch (err) {
+      if (isNodeError(err) && err.code === 'EEXIST') {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`unable to allocate workflow id for: ${baseTaskId}`);
 }
 
 /**
@@ -213,6 +232,10 @@ function parseWorkflowMeta(raw: string, taskId: string): WorkflowMeta | null {
   } catch {
     return null;
   }
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && 'code' in err;
 }
 
 /**

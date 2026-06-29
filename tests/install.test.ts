@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -49,6 +56,32 @@ describe('mancode install', () => {
     const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
     const content = await readFile(hookPath, 'utf-8');
     expect(content).toContain('mancode');
+  });
+
+  it('install --minimal --force keeps only solo skill and removes coaching staff', async () => {
+    await silentInit(dir);
+
+    expect(
+      await pathExists(path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md')),
+    ).toBe(true);
+    expect(await pathExists(path.join(dir, '.claude', 'agents'))).toBe(true);
+
+    const code = await install(dir, 'claude-code', {
+      force: true,
+      minimal: true,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(
+      await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
+    ).toBe(true);
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'man8'))).toBe(
+      false,
+    );
+    expect(
+      await pathExists(path.join(dir, '.claude', 'skills', 'manteam')),
+    ).toBe(false);
+    expect(await pathExists(path.join(dir, '.claude', 'agents'))).toBe(false);
   });
 
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
@@ -201,5 +234,14 @@ async function silentInit(dir: string): Promise<void> {
   } finally {
     console.log = originalLog;
     console.error = originalError;
+  }
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
   }
 }

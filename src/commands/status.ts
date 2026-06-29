@@ -70,6 +70,11 @@ export interface StatusResult {
   } | null;
 }
 
+interface StatusConfig {
+  platforms?: string[];
+  forceTeamMode?: boolean;
+}
+
 /**
  * `mancode status` 命令。
  *
@@ -118,33 +123,31 @@ export async function status(
   const [
     project,
     hooksStatus,
-    platforms,
+    config,
     hookInjection,
     teamStatus,
     currentWorkflow,
   ] = await Promise.all([
     getProjectName(rootDir),
     checkHooks(rootDir),
-    getInstalledPlatforms(rootDir, state.platform),
+    readConfig(rootDir),
     estimateHookInjection(rootDir),
     detectTeamStatus(rootDir),
     getCurrentWorkflow(rootDir, state.currentTask ?? null),
   ]);
+  const effectiveTeam = getEffectiveTeamStatus(state, config, teamStatus);
 
   const result: StatusResult = {
     version: state.version || VERSION,
     project,
     techStack: state.techStack || 'Unknown',
     mode: state.currentMode || 'solo',
-    platforms,
+    platforms: getInstalledPlatforms(config, state.platform),
     uiLibrary: state.uiLibrary || 'None',
     initializedAt: state.initializedAt || 'unknown',
     hooks: hooksStatus,
     hookInjection,
-    team: {
-      ...teamStatus,
-      autoDetected: state.teamModeAutoDetected ?? teamStatus.isTeam,
-    },
+    team: effectiveTeam,
     currentWorkflow,
   };
 
@@ -193,23 +196,45 @@ async function getProjectName(rootDir: string): Promise<string> {
 /**
  * 从 config.json 读取已安装平台列表，fallback 到 state.platform。
  */
-async function getInstalledPlatforms(
-  rootDir: string,
-  fallback: string,
-): Promise<string[]> {
+async function readConfig(rootDir: string): Promise<StatusConfig> {
   try {
     const raw = await fs.readFile(
       path.join(rootDir, '.mancode', 'config.json'),
       'utf-8',
     );
-    const config = JSON.parse(raw) as { platforms?: string[] };
-    if (Array.isArray(config.platforms) && config.platforms.length > 0) {
-      return config.platforms;
-    }
+    return JSON.parse(raw) as StatusConfig;
   } catch {
-    // config.json 不存在或解析失败——fallback
+    // config.json 不存在或解析失败——调用方使用 fallback
+    return {};
+  }
+}
+
+function getInstalledPlatforms(
+  config: StatusConfig,
+  fallback: string,
+): string[] {
+  if (Array.isArray(config.platforms) && config.platforms.length > 0) {
+    return config.platforms;
   }
   return fallback ? [fallback] : [];
+}
+
+function getEffectiveTeamStatus(
+  state: StatusState,
+  config: StatusConfig,
+  detected: StatusResult['team'],
+): StatusResult['team'] {
+  const configuredTeam =
+    config.forceTeamMode === true
+      ? true
+      : (state.teamModeAutoDetected ?? detected.isTeam);
+
+  return {
+    ...detected,
+    isTeam: configuredTeam,
+    contributors: Math.max(detected.contributors, state.contributors ?? 0, 1),
+    autoDetected: state.teamModeAutoDetected ?? detected.isTeam,
+  };
 }
 
 /**

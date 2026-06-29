@@ -146,15 +146,22 @@ export async function init(
       if (project.uiLibrary) {
         console.log(`   UI: ${uiLibraryStr}`);
       }
+    } else if (hasPackageJson) {
+      console.log('   package.json found, no known framework dependencies');
     } else {
       console.log('   (No package.json found, skipping tech detection)');
     }
 
     // 4.1 检测多人协作（MVP-2）
     const team = await detectTeamStatus(rootDir);
-    if (team.isTeam) {
+    const teamModeEnabled = options.team ?? team.isTeam;
+    if (options.team === true) {
+      console.log('   team: forced on (--team)');
+    } else if (options.team === false) {
+      console.log('   team: forced off (--no-team)');
+    } else if (team.isTeam) {
       console.log(
-        `   team: ${team.contributors} contributors (auto-team available in MVP-3)`,
+        `   team: ${team.contributors} contributors (/manteam available)`,
       );
     }
 
@@ -172,7 +179,7 @@ export async function init(
       currentTask: null,
       currentWorkflowMode: null,
       skippedSteps: [],
-      teamModeAutoDetected: team.isTeam,
+      teamModeAutoDetected: teamModeEnabled,
       contributors: team.contributors,
     };
 
@@ -184,6 +191,10 @@ export async function init(
     await installClaudeCode(rootDir, {
       techStack: project.techStack,
       uiLibrary: project.uiLibrary,
+    });
+    await updateConfigOptions(mancodeDir, {
+      forceTeamMode: options.team === true,
+      defaultStyle: options.style ?? null,
     });
 
     // 7. 审美扫描（前端项目才扫）
@@ -233,7 +244,7 @@ export async function init(
     console.log(styleLine);
     console.log('  .mancode/logs/              # hooks.log');
     console.log('  .claude/settings.json       # hook 注册');
-    console.log('  .claude/skills/mancode-solo.md');
+    console.log('  .claude/skills/             # solo + MVP-2 slash skills');
     console.log('');
     console.log('Next:');
     console.log('  mancode status              # Show project state');
@@ -245,6 +256,27 @@ export async function init(
     console.error(`✗  mancode init failed: ${msg}`);
     return EXIT_NOT_A_PROJECT_DIR;
   }
+}
+
+async function updateConfigOptions(
+  mancodeDir: string,
+  patch: { forceTeamMode: boolean; defaultStyle: string | null },
+): Promise<void> {
+  const configPath = path.join(mancodeDir, 'config.json');
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(await fs.readFile(configPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    // installClaudeCode normally writes config.json; keep init robust if it did not.
+  }
+  await fs.writeFile(
+    configPath,
+    `${JSON.stringify({ ...config, ...patch }, null, 2)}\n`,
+    'utf-8',
+  );
 }
 
 async function pathExists(p: string): Promise<boolean> {
