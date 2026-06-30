@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -29,6 +30,36 @@ export interface PreseasonReport {
   issues: PreseasonIssue[];
   commandsChecked: string[];
   reportPath: string;
+  issueDbPath: string;
+}
+
+export type PreseasonIssueStatus = 'open' | 'not-found';
+
+export interface PreseasonIssueRecord extends PreseasonIssue {
+  key: string;
+  status: PreseasonIssueStatus;
+  firstSeen: string;
+  lastSeen: string;
+  lastArea: string;
+  occurrences: number;
+  sourceReports: string[];
+}
+
+export interface PreseasonIssueRun {
+  id: string;
+  generatedAt: string;
+  area: string;
+  reportPath: string;
+  issueCount: number;
+  issueKeys: string[];
+}
+
+export interface PreseasonIssueDatabase {
+  version: '1.0.0';
+  updatedAt: string;
+  latestRunId: string;
+  runs: PreseasonIssueRun[];
+  issues: PreseasonIssueRecord[];
 }
 
 type PreseasonArea = 'all' | 'deps' | 'security' | 'dead-code' | 'config';
@@ -83,6 +114,11 @@ export async function runPreseasonScan(
 
   const reportDir = path.join(projectRoot, '.mancode', 'preseason-reports');
   await mkdir(reportDir, { recursive: true });
+  const issueDbPath = path.join(
+    projectRoot,
+    '.mancode',
+    'preseason-issues.json',
+  );
   const reportPath = await allocateReportPath(
     reportDir,
     `${generatedAt.replace(/[:.]/g, '-')}-${normalizedArea}`,
@@ -93,6 +129,7 @@ export async function runPreseasonScan(
     issues,
     commandsChecked: inferCommands(pkg),
     reportPath,
+    issueDbPath,
   };
   await writeFile(reportPath, renderPreseasonReport(report), 'utf-8');
   await writeFile(
@@ -100,6 +137,7 @@ export async function runPreseasonScan(
     renderPreseasonReport(report),
     'utf-8',
   );
+  await writeIssueDatabase(projectRoot, report);
   return report;
 }
 
@@ -465,6 +503,123 @@ function inferCommands(pkg: PackageJson | null): string[] {
   return ['lint', 'test', 'build']
     .filter((name) => scripts[name])
     .map((name) => `npm run ${name}`);
+}
+
+async function writeIssueDatabase(
+  projectRoot: string,
+  report: PreseasonReport,
+): Promise<void> {
+  const reportRef = path.relative(projectRoot, report.reportPath);
+  const run: PreseasonIssueRun = {
+    id: report.generatedAt.replace(/[:.]/g, '-'),
+    generatedAt: report.generatedAt,
+    area: report.area,
+    reportPath: reportRef,
+    issueCount: report.issues.length,
+    issueKeys: report.issues.map((issue) => issueKey(issue)),
+  };
+  const existing = await readIssueDatabase(report.issueDbPath);
+  const currentKeys = new Set(run.issueKeys);
+  const records = new Map(
+    existing.issues.map((issue) => [issue.key, { ...issue }]),
+  );
+
+  for (const issue of report.issues) {
+    const key = issueKey(issue);
+    const previous = records.get(key);
+    records.set(key, {
+      ...issue,
+      key,
+      status: 'open',
+      firstSeen: previous?.firstSeen ?? report.generatedAt,
+      lastSeen: report.generatedAt,
+      lastArea: report.area,
+      occurrences: (previous?.occurrences ?? 0) + 1,
+      sourceReports: appendUnique(previous?.sourceReports ?? [], reportRef, 5),
+    });
+  }
+
+  for (const [key, issue] of records) {
+    if (!currentKeys.has(key) && issue.status === 'open') {
+      records.set(key, { ...issue, status: 'not-found' });
+    }
+  }
+
+  const database: PreseasonIssueDatabase = {
+    version: '1.0.0',
+    updatedAt: report.generatedAt,
+    latestRunId: run.id,
+    runs: [...existing.runs, run].slice(-50),
+    issues: Array.from(records.values()).sort(compareIssueRecords),
+  };
+
+  await writeFile(
+    report.issueDbPath,
+    `${JSON.stringify(database, null, 2)}\n`,
+    'utf-8',
+  );
+}
+
+async function readIssueDatabase(
+  issueDbPath: string,
+): Promise<PreseasonIssueDatabase> {
+  try {
+    const raw = await readFile(issueDbPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<PreseasonIssueDatabase>;
+    if (
+      parsed.version === '1.0.0' &&
+      Array.isArray(parsed.runs) &&
+      Array.isArray(parsed.issues)
+    ) {
+      return {
+        version: '1.0.0',
+        updatedAt: parsed.updatedAt ?? '',
+        latestRunId: parsed.latestRunId ?? '',
+        runs: parsed.runs,
+        issues: parsed.issues,
+      };
+    }
+  } catch {
+    // Missing/corrupt issue database should not block generating a fresh scan.
+  }
+  return {
+    version: '1.0.0',
+    updatedAt: '',
+    latestRunId: '',
+    runs: [],
+    issues: [],
+  };
+}
+
+function issueKey(issue: PreseasonIssue): string {
+  const stableParts = [
+    issue.type,
+    issue.title,
+    issue.file ?? '',
+    issue.detail,
+  ].join('\0');
+  return createHash('sha1').update(stableParts).digest('hex').slice(0, 12);
+}
+
+function appendUnique(values: string[], next: string, limit: number): string[] {
+  return [...values.filter((value) => value !== next), next].slice(-limit);
+}
+
+function compareIssueRecords(
+  a: PreseasonIssueRecord,
+  b: PreseasonIssueRecord,
+): number {
+  const severityOrder: Record<PreseasonSeverity, number> = {
+    P0: 0,
+    P1: 1,
+    P2: 2,
+  };
+  return (
+    severityOrder[a.severity] - severityOrder[b.severity] ||
+    a.type.localeCompare(b.type) ||
+    a.title.localeCompare(b.title) ||
+    a.key.localeCompare(b.key)
+  );
 }
 
 function renderSection(title: string, issues: PreseasonIssue[]): string {

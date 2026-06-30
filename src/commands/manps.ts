@@ -65,6 +65,7 @@ export async function manps(
     `Issues:   ${report.issues.length} total (P0 ${p0}, P1 ${p1}, P2 ${p2})`,
   );
   console.log(`Report:   ${path.relative(rootDir, report.reportPath)}`);
+  console.log(`Issue DB: ${path.relative(rootDir, report.issueDbPath)}`);
   if (report.issues.length > 0) {
     console.log('');
     for (const issue of report.issues.slice(0, 7)) {

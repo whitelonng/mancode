@@ -53,6 +53,18 @@ describe('preseason scan', () => {
     await expect(
       readFile(path.join(dir, '.mancode', 'preseason-report.md'), 'utf-8'),
     ).resolves.toContain('mancode preseason report');
+    const issueDb = JSON.parse(await readFile(report.issueDbPath, 'utf-8'));
+    expect(issueDb.version).toBe('1.0.0');
+    expect(issueDb.latestRunId).toBeTruthy();
+    expect(issueDb.runs).toHaveLength(1);
+    expect(issueDb.runs[0].area).toBe('all');
+    expect(issueDb.issues.length).toBe(report.issues.length);
+    expect(issueDb.issues[0]).toMatchObject({
+      status: 'open',
+      firstSeen: report.generatedAt,
+      lastSeen: report.generatedAt,
+      occurrences: 1,
+    });
   });
 
   it('filters issues by area', async () => {
@@ -147,6 +159,61 @@ describe('preseason scan', () => {
     await expect(readFile(secondDeps.reportPath, 'utf-8')).resolves.toContain(
       'Area: deps',
     );
+  });
+
+  it('tracks issue history across preseason scans', async () => {
+    const packagePath = path.join(dir, 'package.json');
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const first = await runPreseasonScan(dir, 'deps');
+    const second = await runPreseasonScan(dir, 'deps');
+
+    const issueDb = JSON.parse(await readFile(second.issueDbPath, 'utf-8'));
+    expect(issueDb.runs).toHaveLength(2);
+    expect(issueDb.runs[0].issueKeys).toEqual(issueDb.runs[1].issueKeys);
+    expect(issueDb.issues).toHaveLength(1);
+    expect(issueDb.issues[0]).toMatchObject({
+      key: issueDb.runs[0].issueKeys[0],
+      status: 'open',
+      firstSeen: first.generatedAt,
+      lastSeen: second.generatedAt,
+      lastArea: 'deps',
+      occurrences: 2,
+    });
+    expect(issueDb.issues[0].sourceReports).toHaveLength(2);
+  });
+
+  it('marks previously open issues as not-found when a later scan no longer sees them', async () => {
+    const packagePath = path.join(dir, 'package.json');
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+    const first = await runPreseasonScan(dir, 'deps');
+
+    await writeFile(packagePath, JSON.stringify({ dependencies: {} }), 'utf-8');
+    const second = await runPreseasonScan(dir, 'deps');
+
+    const issueDb = JSON.parse(await readFile(second.issueDbPath, 'utf-8'));
+    expect(issueDb.runs).toHaveLength(2);
+    expect(issueDb.runs[1].issueKeys).toEqual([]);
+    expect(issueDb.issues).toHaveLength(1);
+    expect(issueDb.issues[0]).toMatchObject({
+      key: issueDb.runs[0].issueKeys[0],
+      status: 'not-found',
+      firstSeen: first.generatedAt,
+      lastSeen: first.generatedAt,
+      occurrences: 1,
+    });
   });
 
   it('does not flag CSS variable definitions as hardcoded color drift', async () => {

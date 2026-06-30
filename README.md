@@ -188,7 +188,8 @@ mancode workflow show     # Show workflow metadata
 mancode workflow clean    # Clean completed/old workflows
 mancode manps [area]      # Preseason health scan, write report
                           # Areas: all (default) | deps | security | dead-code | config
-                          # Writes .mancode/preseason-report.md + .mancode/preseason-reports/<ts>-<area>.md
+                          # Writes .mancode/preseason-report.md, .mancode/preseason-issues.json,
+                          # and .mancode/preseason-reports/<ts>-<area>.md
 mancode refresh-style     # Rescan Tailwind config, update style-tokens.json
 mancode version           # Show mancode/node/platform versions
 ```
@@ -230,7 +231,7 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 | **man8 skill** (MVP-2) | Planning/research prompts (hook suggests `/man8`; user can also call it manually) | Scout investigates codebase → Draft plan → Ask for approval |
 | **/man** (MVP-2) | Critical features | Full 8 steps: scout → plan → code → review (offense) → fix → review (defense) → fix → merge |
 | **/manteam** (MVP-2) | Team projects | Multi-dev memory, commit templates, coordination |
-| **/manps** (MVP-2) | Project cleanup | Runs `mancode manps`, writes `.mancode/preseason-report.md` + timestamped copy in `.mancode/preseason-reports/` |
+| **/manps** (MVP-2) | Project cleanup | Runs `mancode manps`, writes Markdown reports + `.mancode/preseason-issues.json` |
 
 **Philosophy**: Light by default. Opt into rigor when you need it.
 
@@ -352,7 +353,7 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 
 Current focus areas:
 - Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
-- Hardening `/manps` remediation loop and structured issue database
+- Hardening `/manps` remediation loop on top of the structured issue database
 - Conventional Commits enforcement and PR template generation for `/manteam`
 
 After MVP-3 (multi-platform), contributions welcome for:
@@ -554,7 +555,8 @@ mancode workflow show     # 显示 workflow 元数据
 mancode workflow clean    # 清理已完成/过旧 workflow
 mancode manps [area]      # 季前赛健康扫描，写入报告
                           # area: all（默认）| deps | security | dead-code | config
-                          # 生成 .mancode/preseason-report.md + .mancode/preseason-reports/<时间戳>-<area>.md
+                          # 生成 .mancode/preseason-report.md、.mancode/preseason-issues.json
+                          # 和 .mancode/preseason-reports/<时间戳>-<area>.md
 mancode refresh-style     # 重扫 Tailwind 配置，更新 style-tokens.json
 mancode version           # 显示 mancode/node/平台版本
 ```
@@ -596,7 +598,7 @@ mancode install --force   # 重装适配（保留已扫描 token）
 | **man8 skill**（MVP-2） | 规划/调研类请求（hook 会建议 `/man8`；用户也可手动调用）| Scout 调查代码库 → 草拟计划 → 等待批准 |
 | **/man**（MVP-2） | 关键功能 | 完整 8 步：侦查 → 计划 → 编码 → 审查（进攻）→ 修复 → 审查（防守）→ 修复 → 合并 |
 | **/manteam**（MVP-2） | 团队项目 | 多开发者记忆、提交模板、协调 |
-| **/manps**（MVP-2） | 项目清理 | 运行 `mancode manps`，写入 `.mancode/preseason-report.md` + 带时间戳的副本到 `.mancode/preseason-reports/` |
+| **/manps**（MVP-2） | 项目清理 | 运行 `mancode manps`，写入 Markdown 报告 + `.mancode/preseason-issues.json` |
 
 **哲学**：默认轻量。需要时选择严格。
 
@@ -718,7 +720,7 @@ MVP-2 alpha 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitH
 
 当前重点：
 - 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
-- 完善 `/manps` 的 y/n remediation loop 和结构化 issue database
+- 基于结构化 issue database 完善 `/manps` 的 y/n remediation loop
 - `/manteam` 的 Conventional Commits 强制和 PR 模板生成
 
 MVP-3（多平台）之后，欢迎贡献：
