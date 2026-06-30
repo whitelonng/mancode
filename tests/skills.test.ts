@@ -169,6 +169,14 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MANPS_SKILL.body).toMatch(/preseason-report\.md/);
       expect(MANPS_SKILL.body).toMatch(/不直接修改代码/);
     });
+
+    it('keeps CLI scan areas aligned with the manps command contract', () => {
+      expect(MANPS_SKILL.body).toMatch(
+        /all.*deps.*security.*dead-code.*config/,
+      );
+      expect(MANPS_SKILL.body).toMatch(/不要把它传给 CLI/);
+      expect(MANPS_SKILL.body).toMatch(/目录\/模块\/主题/);
+    });
   });
 
   describe('renderSkill', () => {

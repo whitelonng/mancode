@@ -74,6 +74,12 @@ describe('mancode init', () => {
     const logContent = await readFile(logPath, 'utf-8');
     expect(logContent).toBe('');
 
+    // 验证 MVP-2 P1 durable outputs
+    const memoryFiles = await readdir(path.join(dir, '.mancode', 'memory'));
+    expect(memoryFiles.sort()).toEqual(['decisions.md', 'prd.md', 'spec.md']);
+    const reportDirs = await readdir(path.join(dir, '.mancode'));
+    expect(reportDirs).toContain('preseason-reports');
+
     // 验证 .claude/settings.json（官方 schema: matcher group 数组）
     const settingsPath = path.join(dir, '.claude', 'settings.json');
     const settingsRaw = await readFile(settingsPath, 'utf-8');

@@ -12,14 +12,38 @@ export const MANPS_SKILL: SkillSpec = {
     'Preseason project health check. Scans for tech debt, stale TODOs, unused dependencies, missing tests, and risky patterns without changing code.',
   body: `# mancode · /manps (Preseason)
 
-用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：只读扫描、分级排序、输出 cleanup plan。默认不改代码。
+用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：先运行 mancode 的确定性扫描引擎，再基于报告补充判断。默认不改代码。
 
 ## 输入
 
-- \`area\` 可选：目录、模块、功能名或主题。
-- 如果为空，扫描整个项目，但要控制范围，优先看根配置、src、tests、README。
+- \`area\` 可选，但 CLI 只支持固定扫描域：\`all\`、\`deps\`、\`security\`、\`dead-code\`、\`config\`。
+- 如果用户输入的是目录、模块、功能名或主题，不要把它传给 CLI；先运行默认扫描，再把该输入作为 Step 2 的补充扫描范围。
+- 如果为空，扫描整个项目，优先看根配置、src、tests、README。
 
-## 扫描清单
+## Step 1: 运行确定性扫描
+
+先用 Bash 执行：
+
+\`\`\`bash
+mancode manps <area>
+\`\`\`
+
+其中 \`<area>\` 必须是 \`all\`、\`deps\`、\`security\`、\`dead-code\`、\`config\` 之一。
+
+如果 \`area\` 为空，或用户给的是目录/模块/主题，运行：
+
+\`\`\`bash
+mancode manps
+\`\`\`
+
+扫描会生成：
+
+- \`.mancode/preseason-reports/<date>.md\`
+- \`.mancode/preseason-report.md\`
+
+如果 CLI 不可用，再按下面的手动扫描清单执行。
+
+## Step 2: 补充扫描清单
 
 ### 1. Project Shape
 
@@ -55,7 +79,7 @@ export const MANPS_SKILL: SkillSpec = {
 
 ## 输出文件
 
-写入 \`.mancode/preseason-report.md\`：
+确认已经写入 \`.mancode/preseason-report.md\`：
 
 \`\`\`
 # mancode preseason report

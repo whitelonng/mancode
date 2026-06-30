@@ -22,14 +22,19 @@ export const MANTEAM_SKILL: SkillSpec = {
 
 ## Step 0: Team Context
 
-1. 读取 \`.mancode/state.json\` 和 \`.mancode/config.json\`
-2. 收集团队上下文：
+1. 读取 \`.mancode/state.json\`、\`.mancode/config.json\` 和团队 memory：
+   - \`.mancode/memory/prd.md\`
+   - \`.mancode/memory/spec.md\`
+   - \`.mancode/memory/decisions.md\`
+2. 如果 memory 文件不存在，先创建上述 3 个文件，使用简短标题和空模板，不要覆盖已有内容。
+3. 收集团队上下文：
    - \`git status --short\`
    - \`git branch --show-current\`
    - \`git log --since="30 days ago" --pretty=format:"%h %an <%ae> %s" --max-count=30\`
    - \`git diff --stat\`
-3. 如果有未提交改动，先判断是否属于用户当前任务；不确定就问用户，不要覆盖。
-4. 在 \`.mancode/team-context.md\` 追加本次任务条目：
+4. 如果有未提交改动，先判断是否属于用户当前任务；不确定就问用户，不要覆盖。
+5. 在 \`.mancode/memory/decisions.md\` 追加本次任务条目：
+   - 日期
    - task
    - branch
    - current contributors signal

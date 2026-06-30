@@ -116,24 +116,38 @@ src/components/     → Button, Input, Card components exist
 <Button className="bg-primary">  // uses #3b82f6, not generic "blue"
 ```
 
-### Team Memory (Codex platform)
-When using Codex CLI, mancode writes to `AGENTS.md`:
-```markdown
-<!-- User's long-term memory -->
-## Lessons
-2026-06-20: Don't use lodash.merge for React state
+### Three Questions (solo mode)
+On every prompt in solo mode, mancode injects three questions before the agent acts:
 
-## Architecture Decisions  
-2026-06-15: Chose shadcn/ui over MUI (team familiarity)
+1. **Why?** — What problem does this change solve?
+2. **What exists?** — Is there an existing implementation to reuse?
+3. **How minimal?** — Can it be one line? Can it reuse existing code?
 
-<!-- mancode managed section -->
-<!-- mancode:start -->
-## mancode Configuration
-[auto-generated, don't edit]
-<!-- mancode:end -->
+This is the **lightweight YAGNI enforcement** that makes solo mode more than just "vanilla agent + aesthetics". The agent doesn't always answer out loud, but it always considers before writing.
+
+### Team Memory (manteam mode)
+When you run `/manteam`, mancode reads and updates shared memory under `.mancode/memory/`:
+
+```
+.mancode/memory/
+├── prd.md           # What the team is building (shared context)
+├── spec.md          # How it should behave (agreements)
+└── decisions.md     # Dated ADR-style entries (why X over Y)
 ```
 
-**Boundary**: mancode only touches the controlled section. Your notes stay safe.
+Example entry appended to `decisions.md` on each `/manteam` run:
+
+```markdown
+## 2026-06-30: Chose shadcn/ui over MUI
+
+- Decision: Use shadcn/ui for the settings redesign
+- Context: Team already familiar with it; MUI bundle is larger
+- Task: settings-redesign
+```
+
+The next agent (or teammate) inherits this context — no more "why did we pick this?" reruns.
+
+**Boundary**: mancode only writes to `.mancode/memory/`. Your source code and `AGENTS.md` (if you use Codex CLI later) stay untouched on Claude Code.
 
 ---
 
@@ -172,6 +186,9 @@ mancode install [platform]# Install/reinstall platform adapter
 mancode workflow list     # List mancode workflows
 mancode workflow show     # Show workflow metadata
 mancode workflow clean    # Clean completed/old workflows
+mancode manps [area]      # Preseason health scan, write report
+                          # Areas: all (default) | deps | security | dead-code | config
+                          # Writes .mancode/preseason-report.md + .mancode/preseason-reports/<ts>-<area>.md
 mancode refresh-style     # Rescan Tailwind config, update style-tokens.json
 mancode version           # Show mancode/node/platform versions
 ```
@@ -194,12 +211,14 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 ### Claude Code Skills
 
 ```bash
-/man8                     # 4 AM Warmup: scout + plan (auto-used for planning/research prompts)
+/man8                     # 4 AM Warmup: scout + plan (hook suggests it for planning/research prompts; also invocable manually)
 /man                      # Playoffs: full 8-step flow
 /manps                    # Preseason: health check
 /manteam                  # Team mode (or auto-detected)
 /mansolo                  # Back to solo
 ```
+
+> **Planned aliases** (not yet wired up): `/warmup`, `/playoffs`, `/team`, `/preseason`, `/back-to-solo`.
 
 ---
 
@@ -208,10 +227,10 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 | Mode | When to Use | What It Does |
 |---|---|---|
 | **solo** (default) | Daily work | Quiet, efficient, style-aware. Reuses existing code. |
-| **man8 skill** (MVP-2) | Planning/research prompts; `/man8` is optional | Scout investigates codebase → Draft plan → Ask for approval |
+| **man8 skill** (MVP-2) | Planning/research prompts (hook suggests `/man8`; user can also call it manually) | Scout investigates codebase → Draft plan → Ask for approval |
 | **/man** (MVP-2) | Critical features | Full 8 steps: scout → plan → code → review (offense) → fix → review (defense) → fix → merge |
 | **/manteam** (MVP-2) | Team projects | Multi-dev memory, commit templates, coordination |
-| **/manps** (MVP-2) | Project cleanup | Scan for tech debt, unused deps, stale TODOs, missing tests |
+| **/manps** (MVP-2) | Project cleanup | Runs `mancode manps`, writes `.mancode/preseason-report.md` + timestamped copy in `.mancode/preseason-reports/` |
 
 **Philosophy**: Light by default. Opt into rigor when you need it.
 
@@ -219,8 +238,12 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 
 ## Design Principles
 
-### 1. YAGNI Ladder
-Before writing new code, check:
+### 1. Light by Default, Heavy on Demand
+- solo mode is the default — 3 enhancements, no ceremony
+- Heavy flows (`/man`, `/manteam`) are opt-in when the task actually warrants it
+- Don't burn 30k tokens fixing a typo
+
+**YAGNI Ladder** (checked before writing new code):
 1. Already exists in this codebase? → **reuse it**
 2. Stdlib does it? → **use it**
 3. Native platform feature? → **use it**
@@ -228,22 +251,25 @@ Before writing new code, check:
 5. One line? → **one line**
 6. Only then: write the minimum that works
 
-### 2. Aesthetic Consistency
-- Scan project's existing design tokens (colors, fonts, spacing)
-- Reuse components, not recreate
-- Match naming conventions
-- Apply project's style guide
+### 2. Pro-Grade When It Counts
+- Critical code gets the full coaching staff: Scout → Head Coach → two Film Analysts
+- Dual review: offense (code quality) + defense (security, edges, concurrency)
+- 8-step flow, 30-90 min, no silent skipping
 
-### 3. Team Memory
-- Track contributors, commits, decisions
-- Avoid conflicting changes
-- Surface project context to all agents
+### 3. Aesthetics Is Not Optional
+- Frontend tasks always match your existing design tokens (colors, fonts, components)
+- No "generic blue" — use the project's actual primary color
+- New projects without design tokens get 3 style options, not AI slop
 
-### 4. Surgical Changes
-- Change only what the task requires
-- No "drive-by refactoring"
-- No formatting unrelated code
-- Keep diffs minimal
+### 4. Ask Before Swinging
+- Even in `/manps` cleanup, every issue is a y/n item, never auto-applied
+- Irreversible operations (force push, schema migrations, bulk deletes) need explicit confirmation
+- The user is always the decision maker
+
+### 5. One Tool, All Agents
+- One core, multiple platform adapters
+- Claude Code today; Cursor, Codex CLI, Copilot in MVP-3
+- Adapter-based architecture — other platforms can be added without rewriting core
 
 ---
 
@@ -260,12 +286,12 @@ mancode/
 │   ├── session-start          # Read .mancode/state.json
 │   └── user-prompt-submit     # Ask: why? what exists? minimal change?
 │
-├── Skills (5 modes)            # SKILL.md files
-│   ├── solo.md                # Default mode
-│   ├── man8.md                # 4 AM Warmup
-│   ├── man.md                 # Playoffs (8 steps)
-│   ├── manteam.md             # Team mode
-│   └── manps.md               # Preseason cleanup
+├── Skills (5 modes)            # .claude/skills/<name>/SKILL.md
+│   ├── solo/SKILL.md          # Default mode
+│   ├── man8/SKILL.md          # 4 AM Warmup
+│   ├── man/SKILL.md           # Playoffs (8 steps)
+│   ├── manteam/SKILL.md       # Team mode
+│   └── manps/SKILL.md         # Preseason cleanup
 │
 └── Agents (Coaching Staff)     # Multi-agent orchestration
     ├── Scout                  # Investigate codebase
@@ -322,9 +348,14 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 
 ## Contributing
 
-**Status**: Design phase complete, implementation starting.
+**Status**: MVP-2 alpha for Claude Code is live. Early testing and feedback welcome.
 
-Once MVP-1 releases, contributions welcome for:
+Current focus areas:
+- Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
+- Hardening `/manps` remediation loop and structured issue database
+- Conventional Commits enforcement and PR template generation for `/manteam`
+
+After MVP-3 (multi-platform), contributions welcome for:
 - Platform adapters (Windsurf, Cline, etc.)
 - Additional modes
 - Aesthetic scanning for other UI libraries
@@ -451,24 +482,38 @@ src/components/     → 已有 Button、Input、Card 组件
 <Button className="bg-primary">  // 使用 #3b82f6，不是通用的 "blue"
 ```
 
-### 团队记忆（Codex 平台）
-使用 Codex CLI 时，mancode 写入 `AGENTS.md`：
-```markdown
-<!-- 用户的长期记忆 -->
-## 经验教训
-2026-06-20: 不要用 lodash.merge 处理 React state
+### 三问追问（solo 模式）
+在 solo 模式下，每次提交 prompt，mancode 会在 agent 动手前注入三个问题：
 
-## 架构决策  
-2026-06-15: 选择 shadcn/ui 而非 MUI（团队熟悉度）
+1. **为什么做？** — 这个改动解决什么问题？
+2. **已经有什么？** — 项目里有没有可以复用的实现？
+3. **最少改多少？** — 能一行解决吗？能复用现有代码吗？
 
-<!-- mancode 管理区 -->
-<!-- mancode:start -->
-## mancode 配置
-[自动生成，请勿编辑]
-<!-- mancode:end -->
+这是 solo 模式的**轻量 YAGNI 强制**——让 solo 不只是"原生 agent + 审美"。agent 不一定每次都说出来，但一定会先想再写。
+
+### 团队记忆（manteam 模式）
+运行 `/manteam` 时，mancode 会读取并更新 `.mancode/memory/` 下的共享记忆：
+
+```
+.mancode/memory/
+├── prd.md           # 团队在做什么（共享上下文）
+├── spec.md          # 应该怎么做（共识）
+└── decisions.md     # 带日期的 ADR 式条目（为什么选 X 不选 Y）
 ```
 
-**边界**：mancode 只修改受控区块。你的笔记保持安全。
+每次 `/manteam` 运行会向 `decisions.md` 追加一条记录：
+
+```markdown
+## 2026-06-30: 选择 shadcn/ui 而非 MUI
+
+- Decision: 设置页改版使用 shadcn/ui
+- Context: 团队已经熟悉；MUI 的 bundle 更大
+- Task: settings-redesign
+```
+
+下一个 agent（或队友）会自动继承这些上下文 —— 不再重复"我们为什么选这个？"。
+
+**边界**：mancode 只写 `.mancode/memory/`。在 Claude Code 上，你的源码和 `AGENTS.md`（如果以后用 Codex CLI）都不会被动到。
 
 ---
 
@@ -507,6 +552,9 @@ mancode install [platform]# 安装/重装平台适配
 mancode workflow list     # 列出 mancode workflow
 mancode workflow show     # 显示 workflow 元数据
 mancode workflow clean    # 清理已完成/过旧 workflow
+mancode manps [area]      # 季前赛健康扫描，写入报告
+                          # area: all（默认）| deps | security | dead-code | config
+                          # 生成 .mancode/preseason-report.md + .mancode/preseason-reports/<时间戳>-<area>.md
 mancode refresh-style     # 重扫 Tailwind 配置，更新 style-tokens.json
 mancode version           # 显示 mancode/node/平台版本
 ```
@@ -529,12 +577,14 @@ mancode install --force   # 重装适配（保留已扫描 token）
 ### Claude Code Skills
 
 ```bash
-/man8                     # 凌晨四点热身：侦查 + 计划（规划/调研类请求会自动使用）
+/man8                     # 凌晨四点热身：侦查 + 计划（hook 在规划/调研类请求时会建议；用户也可手动调用）
 /man                      # 季后赛：完整 8 步流程
 /manps                    # 季前赛：健康检查
 /manteam                  # 团队模式（或自动检测）
 /mansolo                  # 回到 solo 模式
 ```
+
+> **计划中的别名**（尚未启用）：`/warmup`、`/playoffs`、`/team`、`/preseason`、`/back-to-solo`。
 
 ---
 
@@ -543,10 +593,10 @@ mancode install --force   # 重装适配（保留已扫描 token）
 | 模式 | 何时使用 | 做什么 |
 |---|---|---|
 | **solo**（默认） | 日常工作 | 安静、高效、风格感知。复用现有代码。 |
-| **man8 skill**（MVP-2） | 规划/调研类请求；`/man8` 可选 | Scout 调查代码库 → 草拟计划 → 等待批准 |
+| **man8 skill**（MVP-2） | 规划/调研类请求（hook 会建议 `/man8`；用户也可手动调用）| Scout 调查代码库 → 草拟计划 → 等待批准 |
 | **/man**（MVP-2） | 关键功能 | 完整 8 步：侦查 → 计划 → 编码 → 审查（进攻）→ 修复 → 审查（防守）→ 修复 → 合并 |
 | **/manteam**（MVP-2） | 团队项目 | 多开发者记忆、提交模板、协调 |
-| **/manps**（MVP-2） | 项目清理 | 扫描技术债、未使用依赖、过时 TODO、缺失测试 |
+| **/manps**（MVP-2） | 项目清理 | 运行 `mancode manps`，写入 `.mancode/preseason-report.md` + 带时间戳的副本到 `.mancode/preseason-reports/` |
 
 **哲学**：默认轻量。需要时选择严格。
 
@@ -554,8 +604,12 @@ mancode install --force   # 重装适配（保留已扫描 token）
 
 ## 设计原则
 
-### 1. YAGNI 阶梯
-写新代码前，检查：
+### 1. 默认轻量，需要时硬核
+- solo 是默认模式 —— 3 条增强，零仪式感
+- 重型流程（`/man`、`/manteam`）按需选择，任务真需要时才上
+- 别为了修个 typo 烧 30k token
+
+**YAGNI 阶梯**（写新代码前依次检查）：
 1. 代码库已存在？→ **复用它**
 2. 标准库能做？→ **用它**
 3. 平台原生特性？→ **用它**
@@ -563,22 +617,25 @@ mancode install --force   # 重装适配（保留已扫描 token）
 5. 一行能解决？→ **一行**
 6. 只有以上都不行：写最小实现
 
-### 2. 审美一致性
-- 扫描项目现有设计 token（颜色、字体、间距）
-- 复用组件，不重新创建
-- 匹配命名规范
-- 应用项目风格指南
+### 2. 关键时刻，职业级
+- 关键代码动用完整教练组：Scout → Head Coach → 两位 Film Analyst
+- 双重审查：进攻（代码质量）+ 防守（安全、边界、并发）
+- 8 步流程，30-90 分钟，不静默跳过
 
-### 3. 团队记忆
-- 跟踪贡献者、提交、决策
-- 避免冲突变更
-- 向所有代理提供项目上下文
+### 3. 审美不是可选项
+- 前端任务必须匹配项目已有的设计 token（颜色、字体、组件）
+- 不输出"通用蓝色" —— 用项目实际的 primary color
+- 没有设计 token 的新项目给 3 个风格选项，不是 AI slop
 
-### 4. 外科手术式修改
-- 只改任务要求的部分
-- 不"顺便重构"
-- 不格式化无关代码
-- 保持 diff 最小
+### 4. 出手前先问
+- 即使在 `/manps` 整顿模式，每条问题都是 y/n 列表项，绝不自动整改
+- 不可逆操作（force push、schema 变更、批量删除）必须明确确认
+- 用户始终是决策者
+
+### 5. 一个工具，所有 agent
+- 一份核心，多平台适配
+- 现在支持 Claude Code；Cursor、Codex CLI、Copilot 在 MVP-3
+- 基于适配层的架构 —— 加新平台不用重写核心
 
 ---
 
@@ -595,12 +652,12 @@ mancode/
 │   ├── session-start          # 读取 .mancode/state.json
 │   └── user-prompt-submit     # 问：为什么？已有什么？最少改多少？
 │
-├── Skills（5 种模式）           # SKILL.md 文件
-│   ├── solo.md                # 默认模式
-│   ├── man8.md                # 凌晨四点热身
-│   ├── man.md                 # 季后赛（8 步）
-│   ├── manteam.md             # 团队模式
-│   └── manps.md               # 季前赛清理
+├── Skills（5 种模式）           # .claude/skills/<name>/SKILL.md
+│   ├── solo/SKILL.md          # 默认模式
+│   ├── man8/SKILL.md          # 凌晨四点热身
+│   ├── man/SKILL.md           # 季后赛（8 步）
+│   ├── manteam/SKILL.md       # 团队模式
+│   └── manps/SKILL.md         # 季前赛清理
 │
 └── Agents（教练组）             # 多代理编排
     ├── Scout                  # 调查代码库
@@ -657,9 +714,14 @@ MVP-2 alpha 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitH
 
 ## 贡献
 
-**状态**：设计阶段完成，实施开始。
+**状态**：Claude Code 的 MVP-2 alpha 已发布。欢迎早期测试和反馈。
 
-MVP-1 发布后，欢迎贡献：
+当前重点：
+- 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
+- 完善 `/manps` 的 y/n remediation loop 和结构化 issue database
+- `/manteam` 的 Conventional Commits 强制和 PR 模板生成
+
+MVP-3（多平台）之后，欢迎贡献：
 - 平台适配器（Windsurf、Cline 等）
 - 额外模式
 - 其他 UI 库的审美扫描

@@ -164,6 +164,28 @@ describe('mancode install', () => {
     );
     const config = JSON.parse(configRaw);
     expect(config.platforms).toContain('claude-code');
+    expect(config.forceTeamMode).toBe(false);
+    expect(config.defaultStyle).toBeNull();
+    expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
+    expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
+  });
+
+  it('preserves configured team/style options on forced reinstall', async () => {
+    await silentInit(dir, { team: true, style: 'brutalist' });
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    const configRaw = await readFile(
+      path.join(dir, '.mancode', 'config.json'),
+      'utf-8',
+    );
+    const config = JSON.parse(configRaw);
+    expect(config.platforms).toContain('claude-code');
+    expect(config.forceTeamMode).toBe(true);
+    expect(config.defaultStyle).toBe('brutalist');
+    expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
+    expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
   });
 
   it('--force does not wipe scanned style-tokens.json', async () => {
@@ -221,13 +243,16 @@ describe('mancode install', () => {
 /**
  * 静默执行 init，吞掉 init 的 stdout/stderr 噪音。
  */
-async function silentInit(dir: string): Promise<void> {
+async function silentInit(
+  dir: string,
+  options: Parameters<typeof init>[1] = {},
+): Promise<void> {
   const originalLog = console.log;
   const originalError = console.error;
   console.log = () => {};
   console.error = () => {};
   try {
-    const code = await init(dir);
+    const code = await init(dir, options);
     if (code !== 0) {
       throw new Error(`silentInit failed: init exited with ${code}`);
     }

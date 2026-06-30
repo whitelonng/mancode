@@ -27,8 +27,8 @@ export const EXIT_NETWORK_ERROR = 4;
  */
 export interface MancodeState {
   version: string;
-  currentMode: 'solo' | 'man8' | 'man';
-  lastMode: 'solo' | 'man8' | 'man';
+  currentMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
+  lastMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
   platform: 'claude-code';
   initializedAt: string;
   techStack: string;

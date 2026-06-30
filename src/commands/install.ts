@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { installClaudeCode } from '../installers/claude-code.js';
 import { detectProjectType } from '../system/detect.js';
+import { DEFAULT_CONFIG } from '../templates/defaults.js';
 
 /**
  * 退出码契约 — 见 docs/08-cli-spec.md §3
@@ -68,9 +69,10 @@ export async function install(
   }
 
   // 3. 检查是否已安装（除非 --force）
-  const config = await readConfig(rootDir);
+  const configResult = await readConfig(rootDir);
+  const config = withDefaultConfig(configResult.config);
   const alreadyInstalled =
-    config.platforms && Array.isArray(config.platforms)
+    configResult.valid && config.platforms && Array.isArray(config.platforms)
       ? config.platforms.includes(platform)
       : false;
 
@@ -106,14 +108,16 @@ export async function install(
 /**
  * 读取 .mancode/config.json。
  */
-async function readConfig(rootDir: string): Promise<Record<string, unknown>> {
+async function readConfig(
+  rootDir: string,
+): Promise<{ config: Record<string, unknown>; valid: boolean }> {
   const configPath = path.join(rootDir, '.mancode', 'config.json');
   try {
     const raw = await fs.readFile(configPath, 'utf-8');
-    return JSON.parse(raw) as Record<string, unknown>;
+    return { config: JSON.parse(raw) as Record<string, unknown>, valid: true };
   } catch {
     // config.json 不存在或损坏——返回空对象，install 会重建 platforms
-    return {};
+    return { config: {}, valid: false };
   }
 }
 
@@ -127,6 +131,17 @@ async function updateConfig(
   const configPath = path.join(rootDir, '.mancode', 'config.json');
   const content = `${JSON.stringify(config, null, 2)}\n`;
   await fs.writeFile(configPath, content, 'utf-8');
+}
+
+function withDefaultConfig(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    hooks: isRecord(config.hooks) ? config.hooks : DEFAULT_CONFIG.hooks,
+    logging: isRecord(config.logging) ? config.logging : DEFAULT_CONFIG.logging,
+  };
 }
 
 /**
@@ -149,4 +164,8 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

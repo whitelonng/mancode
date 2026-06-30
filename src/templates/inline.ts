@@ -170,6 +170,8 @@ if echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|ui|design|la
             MATCH=$(jq -r '.matchLevel // empty' "$AESTHETICS_FILE" 2>/dev/null)
             COLORS=$(jq -r '.colors | to_entries | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
             FONTS=$(jq -r '.fonts | to_entries | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            COMPONENTS=$(jq -r '(.components // []) | .[0:8] | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            CSS_VARS=$(jq -r '(.cssVariables // {}) | to_entries | .[0:8] | map("--\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
 
             echo "## 审美 token 摘要"
             [ -n "$UI" ] && echo "UI: $UI"
@@ -177,6 +179,8 @@ if echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|ui|design|la
             [ -n "$MATCH" ] && echo "Match: $MATCH"
             [ -n "$COLORS" ] && echo "Colors (前 8): $COLORS"
             [ -n "$FONTS" ] && echo "Fonts (前 4): $FONTS"
+            [ -n "$COMPONENTS" ] && echo "Components (前 8): $COMPONENTS"
+            [ -n "$CSS_VARS" ] && echo "CSS variables (前 8): $CSS_VARS"
             echo "完整 token: .mancode/aesthetics/style-tokens.json"
             echo ""
         else

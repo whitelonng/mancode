@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { ensureTeamMemory } from '../system/team-memory.js';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
 import {
@@ -36,6 +37,9 @@ export async function installClaudeCode(
   await mkdir(path.join(mancodeDir, 'logs'), { recursive: true });
   // MVP-2: workflow 目录存放 /man8 /man 的任务进度
   await mkdir(path.join(mancodeDir, 'workflows'), { recursive: true });
+  // MVP-2 P1: team memory + preseason reports provide durable mode outputs.
+  await ensureTeamMemory(projectRoot);
+  await mkdir(path.join(mancodeDir, 'preseason-reports'), { recursive: true });
 
   // 2. 写入 config.json
   const configPath = path.join(mancodeDir, 'config.json');

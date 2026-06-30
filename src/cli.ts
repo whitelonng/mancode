@@ -2,6 +2,7 @@
 import { program } from 'commander';
 import { init } from './commands/init.js';
 import { install } from './commands/install.js';
+import { manps } from './commands/manps.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
 import { version } from './commands/version.js';
@@ -64,6 +65,15 @@ program
       arg ? [arg] : [],
       options,
     );
+    process.exitCode = code;
+  });
+
+program
+  .command('manps [area]')
+  .description('Run deterministic preseason health scan')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (area, options) => {
+    const code = await manps(process.cwd(), area ?? 'all', options);
     process.exitCode = code;
   });
 

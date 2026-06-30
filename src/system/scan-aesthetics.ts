@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import type { Stats } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -13,6 +14,8 @@ export interface AestheticsTokens {
   lastScanned: string | null;
   colors: Record<string, string>;
   fonts: Record<string, string[]>;
+  components: string[];
+  cssVariables: Record<string, string>;
   uiLibrary: string | null;
   darkMode: string | null;
   matchLevel: 'high' | 'low' | 'none';
@@ -46,6 +49,8 @@ export async function scanAesthetics(
   let colors: Record<string, string> = {};
   let fonts: Record<string, string[]> = {};
   let darkMode: string | null = null;
+  const components = await scanComponents(projectRoot);
+  const cssScan = await scanCssVariables(projectRoot);
 
   if (configResult) {
     sourceFiles.push(configResult.relPath);
@@ -80,12 +85,15 @@ export async function scanAesthetics(
   if (uiLibrary) {
     sourceFiles.push('package.json');
   }
+  sourceFiles.push(...cssScan.sourceFiles);
 
   return {
     version: '1.0.0',
     lastScanned: new Date().toISOString(),
     colors,
     fonts,
+    components,
+    cssVariables: cssScan.variables,
     uiLibrary,
     darkMode,
     matchLevel,
@@ -452,8 +460,110 @@ function stripJsComments(content: string): string {
   return result;
 }
 
+async function scanComponents(projectRoot: string): Promise<string[]> {
+  const roots = ['src/components', 'components', 'app/components'];
+  const names = new Set<string>();
+  for (const relRoot of roots) {
+    const absRoot = path.join(projectRoot, relRoot);
+    if (!(await pathExists(absRoot))) continue;
+    await collectComponentNames(absRoot, names);
+  }
+  return Array.from(names).sort();
+}
+
+async function collectComponentNames(
+  dir: string,
+  names: Set<string>,
+): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const abs = path.join(dir, entry);
+    let info: Stats;
+    try {
+      info = await fs.stat(abs);
+    } catch {
+      continue;
+    }
+    if (info.isDirectory()) {
+      await collectComponentNames(abs, names);
+      continue;
+    }
+    if (!/\.(tsx|jsx|ts|js|vue|svelte)$/.test(entry)) continue;
+    if (isNonComponentFile(entry)) continue;
+    let base = entry.replace(/\.(tsx|jsx|ts|js|vue|svelte)$/, '');
+    if (base === 'index') {
+      base = path.basename(dir);
+    }
+    if (base.startsWith('.')) continue;
+    names.add(toPascalCase(base));
+  }
+}
+
+async function scanCssVariables(
+  projectRoot: string,
+): Promise<{ variables: Record<string, string>; sourceFiles: string[] }> {
+  const candidates = [
+    'src/app/globals.css',
+    'src/index.css',
+    'src/globals.css',
+    'app/globals.css',
+    'styles/globals.css',
+    'globals.css',
+  ];
+  const variables: Record<string, string> = {};
+  const sourceFiles: string[] = [];
+  for (const relPath of candidates) {
+    const absPath = path.join(projectRoot, relPath);
+    if (!(await pathExists(absPath))) continue;
+    const content = await fs.readFile(absPath, 'utf-8');
+    const found = extractCssVariables(content);
+    if (Object.keys(found).length === 0) continue;
+    Object.assign(variables, found);
+    sourceFiles.push(relPath);
+  }
+  return { variables, sourceFiles };
+}
+
+function extractCssVariables(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const withoutComments = content.replace(/\/\*[\s\S]*?\*\//g, '');
+  const regex = /--([a-zA-Z0-9-_]+)\s*:\s*([^;{}]+);/g;
+  let match = regex.exec(withoutComments);
+  while (match !== null) {
+    const key = match[1];
+    const value = match[2]?.trim();
+    if (key && value && value.length <= 120 && isSafeCssVariableValue(value)) {
+      result[key] = value;
+    }
+    match = regex.exec(withoutComments);
+  }
+  return result;
+}
+
 function isSafeColorValue(value: string): boolean {
   return /^[#\w\s,.%()/+-]+$/.test(value);
+}
+
+function isSafeCssVariableValue(value: string): boolean {
+  return /^[#\w\s,.%()/+-]+$/.test(value);
+}
+
+function isNonComponentFile(filename: string): boolean {
+  return /\.(test|spec|stories|story|d)\.(tsx|jsx|ts|js)$/.test(filename);
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join('');
 }
 
 /**

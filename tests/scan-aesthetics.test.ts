@@ -233,6 +233,100 @@ describe('scanAesthetics', () => {
     // theme.colors 的值不应出现（extend 优先）
     expect(result.colors).not.toHaveProperty('legacy');
   });
+
+  it('extracts component names from common component directories', async () => {
+    await mkdir(path.join(dir, 'src', 'components', 'ui'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dir, 'src', 'components', 'ui', 'button.tsx'),
+      'export function Button() { return null; }',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'src', 'components', 'user-card.tsx'),
+      'export function UserCard() { return null; }',
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.components).toContain('Button');
+    expect(result.components).toContain('UserCard');
+  });
+
+  it('extracts component names from directory index files', async () => {
+    await mkdir(path.join(dir, 'src', 'components', 'Button'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dir, 'src', 'components', 'Button', 'index.tsx'),
+      'export function Button() { return null; }',
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.components).toContain('Button');
+  });
+
+  it('ignores component test and story files', async () => {
+    await mkdir(path.join(dir, 'src', 'components'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'src', 'components', 'button.test.tsx'),
+      'export const testOnly = true;',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'src', 'components', 'button.stories.tsx'),
+      'export const Story = {};',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'src', 'components', 'button.tsx'),
+      'export function Button() { return null; }',
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.components).toEqual(['Button']);
+  });
+
+  it('extracts CSS variables from global CSS files', async () => {
+    await mkdir(path.join(dir, 'src', 'app'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'src', 'app', 'globals.css'),
+      `:root {
+  --background: #ffffff;
+  --radius: 8px;
+}`,
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.cssVariables).toHaveProperty('background', '#ffffff');
+    expect(result.cssVariables).toHaveProperty('radius', '8px');
+    expect(result.sourceFiles).toContain('src/app/globals.css');
+  });
+
+  it('skips unsafe or oversized CSS variables without hanging', async () => {
+    await mkdir(path.join(dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'src', 'globals.css'),
+      `:root {
+  --bad: url("javascript:alert(1)");
+  --huge: ${'a'.repeat(130)};
+  --ok: #ffffff;
+}`,
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.cssVariables).toEqual({ ok: '#ffffff' });
+  });
 });
 
 const TAILWIND_CONFIG_BASIC = `/** @type {import('tailwindcss').Config} */

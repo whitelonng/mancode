@@ -29,6 +29,8 @@ export const EMPTY_STYLE_TOKENS = {
   lastScanned: null,
   colors: {},
   fonts: {},
+  components: [],
+  cssVariables: {},
   uiLibrary: null,
   darkMode: null,
   matchLevel: 'none',
