@@ -216,6 +216,67 @@ describe('preseason scan', () => {
     });
   });
 
+  it('does not mark issues from other areas as not-found during scoped scans', async () => {
+    const packagePath = path.join(dir, 'package.json');
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        dependencies: {
+          moment: '^2.30.0',
+          dayjs: '^1.11.0',
+          request: '^2.88.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const security = await runPreseasonScan(dir, 'security');
+    const deps = await runPreseasonScan(dir, 'deps');
+
+    let issueDb = JSON.parse(await readFile(deps.issueDbPath, 'utf-8'));
+    const securityIssue = issueDb.issues.find(
+      (issue: { type: string }) => issue.type === 'security',
+    );
+    const dependencyIssue = issueDb.issues.find(
+      (issue: { type: string }) => issue.type === 'dependency',
+    );
+    expect(securityIssue).toMatchObject({
+      key: issueDb.runs[0].issueKeys[0],
+      status: 'open',
+      firstSeen: security.generatedAt,
+      lastSeen: security.generatedAt,
+      occurrences: 1,
+    });
+    expect(dependencyIssue).toMatchObject({
+      key: issueDb.runs[1].issueKeys[0],
+      status: 'open',
+      firstSeen: deps.generatedAt,
+      lastSeen: deps.generatedAt,
+      occurrences: 1,
+    });
+
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+    const secondSecurity = await runPreseasonScan(dir, 'security');
+    issueDb = JSON.parse(await readFile(secondSecurity.issueDbPath, 'utf-8'));
+
+    expect(
+      issueDb.issues.find(
+        (issue: { type: string }) => issue.type === 'security',
+      ),
+    ).toMatchObject({ status: 'not-found', occurrences: 1 });
+    expect(
+      issueDb.issues.find(
+        (issue: { type: string }) => issue.type === 'dependency',
+      ),
+    ).toMatchObject({ status: 'open', occurrences: 1 });
+  });
+
   it('does not flag CSS variable definitions as hardcoded color drift', async () => {
     await writeFile(
       path.join(dir, 'package.json'),

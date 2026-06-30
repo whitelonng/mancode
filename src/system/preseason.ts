@@ -511,7 +511,7 @@ async function writeIssueDatabase(
 ): Promise<void> {
   const reportRef = path.relative(projectRoot, report.reportPath);
   const run: PreseasonIssueRun = {
-    id: report.generatedAt.replace(/[:.]/g, '-'),
+    id: path.basename(report.reportPath, '.md'),
     generatedAt: report.generatedAt,
     area: report.area,
     reportPath: reportRef,
@@ -540,7 +540,11 @@ async function writeIssueDatabase(
   }
 
   for (const [key, issue] of records) {
-    if (!currentKeys.has(key) && issue.status === 'open') {
+    if (
+      !currentKeys.has(key) &&
+      issue.status === 'open' &&
+      areaCoversIssueType(report.area, issue.type)
+    ) {
       records.set(key, { ...issue, status: 'not-found' });
     }
   }
@@ -599,6 +603,15 @@ function issueKey(issue: PreseasonIssue): string {
     issue.detail,
   ].join('\0');
   return createHash('sha1').update(stableParts).digest('hex').slice(0, 12);
+}
+
+function areaCoversIssueType(area: string, type: PreseasonIssueType): boolean {
+  if (area === 'all') return true;
+  if (area === 'deps') return type === 'dependency';
+  if (area === 'security') return type === 'security';
+  if (area === 'dead-code') return type === 'todo' || type === 'tests';
+  if (area === 'config') return type === 'scripts' || type === 'config';
+  return false;
 }
 
 function appendUnique(values: string[], next: string, limit: number): string[] {
