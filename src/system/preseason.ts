@@ -759,7 +759,9 @@ async function nextRemediationAnswer(
   if (answerQueue.length > 0) {
     return answerQueue.shift() ?? '';
   }
-  if (!ask) return 'skip';
+  if (!ask) {
+    throw new Error('remediation answer required for each open issue');
+  }
   return ask(question);
 }
 

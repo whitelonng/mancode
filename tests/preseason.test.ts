@@ -437,4 +437,38 @@ describe('preseason scan', () => {
       skipped: 0,
     });
   });
+
+  it('rejects remediation when scripted answers run out', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {},
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'all', {
+      remediate: true,
+      answers: ['y'],
+    });
+
+    expect(code).toBe(EXIT_INVALID_ARG);
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { remediation?: unknown }) => issue.remediation,
+      ),
+    ).toHaveLength(0);
+  });
 });

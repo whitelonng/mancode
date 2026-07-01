@@ -74,7 +74,25 @@ export async function manps(
       );
       return EXIT_INVALID_ARG;
     }
-    remediation = await runRemediation(rootDir, report, options, options.json);
+    try {
+      remediation = await runRemediation(
+        rootDir,
+        report,
+        options,
+        options.json,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (options.json) {
+        console.log(
+          JSON.stringify({ error: 'invalid argument', message }, null, 2),
+        );
+      } else {
+        console.error('✗  mancode preseason remediation failed.');
+        console.error(`   ${message}`);
+      }
+      return EXIT_INVALID_ARG;
+    }
   }
 
   if (options.json) {
@@ -128,8 +146,14 @@ async function runRemediation(
   }
 
   if (!process.stdin.isTTY) {
+    const answers = await readStdinLines();
+    if (answers.length === 0 && report.issues.length > 0) {
+      throw new Error(
+        'non-interactive remediation requires piped answers for each open issue',
+      );
+    }
     return runPreseasonRemediation(rootDir, report.issues, {
-      answers: await readStdinLines(),
+      answers,
       write,
     });
   }
