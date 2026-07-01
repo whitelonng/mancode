@@ -263,7 +263,7 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 - New projects without design tokens get 3 style options, not AI slop
 
 ### 4. Ask Before Swinging
-- Even in `/manps` cleanup, every issue is a y/n item, never auto-applied
+- `/manps` alpha scans only; remediation must be y/n-confirmed before code changes
 - Irreversible operations (force push, schema migrations, bulk deletes) need explicit confirmation
 - The user is always the decision maker
 
@@ -630,7 +630,7 @@ mancode install --force   # 重装适配（保留已扫描 token）
 - 没有设计 token 的新项目给 3 个风格选项，不是 AI slop
 
 ### 4. 出手前先问
-- 即使在 `/manps` 整顿模式，每条问题都是 y/n 列表项，绝不自动整改
+- `/manps` alpha 只扫描；进入整改时，每条代码改动都必须先 y/n 确认
 - 不可逆操作（force push、schema 变更、批量删除）必须明确确认
 - 用户始终是决策者
 
