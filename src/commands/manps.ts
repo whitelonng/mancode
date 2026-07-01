@@ -1,6 +1,12 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
-import { type PreseasonReport, runPreseasonScan } from '../system/preseason.js';
+import { createInterface } from 'node:readline/promises';
+import {
+  type PreseasonRemediationResult,
+  type PreseasonReport,
+  runPreseasonRemediation,
+  runPreseasonScan,
+} from '../system/preseason.js';
 
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -9,6 +15,8 @@ export const EXIT_INVALID_ARG = 3;
 
 export interface ManpsOptions {
   json?: boolean;
+  remediate?: boolean;
+  answers?: string[];
 }
 
 export async function manps(
@@ -50,8 +58,27 @@ export async function manps(
     }
     return invalidArg ? EXIT_INVALID_ARG : EXIT_SCAN_FAILED;
   }
+  let remediation: PreseasonRemediationResult | undefined;
+  if (options.remediate) {
+    if (options.json && process.stdin.isTTY && !options.answers) {
+      console.log(
+        JSON.stringify(
+          {
+            error: 'invalid argument',
+            message:
+              '--json --remediate requires piped answers; omit --json for interactive review.',
+          },
+          null,
+          2,
+        ),
+      );
+      return EXIT_INVALID_ARG;
+    }
+    remediation = await runRemediation(rootDir, report, options, options.json);
+  }
+
   if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
+    console.log(JSON.stringify({ ...report, remediation }, null, 2));
     return EXIT_OK;
   }
 
@@ -73,7 +100,63 @@ export async function manps(
       console.log(`- ${issue.severity} ${issue.id}: ${issue.title}${file}`);
     }
   }
+  if (remediation) {
+    console.log('');
+    console.log('Remediation review:');
+    console.log(`  Reviewed: ${remediation.reviewed}`);
+    console.log(`  Accepted: ${remediation.accepted}`);
+    console.log(`  Skipped:  ${remediation.skipped}`);
+    console.log(
+      `  Issue DB: ${path.relative(rootDir, remediation.issueDbPath)}`,
+    );
+  }
   return EXIT_OK;
+}
+
+async function runRemediation(
+  rootDir: string,
+  report: PreseasonReport,
+  options: ManpsOptions,
+  silent = false,
+): Promise<PreseasonRemediationResult> {
+  const write = silent ? () => {} : undefined;
+  if (options.answers) {
+    return runPreseasonRemediation(rootDir, report.issues, {
+      answers: options.answers,
+      write,
+    });
+  }
+
+  if (!process.stdin.isTTY) {
+    return runPreseasonRemediation(rootDir, report.issues, {
+      answers: await readStdinLines(),
+      write,
+    });
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    return await runPreseasonRemediation(rootDir, report.issues, {
+      ask: (question) => rl.question(question),
+      write,
+    });
+  } finally {
+    rl.close();
+  }
+}
+
+async function readStdinLines(): Promise<string[]> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks)
+    .toString('utf-8')
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0);
 }
 
 async function pathExists(p: string): Promise<boolean> {

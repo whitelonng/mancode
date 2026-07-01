@@ -72,6 +72,7 @@ program
   .command('manps [area]')
   .description('Run deterministic preseason health scan')
   .option('--json', 'Output as JSON (for scripts)')
+  .option('--remediate', 'Review scan issues with y/n/skip prompts')
   .action(async (area, options) => {
     const code = await manps(process.cwd(), area ?? 'all', options);
     process.exitCode = code;

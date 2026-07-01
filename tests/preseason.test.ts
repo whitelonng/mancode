@@ -328,4 +328,113 @@ describe('preseason scan', () => {
       readFile(path.join(dir, '.mancode', 'preseason-report.md'), 'utf-8'),
     ).resolves.toContain('Area: deps');
   });
+
+  it('records accepted remediation decisions after showing issue files', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'deps', {
+      remediate: true,
+      answers: ['show files', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(issueDb.issues[0]).toMatchObject({
+      status: 'open',
+      remediation: {
+        status: 'accepted',
+        sourceRunId: issueDb.latestRunId,
+        response: 'y',
+      },
+    });
+  });
+
+  it('records skipped remediation decisions without changing issue status', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'deps', {
+      remediate: true,
+      answers: ['skip'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(issueDb.issues[0]).toMatchObject({
+      status: 'open',
+      remediation: {
+        status: 'skipped',
+        sourceRunId: issueDb.latestRunId,
+        response: 'skip',
+      },
+    });
+  });
+
+  it('keeps json remediation output parseable', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+    try {
+      const code = await manps(dir, 'deps', {
+        json: true,
+        remediate: true,
+        answers: ['y'],
+      });
+
+      expect(code).toBe(EXIT_OK);
+    } finally {
+      console.log = originalLog;
+    }
+
+    const parsed = JSON.parse(logs.join('\n'));
+    expect(parsed.remediation).toMatchObject({
+      reviewed: 1,
+      accepted: 1,
+      skipped: 0,
+    });
+  });
 });

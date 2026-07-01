@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-beta.0",
   "description": "AI coding agent harness. Five modes: practice to playoffs.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -35,11 +35,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

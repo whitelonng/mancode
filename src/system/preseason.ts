@@ -34,6 +34,14 @@ export interface PreseasonReport {
 }
 
 export type PreseasonIssueStatus = 'open' | 'not-found';
+export type PreseasonRemediationStatus = 'accepted' | 'skipped';
+
+export interface PreseasonRemediationState {
+  status: PreseasonRemediationStatus;
+  decidedAt: string;
+  sourceRunId: string;
+  response: 'y' | 'n' | 'skip';
+}
 
 export interface PreseasonIssueRecord extends PreseasonIssue {
   key: string;
@@ -43,6 +51,7 @@ export interface PreseasonIssueRecord extends PreseasonIssue {
   lastArea: string;
   occurrences: number;
   sourceReports: string[];
+  remediation?: PreseasonRemediationState;
 }
 
 export interface PreseasonIssueRun {
@@ -60,6 +69,21 @@ export interface PreseasonIssueDatabase {
   latestRunId: string;
   runs: PreseasonIssueRun[];
   issues: PreseasonIssueRecord[];
+}
+
+export interface PreseasonRemediationOptions {
+  answers?: string[];
+  ask?: (question: string) => Promise<string>;
+  write?: (message: string) => void;
+  now?: string;
+}
+
+export interface PreseasonRemediationResult {
+  issueDbPath: string;
+  reviewed: number;
+  accepted: number;
+  skipped: number;
+  shown: number;
 }
 
 type PreseasonArea = 'all' | 'deps' | 'security' | 'dead-code' | 'config';
@@ -139,6 +163,98 @@ export async function runPreseasonScan(
   );
   await writeIssueDatabase(projectRoot, report);
   return report;
+}
+
+export async function runPreseasonRemediation(
+  projectRoot: string,
+  issues: PreseasonIssue[],
+  options: PreseasonRemediationOptions = {},
+): Promise<PreseasonRemediationResult> {
+  const issueDbPath = path.join(
+    projectRoot,
+    '.mancode',
+    'preseason-issues.json',
+  );
+  const database = await readIssueDatabase(issueDbPath);
+  const keys = new Set(issues.map((issue) => issueKey(issue)));
+  const targets = database.issues.filter(
+    (issue) => keys.has(issue.key) && issue.status === 'open',
+  );
+  const write = options.write ?? ((message: string) => console.log(message));
+  const answerQueue = [...(options.answers ?? [])];
+  const now = options.now ?? new Date().toISOString();
+  let reviewed = 0;
+  let accepted = 0;
+  let skipped = 0;
+  let shown = 0;
+
+  if (targets.length === 0) {
+    write('No open preseason issues to review.');
+  }
+
+  for (let index = 0; index < targets.length; index++) {
+    const issue = targets[index];
+    write('');
+    write(
+      `${index + 1}. ${issue.severity} ${issue.id}: ${issue.title}${issue.file ? ` (${issue.file})` : ''}`,
+    );
+    write(`   Recommendation: ${issue.recommendation}`);
+
+    while (true) {
+      const raw = await nextRemediationAnswer(
+        answerQueue,
+        options.ask,
+        '   Fix this item? [y/n/skip/show files] ',
+      );
+      const answer = normalizeRemediationAnswer(raw);
+
+      if (answer === 'show') {
+        shown++;
+        write(`   File: ${issue.file ?? 'n/a'}`);
+        write(`   Detail: ${issue.detail}`);
+        continue;
+      }
+
+      if (answer === 'y') {
+        issue.remediation = {
+          status: 'accepted',
+          decidedAt: now,
+          sourceRunId: database.latestRunId,
+          response: 'y',
+        };
+        accepted++;
+        reviewed++;
+        write('   Decision: accepted for remediation.');
+        break;
+      }
+
+      issue.remediation = {
+        status: 'skipped',
+        decidedAt: now,
+        sourceRunId: database.latestRunId,
+        response: answer,
+      };
+      skipped++;
+      reviewed++;
+      write('   Decision: skipped.');
+      break;
+    }
+  }
+
+  database.updatedAt = now;
+  await writeFile(
+    issueDbPath,
+    `${JSON.stringify(database, null, 2)}\n`,
+    'utf-8',
+  );
+
+  return {
+    issueDbPath,
+    reviewed,
+    accepted,
+    skipped,
+    shown,
+  };
 }
 
 function normalizeArea(area: string): PreseasonArea {
@@ -633,6 +749,30 @@ function compareIssueRecords(
     a.title.localeCompare(b.title) ||
     a.key.localeCompare(b.key)
   );
+}
+
+async function nextRemediationAnswer(
+  answerQueue: string[],
+  ask: PreseasonRemediationOptions['ask'],
+  question: string,
+): Promise<string> {
+  if (answerQueue.length > 0) {
+    return answerQueue.shift() ?? '';
+  }
+  if (!ask) return 'skip';
+  return ask(question);
+}
+
+function normalizeRemediationAnswer(
+  answer: string,
+): 'y' | 'n' | 'skip' | 'show' {
+  const normalized = answer.trim().toLowerCase();
+  if (['y', 'yes'].includes(normalized)) return 'y';
+  if (['n', 'no'].includes(normalized)) return 'n';
+  if (['show', 'show files', 'files', 'file', '?'].includes(normalized)) {
+    return 'show';
+  }
+  return 'skip';
 }
 
 function renderSection(title: string, issues: PreseasonIssue[]): string {

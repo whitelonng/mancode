@@ -167,6 +167,8 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MANPS_SKILL.body).toMatch(/Preseason/);
       expect(MANPS_SKILL.body).toMatch(/TODO\|FIXME/);
       expect(MANPS_SKILL.body).toMatch(/preseason-report\.md/);
+      expect(MANPS_SKILL.body).toMatch(/--remediate/);
+      expect(MANPS_SKILL.body).toMatch(/preseason-issues\.json/);
       expect(MANPS_SKILL.body).toMatch(/不直接修改代码/);
     });
 
