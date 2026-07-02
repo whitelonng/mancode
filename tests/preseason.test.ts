@@ -359,8 +359,49 @@ describe('preseason scan', () => {
       status: 'open',
       remediation: {
         status: 'accepted',
+        applied: false,
         sourceRunId: issueDb.latestRunId,
         response: 'y',
+      },
+    });
+  });
+
+  it('applies safe remediation for a missing gitignore', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ scripts: { test: 'vitest', lint: 'biome check' } }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'skip'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(path.join(dir, '.gitignore'), 'utf-8'),
+    ).resolves.toContain('node_modules/');
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    const gitignoreIssue = issueDb.issues.find(
+      (issue: { id: string }) => issue.id === 'config-gitignore',
+    );
+    expect(gitignoreIssue).toMatchObject({
+      status: 'fixed',
+      remediation: {
+        status: 'accepted',
+        applied: true,
+        action: 'created .gitignore',
       },
     });
   });
@@ -459,6 +500,9 @@ describe('preseason scan', () => {
     });
 
     expect(code).toBe(EXIT_INVALID_ARG);
+    await expect(
+      readFile(path.join(dir, '.gitignore'), 'utf-8'),
+    ).rejects.toThrow();
     const issueDb = JSON.parse(
       await readFile(
         path.join(dir, '.mancode', 'preseason-issues.json'),

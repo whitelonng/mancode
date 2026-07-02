@@ -33,7 +33,7 @@ export interface PreseasonReport {
   issueDbPath: string;
 }
 
-export type PreseasonIssueStatus = 'open' | 'not-found';
+export type PreseasonIssueStatus = 'open' | 'not-found' | 'fixed';
 export type PreseasonRemediationStatus = 'accepted' | 'skipped';
 
 export interface PreseasonRemediationState {
@@ -41,6 +41,8 @@ export interface PreseasonRemediationState {
   decidedAt: string;
   sourceRunId: string;
   response: 'y' | 'n' | 'skip';
+  applied?: boolean;
+  action?: string;
 }
 
 export interface PreseasonIssueRecord extends PreseasonIssue {
@@ -83,7 +85,13 @@ export interface PreseasonRemediationResult {
   reviewed: number;
   accepted: number;
   skipped: number;
+  fixed: number;
   shown: number;
+}
+
+interface PreseasonRemediationDecision {
+  issue: PreseasonIssueRecord;
+  response: 'y' | 'n' | 'skip';
 }
 
 type PreseasonArea = 'all' | 'deps' | 'security' | 'dead-code' | 'config';
@@ -183,9 +191,8 @@ export async function runPreseasonRemediation(
   const write = options.write ?? ((message: string) => console.log(message));
   const answerQueue = [...(options.answers ?? [])];
   const now = options.now ?? new Date().toISOString();
-  let reviewed = 0;
-  let accepted = 0;
-  let skipped = 0;
+  const decisions: PreseasonRemediationDecision[] = [];
+  let fixed = 0;
   let shown = 0;
 
   if (targets.length === 0) {
@@ -216,29 +223,50 @@ export async function runPreseasonRemediation(
       }
 
       if (answer === 'y') {
-        issue.remediation = {
-          status: 'accepted',
-          decidedAt: now,
-          sourceRunId: database.latestRunId,
-          response: 'y',
-        };
-        accepted++;
-        reviewed++;
-        write('   Decision: accepted for remediation.');
+        decisions.push({ issue, response: 'y' });
         break;
       }
 
-      issue.remediation = {
-        status: 'skipped',
-        decidedAt: now,
-        sourceRunId: database.latestRunId,
-        response: answer,
-      };
-      skipped++;
-      reviewed++;
-      write('   Decision: skipped.');
+      decisions.push({ issue, response: answer });
       break;
     }
+  }
+
+  let accepted = 0;
+  let skipped = 0;
+  for (const decision of decisions) {
+    const issue = decision.issue;
+    if (decision.response === 'y') {
+      const applied = await applySafeRemediation(projectRoot, issue);
+      issue.remediation = {
+        status: 'accepted',
+        decidedAt: now,
+        sourceRunId: database.latestRunId,
+        response: 'y',
+        applied: applied.applied,
+        action: applied.action,
+      };
+      if (applied.applied) {
+        issue.status = 'fixed';
+        fixed++;
+      }
+      accepted++;
+      write(
+        applied.applied
+          ? `   Decision: fixed (${applied.action}).`
+          : '   Decision: accepted for remediation.',
+      );
+      continue;
+    }
+
+    issue.remediation = {
+      status: 'skipped',
+      decidedAt: now,
+      sourceRunId: database.latestRunId,
+      response: decision.response,
+    };
+    skipped++;
+    write('   Decision: skipped.');
   }
 
   database.updatedAt = now;
@@ -250,9 +278,10 @@ export async function runPreseasonRemediation(
 
   return {
     issueDbPath,
-    reviewed,
+    reviewed: decisions.length,
     accepted,
     skipped,
+    fixed,
     shown,
   };
 }
@@ -750,6 +779,43 @@ function compareIssueRecords(
     a.key.localeCompare(b.key)
   );
 }
+
+async function applySafeRemediation(
+  projectRoot: string,
+  issue: PreseasonIssueRecord,
+): Promise<{ applied: boolean; action?: string }> {
+  if (issue.id === 'config-gitignore' && issue.file === '.gitignore') {
+    const gitignorePath = path.join(projectRoot, '.gitignore');
+    if (pathExistsSync(gitignorePath)) {
+      return { applied: false };
+    }
+    await writeFile(gitignorePath, `${DEFAULT_GITIGNORE}\n`, 'utf-8');
+    return { applied: true, action: 'created .gitignore' };
+  }
+  return { applied: false };
+}
+
+const DEFAULT_GITIGNORE = `# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store`;
 
 async function nextRemediationAnswer(
   answerQueue: string[],

@@ -12,7 +12,7 @@ export const MANPS_SKILL: SkillSpec = {
     'Preseason project health check. Scans for tech debt, stale TODOs, unused dependencies, missing tests, and risky patterns without changing code.',
   body: `# mancode · /manps (Preseason)
 
-用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：先运行 mancode 的确定性扫描引擎，再基于报告补充判断。默认不改代码；需要逐项确认时使用 \`mancode manps [area] --remediate\`。
+用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：先运行 mancode 的确定性扫描引擎，再基于报告补充判断。默认只扫描；需要逐项确认和安全修复时使用 \`mancode manps [area] --remediate\`。
 
 ## 输入
 
@@ -48,7 +48,7 @@ mancode manps
 mancode manps <area> --remediate
 \`\`\`
 
-\`--remediate\` 会对本次扫描问题逐条询问 \`y/n/skip/show files\`，并把 accepted/skipped 决策写回 \`.mancode/preseason-issues.json\`。它不会自动修改代码。
+\`--remediate\` 会对本次扫描问题逐条询问 \`y/n/skip/show files\`，并把 accepted/skipped/fixed 决策写回 \`.mancode/preseason-issues.json\`。它只执行白名单内、低风险且用户明确选择 \`y\` 的安全修复；当前自动执行范围包括创建缺失的 \`.gitignore\`。
 
 如果 CLI 不可用，再按下面的手动扫描清单执行。
 
@@ -108,7 +108,7 @@ mancode manps <area> --remediate
 
 ## 输出规则
 
-- 不直接修改代码
+- 默认扫描不修改代码；\`--remediate\` 只执行白名单内安全修复
 - 不删除依赖
 - 未经过 \`--remediate\` 的 y/n 确认，不进入整改
 - 不制造大型重构计划

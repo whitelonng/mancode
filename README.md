@@ -188,7 +188,7 @@ mancode workflow show     # Show workflow metadata
 mancode workflow clean    # Clean completed/old workflows
 mancode manps [area]      # Preseason health scan, write report
 mancode manps [area] --remediate
-                          # Review current scan issues with y/n/skip/show files
+                          # Review issues, record decisions, apply safe fixes
                           # Areas: all (default) | deps | security | dead-code | config
                           # Writes .mancode/preseason-report.md, .mancode/preseason-issues.json,
                           # and .mancode/preseason-reports/<ts>-<area>.md
@@ -265,7 +265,7 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 - New projects without design tokens get 3 style options, not AI slop
 
 ### 4. Ask Before Swinging
-- `/manps` beta records y/n remediation decisions before any code changes
+- `/manps` beta applies only safe, y-confirmed remediation actions
 - Irreversible operations (force push, schema migrations, bulk deletes) need explicit confirmation
 - The user is always the decision maker
 
@@ -355,7 +355,7 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 
 Current focus areas:
 - Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
-- Extend `/manps` remediation from y/n decision logging to safe fix execution
+- Extend `/manps` safe fix execution beyond the initial `.gitignore` repair
 - Conventional Commits enforcement and PR template generation for `/manteam`
 
 After MVP-3 (multi-platform), contributions welcome for:
@@ -557,7 +557,7 @@ mancode workflow show     # 显示 workflow 元数据
 mancode workflow clean    # 清理已完成/过旧 workflow
 mancode manps [area]      # 季前赛健康扫描，写入报告
 mancode manps [area] --remediate
-                          # 用 y/n/skip/show files 审核本次扫描问题
+                          # 审核问题、记录决策，并执行安全修复
                           # area: all（默认）| deps | security | dead-code | config
                           # 生成 .mancode/preseason-report.md、.mancode/preseason-issues.json
                           # 和 .mancode/preseason-reports/<时间戳>-<area>.md
@@ -634,7 +634,7 @@ mancode install --force   # 重装适配（保留已扫描 token）
 - 没有设计 token 的新项目给 3 个风格选项，不是 AI slop
 
 ### 4. 出手前先问
-- `/manps` beta 会先记录 y/n 整改决策，再进入任何代码改动
+- `/manps` beta 只执行用户 y 确认过的安全整改动作
 - 不可逆操作（force push、schema 变更、批量删除）必须明确确认
 - 用户始终是决策者
 
@@ -724,7 +724,7 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 
 当前重点：
 - 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
-- 把 `/manps` 从 y/n 决策记录推进到安全执行整改
+- 把 `/manps` 的安全整改从 `.gitignore` 修复扩展到更多场景
 - `/manteam` 的 Conventional Commits 强制和 PR 模板生成
 
 MVP-3（多平台）之后，欢迎贡献：

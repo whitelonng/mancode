@@ -124,6 +124,7 @@ export async function manps(
     console.log(`  Reviewed: ${remediation.reviewed}`);
     console.log(`  Accepted: ${remediation.accepted}`);
     console.log(`  Skipped:  ${remediation.skipped}`);
+    console.log(`  Fixed:    ${remediation.fixed}`);
     console.log(
       `  Issue DB: ${path.relative(rootDir, remediation.issueDbPath)}`,
     );
