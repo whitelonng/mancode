@@ -76,6 +76,7 @@ export async function installClaudeCode(
     await rm(path.join(claudeDir, 'agents'), { recursive: true, force: true });
   } else {
     await installAgents(path.join(claudeDir, 'agents'));
+    await installTeamTemplates(projectRoot);
   }
 
   // 8. 更新 .claude/settings.json（幂等合并）
@@ -155,6 +156,59 @@ async function installAgents(agentsDir: string): Promise<void> {
     await writeFile(path.join(agentsDir, `${agent.name}.md`), content, 'utf-8');
   }
 }
+
+async function installTeamTemplates(projectRoot: string): Promise<void> {
+  const teamDir = path.join(projectRoot, '.mancode', 'team');
+  await mkdir(teamDir, { recursive: true });
+  await writeFileIfMissing(
+    path.join(teamDir, 'commit-template.txt'),
+    TEAM_COMMIT_TEMPLATE,
+  );
+
+  const githubDir = path.join(projectRoot, '.github');
+  await mkdir(githubDir, { recursive: true });
+  await writeFileIfMissing(
+    path.join(githubDir, 'PULL_REQUEST_TEMPLATE.md'),
+    PULL_REQUEST_TEMPLATE,
+  );
+}
+
+async function writeFileIfMissing(
+  file: string,
+  content: string,
+): Promise<void> {
+  if (await pathExists(file)) return;
+  await writeFile(file, content, 'utf-8');
+}
+
+const TEAM_COMMIT_TEMPLATE = `<type>(<scope>): <summary>
+
+Context:
+- task:
+- workflow:
+- validation:
+
+# Types: feat, fix, docs, test, refactor, perf, chore
+# Keep summary imperative and under 72 characters.
+# Remove comment lines before committing.
+`;
+
+const PULL_REQUEST_TEMPLATE = `## Summary
+
+-
+
+## Validation
+
+- [ ] Tests/lint/build run, or reason documented
+- [ ] Screenshots or smoke notes added for UI/CLI behavior
+
+## Team Coordination
+
+- Related mancode workflow:
+- Shared modules touched:
+- Rollback notes:
+- Follow-up TODOs:
+`;
 
 interface ClaudeHookItem {
   type: 'command';

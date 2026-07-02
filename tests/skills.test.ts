@@ -158,6 +158,8 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MANTEAM_SKILL.body).toMatch(/Team Context/);
       expect(MANTEAM_SKILL.body).toMatch(/git log/);
       expect(MANTEAM_SKILL.body).toMatch(/handoff\.md/);
+      expect(MANTEAM_SKILL.body).toMatch(/commit-template\.txt/);
+      expect(MANTEAM_SKILL.body).toMatch(/PULL_REQUEST_TEMPLATE\.md/);
       expect(MANTEAM_SKILL.body).toMatch(/不覆盖/);
     });
   });

@@ -135,6 +135,13 @@ When you run `/manteam`, mancode reads and updates shared memory under `.mancode
 └── decisions.md     # Dated ADR-style entries (why X over Y)
 ```
 
+`/manteam` also installs team coordination templates without overwriting existing files:
+
+```
+.mancode/team/commit-template.txt
+.github/PULL_REQUEST_TEMPLATE.md
+```
+
 Example entry appended to `decisions.md` on each `/manteam` run:
 
 ```markdown
@@ -356,7 +363,7 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 Current focus areas:
 - Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
 - Extend `/manps` safe fix execution beyond initial config-file repairs
-- Conventional Commits enforcement and PR template generation for `/manteam`
+- Harden `/manteam` commit/PR template usage into optional enforcement hooks
 
 After MVP-3 (multi-platform), contributions welcome for:
 - Platform adapters (Windsurf, Cline, etc.)
@@ -502,6 +509,13 @@ src/components/     → 已有 Button、Input、Card 组件
 ├── prd.md           # 团队在做什么（共享上下文）
 ├── spec.md          # 应该怎么做（共识）
 └── decisions.md     # 带日期的 ADR 式条目（为什么选 X 不选 Y）
+```
+
+`/manteam` 也会安装团队协作模板，且不会覆盖已有文件：
+
+```
+.mancode/team/commit-template.txt
+.github/PULL_REQUEST_TEMPLATE.md
 ```
 
 每次 `/manteam` 运行会向 `decisions.md` 追加一条记录：
@@ -725,7 +739,7 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 当前重点：
 - 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
 - 把 `/manps` 的安全整改从基础配置文件修复扩展到更多场景
-- `/manteam` 的 Conventional Commits 强制和 PR 模板生成
+- 把 `/manteam` 的 commit/PR 模板使用推进为可选强制 hook
 
 MVP-3（多平台）之后，欢迎贡献：
 - 平台适配器（Windsurf、Cline 等）

@@ -84,6 +84,61 @@ describe('mancode install', () => {
     expect(await pathExists(path.join(dir, '.claude', 'agents'))).toBe(false);
   });
 
+  it('installs team commit and pull request templates without overwriting them', async () => {
+    await silentInit(dir);
+
+    const commitTemplatePath = path.join(
+      dir,
+      '.mancode',
+      'team',
+      'commit-template.txt',
+    );
+    const prTemplatePath = path.join(
+      dir,
+      '.github',
+      'PULL_REQUEST_TEMPLATE.md',
+    );
+
+    await expect(readFile(commitTemplatePath, 'utf-8')).resolves.toContain(
+      '<type>(<scope>): <summary>',
+    );
+    await expect(readFile(prTemplatePath, 'utf-8')).resolves.toContain(
+      '## Team Coordination',
+    );
+
+    await writeFile(commitTemplatePath, 'custom commit template\n', 'utf-8');
+    await writeFile(prTemplatePath, 'custom pr template\n', 'utf-8');
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(commitTemplatePath, 'utf-8')).resolves.toBe(
+      'custom commit template\n',
+    );
+    await expect(readFile(prTemplatePath, 'utf-8')).resolves.toBe(
+      'custom pr template\n',
+    );
+  });
+
+  it('minimal install does not create team templates', async () => {
+    await silentInit(dir);
+
+    await rm(path.join(dir, '.mancode', 'team'), {
+      recursive: true,
+      force: true,
+    });
+    await rm(path.join(dir, '.github'), { recursive: true, force: true });
+
+    const code = await install(dir, 'claude-code', {
+      force: true,
+      minimal: true,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(await pathExists(path.join(dir, '.mancode', 'team'))).toBe(false);
+    expect(await pathExists(path.join(dir, '.github'))).toBe(false);
+  });
+
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
     await silentInit(dir);
     const code = await install(dir, 'claude-code');
