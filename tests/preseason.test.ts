@@ -366,7 +366,7 @@ describe('preseason scan', () => {
     });
   });
 
-  it('applies safe remediation for a missing gitignore', async () => {
+  it('applies safe remediation for missing config files', async () => {
     await writeFile(
       path.join(dir, '.mancode', 'state.json'),
       JSON.stringify({ currentMode: 'solo' }),
@@ -374,19 +374,24 @@ describe('preseason scan', () => {
     );
     await writeFile(
       path.join(dir, 'package.json'),
-      JSON.stringify({ scripts: { test: 'vitest', lint: 'biome check' } }),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
       'utf-8',
     );
 
     const code = await manps(dir, 'config', {
       remediate: true,
-      answers: ['y', 'skip'],
+      answers: ['y', 'y'],
     });
 
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(path.join(dir, '.gitignore'), 'utf-8'),
     ).resolves.toContain('node_modules/');
+    await expect(
+      readFile(path.join(dir, '.editorconfig'), 'utf-8'),
+    ).resolves.toContain('root = true');
     const issueDb = JSON.parse(
       await readFile(
         path.join(dir, '.mancode', 'preseason-issues.json'),
@@ -402,6 +407,17 @@ describe('preseason scan', () => {
         status: 'accepted',
         applied: true,
         action: 'created .gitignore',
+      },
+    });
+    const editorconfigIssue = issueDb.issues.find(
+      (issue: { id: string }) => issue.id === 'config-editorconfig',
+    );
+    expect(editorconfigIssue).toMatchObject({
+      status: 'fixed',
+      remediation: {
+        status: 'accepted',
+        applied: true,
+        action: 'created .editorconfig',
       },
     });
   });
@@ -502,6 +518,9 @@ describe('preseason scan', () => {
     expect(code).toBe(EXIT_INVALID_ARG);
     await expect(
       readFile(path.join(dir, '.gitignore'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(dir, '.editorconfig'), 'utf-8'),
     ).rejects.toThrow();
     const issueDb = JSON.parse(
       await readFile(

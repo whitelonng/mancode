@@ -605,6 +605,21 @@ function scanConfig(projectRoot: string, files: string[]): PreseasonIssue[] {
         'Add a .gitignore that excludes dependencies, build output, coverage, and local env files.',
     });
   }
+  if (
+    !files.includes('.editorconfig') &&
+    !pathExistsSync(path.join(projectRoot, '.editorconfig'))
+  ) {
+    issues.push({
+      id: 'config-editorconfig',
+      severity: 'P2',
+      type: 'config',
+      title: 'Missing .editorconfig',
+      file: '.editorconfig',
+      detail: 'No .editorconfig found at the project root.',
+      recommendation:
+        'Add a small .editorconfig to keep indentation, charset, and line endings consistent across editors.',
+    });
+  }
   return issues;
 }
 
@@ -792,6 +807,14 @@ async function applySafeRemediation(
     await writeFile(gitignorePath, `${DEFAULT_GITIGNORE}\n`, 'utf-8');
     return { applied: true, action: 'created .gitignore' };
   }
+  if (issue.id === 'config-editorconfig' && issue.file === '.editorconfig') {
+    const editorconfigPath = path.join(projectRoot, '.editorconfig');
+    if (pathExistsSync(editorconfigPath)) {
+      return { applied: false };
+    }
+    await writeFile(editorconfigPath, `${DEFAULT_EDITORCONFIG}\n`, 'utf-8');
+    return { applied: true, action: 'created .editorconfig' };
+  }
   return { applied: false };
 }
 
@@ -816,6 +839,19 @@ yarn-error.log*
 
 # OS files
 .DS_Store`;
+
+const DEFAULT_EDITORCONFIG = `root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false`;
 
 async function nextRemediationAnswer(
   answerQueue: string[],

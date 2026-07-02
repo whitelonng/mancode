@@ -355,7 +355,7 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 
 Current focus areas:
 - Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
-- Extend `/manps` safe fix execution beyond the initial `.gitignore` repair
+- Extend `/manps` safe fix execution beyond initial config-file repairs
 - Conventional Commits enforcement and PR template generation for `/manteam`
 
 After MVP-3 (multi-platform), contributions welcome for:
@@ -724,7 +724,7 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 
 当前重点：
 - 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
-- 把 `/manps` 的安全整改从 `.gitignore` 修复扩展到更多场景
+- 把 `/manps` 的安全整改从基础配置文件修复扩展到更多场景
 - `/manteam` 的 Conventional Commits 强制和 PR 模板生成
 
 MVP-3（多平台）之后，欢迎贡献：
