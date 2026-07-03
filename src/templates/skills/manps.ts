@@ -3,13 +3,13 @@ import type { SkillSpec } from './index.js';
 /**
  * /manps skill — Preseason（README MVP-2）。
  *
- * 项目健康检查：只读扫描技术债、旧 TODO、未使用依赖、测试缺口和陈旧模式，
- * 输出可执行的 cleanup plan，不直接修改代码。
+ * 项目健康检查：扫描技术债、旧 TODO、未使用依赖、测试缺口和陈旧模式，
+ * 输出可执行的 cleanup plan；只有 --remediate 且用户确认时才执行白名单安全修复。
  */
 export const MANPS_SKILL: SkillSpec = {
   name: 'manps',
   description:
-    'Preseason project health check. Scans for tech debt, stale TODOs, unused dependencies, missing tests, and risky patterns without changing code.',
+    'Preseason project health check. Scans for tech debt, stale TODOs, unused dependencies, missing tests, risky patterns, and optional safe remediation.',
   body: `# mancode · /manps (Preseason)
 
 用户用 \`/manps [area]\` 触发你。这是项目健康检查模式：先运行 mancode 的确定性扫描引擎，再基于报告补充判断。默认只扫描；需要逐项确认和安全修复时使用 \`mancode manps [area] --remediate\`。
@@ -48,7 +48,7 @@ mancode manps
 mancode manps <area> --remediate
 \`\`\`
 
-\`--remediate\` 会对本次扫描问题逐条询问 \`y/n/skip/show files\`，并把 accepted/skipped/fixed 决策写回 \`.mancode/preseason-issues.json\`。它只执行白名单内、低风险且用户明确选择 \`y\` 的安全修复；当前自动执行范围包括创建缺失的 \`.gitignore\` 和 \`.editorconfig\`。
+\`--remediate\` 会对本次扫描问题逐条询问 \`y/n/skip/show files\`，并把 accepted/skipped/fixed 决策写回 \`.mancode/preseason-issues.json\`。它只执行白名单内、低风险且用户明确选择 \`y\` 的安全修复；当前自动执行范围包括创建缺失的 \`.gitignore\`、\`.editorconfig\`，以及从已安装工具依赖安全推断 \`test\` / \`lint\` / \`build\` package scripts。
 
 如果 CLI 不可用，再按下面的手动扫描清单执行。
 

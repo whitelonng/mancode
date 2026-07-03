@@ -173,6 +173,7 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MANPS_SKILL.body).toMatch(/--remediate/);
       expect(MANPS_SKILL.body).toMatch(/preseason-issues\.json/);
       expect(MANPS_SKILL.body).toMatch(/白名单内安全修复/);
+      expect(MANPS_SKILL.body).toMatch(/package scripts/);
     });
 
     it('keeps CLI scan areas aligned with the manps command contract', () => {

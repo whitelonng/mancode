@@ -372,8 +372,8 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 **Status**: MVP-2 beta for Claude Code is live. Early testing and feedback welcome.
 
 Current focus areas:
-- Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
-- Extend `/manps` safe fix execution beyond initial config-file repairs
+- Final MVP-2 beta smoke testing for the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`)
+- Last review pass before tagging/publishing the beta
 - Exercise `/manteam` commit/PR templates and optional commit hook in team repos
 
 After MVP-3 (multi-platform), contributions welcome for:
@@ -759,8 +759,8 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 **状态**：Claude Code 的 MVP-2 beta 已发布。欢迎早期测试和反馈。
 
 当前重点：
-- 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
-- 把 `/manps` 的安全整改从基础配置文件修复扩展到更多场景
+- 对 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）做 MVP-2 beta 最终烟测
+- beta tag / publish 前做最后一轮审核
 - 在团队仓库中验证 `/manteam` commit/PR 模板和可选 commit hook
 
 MVP-3（多平台）之后，欢迎贡献：
