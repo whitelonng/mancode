@@ -422,6 +422,145 @@ describe('preseason scan', () => {
     });
   });
 
+  it('applies safe remediation for missing package scripts when matching tools exist', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        devDependencies: {
+          '@biomejs/biome': '^2.0.0',
+          typescript: '^5.0.0',
+          vitest: '^3.0.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'y', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts).toEqual({
+      test: 'vitest run',
+      lint: 'biome check .',
+      build: 'tsc',
+    });
+
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { type: string; status: string }) =>
+          issue.type === 'scripts' && issue.status === 'fixed',
+      ),
+    ).toHaveLength(3);
+    expect(
+      issueDb.issues.map(
+        (issue: { remediation?: { action?: string } }) =>
+          issue.remediation?.action,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        'added npm test script',
+        'added npm lint script',
+        'added npm build script',
+      ]),
+    );
+  });
+
+  it('does not add package scripts when no matching tool dependency exists', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({}),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'y', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts).toBeUndefined();
+
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { type: string; status: string }) =>
+          issue.type === 'scripts' && issue.status === 'open',
+      ),
+    ).toHaveLength(3);
+    expect(
+      issueDb.issues.every(
+        (issue: { remediation?: { applied?: boolean } }) =>
+          issue.remediation?.applied === false,
+      ),
+    ).toBe(true);
+  });
+
+  it('prefers framework build scripts over plain TypeScript builds', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest run', lint: 'biome check .' },
+        devDependencies: {
+          typescript: '^5.0.0',
+          vite: '^7.0.0',
+          vitest: '^3.0.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts.build).toBe('vite build');
+  });
+
   it('records skipped remediation decisions without changing issue status', async () => {
     await writeFile(
       path.join(dir, '.mancode', 'state.json'),

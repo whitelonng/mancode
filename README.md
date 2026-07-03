@@ -206,6 +206,7 @@ mancode workflow clean    # Clean completed/old workflows
 mancode manps [area]      # Preseason health scan, write report
 mancode manps [area] --remediate
                           # Review issues, record decisions, apply safe fixes
+                          # Safe fixes: config files + inferred package scripts
                           # Areas: all (default) | deps | security | dead-code | config
                           # Writes .mancode/preseason-report.md, .mancode/preseason-issues.json,
                           # and .mancode/preseason-reports/<ts>-<area>.md
@@ -592,6 +593,7 @@ mancode workflow clean    # 清理已完成/过旧 workflow
 mancode manps [area]      # 季前赛健康扫描，写入报告
 mancode manps [area] --remediate
                           # 审核问题、记录决策，并执行安全修复
+                          # 安全修复：配置文件 + 可从已安装工具推断的 package scripts
                           # area: all（默认）| deps | security | dead-code | config
                           # 生成 .mancode/preseason-report.md、.mancode/preseason-issues.json
                           # 和 .mancode/preseason-reports/<时间戳>-<area>.md

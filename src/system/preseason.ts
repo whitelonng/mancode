@@ -815,7 +815,71 @@ async function applySafeRemediation(
     await writeFile(editorconfigPath, `${DEFAULT_EDITORCONFIG}\n`, 'utf-8');
     return { applied: true, action: 'created .editorconfig' };
   }
+  if (issue.type === 'scripts' && issue.file === 'package.json') {
+    const scriptName = issue.id.replace(/^scripts-/, '');
+    const script = await inferSafePackageScript(projectRoot, scriptName);
+    if (!script) return { applied: false };
+    const applied = await addPackageScript(projectRoot, scriptName, script);
+    return applied
+      ? { applied: true, action: `added npm ${scriptName} script` }
+      : { applied: false };
+  }
   return { applied: false };
+}
+
+async function inferSafePackageScript(
+  projectRoot: string,
+  scriptName: string,
+): Promise<string | null> {
+  const pkg = await readPackageJson(projectRoot);
+  if (!pkg) return null;
+  if (pkg.scripts?.[scriptName]) return null;
+
+  switch (scriptName) {
+    case 'test':
+      if (packageHasDependency(pkg, 'vitest')) return 'vitest run';
+      if (packageHasDependency(pkg, 'jest')) return 'jest';
+      return null;
+    case 'lint':
+      if (packageHasDependency(pkg, '@biomejs/biome')) return 'biome check .';
+      if (packageHasDependency(pkg, 'eslint')) return 'eslint .';
+      return null;
+    case 'build':
+      if (packageHasDependency(pkg, 'next')) return 'next build';
+      if (packageHasDependency(pkg, 'vite')) return 'vite build';
+      if (packageHasDependency(pkg, 'typescript')) return 'tsc';
+      return null;
+    default:
+      return null;
+  }
+}
+
+async function addPackageScript(
+  projectRoot: string,
+  scriptName: string,
+  script: string,
+): Promise<boolean> {
+  const packagePath = path.join(projectRoot, 'package.json');
+  let pkg: PackageJson;
+  try {
+    pkg = JSON.parse(await readFile(packagePath, 'utf-8')) as PackageJson;
+  } catch {
+    return false;
+  }
+
+  const scripts = pkg.scripts ?? {};
+  if (scripts[scriptName]) return false;
+
+  pkg.scripts = {
+    ...scripts,
+    [scriptName]: script,
+  };
+  await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf-8');
+  return true;
+}
+
+function packageHasDependency(pkg: PackageJson, name: string): boolean {
+  return Boolean(pkg.dependencies?.[name] || pkg.devDependencies?.[name]);
 }
 
 const DEFAULT_GITIGNORE = `# Dependencies
