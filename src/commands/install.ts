@@ -1,7 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { installClaudeCode } from '../installers/claude-code.js';
+import {
+  installClaudeCode,
+  installClaudeCodeCommitHook,
+} from '../installers/claude-code.js';
 import { detectProjectType } from '../system/detect.js';
 import { DEFAULT_CONFIG } from '../templates/defaults.js';
 
@@ -78,7 +81,13 @@ export async function install(
       ? config.platforms.includes(platform)
       : false;
 
-  if (alreadyInstalled && !options.force && !options.commitHook) {
+  if (alreadyInstalled && !options.force) {
+    if (options.commitHook) {
+      await installClaudeCodeCommitHook(rootDir);
+      console.log('✓  Optional /manteam commit hook installed.');
+      return EXIT_OK;
+    }
+
     console.log(
       `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
     );

@@ -148,7 +148,7 @@ Teams that want enforcement can opt in to a managed Conventional Commit hook:
 mancode install claude-code --commit-hook
 ```
 
-This writes `.mancode/team/commit-msg.sh` and wires `.git/hooks/commit-msg` only when the hook is missing or already managed by mancode.
+This writes `.mancode/team/commit-msg.sh` and wires Git's resolved `commit-msg` hook path only when the hook is missing or already managed by mancode.
 
 Example entry appended to `decisions.md` on each `/manteam` run:
 
@@ -534,7 +534,7 @@ src/components/     → 已有 Button、Input、Card 组件
 mancode install claude-code --commit-hook
 ```
 
-它会写入 `.mancode/team/commit-msg.sh`，并且只在 `.git/hooks/commit-msg` 缺失或已经由 mancode 管理时接管该 hook。
+它会写入 `.mancode/team/commit-msg.sh`，并且只在 Git 解析出的 `commit-msg` hook 缺失或已经由 mancode 管理时接管该 hook。
 
 每次 `/manteam` 运行会向 `decisions.md` 追加一条记录：
 

@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import {
   access,
   mkdir,
@@ -8,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
 import {
@@ -17,6 +19,8 @@ import {
   install,
 } from '../src/commands/install.js';
 import { DEFAULT_CONFIG } from '../src/templates/defaults.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('mancode install', () => {
   let dir: string;
@@ -151,7 +155,9 @@ describe('mancode install', () => {
     await silentInit(dir);
 
     const gitHookPath = path.join(dir, '.git', 'hooks', 'commit-msg');
+    const logPath = path.join(dir, '.mancode', 'logs', 'hooks.log');
     const validatorPath = path.join(dir, '.mancode', 'team', 'commit-msg.sh');
+    await writeFile(logPath, 'preserve existing logs\n', 'utf-8');
 
     const code = await install(dir, 'claude-code', { commitHook: true });
 
@@ -161,6 +167,9 @@ describe('mancode install', () => {
     );
     await expect(readFile(validatorPath, 'utf-8')).resolves.toContain(
       'Conventional Commits',
+    );
+    await expect(readFile(logPath, 'utf-8')).resolves.toBe(
+      'preserve existing logs\n',
     );
 
     await writeFile(gitHookPath, '#!/usr/bin/env bash\necho custom\n', 'utf-8');
@@ -174,6 +183,52 @@ describe('mancode install', () => {
     await expect(readFile(gitHookPath, 'utf-8')).resolves.toBe(
       '#!/usr/bin/env bash\necho custom\n',
     );
+  });
+
+  it('installs optional commit hook in linked git worktrees', async () => {
+    await rm(path.join(dir, '.git'), { recursive: true, force: true });
+    await execFileAsync('git', ['init'], { cwd: dir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
+      cwd: dir,
+    });
+    await execFileAsync('git', ['config', 'user.name', 'Test User'], {
+      cwd: dir,
+    });
+    await writeFile(path.join(dir, 'README.md'), '# test\n', 'utf-8');
+    await execFileAsync('git', ['add', 'README.md'], { cwd: dir });
+    await execFileAsync('git', ['commit', '-m', 'chore: init'], { cwd: dir });
+
+    const linkedDir = await mkdtemp(path.join(tmpdir(), 'mancode-linked-'));
+    await rm(linkedDir, { recursive: true, force: true });
+
+    try {
+      await execFileAsync(
+        'git',
+        ['worktree', 'add', '-b', 'mancode-linked-test', linkedDir, 'HEAD'],
+        { cwd: dir },
+      );
+      await silentInit(linkedDir);
+
+      const code = await install(linkedDir, 'claude-code', {
+        commitHook: true,
+      });
+      const { stdout } = await execFileAsync(
+        'git',
+        ['rev-parse', '--git-path', 'hooks/commit-msg'],
+        { cwd: linkedDir },
+      );
+      const hookPath = stdout.trim();
+
+      expect(code).toBe(EXIT_OK);
+      await expect(readFile(hookPath, 'utf-8')).resolves.toContain(
+        '.mancode/team/commit-msg.sh',
+      );
+    } finally {
+      await execFileAsync('git', ['worktree', 'remove', '--force', linkedDir], {
+        cwd: dir,
+      }).catch(() => {});
+      await rm(linkedDir, { recursive: true, force: true });
+    }
   });
 
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {

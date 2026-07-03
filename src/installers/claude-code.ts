@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { ensureTeamMemory } from '../system/team-memory.js';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
@@ -9,6 +11,8 @@ import {
   USER_PROMPT_SUBMIT_HOOK,
 } from '../templates/inline.js';
 import { MVP2_SKILLS, renderSkill } from '../templates/skills/index.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Claude Code 平台安装器。
@@ -85,6 +89,13 @@ export async function installClaudeCode(
 
   // 8. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir);
+}
+
+export async function installClaudeCodeCommitHook(
+  projectRoot: string,
+): Promise<void> {
+  await installTeamTemplates(projectRoot);
+  await installTeamCommitHook(projectRoot);
 }
 
 async function installHooks(hooksDir: string): Promise<void> {
@@ -185,17 +196,16 @@ async function installTeamCommitHook(projectRoot: string): Promise<void> {
   await writeFile(validatorPath, TEAM_COMMIT_MSG_HOOK, 'utf-8');
   await chmod(validatorPath, 0o755);
 
-  const gitDir = path.join(projectRoot, '.git');
-  if (!(await pathExists(gitDir))) return;
+  const gitHookPath = await resolveGitHookPath(projectRoot);
+  if (!gitHookPath) return;
 
-  const gitHooksDir = path.join(gitDir, 'hooks');
+  const gitHooksDir = path.dirname(gitHookPath);
   try {
     await mkdir(gitHooksDir, { recursive: true });
   } catch {
     return;
   }
 
-  const gitHookPath = path.join(gitHooksDir, 'commit-msg');
   const wrapper = TEAM_COMMIT_MSG_WRAPPER;
 
   if (await pathExists(gitHookPath)) {
@@ -205,6 +215,38 @@ async function installTeamCommitHook(projectRoot: string): Promise<void> {
 
   await writeFile(gitHookPath, wrapper, 'utf-8');
   await chmod(gitHookPath, 0o755);
+}
+
+async function resolveGitHookPath(projectRoot: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', [
+      '-C',
+      projectRoot,
+      'rev-parse',
+      '--git-path',
+      'hooks/commit-msg',
+    ]);
+    const hookPath = stdout.trim();
+    if (hookPath) {
+      return path.isAbsolute(hookPath)
+        ? hookPath
+        : path.join(projectRoot, hookPath);
+    }
+  } catch {
+    // Fall back for tests or partially initialized repositories.
+  }
+
+  const gitDir = path.join(projectRoot, '.git');
+  try {
+    const gitDirStat = await stat(gitDir);
+    if (gitDirStat.isDirectory()) {
+      return path.join(gitDir, 'hooks', 'commit-msg');
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 async function writeFileIfMissing(
