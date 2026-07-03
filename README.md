@@ -142,6 +142,14 @@ When you run `/manteam`, mancode reads and updates shared memory under `.mancode
 .github/PULL_REQUEST_TEMPLATE.md
 ```
 
+Teams that want enforcement can opt in to a managed Conventional Commit hook:
+
+```bash
+mancode install claude-code --commit-hook
+```
+
+This writes `.mancode/team/commit-msg.sh` and wires `.git/hooks/commit-msg` only when the hook is missing or already managed by mancode.
+
 Example entry appended to `decisions.md` on each `/manteam` run:
 
 ```markdown
@@ -190,6 +198,8 @@ mancode init              # Initialize .mancode/ + solo mode + aesthetic scan
 mancode status            # Show project status, mode, style, hooks
 mancode status --json     # Output as JSON (for scripts)
 mancode install [platform]# Install/reinstall platform adapter
+mancode install claude-code --commit-hook
+                          # Opt into /manteam Conventional Commit enforcement
 mancode workflow list     # List mancode workflows
 mancode workflow show     # Show workflow metadata
 mancode workflow clean    # Clean completed/old workflows
@@ -363,7 +373,7 @@ Heavy modes (`/man`, `/manteam`) are opt-in when you need structure.
 Current focus areas:
 - Smoke-test the slash command suite (`/man8`, `/man`, `/manteam`, `/manps`, `/mansolo`) in real sessions
 - Extend `/manps` safe fix execution beyond initial config-file repairs
-- Harden `/manteam` commit/PR template usage into optional enforcement hooks
+- Exercise `/manteam` commit/PR templates and optional commit hook in team repos
 
 After MVP-3 (multi-platform), contributions welcome for:
 - Platform adapters (Windsurf, Cline, etc.)
@@ -518,6 +528,14 @@ src/components/     → 已有 Button、Input、Card 组件
 .github/PULL_REQUEST_TEMPLATE.md
 ```
 
+需要强制规范的团队可以显式启用受管 Conventional Commit hook：
+
+```bash
+mancode install claude-code --commit-hook
+```
+
+它会写入 `.mancode/team/commit-msg.sh`，并且只在 `.git/hooks/commit-msg` 缺失或已经由 mancode 管理时接管该 hook。
+
 每次 `/manteam` 运行会向 `decisions.md` 追加一条记录：
 
 ```markdown
@@ -566,6 +584,8 @@ mancode init              # 初始化 .mancode/ + solo 模式 + 审美扫描
 mancode status            # 显示项目状态、模式、风格、hooks
 mancode status --json     # JSON 输出（脚本用）
 mancode install [platform]# 安装/重装平台适配
+mancode install claude-code --commit-hook
+                          # 显式启用 /manteam Conventional Commit 校验
 mancode workflow list     # 列出 mancode workflow
 mancode workflow show     # 显示 workflow 元数据
 mancode workflow clean    # 清理已完成/过旧 workflow
@@ -739,7 +759,7 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 当前重点：
 - 在真实会话里烟测 slash 命令套件（`/man8`、`/man`、`/manteam`、`/manps`、`/mansolo`）
 - 把 `/manps` 的安全整改从基础配置文件修复扩展到更多场景
-- 把 `/manteam` 的 commit/PR 模板使用推进为可选强制 hook
+- 在团队仓库中验证 `/manteam` commit/PR 模板和可选 commit hook
 
 MVP-3（多平台）之后，欢迎贡献：
 - 平台适配器（Windsurf、Cline 等）

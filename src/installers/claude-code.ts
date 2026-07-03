@@ -26,6 +26,7 @@ export async function installClaudeCode(
     techStack: string[];
     uiLibrary: string | null;
     minimal?: boolean;
+    commitHook?: boolean;
   },
 ): Promise<void> {
   const mancodeDir = path.join(projectRoot, '.mancode');
@@ -77,6 +78,9 @@ export async function installClaudeCode(
   } else {
     await installAgents(path.join(claudeDir, 'agents'));
     await installTeamTemplates(projectRoot);
+    if (options.commitHook) {
+      await installTeamCommitHook(projectRoot);
+    }
   }
 
   // 8. 更新 .claude/settings.json（幂等合并）
@@ -173,6 +177,36 @@ async function installTeamTemplates(projectRoot: string): Promise<void> {
   );
 }
 
+async function installTeamCommitHook(projectRoot: string): Promise<void> {
+  const teamDir = path.join(projectRoot, '.mancode', 'team');
+  await mkdir(teamDir, { recursive: true });
+
+  const validatorPath = path.join(teamDir, 'commit-msg.sh');
+  await writeFile(validatorPath, TEAM_COMMIT_MSG_HOOK, 'utf-8');
+  await chmod(validatorPath, 0o755);
+
+  const gitDir = path.join(projectRoot, '.git');
+  if (!(await pathExists(gitDir))) return;
+
+  const gitHooksDir = path.join(gitDir, 'hooks');
+  try {
+    await mkdir(gitHooksDir, { recursive: true });
+  } catch {
+    return;
+  }
+
+  const gitHookPath = path.join(gitHooksDir, 'commit-msg');
+  const wrapper = TEAM_COMMIT_MSG_WRAPPER;
+
+  if (await pathExists(gitHookPath)) {
+    const existing = await readFile(gitHookPath, 'utf-8');
+    if (!existing.includes('.mancode/team/commit-msg.sh')) return;
+  }
+
+  await writeFile(gitHookPath, wrapper, 'utf-8');
+  await chmod(gitHookPath, 0o755);
+}
+
 async function writeFileIfMissing(
   file: string,
   content: string,
@@ -208,6 +242,53 @@ const PULL_REQUEST_TEMPLATE = `## Summary
 - Shared modules touched:
 - Rollback notes:
 - Follow-up TODOs:
+`;
+
+const TEAM_COMMIT_MSG_WRAPPER = `#!/usr/bin/env bash
+# mancode managed commit-msg hook
+set -euo pipefail
+exec bash .mancode/team/commit-msg.sh "$@"
+`;
+
+const TEAM_COMMIT_MSG_HOOK = `#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="\${1:-}"
+if [[ -z "$msg_file" || ! -f "$msg_file" ]]; then
+  exit 0
+fi
+
+subject="$(grep -vE '^[[:space:]]*(#|$)' "$msg_file" | head -n 1 || true)"
+
+if [[ -z "$subject" ]]; then
+  exit 0
+fi
+
+if [[ "$subject" =~ ^(Merge|Revert)[[:space:]] ]]; then
+  exit 0
+fi
+
+pattern='^(feat|fix|docs|test|tests|refactor|perf|chore|build|ci|style|revert)(\\([A-Za-z0-9._/-]+\\))?!?: .{1,72}$'
+
+if [[ "$subject" =~ $pattern ]]; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+mancode: commit message must use Conventional Commits.
+
+Expected:
+  feat(scope): short imperative summary
+  fix: short imperative summary
+
+Allowed types:
+  feat, fix, docs, test, tests, refactor, perf, chore, build, ci, style, revert
+
+Tip:
+  See .mancode/team/commit-template.txt
+EOF
+
+exit 1
 `;
 
 interface ClaudeHookItem {

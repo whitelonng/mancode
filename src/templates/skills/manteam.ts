@@ -27,6 +27,7 @@ export const MANTEAM_SKILL: SkillSpec = {
    - \`.mancode/memory/spec.md\`
    - \`.mancode/memory/decisions.md\`
    - \`.mancode/team/commit-template.txt\`
+   - \`.mancode/team/commit-msg.sh\`（仅当团队启用 \`mancode install claude-code --commit-hook\`）
    - \`.github/PULL_REQUEST_TEMPLATE.md\`
 2. 如果 memory 文件不存在，先创建上述 3 个文件，使用简短标题和空模板，不要覆盖已有内容。
 3. 收集团队上下文：
@@ -83,7 +84,8 @@ export const MANTEAM_SKILL: SkillSpec = {
    - workflow: <taskId>
    - validation: <commands>
    \`\`\`
-4. 如果用户要开 PR，参考 \`.github/PULL_REQUEST_TEMPLATE.md\` 输出 PR 描述。
+4. 如果团队需要强制 commit 规范，提醒可运行 \`mancode install claude-code --commit-hook\` 安装可选 Git hook；不要覆盖已有自定义 hook。
+5. 如果用户要开 PR，参考 \`.github/PULL_REQUEST_TEMPLATE.md\` 输出 PR 描述。
 
 ## 铁律
 

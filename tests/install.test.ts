@@ -139,6 +139,43 @@ describe('mancode install', () => {
     expect(await pathExists(path.join(dir, '.github'))).toBe(false);
   });
 
+  it('does not install the optional commit hook by default', async () => {
+    await silentInit(dir);
+
+    expect(
+      await pathExists(path.join(dir, '.git', 'hooks', 'commit-msg')),
+    ).toBe(false);
+  });
+
+  it('installs optional team commit hook without overwriting custom hooks', async () => {
+    await silentInit(dir);
+
+    const gitHookPath = path.join(dir, '.git', 'hooks', 'commit-msg');
+    const validatorPath = path.join(dir, '.mancode', 'team', 'commit-msg.sh');
+
+    const code = await install(dir, 'claude-code', { commitHook: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(gitHookPath, 'utf-8')).resolves.toContain(
+      '.mancode/team/commit-msg.sh',
+    );
+    await expect(readFile(validatorPath, 'utf-8')).resolves.toContain(
+      'Conventional Commits',
+    );
+
+    await writeFile(gitHookPath, '#!/usr/bin/env bash\necho custom\n', 'utf-8');
+
+    const reinstallCode = await install(dir, 'claude-code', {
+      force: true,
+      commitHook: true,
+    });
+
+    expect(reinstallCode).toBe(EXIT_OK);
+    await expect(readFile(gitHookPath, 'utf-8')).resolves.toBe(
+      '#!/usr/bin/env bash\necho custom\n',
+    );
+  });
+
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
     await silentInit(dir);
     const code = await install(dir, 'claude-code');

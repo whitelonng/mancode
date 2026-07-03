@@ -24,6 +24,8 @@ export interface InstallOptions {
   force?: boolean;
   /** --minimal: 最小安装（MVP-2 预留） */
   minimal?: boolean;
+  /** --commit-hook: 安装可选 commit-msg 规范校验 hook */
+  commitHook?: boolean;
 }
 
 /**
@@ -76,7 +78,7 @@ export async function install(
       ? config.platforms.includes(platform)
       : false;
 
-  if (alreadyInstalled && !options.force) {
+  if (alreadyInstalled && !options.force && !options.commitHook) {
     console.log(
       `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
     );
@@ -91,6 +93,7 @@ export async function install(
     techStack: project.techStack,
     uiLibrary: project.uiLibrary,
     minimal: options.minimal,
+    commitHook: options.commitHook,
   });
 
   // 5. 更新 config.json platforms
