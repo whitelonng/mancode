@@ -376,7 +376,7 @@ Current focus areas:
 - Last review pass before tagging/publishing the beta
 - Exercise `/manteam` commit/PR templates and optional commit hook in team repos
 
-Manual release testing: [MVP2_BETA_TEST_PLAN.md](MVP2_BETA_TEST_PLAN.md)
+Manual release testing: [English](MVP2_BETA_TEST_PLAN.md) / [中文](MVP2_BETA_TEST_PLAN.zh-CN.md)
 
 After MVP-3 (multi-platform), contributions welcome for:
 - Platform adapters (Windsurf, Cline, etc.)
@@ -765,7 +765,7 @@ MVP-2 beta 目标是 **Claude Code**。MVP-3 添加 Cursor、Codex CLI 和 GitHu
 - beta tag / publish 前做最后一轮审核
 - 在团队仓库中验证 `/manteam` commit/PR 模板和可选 commit hook
 
-人工发布测试：[MVP2_BETA_TEST_PLAN.md](MVP2_BETA_TEST_PLAN.md)
+人工发布测试：[中文](MVP2_BETA_TEST_PLAN.zh-CN.md) / [English](MVP2_BETA_TEST_PLAN.md)
 
 MVP-3（多平台）之后，欢迎贡献：
 - 平台适配器（Windsurf、Cline 等）
