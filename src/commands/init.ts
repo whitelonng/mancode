@@ -35,7 +35,7 @@ export interface MancodeState {
   uiLibrary: string;
   // MVP-2: workflow 状态
   currentTask: string | null;
-  currentWorkflowMode: 'man8' | 'man' | null;
+  currentWorkflowMode: 'man8' | 'man' | 'manteam' | null;
   skippedSteps: string[];
   // MVP-2: 团队检测
   teamModeAutoDetected: boolean;
@@ -192,8 +192,10 @@ export async function init(
       techStack: project.techStack,
       uiLibrary: project.uiLibrary,
     });
+    const cliSpec = detectCliCommand();
     await updateConfigOptions(mancodeDir, {
-      cliCommand: detectCliCommand(),
+      cliCommand: cliSpec.command,
+      cliArgs: cliSpec.args,
       forceTeamMode: options.team === true,
       defaultStyle: options.style ?? null,
     });
@@ -263,6 +265,7 @@ async function updateConfigOptions(
   mancodeDir: string,
   patch: {
     cliCommand: string;
+    cliArgs: string[];
     forceTeamMode: boolean;
     defaultStyle: string | null;
   },
@@ -284,20 +287,16 @@ async function updateConfigOptions(
   );
 }
 
-function detectCliCommand(): string {
+function detectCliCommand(): { command: string; args: string[] } {
   const entrypoint = process.argv[1];
-  if (!entrypoint) return 'mancode';
+  if (!entrypoint) return { command: 'mancode', args: [] };
 
   const basename = path.basename(entrypoint);
   if (basename === 'cli.js' && path.isAbsolute(entrypoint)) {
-    return `node ${shellQuote(entrypoint)}`;
+    return { command: 'node', args: [entrypoint] };
   }
 
-  return 'mancode';
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  return { command: 'mancode', args: [] };
 }
 
 async function pathExists(p: string): Promise<boolean> {

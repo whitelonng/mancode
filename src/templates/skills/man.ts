@@ -44,10 +44,10 @@ export const MAN_SKILL: SkillSpec = {
 ### Step 2: Game Plan
 
 1. 读 \`scout-report.md\` 内容
-2. 调用 Head Coach（写 plan 模式）：
+2. 调用 Plan Coach（只读 plan 模式）：
    \`\`\`
-   Agent({ subagent_type: "head-coach", description: "Head Coach: plan <task>",
-     prompt: "PLAN-ONLY：只写计划，不要 Edit/Write/Bash 修改任何项目文件。任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n写 plan。" })
+   Agent({ subagent_type: "plan-coach", description: "Plan Coach: plan <task>",
+     prompt: "任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n只返回 plan markdown，不要修改项目文件。" })
    \`\`\`
 3. Write 到 \`plan.md\`
 4. metadata.json：\`currentStep: 3\`

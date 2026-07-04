@@ -20,7 +20,7 @@ export interface WorkflowMeta {
   /** 用户的原始任务描述 */
   task: string;
   /** 触发的工作流模式 */
-  mode: 'man8' | 'man';
+  mode: WorkflowMode;
   /** 当前进行到第几步（1-8）*/
   currentStep: number;
   /** 被跳过的步骤名（如 ['warmup-drill', 'film-1']）*/
@@ -34,6 +34,7 @@ export interface WorkflowMeta {
 }
 
 export type WorkflowStatus = 'in_progress' | 'completed' | 'abandoned';
+export type WorkflowMode = 'man8' | 'man' | 'manteam';
 
 const METADATA_FILE = 'metadata.json';
 const SLUG_MAX = 30;
@@ -74,7 +75,7 @@ function slugify(text: string): string {
 export async function createWorkflow(
   projectRoot: string,
   task: string,
-  mode: 'man8' | 'man',
+  mode: WorkflowMode,
 ): Promise<WorkflowMeta> {
   await mkdir(workflowsRoot(projectRoot), { recursive: true });
   const taskId = await allocateTaskId(projectRoot, generateTaskId(task));

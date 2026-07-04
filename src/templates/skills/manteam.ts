@@ -36,7 +36,7 @@ export const MANTEAM_SKILL: SkillSpec = {
    - \`git log --since="30 days ago" --pretty=format:"%h %an <%ae> %s" --max-count=30\`
    - \`git diff --stat\`
 4. 如果有未提交改动，先判断是否属于用户当前任务；不确定就问用户，不要覆盖。
-5. 在 \`.mancode/memory/decisions.md\` 追加本次任务条目：
+5. 不要在确认前追加 \`.mancode/memory/decisions.md\`。先把本次团队上下文写入当前 workflow 的 \`team-context.md\`：
    - 日期
    - task
    - branch
@@ -50,7 +50,7 @@ export const MANTEAM_SKILL: SkillSpec = {
 
 1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件。
 2. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式。
-   - Head Coach 写计划时必须使用 PLAN-ONLY 约束：只返回计划文本，禁止提前 Edit/Write/Bash 修改业务文件。
+   - Plan Coach 写计划：只返回计划文本，禁止提前修改业务文件或团队 memory。
 3. Tip-off：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
 4. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。
 5. Film #1：重点审查可维护性、命名一致性、团队风格一致性。
@@ -71,6 +71,8 @@ export const MANTEAM_SKILL: SkillSpec = {
 - Migration or rollback notes
 - Follow-up TODOs, only if unavoidable
 - Suggested commit message
+
+只有在用户确认实施并完成 workflow 后，才把最终 ADR 追加到 \`.mancode/memory/decisions.md\`。abandoned / plan-only workflow 只能保留在 \`.mancode/workflows/<taskId>/team-context.md\`、\`plan.md\` 和 \`handoff.md\`，不能污染长期团队 memory。
 
 ## Commit Discipline
 

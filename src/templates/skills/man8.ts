@@ -61,17 +61,17 @@ export const MAN8_SKILL: SkillSpec = {
 4. 用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "man8"\`, \`currentTask: "<taskId>"\`, \`currentWorkflowMode: "man8"\`
 5. 用 Edit 工具更新 metadata.json：\`currentStep: 2\`
 
-### Step 2：Head Coach 写 plan
+### Step 2：Plan Coach 写 plan
 
-1. 用 Agent tool 调用 Head Coach：
+1. 用 Agent tool 调用 Plan Coach（只读 plan 模式）：
    \`\`\`
    Agent({
-     description: "Head Coach: write plan for <task>",
-     subagent_type: "head-coach",
-     prompt: "PLAN-ONLY：只写计划，不要 Edit/Write/Bash 修改任何项目文件。任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n写 plan。"
+     description: "Plan Coach: write plan for <task>",
+     subagent_type: "plan-coach",
+     prompt: "任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n只返回 plan markdown，不要修改项目文件。"
    })
    \`\`\`
-2. 把 Head Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
+2. 把 Plan Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
 3. 更新 metadata.json：\`currentStep: 3\`
 
 ### Step 3：用户确认
@@ -85,7 +85,7 @@ AskUserQuestion({
     header: "Next step",
     options: [
       { label: "切 solo 实施 (Recommended)", description: "切回 solo 模式，按 plan 直接开发" },
-      { label: "修改 plan", description: "重新跑 Step 2（Head Coach 重写 plan）" },
+      { label: "修改 plan", description: "重新跑 Step 2（Plan Coach 重写 plan）" },
       { label: "退出，保留 plan", description: "结束 /man8，plan 保留在 .mancode/workflows/ 供日后参考" }
     ],
     multiSelect: false
@@ -105,7 +105,7 @@ AskUserQuestion({
 
 - **修改 plan**：
   1. 询问用户希望调整什么
-  2. 重新跑 Step 2（Head Coach 重写 plan，可附用户的修改意见）
+  2. 重新跑 Step 2（Plan Coach 重写 plan，可附用户的修改意见）
 
 - **退出**：
   1. 更新 metadata.json：\`status: "completed"\`
@@ -115,7 +115,7 @@ AskUserQuestion({
 ## 上下文预算
 
 - Scout 的 prompt ≤ 200 tokens
-- Head Coach 的 prompt 把 scout-report.md 全部贴进去（plan 阶段值得）
+- Plan Coach 的 prompt 把 scout-report.md 全部贴进去（plan 阶段值得）
 - 不要 dump 大量代码到对话；让 agent 自己用 Read 读
 
 ## 失败处理

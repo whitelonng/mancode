@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { detectTeamStatus } from '../system/detect-team.js';
-import { readWorkflow } from '../system/workflow.js';
+import { type WorkflowMode, readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -64,7 +64,7 @@ export interface StatusResult {
   currentWorkflow: {
     taskId: string;
     task: string;
-    mode: 'man8' | 'man';
+    mode: WorkflowMode;
     currentStep: number;
     status: string;
   } | null;
@@ -385,7 +385,7 @@ function printText(r: StatusResult): void {
     `Team:        ${r.team.isTeam ? `detected (${r.team.contributors} contributors)` : 'solo'}`,
   );
   if (r.currentWorkflow) {
-    const stepMax = r.currentWorkflow.mode === 'man' ? 8 : 3;
+    const stepMax = workflowStepMax(r.currentWorkflow.mode);
     console.log(
       `Workflow:    ${r.currentWorkflow.taskId} (Step ${r.currentWorkflow.currentStep}/${stepMax}, ${r.currentWorkflow.status})`,
     );
@@ -421,6 +421,10 @@ function formatPlatformName(p: string): string {
     copilot: 'GitHub Copilot',
   };
   return names[p] ?? p;
+}
+
+function workflowStepMax(mode: WorkflowMode): number {
+  return mode === 'man8' ? 3 : 8;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

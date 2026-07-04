@@ -158,6 +158,31 @@ describe('mancode status', () => {
     expect(output).toContain('Step 1/8');
   });
 
+  it('shows manteam active workflow as an 8-step workflow', async () => {
+    await silentInit(dir);
+    const workflowMeta = await createWorkflow(
+      dir,
+      'coordinate team login',
+      'manteam',
+    );
+    const statePath = path.join(dir, '.mancode', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+    state.currentMode = 'manteam';
+    state.currentTask = workflowMeta.taskId;
+    state.currentWorkflowMode = 'manteam';
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+
+    const jsonLogs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(jsonLogs.join('\n'));
+    expect(result.currentWorkflow?.mode).toBe('manteam');
+
+    const textLogs = await captureLog(() => status(dir));
+    const output = textLogs.join('\n');
+    expect(output).toContain('Workflow:');
+    expect(output).toContain(workflowMeta.taskId);
+    expect(output).toContain('Step 1/8');
+  });
+
   it('returns EXIT_CORRUPT_STATE for malformed state.json', async () => {
     await mkdir(path.join(dir, '.mancode'), { recursive: true });
     await writeFile(

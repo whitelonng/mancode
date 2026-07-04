@@ -22,52 +22,79 @@ export const MANPS_SKILL: SkillSpec = {
 
 ## Step 1: 解析并运行确定性扫描
 
-先读取 \`.mancode/config.json\`。如果其中有 \`cliCommand\`，优先使用它作为 \`<mancode-cli>\`，例如 \`mancode\` 或 \`node /abs/path/dist/cli.js\`。
+先读取 \`.mancode/config.json\`。如果其中有 \`cliCommand\` + \`cliArgs\`，优先使用它作为 \`<mancode-cli>\`，例如 \`{"cliCommand":"mancode","cliArgs":[]}\` 或 \`{"cliCommand":"node","cliArgs":["/abs/path/dist/cli.js"]}\`。
 
-如果 \`config.cliCommand\` 不存在，再用 Bash 解析可用 CLI：
+如果 \`config.cliCommand\` 不存在，再解析可用 CLI。必须使用下面这个 Node 包装器执行扫描；它只允许白名单命令，并用 \`spawnSync(command, args)\` 传参，禁止 \`eval\` 或拼接 shell 字符串：
 
 \`\`\`bash
-MANCODE_CLI="$(node -e 'const fs=require("fs"); try { const c=JSON.parse(fs.readFileSync(".mancode/config.json","utf8")); if (typeof c.cliCommand === "string" && c.cliCommand.trim()) process.stdout.write(c.cliCommand.trim()); } catch {}')"
-if [ -z "$MANCODE_CLI" ]; then
-  if command -v mancode >/dev/null 2>&1; then
-    MANCODE_CLI="mancode"
-  elif [ -x ./node_modules/.bin/mancode ]; then
-    MANCODE_CLI="./node_modules/.bin/mancode"
-  fi
-fi
-if [ -z "$MANCODE_CLI" ]; then
-  echo "mancode CLI not found. Run mancode init with the same CLI you want Claude Code to use, or install mancode in PATH."
-  exit 127
-fi
+AREA=""
+REMEDIATE=0
+node - "$AREA" "$REMEDIATE" <<'NODE'
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const area = process.argv[2] ?? "";
+const remediate = process.argv[3] === "1";
+const allowedAreas = new Set(["all", "deps", "security", "dead-code", "config"]);
+
+if (area && !allowedAreas.has(area)) {
+  console.error("Invalid manps area: " + area + ". Supported areas: " + Array.from(allowedAreas).join(", "));
+  process.exit(2);
+}
+
+const scanArea = area || undefined;
+
+let config = {};
+try {
+  config = JSON.parse(fs.readFileSync(".mancode/config.json", "utf8"));
+} catch {}
+
+function resolveCli() {
+  if (config.cliCommand === "mancode" && Array.isArray(config.cliArgs) && config.cliArgs.length === 0) {
+    return { command: "mancode", args: [] };
+  }
+  if (
+    config.cliCommand === "node" &&
+    Array.isArray(config.cliArgs) &&
+    config.cliArgs.length === 1 &&
+    typeof config.cliArgs[0] === "string" &&
+    path.isAbsolute(config.cliArgs[0]) &&
+    config.cliArgs[0].endsWith("/dist/cli.js")
+  ) {
+    return { command: "node", args: [config.cliArgs[0]] };
+  }
+  if (fs.existsSync("./node_modules/.bin/mancode")) {
+    return { command: "./node_modules/.bin/mancode", args: [] };
+  }
+  return { command: "mancode", args: [] };
+}
+
+const cli = resolveCli();
+const result = spawnSync(
+  cli.command,
+  [...cli.args, "manps", ...(scanArea ? [scanArea] : []), ...(remediate ? ["--remediate"] : [])],
+  { stdio: "inherit" },
+);
+
+if (result.error && result.error.code === "ENOENT") {
+  console.error("mancode CLI not found. Run mancode init with the same CLI you want Claude Code to use, or install mancode in PATH.");
+  process.exit(127);
+}
+
+process.exit(result.status ?? 1);
+NODE
 \`\`\`
 
 如果 CLI 解析失败，停下来报告错误；不要用手写扫描替代确定性扫描，因为那会让报告格式和严重级别偏离 CLI。
 
-然后用 Bash 执行：
-
-\`\`\`bash
-eval "$MANCODE_CLI" manps <area>
-\`\`\`
-
-其中 \`<area>\` 必须是 \`all\`、\`deps\`、\`security\`、\`dead-code\`、\`config\` 之一。
-
-如果 \`area\` 为空，或用户给的是目录/模块/主题，运行：
-
-\`\`\`bash
-eval "$MANCODE_CLI" manps
-\`\`\`
+其中 \`AREA\` 默认为空，表示运行默认扫描；也可以设成 \`all\`、\`deps\`、\`security\`、\`dead-code\`、\`config\` 之一。如果用户给的是目录/模块/主题，保持 \`AREA=""\`，让包装器运行默认扫描。如果用户给的是非空非法 area，包装器必须失败，不要静默降级。如果用户要求逐项确认，或者明确说要进入整改审核，设置 \`REMEDIATE=1\`。
 
 扫描会生成：
 
 - \`.mancode/preseason-reports/<date>.md\`
 - \`.mancode/preseason-report.md\`
 - \`.mancode/preseason-issues.json\`
-
-如果用户要求逐项确认，或者明确说要进入整改审核，运行：
-
-\`\`\`bash
-eval "$MANCODE_CLI" manps <area> --remediate
-\`\`\`
 
 \`--remediate\` 会对本次扫描问题逐条询问 \`y/n/skip/show files\`，并把 accepted/skipped/fixed 决策写回 \`.mancode/preseason-issues.json\`。它只执行白名单内、低风险且用户明确选择 \`y\` 的安全修复；当前自动执行范围包括创建缺失的 \`.gitignore\`、\`.editorconfig\`，以及从已安装工具依赖安全推断 \`test\` / \`lint\` / \`build\` package scripts。
 

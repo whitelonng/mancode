@@ -314,6 +314,7 @@ describe('mancode install', () => {
     expect(config.forceTeamMode).toBe(false);
     expect(config.defaultStyle).toBeNull();
     expect(config.cliCommand).toBe(DEFAULT_CONFIG.cliCommand);
+    expect(config.cliArgs).toEqual(DEFAULT_CONFIG.cliArgs);
     expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
     expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
   });
@@ -325,7 +326,11 @@ describe('mancode install', () => {
     await writeFile(
       configPath,
       `${JSON.stringify(
-        { ...initialConfig, cliCommand: "node '/tmp/mancode/dist/cli.js'" },
+        {
+          ...initialConfig,
+          cliCommand: 'node',
+          cliArgs: ['/tmp/mancode/dist/cli.js'],
+        },
         null,
         2,
       )}\n`,
@@ -343,7 +348,8 @@ describe('mancode install', () => {
     expect(config.platforms).toContain('claude-code');
     expect(config.forceTeamMode).toBe(true);
     expect(config.defaultStyle).toBe('brutalist');
-    expect(config.cliCommand).toBe("node '/tmp/mancode/dist/cli.js'");
+    expect(config.cliCommand).toBe('node');
+    expect(config.cliArgs).toEqual(['/tmp/mancode/dist/cli.js']);
     expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
     expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
   });

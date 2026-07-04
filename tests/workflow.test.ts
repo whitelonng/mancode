@@ -98,6 +98,12 @@ describe('workflow helpers', () => {
       expect(result?.mode).toBe('man');
     });
 
+    it('supports manteam workflow metadata', async () => {
+      const created = await createWorkflow(dir, 'coordinate login', 'manteam');
+      const result = await readWorkflow(dir, created.taskId);
+      expect(result?.mode).toBe('manteam');
+    });
+
     it('returns null for malformed metadata', async () => {
       // 模拟一个坏的 metadata
       const workflowDir = path.join(

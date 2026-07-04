@@ -1,4 +1,5 @@
 export { SCOUT_AGENT } from './scout.js';
+export { PLAN_COACH_AGENT } from './plan-coach.js';
 export { HEAD_COACH_AGENT } from './head-coach.js';
 export { FILM_ANALYST_OFFENSE_AGENT } from './film-analyst-offense.js';
 export { FILM_ANALYST_DEFENSE_AGENT } from './film-analyst-defense.js';
@@ -6,6 +7,7 @@ export { FILM_ANALYST_DEFENSE_AGENT } from './film-analyst-defense.js';
 import { FILM_ANALYST_DEFENSE_AGENT } from './film-analyst-defense.js';
 import { FILM_ANALYST_OFFENSE_AGENT } from './film-analyst-offense.js';
 import { HEAD_COACH_AGENT } from './head-coach.js';
+import { PLAN_COACH_AGENT } from './plan-coach.js';
 import { SCOUT_AGENT } from './scout.js';
 
 /**
@@ -28,6 +30,7 @@ export interface AgentSpec {
 /** 所有 MVP-2 agent，install 时遍历 */
 export const ALL_AGENTS: AgentSpec[] = [
   SCOUT_AGENT,
+  PLAN_COACH_AGENT,
   HEAD_COACH_AGENT,
   FILM_ANALYST_OFFENSE_AGENT,
   FILM_ANALYST_DEFENSE_AGENT,

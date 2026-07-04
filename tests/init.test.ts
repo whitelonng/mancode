@@ -52,6 +52,7 @@ describe('mancode init', () => {
     const config = JSON.parse(configRaw);
     expect(config.platforms).toEqual(['claude-code']);
     expect(config.cliCommand).toBe('mancode');
+    expect(config.cliArgs).toEqual([]);
     expect(config.hooks.sessionStart).toBe(true);
 
     // 验证 hooks（2 个文件，可执行）

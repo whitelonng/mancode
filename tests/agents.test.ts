@@ -8,6 +8,7 @@ import {
   FILM_ANALYST_DEFENSE_AGENT,
   FILM_ANALYST_OFFENSE_AGENT,
   HEAD_COACH_AGENT,
+  PLAN_COACH_AGENT,
   SCOUT_AGENT,
   renderAgent,
 } from '../src/templates/agents/index.js';
@@ -48,6 +49,15 @@ describe('coaching staff agents', () => {
       expect(SCOUT_AGENT.tools).not.toContain('Edit');
     });
 
+    it('plan coach is read-only and owns pre-confirmation plans', () => {
+      expect(PLAN_COACH_AGENT.body).toMatch(/只读/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/plan\.md/);
+      expect(PLAN_COACH_AGENT.tools).toEqual(['Read', 'Grep', 'Glob']);
+      expect(PLAN_COACH_AGENT.tools).not.toContain('Edit');
+      expect(PLAN_COACH_AGENT.tools).not.toContain('Write');
+      expect(PLAN_COACH_AGENT.tools).not.toContain('Bash');
+    });
+
     it('head coach body includes 5 core principles', () => {
       // 五条铁律的关键词（中文）
       expect(HEAD_COACH_AGENT.body).toMatch(/不做无关修改/);
@@ -62,14 +72,6 @@ describe('coaching staff agents', () => {
       // 有 Edit 权限（要写代码）
       expect(HEAD_COACH_AGENT.tools).toContain('Edit');
       expect(HEAD_COACH_AGENT.tools).toContain('Write');
-    });
-
-    it('forbids project file edits during PLAN-ONLY planning', () => {
-      expect(HEAD_COACH_AGENT.body).toMatch(/PLAN-ONLY/);
-      expect(HEAD_COACH_AGENT.body).toMatch(
-        /禁止用 Edit \/ Write 修改项目文件/,
-      );
-      expect(HEAD_COACH_AGENT.body).toMatch(/只在最终响应里返回计划文本/);
     });
 
     it('film analyst offense body describes quality review', () => {
@@ -123,7 +125,7 @@ describe('coaching staff agents', () => {
   });
 
   describe('installAgents (via installClaudeCode)', () => {
-    it('creates 4 agent files in .claude/agents/', async () => {
+    it('creates agent files in .claude/agents/', async () => {
       await installClaudeCode(dir, { techStack: [], uiLibrary: null });
 
       const agentsDir = path.join(dir, '.claude', 'agents');
