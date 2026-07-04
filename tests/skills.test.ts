@@ -97,6 +97,20 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MAN8_SKILL.body).toMatch(/立即按 plan 实施/);
       expect(MAN8_SKILL.body).toMatch(/不要再次要求用户输入/);
     });
+
+    it('keeps Head Coach planning read-only before user confirmation', () => {
+      expect(MAN8_SKILL.body).toMatch(/PLAN-ONLY/);
+      expect(MAN8_SKILL.body).toMatch(
+        /不要 Edit\/Write\/Bash 修改任何项目文件/,
+      );
+    });
+
+    it('clears active workflow state when exiting without implementation', () => {
+      expect(MAN8_SKILL.body).toMatch(/退出/);
+      expect(MAN8_SKILL.body).toMatch(/currentMode: "solo"/);
+      expect(MAN8_SKILL.body).toMatch(/currentTask: null/);
+      expect(MAN8_SKILL.body).toMatch(/currentWorkflowMode: null/);
+    });
   });
 
   describe('man skill content', () => {
@@ -133,6 +147,14 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MAN_SKILL.body).toMatch(/currentMode.*man/);
       expect(MAN_SKILL.body).toMatch(/等待任务期间，当前模式仍是 `man`/);
     });
+
+    it('keeps plan generation read-only and clears state on abandon', () => {
+      expect(MAN_SKILL.body).toMatch(/PLAN-ONLY/);
+      expect(MAN_SKILL.body).toMatch(/不要 Edit\/Write\/Bash 修改任何项目文件/);
+      expect(MAN_SKILL.body).toMatch(/status: "abandoned"/);
+      expect(MAN_SKILL.body).toMatch(/currentMode: "solo"/);
+      expect(MAN_SKILL.body).toMatch(/currentTask: null/);
+    });
   });
 
   describe('mansolo skill content', () => {
@@ -163,6 +185,20 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MANTEAM_SKILL.body).toMatch(/PULL_REQUEST_TEMPLATE\.md/);
       expect(MANTEAM_SKILL.body).toMatch(/不覆盖/);
     });
+
+    it('inherits plan-only and abandoned-state cleanup constraints', () => {
+      expect(MANTEAM_SKILL.body).toMatch(/PLAN-ONLY/);
+      expect(MANTEAM_SKILL.body).toMatch(
+        /禁止提前 Edit\/Write\/Bash 修改业务文件/,
+      );
+      expect(MANTEAM_SKILL.body).toMatch(
+        /metadata\.json\.status = "abandoned"/,
+      );
+      expect(MANTEAM_SKILL.body).toMatch(/currentMode: "solo"/);
+      expect(MANTEAM_SKILL.body).toMatch(
+        /不要把 abandoned workflow 留在 active state/,
+      );
+    });
   });
 
   describe('manps skill content', () => {
@@ -182,6 +218,15 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       );
       expect(MANPS_SKILL.body).toMatch(/不要把它传给 CLI/);
       expect(MANPS_SKILL.body).toMatch(/目录\/模块\/主题/);
+    });
+
+    it('resolves the installed CLI before running manps', () => {
+      expect(MANPS_SKILL.body).toMatch(/cliCommand/);
+      expect(MANPS_SKILL.body).toMatch(/command -v mancode/);
+      expect(MANPS_SKILL.body).toMatch(/node_modules\/\.bin\/mancode/);
+      expect(MANPS_SKILL.body).toMatch(/eval "\$MANCODE_CLI" manps/);
+      expect(MANPS_SKILL.body).toMatch(/exit 127/);
+      expect(MANPS_SKILL.body).toMatch(/不要用手写扫描替代确定性扫描/);
     });
   });
 

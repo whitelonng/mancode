@@ -68,7 +68,7 @@ export const MAN8_SKILL: SkillSpec = {
    Agent({
      description: "Head Coach: write plan for <task>",
      subagent_type: "head-coach",
-     prompt: "任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n写 plan。"
+     prompt: "PLAN-ONLY：只写计划，不要 Edit/Write/Bash 修改任何项目文件。任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n写 plan。"
    })
    \`\`\`
 2. 把 Head Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
@@ -109,7 +109,8 @@ AskUserQuestion({
 
 - **退出**：
   1. 更新 metadata.json：\`status: "completed"\`
-  2. 告诉用户："plan 保留在 \`.mancode/workflows/<taskId>/plan.md\`，需要时再叫我。"
+  2. 用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "man8"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`
+  3. 告诉用户："plan 保留在 \`.mancode/workflows/<taskId>/plan.md\`，需要时再叫我。"
 
 ## 上下文预算
 

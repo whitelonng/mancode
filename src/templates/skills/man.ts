@@ -47,7 +47,7 @@ export const MAN_SKILL: SkillSpec = {
 2. 调用 Head Coach（写 plan 模式）：
    \`\`\`
    Agent({ subagent_type: "head-coach", description: "Head Coach: plan <task>",
-     prompt: "任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n写 plan。" })
+     prompt: "PLAN-ONLY：只写计划，不要 Edit/Write/Bash 修改任何项目文件。任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n写 plan。" })
    \`\`\`
 3. Write 到 \`plan.md\`
 4. metadata.json：\`currentStep: 3\`
@@ -71,7 +71,7 @@ AskUserQuestion({
 })
 \`\`\`
 
-- "退出" → metadata.json \`status: "abandoned"\`，结束。
+- "退出" → metadata.json \`status: "abandoned"\`；用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "man"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`；然后结束。
 - "修改 plan" → 回 Step 2，附用户修改意见。
 - metadata.json：\`currentStep: 3\`
 

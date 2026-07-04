@@ -50,12 +50,15 @@ export const MANTEAM_SKILL: SkillSpec = {
 
 1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件。
 2. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式。
+   - Head Coach 写计划时必须使用 PLAN-ONLY 约束：只返回计划文本，禁止提前 Edit/Write/Bash 修改业务文件。
 3. Tip-off：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
 4. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。
 5. Film #1：重点审查可维护性、命名一致性、团队风格一致性。
 6. Halftime Fix：只修 plan 和 film 指出的内容。
 7. Film #2：重点审查边界条件、安全、性能、并发、兼容性。
 8. Post-game：生成 hand-off summary。
+
+如果用户在确认阶段选择"退出"或放弃团队 workflow：标记当前 workflow \`metadata.json.status = "abandoned"\`，并用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "manteam"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`。不要把 abandoned workflow 留在 active state。
 
 ## Team Hand-off Summary
 

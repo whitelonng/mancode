@@ -313,12 +313,24 @@ describe('mancode install', () => {
     expect(config.platforms).toContain('claude-code');
     expect(config.forceTeamMode).toBe(false);
     expect(config.defaultStyle).toBeNull();
+    expect(config.cliCommand).toBe(DEFAULT_CONFIG.cliCommand);
     expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
     expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
   });
 
-  it('preserves configured team/style options on forced reinstall', async () => {
+  it('preserves configured team/style/cli options on forced reinstall', async () => {
     await silentInit(dir, { team: true, style: 'brutalist' });
+    const configPath = path.join(dir, '.mancode', 'config.json');
+    const initialConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        { ...initialConfig, cliCommand: "node '/tmp/mancode/dist/cli.js'" },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    );
 
     const code = await install(dir, 'claude-code', { force: true });
 
@@ -331,6 +343,7 @@ describe('mancode install', () => {
     expect(config.platforms).toContain('claude-code');
     expect(config.forceTeamMode).toBe(true);
     expect(config.defaultStyle).toBe('brutalist');
+    expect(config.cliCommand).toBe("node '/tmp/mancode/dist/cli.js'");
     expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
     expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
   });

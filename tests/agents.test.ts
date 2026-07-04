@@ -64,6 +64,14 @@ describe('coaching staff agents', () => {
       expect(HEAD_COACH_AGENT.tools).toContain('Write');
     });
 
+    it('forbids project file edits during PLAN-ONLY planning', () => {
+      expect(HEAD_COACH_AGENT.body).toMatch(/PLAN-ONLY/);
+      expect(HEAD_COACH_AGENT.body).toMatch(
+        /禁止用 Edit \/ Write 修改项目文件/,
+      );
+      expect(HEAD_COACH_AGENT.body).toMatch(/只在最终响应里返回计划文本/);
+    });
+
     it('film analyst offense body describes quality review', () => {
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/质量|quality/i);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/可读性|readability/i);

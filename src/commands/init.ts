@@ -193,6 +193,7 @@ export async function init(
       uiLibrary: project.uiLibrary,
     });
     await updateConfigOptions(mancodeDir, {
+      cliCommand: detectCliCommand(),
       forceTeamMode: options.team === true,
       defaultStyle: options.style ?? null,
     });
@@ -260,7 +261,11 @@ export async function init(
 
 async function updateConfigOptions(
   mancodeDir: string,
-  patch: { forceTeamMode: boolean; defaultStyle: string | null },
+  patch: {
+    cliCommand: string;
+    forceTeamMode: boolean;
+    defaultStyle: string | null;
+  },
 ): Promise<void> {
   const configPath = path.join(mancodeDir, 'config.json');
   let config: Record<string, unknown> = {};
@@ -277,6 +282,22 @@ async function updateConfigOptions(
     `${JSON.stringify({ ...config, ...patch }, null, 2)}\n`,
     'utf-8',
   );
+}
+
+function detectCliCommand(): string {
+  const entrypoint = process.argv[1];
+  if (!entrypoint) return 'mancode';
+
+  const basename = path.basename(entrypoint);
+  if (basename === 'cli.js' && path.isAbsolute(entrypoint)) {
+    return `node ${shellQuote(entrypoint)}`;
+  }
+
+  return 'mancode';
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function pathExists(p: string): Promise<boolean> {
