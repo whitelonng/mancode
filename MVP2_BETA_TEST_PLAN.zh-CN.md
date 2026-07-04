@@ -90,10 +90,12 @@ cat > src/app/globals.css <<'CSS'
 CSS
 ```
 
-设置一个命令别名，后续步骤直接使用 `$MANCODE`：
+设置一个本地测试命令，后续步骤直接使用 `mancode_local`。这个写法兼容 zsh 和 bash：
 
 ```bash
-MANCODE="node /Users/whitelonng/code/mancode/.claude/worktrees/objective-poincare-22ba7c/dist/cli.js"
+mancode_local() {
+  node /Users/whitelonng/code/mancode/.claude/worktrees/objective-poincare-22ba7c/dist/cli.js "$@"
+}
 ```
 
 ## 测试用例
@@ -103,7 +105,7 @@ MANCODE="node /Users/whitelonng/code/mancode/.claude/worktrees/objective-poincar
 测试方法：
 
 ```bash
-$MANCODE init --force --team --style clean
+mancode_local init --force --team --style clean
 ```
 
 预期结果：
@@ -148,7 +150,7 @@ cat .mancode/aesthetics/style-tokens.json
 测试方法：
 
 ```bash
-$MANCODE status
+mancode_local status
 ```
 
 预期结果：
@@ -253,7 +255,7 @@ git checkout -- README.md 2>/dev/null || true
 CLI 交叉验证：
 
 ```bash
-$MANCODE manps config
+mancode_local manps config
 ```
 
 预期 CLI 结果：
@@ -269,7 +271,7 @@ $MANCODE manps config
 用显式答案运行 CLI 整改：
 
 ```bash
-printf 'y\ny\ny\ny\ny\n' | $MANCODE manps config --remediate
+printf 'y\ny\ny\ny\ny\n' | mancode_local manps config --remediate
 ```
 
 预期结果：
@@ -294,7 +296,7 @@ git init
 mkdir -p .mancode
 echo '{"currentMode":"solo"}' > .mancode/state.json
 echo '{}' > package.json
-printf 'y\ny\ny\n' | $MANCODE manps config --remediate
+printf 'y\ny\ny\n' | mancode_local manps config --remediate
 cat package.json
 ```
 
@@ -328,7 +330,7 @@ cat package.json
 测试方法：
 
 ```bash
-$MANCODE install claude-code --commit-hook
+mancode_local install claude-code --commit-hook
 test -x .mancode/team/commit-msg.sh
 test -x "$(git rev-parse --git-path hooks/commit-msg)"
 printf 'feat(beta): manual smoke\n' > good-msg.txt
@@ -352,7 +354,7 @@ fi
 测试方法：
 
 ```bash
-$MANCODE workflow list
+mancode_local workflow list
 ```
 
 预期结果：
@@ -366,7 +368,7 @@ $MANCODE workflow list
 测试方法：
 
 ```bash
-$MANCODE install claude-code --force --minimal
+mancode_local install claude-code --force --minimal
 ```
 
 预期结果：
@@ -383,7 +385,7 @@ $MANCODE install claude-code --force --minimal
 测试后恢复完整安装：
 
 ```bash
-$MANCODE install claude-code --force
+mancode_local install claude-code --force
 ```
 
 预期恢复结果：
