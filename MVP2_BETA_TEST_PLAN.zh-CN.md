@@ -30,16 +30,16 @@ npm ci
 npm run build
 ```
 
-下面测试命令默认使用本地构建产物：
+检查本地构建产物是否可执行：
 
 ```bash
-node /Users/whitelonng/code/mancode/.claude/worktrees/objective-poincare-22ba7c/dist/cli.js
+node /Users/whitelonng/code/mancode/.claude/worktrees/objective-poincare-22ba7c/dist/cli.js --help
 ```
 
-如果你要测试已经发布或全局安装的 npm beta 包，可以把命令替换成：
+如果你要测试已经发布或全局安装的 npm beta 包，可以先确认全局命令可用：
 
 ```bash
-mancode
+mancode --help
 ```
 
 ## 测试项目准备
@@ -49,6 +49,7 @@ mancode
 ```bash
 tmpdir="$(mktemp -d)"
 cd "$tmpdir"
+test_project="$PWD"
 git init
 cat > package.json <<'JSON'
 {
@@ -90,7 +91,7 @@ cat > src/app/globals.css <<'CSS'
 CSS
 ```
 
-设置一个本地测试命令，后续步骤直接使用 `mancode_local`。这个写法兼容 zsh 和 bash：
+设置一个本地测试命令，后续步骤直接使用 `mancode_local`。这个写法兼容 zsh 和 bash；如果打开新终端，需要重新执行这个函数定义，并 `cd "$test_project"` 回到测试项目：
 
 ```bash
 mancode_local() {
@@ -213,6 +214,7 @@ mancode_local status
 
 ```bash
 git checkout -- README.md 2>/dev/null || true
+rm -f README.md
 ```
 
 ### 7. 测试 `/manteam`
@@ -296,8 +298,9 @@ git init
 mkdir -p .mancode
 echo '{"currentMode":"solo"}' > .mancode/state.json
 echo '{}' > package.json
-printf 'y\ny\ny\n' | mancode_local manps config --remediate
+printf 'y\ny\ny\ny\ny\n' | mancode_local manps config --remediate
 cat package.json
+cd "$test_project"
 ```
 
 预期负向结果：
