@@ -29,6 +29,75 @@ describe('mancode workflow command', () => {
     expect(logs.stdout.join('\n')).toContain('No workflows');
   });
 
+  it('workflow create creates metadata through the command path', async () => {
+    const logs = await captureLog(() =>
+      workflow(dir, 'create', ['man8', 'add', 'oauth', 'login'], {
+        json: true,
+      }),
+    );
+    const meta = JSON.parse(logs.stdout.join('\n'));
+
+    expect(logs.code).toBe(EXIT_OK);
+    expect(meta.mode).toBe('man8');
+    expect(meta.task).toBe('add oauth login');
+    await expect(readWorkflow(dir, meta.taskId)).resolves.toMatchObject({
+      task: 'add oauth login',
+      currentStep: 1,
+    });
+  });
+
+  it('workflow update updates metadata through the command path', async () => {
+    const meta = await createWorkflow(dir, 'fix login bug', 'man');
+
+    const logs = await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], {
+        step: '5',
+        status: 'completed',
+        skipped: 'film-1,film-2',
+        json: true,
+      }),
+    );
+    const updated = JSON.parse(logs.stdout.join('\n'));
+
+    expect(logs.code).toBe(EXIT_OK);
+    expect(updated.currentStep).toBe(5);
+    expect(updated.status).toBe('completed');
+    expect(updated.skippedSteps).toEqual(['film-1', 'film-2']);
+    await expect(readWorkflow(dir, meta.taskId)).resolves.toMatchObject({
+      currentStep: 5,
+      status: 'completed',
+      skippedSteps: ['film-1', 'film-2'],
+    });
+  });
+
+  it('workflow update rejects steps beyond the workflow mode max', async () => {
+    const meta = await createWorkflow(dir, 'plan only', 'man8');
+
+    const logs = await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], { step: '8' }),
+    );
+
+    expect(logs.code).toBe(EXIT_INVALID_ARG);
+    expect(logs.stderr.join('\n')).toContain('invalid --step: 8');
+    await expect(readWorkflow(dir, meta.taskId)).resolves.toMatchObject({
+      currentStep: 1,
+    });
+  });
+
+  it('workflow show and update reject invalid task ids', async () => {
+    const showLogs = await captureLog(() =>
+      workflow(dir, 'show', ['../../outside']),
+    );
+    const updateLogs = await captureLog(() =>
+      workflow(dir, 'update', ['../../outside'], { step: '2' }),
+    );
+
+    expect(showLogs.code).toBe(EXIT_INVALID_ARG);
+    expect(showLogs.stderr.join('\n')).toContain('invalid taskId');
+    expect(updateLogs.code).toBe(EXIT_INVALID_ARG);
+    expect(updateLogs.stderr.join('\n')).toContain('invalid taskId');
+  });
+
   it('workflow list shows created workflow', async () => {
     const meta = await createWorkflow(dir, 'add oauth login', 'man');
 

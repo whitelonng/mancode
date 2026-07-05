@@ -37,6 +37,11 @@ export type WorkflowStatus = 'in_progress' | 'completed' | 'abandoned';
 
 const METADATA_FILE = 'metadata.json';
 const SLUG_MAX = 30;
+const TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+
+export function isValidWorkflowTaskId(taskId: string): boolean {
+  return TASK_ID_PATTERN.test(taskId);
+}
 
 /**
  * 生成 task id：YYYYMMDD-HHMMSS-<slug>。
@@ -124,6 +129,7 @@ export async function readWorkflow(
   projectRoot: string,
   taskId: string,
 ): Promise<WorkflowMeta | null> {
+  if (!isValidWorkflowTaskId(taskId)) return null;
   const file = metadataPath(projectRoot, taskId);
   try {
     const raw = await readFile(file, 'utf-8');
@@ -141,6 +147,7 @@ export async function updateWorkflow(
   taskId: string,
   patch: Partial<WorkflowMeta>,
 ): Promise<void> {
+  assertValidTaskId(taskId);
   const existing = await readWorkflow(projectRoot, taskId);
   if (!existing) {
     throw new Error(`workflow not found: ${taskId}`);
@@ -187,6 +194,7 @@ export async function deleteWorkflow(
   projectRoot: string,
   taskId: string,
 ): Promise<boolean> {
+  if (!isValidWorkflowTaskId(taskId)) return false;
   const dir = workflowDir(projectRoot, taskId);
   try {
     await stat(dir);
@@ -202,6 +210,7 @@ function workflowsRoot(projectRoot: string): string {
 }
 
 function workflowDir(projectRoot: string, taskId: string): string {
+  assertValidTaskId(taskId);
   return path.join(workflowsRoot(projectRoot), taskId);
 }
 
@@ -245,10 +254,17 @@ export async function workflowExists(
   projectRoot: string,
   taskId: string,
 ): Promise<boolean> {
+  if (!isValidWorkflowTaskId(taskId)) return false;
   try {
     await stat(metadataPath(projectRoot, taskId));
     return true;
   } catch {
     return false;
+  }
+}
+
+function assertValidTaskId(taskId: string): void {
+  if (!isValidWorkflowTaskId(taskId)) {
+    throw new Error(`invalid workflow taskId: ${taskId}`);
   }
 }

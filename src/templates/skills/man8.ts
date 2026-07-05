@@ -45,10 +45,15 @@ export const MAN8_SKILL: SkillSpec = {
 
 ### Step 1：Scout 调研
 
-1. 用 Write 工具创建 workflow 目录。task id 用 \`YYYYMMDD-HHMMSS-<slug>\` 格式（slug = task 的 kebab-case，截到 30 字符）：
-   - 必须先用 Bash 执行 \`date -u +"%Y%m%d-%H%M%S"\` 获取真实时间戳；不要凭空估算日期时间
-   - 目录：\`.mancode/workflows/<taskId>/\`
-   - 写入 \`metadata.json\`：\`{"taskId":"...","task":"...","mode":"man8","currentStep":1,"skippedSteps":[],"startedAt":"<ISO>","updatedAt":"<ISO>","status":"in_progress"}\`
+1. 用 Bash 创建 workflow，不要手写 \`metadata.json\`。不要把用户 task 直接插进 shell 命令；用 here-doc 传入变量，再用双引号引用变量：
+   \`\`\`bash
+   TASK=$(cat <<'MANCODE_TASK'
+   <task>
+   MANCODE_TASK
+   )
+   mancode workflow create man8 "$TASK" --json
+   \`\`\`
+   从 JSON 输出的 \`taskId\` 字段取得 \`<taskId>\`。目录会由 CLI 创建在 \`.mancode/workflows/<taskId>/\`。
 2. 用 Agent tool 调用 Scout：
    \`\`\`
    Agent({
@@ -59,7 +64,7 @@ export const MAN8_SKILL: SkillSpec = {
    \`\`\`
 3. 把 Scout 的输出用 Write 工具写入 \`.mancode/workflows/<taskId>/scout-report.md\`
 4. 用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "man8"\`, \`currentTask: "<taskId>"\`, \`currentWorkflowMode: "man8"\`
-5. 用 Edit 工具更新 metadata.json：\`currentStep: 2\`
+5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 2\`
 
 ### Step 2：Head Coach 写 plan
 
@@ -72,7 +77,7 @@ export const MAN8_SKILL: SkillSpec = {
    })
    \`\`\`
 2. 把 Head Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
-3. 更新 metadata.json：\`currentStep: 3\`
+3. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 3\`
 
 ### Step 3：用户确认
 
@@ -100,7 +105,7 @@ AskUserQuestion({
   2. 读取 \`.mancode/workflows/<taskId>/plan.md\`
   3. 用当前 assistant（solo 模式）立即按 plan 实施；不要再次要求用户输入"开始实施"
   4. 实施完成后运行 plan 里列出的验证命令；如没有验证命令，至少用只读检查确认目标文件内容
-  5. 用 Edit 更新 metadata.json：\`status: "completed"\`, \`currentStep: 3\`
+  5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --status completed --step 3\`
   6. 最终告诉用户：改了哪些文件、验证结果、plan 路径
 
 - **修改 plan**：
@@ -108,7 +113,7 @@ AskUserQuestion({
   2. 重新跑 Step 2（Head Coach 重写 plan，可附用户的修改意见）
 
 - **退出**：
-  1. 更新 metadata.json：\`status: "completed"\`
+  1. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --status completed --step 3\`
   2. 告诉用户："plan 保留在 \`.mancode/workflows/<taskId>/plan.md\`，需要时再叫我。"
 
 ## 上下文预算
@@ -120,7 +125,7 @@ AskUserQuestion({
 ## 失败处理
 
 - Agent 调用失败：报告错误，不重试 2 次以上（铁律 1.3）
-- metadata.json 写入失败：停下来诊断，不伪造状态
+- \`mancode workflow create/update\` 失败：停下来诊断，不伪造状态
 
 收到 \`/man8\` 或自动触发后立即开始 Step 1，不要等用户确认。`,
 };

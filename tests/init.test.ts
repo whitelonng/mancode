@@ -11,6 +11,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   EXIT_ALREADY_INITIALIZED,
+  EXIT_INIT_FAILED,
   EXIT_NOT_A_PROJECT_DIR,
   EXIT_OK,
   type MancodeState,
@@ -341,6 +342,26 @@ describe('mancode init', () => {
     );
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
     expect(settings.skills.man8).toBeUndefined();
+  });
+
+  it('returns init failure without writing state when Claude settings are invalid', async () => {
+    const claudeDir = path.join(dir, '.claude');
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      path.join(claudeDir, 'settings.json'),
+      '{ invalid',
+      'utf-8',
+    );
+
+    const code = await init(dir);
+
+    expect(code).toBe(EXIT_INIT_FAILED);
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).resolves.toBe('{ invalid');
+    await expect(
+      readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    ).rejects.toThrow();
   });
 });
 

@@ -66,11 +66,13 @@ describe('mvp-2 skills (man8 / man / manteam / manps / mansolo)', () => {
       expect(MAN8_SKILL.body).not.toMatch(/Step 8/);
     });
 
-    it('references workflow dir and metadata.json', () => {
+    it('creates and updates workflow metadata through the CLI', () => {
       expect(MAN8_SKILL.body).toMatch(/\.mancode\/workflows\//);
       expect(MAN8_SKILL.body).toMatch(/metadata\.json/);
-      expect(MAN8_SKILL.body).toMatch(/date -u/);
-      expect(MAN8_SKILL.body).toMatch(/不要凭空估算日期时间/);
+      expect(MAN8_SKILL.body).toMatch(/mancode workflow create man8 "\$TASK"/);
+      expect(MAN8_SKILL.body).toMatch(/mancode workflow update <taskId>/);
+      expect(MAN8_SKILL.body).toMatch(/不要手写 `metadata\.json`/);
+      expect(MAN8_SKILL.body).toMatch(/不要把用户 task 直接插进 shell 命令/);
     });
 
     it('uses Agent tool with subagent_type: scout', () => {

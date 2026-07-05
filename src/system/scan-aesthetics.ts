@@ -22,6 +22,9 @@ export interface AestheticsTokens {
   sourceFiles: string[];
 }
 
+const MAX_COMPONENT_SCAN_DEPTH = 12;
+const MAX_COMPONENT_FILES = 2000;
+
 /**
  * 扫描项目审美 token（MVP-1）。
  *
@@ -210,6 +213,7 @@ function extractTopLevelStringValues(block: string): Record<string, string> {
   const pairs = extractTopLevelPairs(block);
 
   for (const { key, value } of pairs) {
+    if (!isSafeTokenName(key)) continue;
     // 值必须是引号包裹的字符串（不是对象、不是数组）
     const strMatch = value.match(/^['"]([^'"]+)['"]$/);
     if (strMatch && isSafeColorValue(strMatch[1])) {
@@ -230,6 +234,7 @@ function extractTopLevelArrayValues(block: string): Record<string, string[]> {
   const pairs = extractTopLevelPairs(block);
 
   for (const { key, value } of pairs) {
+    if (!isSafeTokenName(key)) continue;
     // 值必须是数组
     const arrMatch = value.match(/^\[([^\]]+)\]$/);
     if (arrMatch) {
@@ -463,10 +468,12 @@ function stripJsComments(content: string): string {
 async function scanComponents(projectRoot: string): Promise<string[]> {
   const roots = ['src/components', 'components', 'app/components'];
   const names = new Set<string>();
+  let visitedFiles = 0;
   for (const relRoot of roots) {
     const absRoot = path.join(projectRoot, relRoot);
     if (!(await pathExists(absRoot))) continue;
-    await collectComponentNames(absRoot, names);
+    visitedFiles = await collectComponentNames(absRoot, names, 0, visitedFiles);
+    if (visitedFiles >= MAX_COMPONENT_FILES) break;
   }
   return Array.from(names).sort();
 }
@@ -474,35 +481,48 @@ async function scanComponents(projectRoot: string): Promise<string[]> {
 async function collectComponentNames(
   dir: string,
   names: Set<string>,
-): Promise<void> {
+  depth: number,
+  visitedFiles: number,
+): Promise<number> {
+  if (depth > MAX_COMPONENT_SCAN_DEPTH || visitedFiles >= MAX_COMPONENT_FILES) {
+    return visitedFiles;
+  }
+  let fileCount = visitedFiles;
   let entries: string[];
   try {
     entries = await fs.readdir(dir);
   } catch {
-    return;
+    return fileCount;
   }
 
   for (const entry of entries) {
+    if (fileCount >= MAX_COMPONENT_FILES) return fileCount;
     const abs = path.join(dir, entry);
     let info: Stats;
     try {
-      info = await fs.stat(abs);
+      info = await fs.lstat(abs);
     } catch {
       continue;
     }
+    if (info.isSymbolicLink()) continue;
     if (info.isDirectory()) {
-      await collectComponentNames(abs, names);
+      fileCount = await collectComponentNames(abs, names, depth + 1, fileCount);
       continue;
     }
     if (!/\.(tsx|jsx|ts|js|vue|svelte)$/.test(entry)) continue;
+    fileCount++;
     if (isNonComponentFile(entry)) continue;
     let base = entry.replace(/\.(tsx|jsx|ts|js|vue|svelte)$/, '');
     if (base === 'index') {
       base = path.basename(dir);
     }
     if (base.startsWith('.')) continue;
-    names.add(toPascalCase(base));
+    const componentName = toPascalCase(base);
+    if (isSafeComponentName(componentName)) {
+      names.add(componentName);
+    }
   }
+  return fileCount;
 }
 
 async function scanCssVariables(
@@ -552,6 +572,14 @@ function isSafeColorValue(value: string): boolean {
 
 function isSafeCssVariableValue(value: string): boolean {
   return /^[#\w\s,.%()/+-]+$/.test(value);
+}
+
+function isSafeTokenName(value: string): boolean {
+  return /^[A-Za-z0-9_-]{1,80}$/.test(value);
+}
+
+function isSafeComponentName(value: string): boolean {
+  return /^[A-Z][A-Za-z0-9]{0,79}$/.test(value);
 }
 
 function isNonComponentFile(filename: string): boolean {

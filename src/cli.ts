@@ -53,18 +53,16 @@ program
   });
 
 program
-  .command('workflow <subcommand> [arg]')
+  .command('workflow <subcommand> [args...]')
   .description('Manage mancode workflows')
   .option('--dry-run', 'Preview clean without deleting')
   .option('--older-than <duration>', 'Clean workflows older than (e.g. 30d)')
+  .option('--step <n>', 'Update workflow current step')
+  .option('--status <status>', 'Update workflow status')
+  .option('--skipped <steps>', 'Update skipped steps as comma-separated values')
   .option('--json', 'Output as JSON (for scripts)')
-  .action(async (subcommand, arg, options) => {
-    const code = await workflow(
-      process.cwd(),
-      subcommand,
-      arg ? [arg] : [],
-      options,
-    );
+  .action(async (subcommand, args, options) => {
+    const code = await workflow(process.cwd(), subcommand, args ?? [], options);
     process.exitCode = code;
   });
 

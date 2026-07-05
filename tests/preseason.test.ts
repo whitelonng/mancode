@@ -1,4 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -297,6 +306,52 @@ describe('preseason scan', () => {
     );
   });
 
+  it('does not follow symlinked directories during source scans', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ scripts: { test: 'vitest', lint: 'biome check' } }),
+      'utf-8',
+    );
+    await mkdir(path.join(dir, 'src'), { recursive: true });
+    const outside = await mkdtemp(path.join(tmpdir(), 'mancode-outside-'));
+    try {
+      await writeFile(
+        path.join(outside, 'secret.ts'),
+        '// TODO: this outside file must not be scanned\n',
+        'utf-8',
+      );
+      await symlink(outside, path.join(dir, 'src', 'outside'));
+
+      const report = await runPreseasonScan(dir, 'all');
+
+      expect(
+        report.issues.some((issue) => issue.file?.includes('outside')),
+      ).toBe(false);
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite a corrupt issue database', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+    const issueDbPath = path.join(dir, '.mancode', 'preseason-issues.json');
+    const reportIndexPath = path.join(dir, '.mancode', 'preseason-report.md');
+    const reportDir = path.join(dir, '.mancode', 'preseason-reports');
+    const corrupt = '{ not json';
+    await writeFile(issueDbPath, corrupt, 'utf-8');
+
+    await expect(runPreseasonScan(dir, 'deps')).rejects.toThrow();
+    await expect(readFile(issueDbPath, 'utf-8')).resolves.toBe(corrupt);
+    await expect(pathExists(reportIndexPath)).resolves.toBe(false);
+    await expect(listMarkdownFiles(reportDir)).resolves.toEqual([]);
+  });
+
   it('manps command requires initialization', async () => {
     const uninitialized = await mkdtemp(
       path.join(tmpdir(), 'mancode-preseason-empty-'),
@@ -329,3 +384,21 @@ describe('preseason scan', () => {
     ).resolves.toContain('Area: deps');
   });
 });
+
+async function pathExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function listMarkdownFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir);
+    return entries.filter((entry) => entry.endsWith('.md'));
+  } catch {
+    return [];
+  }
+}

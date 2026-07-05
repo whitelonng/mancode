@@ -168,19 +168,19 @@ if echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|ui|design|la
             UI=$(jq -r '.uiLibrary // empty' "$AESTHETICS_FILE" 2>/dev/null)
             DARK=$(jq -r '.darkMode // empty' "$AESTHETICS_FILE" 2>/dev/null)
             MATCH=$(jq -r '.matchLevel // empty' "$AESTHETICS_FILE" 2>/dev/null)
-            COLORS=$(jq -r '.colors | to_entries | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            FONTS=$(jq -r '.fonts | to_entries | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            COMPONENTS=$(jq -r '(.components // []) | .[0:8] | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            CSS_VARS=$(jq -r '(.cssVariables // {}) | to_entries | .[0:8] | map("--\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            COLORS=$(jq -r '.colors | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            FONTS=$(jq -r '.fonts | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            COMPONENTS=$(jq -r '(.components // []) | map(select(test("^[A-Z][A-Za-z0-9]{0,79}$"))) | .[0:8] | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+            CSS_VARS=$(jq -r '(.cssVariables // {}) | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:8] | map("--\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
 
             echo "## 审美 token 摘要"
-            [ -n "$UI" ] && echo "UI: $UI"
-            [ -n "$DARK" ] && echo "Dark: $DARK"
-            [ -n "$MATCH" ] && echo "Match: $MATCH"
-            [ -n "$COLORS" ] && echo "Colors (前 8): $COLORS"
-            [ -n "$FONTS" ] && echo "Fonts (前 4): $FONTS"
-            [ -n "$COMPONENTS" ] && echo "Components (前 8): $COMPONENTS"
-            [ -n "$CSS_VARS" ] && echo "CSS variables (前 8): $CSS_VARS"
+            [ -n "$UI" ] && echo "UI: $(sanitize "$UI")"
+            [ -n "$DARK" ] && echo "Dark: $(sanitize "$DARK")"
+            [ -n "$MATCH" ] && echo "Match: $(sanitize "$MATCH")"
+            [ -n "$COLORS" ] && echo "Colors (前 8): $(sanitize "$COLORS")"
+            [ -n "$FONTS" ] && echo "Fonts (前 4): $(sanitize "$FONTS")"
+            [ -n "$COMPONENTS" ] && echo "Components (前 8): $(sanitize "$COMPONENTS")"
+            [ -n "$CSS_VARS" ] && echo "CSS variables (前 8): $(sanitize "$CSS_VARS")"
             echo "完整 token: .mancode/aesthetics/style-tokens.json"
             echo ""
         else

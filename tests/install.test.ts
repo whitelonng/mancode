@@ -58,13 +58,17 @@ describe('mancode install', () => {
     expect(content).toContain('mancode');
   });
 
-  it('install --minimal --force keeps only solo skill and removes coaching staff', async () => {
+  it('install --minimal --force keeps only solo skill and removes only mancode agents', async () => {
     await silentInit(dir);
+    const customAgentPath = path.join(dir, '.claude', 'agents', 'custom.md');
+    await writeFile(customAgentPath, '# custom agent\n', 'utf-8');
 
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md')),
     ).toBe(true);
-    expect(await pathExists(path.join(dir, '.claude', 'agents'))).toBe(true);
+    expect(
+      await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
+    ).toBe(true);
 
     const code = await install(dir, 'claude-code', {
       force: true,
@@ -81,7 +85,10 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'manteam')),
     ).toBe(false);
-    expect(await pathExists(path.join(dir, '.claude', 'agents'))).toBe(false);
+    expect(
+      await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
+    ).toBe(false);
+    expect(await readFile(customAgentPath, 'utf-8')).toBe('# custom agent\n');
   });
 
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
@@ -237,6 +244,45 @@ describe('mancode install', () => {
     );
     expect(tokensAfter.matchLevel).toBe('high');
     expect(tokensAfter.colors).toHaveProperty('primary', '#3b82f6');
+  });
+
+  it('fails without rewriting invalid .claude/settings.json', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    const configPath = path.join(dir, '.mancode', 'config.json');
+    const logPath = path.join(dir, '.mancode', 'logs', 'hooks.log');
+    const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
+    const skillPath = path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md');
+    const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
+    const invalidSettings = '{ invalid json';
+    const existingConfig = {
+      ...DEFAULT_CONFIG,
+      platforms: ['claude-code'],
+      forceTeamMode: true,
+      defaultStyle: 'brutalist',
+    };
+    await writeFile(settingsPath, invalidSettings, 'utf-8');
+    await writeFile(
+      configPath,
+      JSON.stringify(existingConfig, null, 2),
+      'utf-8',
+    );
+    await writeFile(logPath, 'existing log\n', 'utf-8');
+    await writeFile(hookPath, 'existing hook\n', 'utf-8');
+    await writeFile(skillPath, 'existing skill\n', 'utf-8');
+    await writeFile(agentPath, 'existing agent\n', 'utf-8');
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).not.toBe(EXIT_OK);
+    expect(await readFile(settingsPath, 'utf-8')).toBe(invalidSettings);
+    expect(JSON.parse(await readFile(configPath, 'utf-8'))).toEqual(
+      existingConfig,
+    );
+    expect(await readFile(logPath, 'utf-8')).toBe('existing log\n');
+    expect(await readFile(hookPath, 'utf-8')).toBe('existing hook\n');
+    expect(await readFile(skillPath, 'utf-8')).toBe('existing skill\n');
+    expect(await readFile(agentPath, 'utf-8')).toBe('existing agent\n');
   });
 });
 

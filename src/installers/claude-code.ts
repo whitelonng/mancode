@@ -20,6 +20,12 @@ import { MVP2_SKILLS, renderSkill } from '../templates/skills/index.js';
  *
  * 幂等：重复运行不会丢失用户配置，hook 会去重。
  */
+export async function validateClaudeCodeSettings(
+  projectRoot: string,
+): Promise<void> {
+  await readClaudeSettings(path.join(projectRoot, '.claude'));
+}
+
 export async function installClaudeCode(
   projectRoot: string,
   options: {
@@ -30,6 +36,7 @@ export async function installClaudeCode(
 ): Promise<void> {
   const mancodeDir = path.join(projectRoot, '.mancode');
   const claudeDir = path.join(projectRoot, '.claude');
+  const settings = await readClaudeSettings(claudeDir);
 
   // 1. 创建 .mancode/ 子目录
   await mkdir(path.join(mancodeDir, 'hooks'), { recursive: true });
@@ -60,7 +67,9 @@ export async function installClaudeCode(
 
   // 5. 创建空 hooks.log
   const logPath = path.join(mancodeDir, 'logs', 'hooks.log');
-  await writeFile(logPath, '', 'utf-8');
+  if (!(await pathExists(logPath))) {
+    await writeFile(logPath, '', 'utf-8');
+  }
 
   // 6. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
@@ -73,13 +82,13 @@ export async function installClaudeCode(
 
   // 7. 创建 .claude/agents/ 并写入教练组（MVP-2）
   if (options.minimal) {
-    await rm(path.join(claudeDir, 'agents'), { recursive: true, force: true });
+    await uninstallAgents(path.join(claudeDir, 'agents'));
   } else {
     await installAgents(path.join(claudeDir, 'agents'));
   }
 
   // 8. 更新 .claude/settings.json（幂等合并）
-  await updateClaudeSettings(claudeDir);
+  await updateClaudeSettings(claudeDir, settings);
 }
 
 async function installHooks(hooksDir: string): Promise<void> {
@@ -156,6 +165,12 @@ async function installAgents(agentsDir: string): Promise<void> {
   }
 }
 
+async function uninstallAgents(agentsDir: string): Promise<void> {
+  for (const agent of ALL_AGENTS) {
+    await rm(path.join(agentsDir, `${agent.name}.md`), { force: true });
+  }
+}
+
 interface ClaudeHookItem {
   type: 'command';
   command: string;
@@ -194,18 +209,27 @@ interface ClaudeSettings {
  * - 追加新的 mancode matcher group
  * - 不覆盖用户已有 matcher groups
  */
-async function updateClaudeSettings(claudeDir: string): Promise<void> {
+async function readClaudeSettings(claudeDir: string): Promise<ClaudeSettings> {
   const settingsPath = path.join(claudeDir, 'settings.json');
-  let settings: ClaudeSettings = {};
-
-  // 读取现有 settings（如有）
   try {
     const raw = await readFile(settingsPath, 'utf-8');
-    settings = JSON.parse(raw) as ClaudeSettings;
-  } catch {
-    // 文件不存在或解析失败，用空对象
+    return JSON.parse(raw) as ClaudeSettings;
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      return {};
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `cannot update .claude/settings.json because it is unreadable or invalid JSON: ${reason}`,
+    );
   }
+}
 
+async function updateClaudeSettings(
+  claudeDir: string,
+  settings: ClaudeSettings,
+): Promise<void> {
+  const settingsPath = path.join(claudeDir, 'settings.json');
   // 初始化 hooks 对象
   settings.hooks = settings.hooks || {};
 
@@ -313,6 +337,10 @@ function isMancodeHook(hook: ClaudeHookItem): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && 'code' in err;
 }
 
 async function pathExists(p: string): Promise<boolean> {

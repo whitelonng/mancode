@@ -2,9 +2,13 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import {
   type WorkflowMeta,
+  type WorkflowStatus,
+  createWorkflow,
   deleteWorkflow,
+  isValidWorkflowTaskId,
   listWorkflows,
   readWorkflow,
+  updateWorkflow,
 } from '../system/workflow.js';
 
 export const EXIT_OK = 0;
@@ -15,6 +19,9 @@ export interface WorkflowOptions {
   dryRun?: boolean;
   olderThan?: string;
   json?: boolean;
+  step?: string;
+  status?: string;
+  skipped?: string;
 }
 
 /**
@@ -42,6 +49,10 @@ export async function workflow(
   }
 
   switch (subcommand) {
+    case 'create':
+      return workflowCreate(rootDir, args, options);
+    case 'update':
+      return workflowUpdate(rootDir, args[0], options);
     case 'list':
       return workflowList(rootDir, options);
     case 'show':
@@ -59,10 +70,107 @@ export async function workflow(
         );
       } else {
         console.error(`✗  Invalid workflow subcommand: ${subcommand}`);
-        console.error('   Use: list | show <taskId> | clean');
+        console.error(
+          '   Use: create <man8|man> <task> | update <taskId> | list | show <taskId> | clean',
+        );
       }
       return EXIT_INVALID_ARG;
   }
+}
+
+async function workflowCreate(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const mode = args[0];
+  const task = args.slice(1).join(' ').trim();
+  if (mode !== 'man8' && mode !== 'man') {
+    return invalidArg(
+      options,
+      `invalid workflow mode: ${mode ?? ''}`,
+      'Use: mancode workflow create <man8|man> <task>',
+    );
+  }
+  if (!task) {
+    return invalidArg(
+      options,
+      'missing workflow task',
+      'Use: mancode workflow create <man8|man> <task>',
+    );
+  }
+
+  const meta = await createWorkflow(rootDir, task, mode);
+  if (options.json) {
+    console.log(JSON.stringify(meta, null, 2));
+  } else {
+    console.log(`Created workflow: ${meta.taskId}`);
+  }
+  return EXIT_OK;
+}
+
+async function workflowUpdate(
+  rootDir: string,
+  taskId: string | undefined,
+  options: WorkflowOptions,
+): Promise<number> {
+  if (!taskId) {
+    return invalidArg(
+      options,
+      'missing taskId',
+      'Use: mancode workflow update <taskId> [--step N] [--status in_progress|completed|abandoned] [--skipped a,b]',
+    );
+  }
+  if (!isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId}`);
+  }
+
+  const existing = await readWorkflow(rootDir, taskId);
+  if (!existing) {
+    return invalidArg(options, `workflow not found: ${taskId}`);
+  }
+
+  const patch: Partial<WorkflowMeta> = {};
+  if (options.step !== undefined) {
+    const currentStep = Number.parseInt(options.step, 10);
+    const maxStep = existing.mode === 'man' ? 8 : 3;
+    if (
+      !Number.isInteger(currentStep) ||
+      currentStep < 1 ||
+      currentStep > maxStep
+    ) {
+      return invalidArg(options, `invalid --step: ${options.step}`);
+    }
+    patch.currentStep = currentStep;
+  }
+
+  if (options.status !== undefined) {
+    if (!isWorkflowStatus(options.status)) {
+      return invalidArg(options, `invalid --status: ${options.status}`);
+    }
+    patch.status = options.status;
+  }
+
+  if (options.skipped !== undefined) {
+    patch.skippedSteps = options.skipped
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return invalidArg(options, 'missing update fields');
+  }
+
+  await updateWorkflow(rootDir, taskId, patch);
+
+  const updated = await readWorkflow(rootDir, taskId);
+  if (options.json) {
+    console.log(JSON.stringify(updated, null, 2));
+  } else {
+    console.log(`Updated workflow: ${taskId}`);
+  }
+  return EXIT_OK;
 }
 
 async function workflowList(
@@ -104,6 +212,9 @@ async function workflowShow(
       console.error('   Use: mancode workflow show <taskId>');
     }
     return EXIT_INVALID_ARG;
+  }
+  if (!isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId}`);
   }
 
   const meta = await readWorkflow(rootDir, taskId);
@@ -218,6 +329,26 @@ function parseOlderThan(value: string | undefined): Date | undefined | null {
         ? amount * 60 * 60 * 1000
         : amount * 60 * 1000;
   return new Date(Date.now() - ms);
+}
+
+function invalidArg(
+  options: WorkflowOptions,
+  message: string,
+  usage?: string,
+): number {
+  if (options.json) {
+    console.log(JSON.stringify({ error: message }, null, 2));
+  } else {
+    console.error(`✗  ${message}`);
+    if (usage) console.error(`   ${usage}`);
+  }
+  return EXIT_INVALID_ARG;
+}
+
+function isWorkflowStatus(value: string): value is WorkflowStatus {
+  return (
+    value === 'in_progress' || value === 'completed' || value === 'abandoned'
+  );
 }
 
 function ago(iso: string): string {

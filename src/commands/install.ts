@@ -11,6 +11,7 @@ import { DEFAULT_CONFIG } from '../templates/defaults.js';
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_UNSUPPORTED_PLATFORM = 2;
+export const EXIT_INSTALL_FAILED = 3;
 
 /**
  * 当前支持的平台。
@@ -87,11 +88,20 @@ export async function install(
   // 4. 安装
   console.log(`✓  Installing ${formatPlatformName(platform)} adapter...`);
   const project = await detectProjectType(rootDir);
-  await installClaudeCode(rootDir, {
-    techStack: project.techStack,
-    uiLibrary: project.uiLibrary,
-    minimal: options.minimal,
-  });
+  try {
+    await installClaudeCode(rootDir, {
+      techStack: project.techStack,
+      uiLibrary: project.uiLibrary,
+      minimal: options.minimal,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `✗  ${formatPlatformName(platform)} adapter install failed: ${msg}`,
+    );
+    await updateConfig(rootDir, config);
+    return EXIT_INSTALL_FAILED;
+  }
 
   // 5. 更新 config.json platforms
   const platforms = Array.isArray(config.platforms) ? config.platforms : [];

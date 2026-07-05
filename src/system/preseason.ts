@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import type { Stats } from 'node:fs';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 
 export type PreseasonSeverity = 'P0' | 'P1' | 'P2';
@@ -97,6 +104,8 @@ const SOURCE_EXTENSIONS = new Set([
   '.css',
   '.md',
 ]);
+const MAX_SCAN_DEPTH = 20;
+const MAX_PROJECT_FILES = 5000;
 
 export async function runPreseasonScan(
   projectRoot: string,
@@ -131,13 +140,14 @@ export async function runPreseasonScan(
     reportPath,
     issueDbPath,
   };
+  const database = await buildIssueDatabase(projectRoot, report);
   await writeFile(reportPath, renderPreseasonReport(report), 'utf-8');
   await writeFile(
     path.join(projectRoot, '.mancode', 'preseason-report.md'),
     renderPreseasonReport(report),
     'utf-8',
   );
-  await writeIssueDatabase(projectRoot, report);
+  await writeJsonAtomic(report.issueDbPath, database);
   return report;
 }
 
@@ -224,7 +234,7 @@ ${report.commandsChecked.length === 0 ? '- No package scripts found.' : report.c
 
 async function listProjectFiles(projectRoot: string): Promise<string[]> {
   const results: string[] = [];
-  await walk(projectRoot, projectRoot, results);
+  await walk(projectRoot, projectRoot, results, 0);
   return results.sort();
 }
 
@@ -232,7 +242,9 @@ async function walk(
   root: string,
   current: string,
   results: string[],
+  depth: number,
 ): Promise<void> {
+  if (depth > MAX_SCAN_DEPTH || results.length >= MAX_PROJECT_FILES) return;
   let entries: string[];
   try {
     entries = await readdir(current);
@@ -246,17 +258,19 @@ async function walk(
     const rel = path.relative(root, abs);
     let info: Stats;
     try {
-      info = await stat(abs);
+      info = await lstat(abs);
     } catch {
       continue;
     }
+    if (info.isSymbolicLink()) continue;
     if (info.isDirectory()) {
-      await walk(root, abs, results);
+      await walk(root, abs, results, depth + 1);
     } else if (
       SOURCE_EXTENSIONS.has(path.extname(entry)) ||
       entry === 'package.json'
     ) {
       results.push(rel);
+      if (results.length >= MAX_PROJECT_FILES) return;
     }
   }
 }
@@ -470,7 +484,12 @@ function scanAestheticDrift(
   const issues: PreseasonIssue[] = [];
   const frontendFiles = files.filter((file) => /\.(tsx|jsx|css)$/.test(file));
   for (const file of frontendFiles) {
-    const content = readFileSyncSafe(path.join(projectRoot, file));
+    let content: string;
+    try {
+      content = readFileSyncSafe(path.join(projectRoot, file));
+    } catch {
+      continue;
+    }
     if (containsHardcodedColor(content)) {
       issues.push({
         id: 'aesthetics-hardcoded-color',
@@ -505,10 +524,10 @@ function inferCommands(pkg: PackageJson | null): string[] {
     .map((name) => `npm run ${name}`);
 }
 
-async function writeIssueDatabase(
+async function buildIssueDatabase(
   projectRoot: string,
   report: PreseasonReport,
-): Promise<void> {
+): Promise<PreseasonIssueDatabase> {
   const reportRef = path.relative(projectRoot, report.reportPath);
   const run: PreseasonIssueRun = {
     id: path.basename(report.reportPath, '.md'),
@@ -549,43 +568,56 @@ async function writeIssueDatabase(
     }
   }
 
-  const database: PreseasonIssueDatabase = {
+  return {
     version: '1.0.0',
     updatedAt: report.generatedAt,
     latestRunId: run.id,
     runs: [...existing.runs, run].slice(-50),
     issues: Array.from(records.values()).sort(compareIssueRecords),
   };
-
-  await writeFile(
-    report.issueDbPath,
-    `${JSON.stringify(database, null, 2)}\n`,
-    'utf-8',
-  );
 }
 
 async function readIssueDatabase(
   issueDbPath: string,
 ): Promise<PreseasonIssueDatabase> {
+  let raw: string;
   try {
-    const raw = await readFile(issueDbPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<PreseasonIssueDatabase>;
-    if (
-      parsed.version === '1.0.0' &&
-      Array.isArray(parsed.runs) &&
-      Array.isArray(parsed.issues)
-    ) {
-      return {
-        version: '1.0.0',
-        updatedAt: parsed.updatedAt ?? '',
-        latestRunId: parsed.latestRunId ?? '',
-        runs: parsed.runs,
-        issues: parsed.issues,
-      };
+    raw = await readFile(issueDbPath, 'utf-8');
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      return emptyIssueDatabase();
     }
-  } catch {
-    // Missing/corrupt issue database should not block generating a fresh scan.
+    throw err;
   }
+
+  const parsed = JSON.parse(raw) as Partial<PreseasonIssueDatabase>;
+  if (
+    parsed.version === '1.0.0' &&
+    Array.isArray(parsed.runs) &&
+    Array.isArray(parsed.issues)
+  ) {
+    return {
+      version: '1.0.0',
+      updatedAt: parsed.updatedAt ?? '',
+      latestRunId: parsed.latestRunId ?? '',
+      runs: parsed.runs,
+      issues: parsed.issues,
+    };
+  }
+
+  throw new Error(`invalid preseason issue database: ${issueDbPath}`);
+}
+
+async function writeJsonAtomic(
+  file: string,
+  value: PreseasonIssueDatabase,
+): Promise<void> {
+  const tmp = `${file}.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
+  await rename(tmp, file);
+}
+
+function emptyIssueDatabase(): PreseasonIssueDatabase {
   return {
     version: '1.0.0',
     updatedAt: '',
@@ -655,4 +687,8 @@ function readFileSyncSafe(file: string): string {
 
 function pathExistsSync(file: string): boolean {
   return existsSync(file);
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && 'code' in err;
 }

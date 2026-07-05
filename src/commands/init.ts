@@ -1,7 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { installClaudeCode } from '../installers/claude-code.js';
+import {
+  installClaudeCode,
+  validateClaudeCodeSettings,
+} from '../installers/claude-code.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectProjectType, detectSystemDeps } from '../system/detect.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
@@ -15,6 +18,7 @@ export const EXIT_ALREADY_INITIALIZED = 1;
 export const EXIT_NOT_A_PROJECT_DIR = 2;
 export const EXIT_USER_CANCEL = 3;
 export const EXIT_NETWORK_ERROR = 4;
+export const EXIT_INIT_FAILED = 5;
 
 /**
  * mancode state 文件的内容。
@@ -67,8 +71,8 @@ export interface InitOptions {
  * - ✅ 项目类型检测（基于 package.json）
  * - ✅ 创建 8 个文件
  * - ✅ --force / --yes 参数
- * - ⏸️ --team / --style（MVP-2）
- * - ⏸️ 交互式确认（MVP-1 暂用 --yes 默认静默安装）
+ * - ✅ --team / --no-team / --style 参数（MVP-2）
+ * - ⏸️ 交互式确认（默认静默安装，--yes 保持兼容）
  *
  * @param rootDir 目标项目根目录，默认 process.cwd()
  * @param options CLI 参数
@@ -165,9 +169,6 @@ export async function init(
       );
     }
 
-    // 5. 创建 .mancode/state.json
-    await fs.mkdir(mancodeDir, { recursive: true });
-
     const state: MancodeState = {
       version: VERSION,
       currentMode: 'solo',
@@ -183,8 +184,8 @@ export async function init(
       contributors: team.contributors,
     };
 
-    const stateContent = `${JSON.stringify(state, null, 2)}\n`;
-    await fs.writeFile(stateFile, stateContent, 'utf-8');
+    // 5. 预检用户 Claude Code settings，避免坏 JSON 导致半初始化。
+    await validateClaudeCodeSettings(rootDir);
 
     // 6. 安装 Claude Code 适配（8 个文件）
     console.log('✓  安装 Claude Code 适配...');
@@ -192,12 +193,18 @@ export async function init(
       techStack: project.techStack,
       uiLibrary: project.uiLibrary,
     });
+
+    // 7. 创建 .mancode/state.json
+    await fs.mkdir(mancodeDir, { recursive: true });
+    const stateContent = `${JSON.stringify(state, null, 2)}\n`;
+    await fs.writeFile(stateFile, stateContent, 'utf-8');
+
     await updateConfigOptions(mancodeDir, {
       forceTeamMode: options.team === true,
       defaultStyle: options.style ?? null,
     });
 
-    // 7. 审美扫描（前端项目才扫）
+    // 8. 审美扫描（前端项目才扫）
     let styleLine = '  .mancode/aesthetics/        # style-tokens.json (空)';
     if (project.hasFrontend) {
       console.log('✓  扫描审美 token...');
@@ -231,7 +238,7 @@ export async function init(
       }
     }
 
-    // 8. 完成
+    // 9. 完成
     console.log('');
     console.log('✓  mancode initialized.');
     console.log('');
@@ -254,7 +261,7 @@ export async function init(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`✗  mancode init failed: ${msg}`);
-    return EXIT_NOT_A_PROJECT_DIR;
+    return EXIT_INIT_FAILED;
   }
 }
 

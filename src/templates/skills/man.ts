@@ -30,8 +30,15 @@ export const MAN_SKILL: SkillSpec = {
 
 ### Step 1: Scout Report（球探报告）
 
-1. 创建 workflow 目录：\`.mancode/workflows/<YYYYMMDD-HHMMSS-slug>/\`
-   - 写入 \`metadata.json\`：\`{"taskId":"...","task":"...","mode":"man","currentStep":1,"skippedSteps":[],"startedAt":"<ISO>","updatedAt":"<ISO>","status":"in_progress"}\`
+1. 用 Bash 创建 workflow，不要手写 \`metadata.json\`。不要把用户 task 直接插进 shell 命令；用 here-doc 传入变量，再用双引号引用变量：
+   \`\`\`bash
+   TASK=$(cat <<'MANCODE_TASK'
+   <task>
+   MANCODE_TASK
+   )
+   mancode workflow create man "$TASK" --json
+   \`\`\`
+   从 JSON 输出的 \`taskId\` 字段取得 \`<taskId>\`。目录会由 CLI 创建在 \`.mancode/workflows/<taskId>/\`。
 2. 调用 Scout：
    \`\`\`
    Agent({ subagent_type: "scout", description: "Scout: <task>",
@@ -39,7 +46,7 @@ export const MAN_SKILL: SkillSpec = {
    \`\`\`
 3. Write scout 输出到 \`scout-report.md\`
 4. 更新 state.json：\`currentMode: "man"\`, \`currentTask: "<taskId>"\`, \`currentWorkflowMode: "man"\`
-5. metadata.json：\`currentStep: 2\`
+5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 2\`
 
 ### Step 2: Game Plan
 
@@ -50,7 +57,7 @@ export const MAN_SKILL: SkillSpec = {
      prompt: "任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n写 plan。" })
    \`\`\`
 3. Write 到 \`plan.md\`
-4. metadata.json：\`currentStep: 3\`
+4. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 3\`
 
 ### 用户确认 plan
 
@@ -71,9 +78,9 @@ AskUserQuestion({
 })
 \`\`\`
 
-- "退出" → metadata.json \`status: "abandoned"\`，结束。
+- "退出" → 用 Bash 执行 \`mancode workflow update <taskId> --status abandoned\`，结束。
 - "修改 plan" → 回 Step 2，附用户修改意见。
-- metadata.json：\`currentStep: 3\`
+- workflow 已在 Step 2 更新到 \`currentStep: 3\`
 
 ### Step 3: Tip-off（实施）
 
@@ -83,7 +90,7 @@ AskUserQuestion({
    Agent({ subagent_type: "head-coach", description: "Head Coach: implement <task>",
      prompt: "任务：<task>\\nPlan：\\n<plan.md 内容>\\n\\n按 plan 实施。" })
    \`\`\`
-3. metadata.json：\`currentStep: 4\`
+3. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 4\`
 
 ### Step 4: Head Coach 自测
 
@@ -91,12 +98,12 @@ AskUserQuestion({
 
 **铁律 1.3：失败两次必须停下诊断根因**。
 
-通过后 metadata.json：\`currentStep: 5\`
+通过后用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 5\`
 
 ### Step 5: Film Session #1（进攻）
 
 用 AskUserQuestion 问用户："准备叫录像分析师 #1（进攻）上场，需要吗？"
-- 跳过：metadata.json \`skippedSteps: ["film-1"]\`，直接 Step 7
+- 跳过：用 Bash 执行 \`mancode workflow update <taskId> --skipped film-1 --step 7\`，直接 Step 7
 - 执行：
 
 \`\`\`
@@ -104,7 +111,7 @@ Agent({ subagent_type: "film-analyst-offense", description: "Film #1: offense re
   prompt: "任务：<task>\\nScout Report：\\n<scout-report.md>\\n\\n本次改动的 git diff：\\n<git diff HEAD>\\n\\n开始审查。" })
 \`\`\`
 
-Write 输出到 \`film-report-1.md\`。metadata.json：\`currentStep: 6\`
+Write 输出到 \`film-report-1.md\`。用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 6\`
 
 ### Step 6: Halftime 修复
 
@@ -114,12 +121,12 @@ Agent({ subagent_type: "head-coach", description: "Head Coach: fix film-1",
   prompt: "任务：<task>\\nFilm Report #1：\\n<film-report-1.md>\\n\\n修复指出的问题（🔴 必修 > 🟡 建议 > 🟢 可选）。" })
 \`\`\`
 
-修复后重跑 build/lint/test。metadata.json：\`currentStep: 7\`
+修复后重跑 build/lint/test。用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 7\`
 
 ### Step 7: Film Session #2（防守）
 
 问用户："叫录像分析师 #2（防守）上场？"
-- 跳过：metadata.json \`skippedSteps\` 加 \`"film-2"\`，直接 Step 8
+- 跳过：用 Bash 执行 \`mancode workflow update <taskId> --skipped <已有跳过步骤>,film-2 --step 8\`，直接 Step 8
 - 执行：
 
 \`\`\`
@@ -128,7 +135,7 @@ Agent({ subagent_type: "film-analyst-defense", description: "Film #2: defense re
 \`\`\`
 
 Write 到 \`film-report-2.md\`。
-metadata.json：\`currentStep: 8\`
+用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 8\`
 
 ### Step 8: Post-game 收尾
 
@@ -140,7 +147,7 @@ metadata.json：\`currentStep: 8\`
 2. 把 summary 写到 \`summary.md\`
 3. 如有 worktree，合并回主分支（用户确认后）
 4. 更新 state.json：\`currentMode: "solo"\`, \`lastMode: "man"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`
-5. metadata.json：\`status: "completed"\`
+5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --status completed --step 8\`
 
 ## 最终输出
 

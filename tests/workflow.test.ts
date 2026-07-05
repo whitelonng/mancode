@@ -6,6 +6,7 @@ import {
   createWorkflow,
   deleteWorkflow,
   generateTaskId,
+  isValidWorkflowTaskId,
   listWorkflows,
   readWorkflow,
   updateWorkflow,
@@ -85,6 +86,30 @@ describe('workflow helpers', () => {
   });
 
   describe('readWorkflow', () => {
+    it('rejects task ids that could escape the workflow directory', async () => {
+      const outsideDir = path.join(dir, '.mancode', 'outside');
+      await mkdir(outsideDir, { recursive: true });
+      await writeFile(
+        path.join(outsideDir, 'metadata.json'),
+        JSON.stringify(
+          {
+            task: 'outside',
+            mode: 'man',
+            currentStep: 1,
+            skippedSteps: [],
+            startedAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            status: 'in_progress',
+          },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+
+      await expect(readWorkflow(dir, '../../outside')).resolves.toBeNull();
+    });
+
     it('returns null when workflow does not exist', async () => {
       const result = await readWorkflow(dir, 'nonexistent');
       expect(result).toBeNull();
@@ -118,6 +143,31 @@ describe('workflow helpers', () => {
   });
 
   describe('updateWorkflow', () => {
+    it('rejects invalid task ids before reading or writing metadata', async () => {
+      const outsideDir = path.join(dir, '.mancode', 'outside');
+      await mkdir(outsideDir, { recursive: true });
+      const metadataPath = path.join(outsideDir, 'metadata.json');
+      const metadata = JSON.stringify(
+        {
+          task: 'outside',
+          mode: 'man',
+          currentStep: 1,
+          skippedSteps: [],
+          startedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          status: 'in_progress',
+        },
+        null,
+        2,
+      );
+      await writeFile(metadataPath, metadata, 'utf-8');
+
+      await expect(
+        updateWorkflow(dir, '../../outside', { currentStep: 2 }),
+      ).rejects.toThrow(/invalid workflow taskId/);
+      await expect(readFile(metadataPath, 'utf-8')).resolves.toBe(metadata);
+    });
+
     it('merges patch and refreshes updatedAt', async () => {
       const created = await createWorkflow(dir, 'task a', 'man');
       const originalUpdatedAt = created.updatedAt;
@@ -168,6 +218,17 @@ describe('workflow helpers', () => {
   });
 
   describe('deleteWorkflow', () => {
+    it('rejects invalid task ids instead of deleting outside directories', async () => {
+      const outsideDir = path.join(dir, '.mancode', 'outside');
+      await mkdir(outsideDir, { recursive: true });
+      await writeFile(path.join(outsideDir, 'metadata.json'), '{}', 'utf-8');
+
+      await expect(deleteWorkflow(dir, '../../outside')).resolves.toBe(false);
+      await expect(
+        readFile(path.join(outsideDir, 'metadata.json'), 'utf-8'),
+      ).resolves.toBe('{}');
+    });
+
     it('removes workflow directory', async () => {
       const created = await createWorkflow(dir, 'temp task', 'man8');
       const removed = await deleteWorkflow(dir, created.taskId);
@@ -180,6 +241,16 @@ describe('workflow helpers', () => {
     it('returns false when workflow does not exist', async () => {
       const removed = await deleteWorkflow(dir, 'nonexistent');
       expect(removed).toBe(false);
+    });
+  });
+
+  describe('isValidWorkflowTaskId', () => {
+    it('accepts generated task id shape and rejects path traversal', () => {
+      expect(isValidWorkflowTaskId('20260705-120000-add-login-2')).toBe(true);
+      expect(isValidWorkflowTaskId('../../outside')).toBe(false);
+      expect(isValidWorkflowTaskId('/tmp/outside')).toBe(false);
+      expect(isValidWorkflowTaskId('task/child')).toBe(false);
+      expect(isValidWorkflowTaskId('.hidden')).toBe(false);
     });
   });
 });

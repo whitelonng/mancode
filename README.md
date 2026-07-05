@@ -183,6 +183,8 @@ mancode init              # Initialize .mancode/ + solo mode + aesthetic scan
 mancode status            # Show project status, mode, style, hooks
 mancode status --json     # Output as JSON (for scripts)
 mancode install [platform]# Install/reinstall platform adapter
+mancode workflow create   # Create workflow metadata (used by /man8 and /man)
+mancode workflow update   # Update workflow step/status/skipped state
 mancode workflow list     # List mancode workflows
 mancode workflow show     # Show workflow metadata
 mancode workflow clean    # Clean completed/old workflows
@@ -218,10 +220,6 @@ mancode install --force   # Reinstall adapter (keep scanned tokens)
 /manteam                  # Team mode (or auto-detected)
 /mansolo                  # Back to solo
 ```
-
-> **Planned aliases** (not yet wired up): `/warmup`, `/playoffs`, `/team`, `/preseason`, `/back-to-solo`.
-
----
 
 ## Modes Explained
 
@@ -550,6 +548,8 @@ mancode init              # 初始化 .mancode/ + solo 模式 + 审美扫描
 mancode status            # 显示项目状态、模式、风格、hooks
 mancode status --json     # JSON 输出（脚本用）
 mancode install [platform]# 安装/重装平台适配
+mancode workflow create   # 创建 workflow 元数据（/man8 和 /man 使用）
+mancode workflow update   # 更新 workflow 步骤/状态/跳过记录
 mancode workflow list     # 列出 mancode workflow
 mancode workflow show     # 显示 workflow 元数据
 mancode workflow clean    # 清理已完成/过旧 workflow
