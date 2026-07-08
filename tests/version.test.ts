@@ -7,8 +7,8 @@ describe('version', () => {
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('is the beta prerelease', () => {
-    expect(VERSION).toContain('beta');
+  it('is a stable release without prerelease tag', () => {
+    expect(VERSION).not.toMatch(/-(alpha|beta|rc)\./);
   });
 });
 

@@ -16,9 +16,9 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-MVP--3%20alpha-green?style=flat-square" alt="Status: MVP-3 alpha" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="Status: stable v0.1.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex CLI, GitHub Copilot" />
-  <img src="https://img.shields.io/badge/tests-223%20passed-brightgreen?style=flat-square" alt="Tests: 223 passed" />
+  <img src="https://img.shields.io/badge/tests-256%20passed-brightgreen?style=flat-square" alt="Tests: 256 passed" />
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@ different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
 
-The MVP-3 alpha ships with adapters for Claude Code, Cursor, Codex CLI, and
+mancode ships with adapters for Claude Code, Cursor, Codex CLI, and
 GitHub Copilot. Claude Code gets the full hooks, skills, and subagents setup;
 the other adapters receive durable rules or instruction files with documented
 capability downgrades.
@@ -55,7 +55,7 @@ production changes.
 ## Quick Start
 
 ```bash
-npm install -g mancode@alpha
+npm install -g mancode
 cd your-project
 mancode init
 ```
@@ -232,11 +232,11 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: MVP-3 alpha. Claude Code, Cursor, Codex CLI, and GitHub Copilot are
+**Status**: stable v0.1.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot are
 supported.
 
 ```bash
-npm install -g mancode@alpha
+npm install -g mancode
 cd your-project
 mancode init
 mancode init --platform cursor
@@ -296,7 +296,7 @@ mancode version
 ### `mancode status`
 
 ```text
-mancode v0.1.0-alpha.1
+mancode v0.1.0
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -522,7 +522,7 @@ are opt-in for work that needs planning, tests, and review.
 
 ### Does mancode work outside Claude Code?
 
-Yes. MVP-3 alpha supports Cursor, Codex CLI, and GitHub Copilot through
+Yes. mancode supports Cursor, Codex CLI, and GitHub Copilot through
 persistent project rules or instruction files. Claude Code remains the richest
 adapter because it supports hooks, skills, and subagents.
 

@@ -15,9 +15,9 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-MVP--3%20alpha-green?style=flat-square" alt="状态：MVP-3 alpha" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="状态：稳定版 v0.1.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、Codex CLI、GitHub Copilot" />
-  <img src="https://img.shields.io/badge/tests-223%20passed-brightgreen?style=flat-square" alt="测试：223 通过" />
+  <img src="https://img.shields.io/badge/tests-256%20passed-brightgreen?style=flat-square" alt="测试：256 通过" />
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
 
-MVP-3 alpha 当前支持 Claude Code、Cursor、Codex CLI 和 GitHub Copilot。Claude Code
+mancode 当前支持 Claude Code、Cursor、Codex CLI 和 GitHub Copilot。Claude Code
 获得完整 hooks、skills 和 subagents；其他平台通过持久化 rules 或 instructions 文件提供
 降级适配。
 
@@ -50,7 +50,7 @@ mancode 可以作为一层本地工作流约束。
 ## 快速开始
 
 ```bash
-npm install -g mancode@alpha
+npm install -g mancode
 cd your-project
 mancode init
 ```
@@ -209,10 +209,10 @@ src/components/
 
 ## 安装
 
-**状态**：MVP-3 alpha。Claude Code、Cursor、Codex CLI 和 GitHub Copilot 均已支持。
+**状态**：稳定版 v0.1.0。Claude Code、Cursor、Codex CLI 和 GitHub Copilot 均已支持。
 
 ```bash
-npm install -g mancode@alpha
+npm install -g mancode
 cd your-project
 mancode init
 mancode init --platform cursor
@@ -272,7 +272,7 @@ mancode version
 ### `mancode status`
 
 ```text
-mancode v0.1.0-alpha.1
+mancode v0.1.0
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -488,7 +488,7 @@ hooks。用户自定义的 rules 和 instructions 会被保留。
 
 ### mancode 支持 Claude Code 以外的平台吗？
 
-支持。MVP-3 alpha 已通过持久化 rules 或 instruction 文件支持 Cursor、Codex CLI 和
+支持。mancode 已通过持久化 rules 或 instruction 文件支持 Cursor、Codex CLI 和
 GitHub Copilot。Claude Code 仍是能力最完整的 adapter，因为它支持 hooks、skills 和
 subagents。
 
