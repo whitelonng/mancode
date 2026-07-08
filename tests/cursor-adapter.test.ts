@@ -108,6 +108,20 @@ describe('Cursor adapter', () => {
     ).rejects.toThrow();
   });
 
+  it('creates .cursor/commands/ with 5 mode command files', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+
+    for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
+      const cmd = await readFile(
+        path.join(dir, '.cursor', 'commands', `${mode}.md`),
+        'utf-8',
+      );
+      expect(cmd).toContain('Mode Persistence');
+      expect(cmd).toContain('YAGNI ladder');
+    }
+  });
+
   async function readRule(name: string): Promise<string> {
     return readFile(path.join(dir, '.cursor', 'rules', name), 'utf-8');
   }

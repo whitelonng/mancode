@@ -4,6 +4,11 @@ import process from 'node:process';
 import { MANCODE_CURSOR_RULE_FILES } from '../installers/cursor.js';
 import { removeManagedBlock } from '../installers/managed-block.js';
 import {
+  removeCodexSkills,
+  removeCopilotPrompts,
+  removeCursorCommands,
+} from '../installers/mode-skills.js';
+import {
   formatPlatformName,
   getPlatformInstaller,
 } from '../installers/registry.js';
@@ -192,6 +197,7 @@ async function uninstallCursor(rootDir: string): Promise<void> {
   for (const file of MANCODE_CURSOR_RULE_FILES) {
     await rm(path.join(rulesDir, file), { force: true });
   }
+  await removeCursorCommands(rootDir);
 }
 
 async function uninstallCodex(rootDir: string): Promise<void> {
@@ -207,6 +213,7 @@ async function uninstallCodex(rootDir: string): Promise<void> {
   } catch {
     // AGENTS.md doesn't exist — nothing to do
   }
+  await removeCodexSkills(rootDir);
 }
 
 async function uninstallCopilot(rootDir: string): Promise<void> {
@@ -226,6 +233,7 @@ async function uninstallCopilot(rootDir: string): Promise<void> {
   } catch {
     // copilot-instructions.md doesn't exist — nothing to do
   }
+  await removeCopilotPrompts(rootDir);
 }
 
 async function removeFromConfig(

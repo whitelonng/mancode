@@ -100,6 +100,20 @@ describe('GitHub Copilot adapter', () => {
     ).rejects.toThrow();
   });
 
+  it('creates .github/prompts/ with 5 mode prompt files', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+
+    for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
+      const prompt = await readFile(
+        path.join(dir, '.github', 'prompts', `${mode}.prompt.md`),
+        'utf-8',
+      );
+      expect(prompt).toContain('Mode Persistence');
+      expect(prompt).toContain('YAGNI ladder');
+    }
+  });
+
   async function readInstructions(): Promise<string> {
     return readFile(
       path.join(dir, '.github', 'copilot-instructions.md'),

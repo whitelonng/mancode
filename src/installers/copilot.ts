@@ -6,6 +6,7 @@ import {
   DEFAULT_MANCODE_START_MARKER,
   replaceManagedBlock,
 } from './managed-block.js';
+import { installCopilotPrompts } from './mode-skills.js';
 import type { InstallAdapterOptions } from './registry.js';
 import { generateSharedContent } from './shared-content.js';
 
@@ -54,6 +55,8 @@ export async function installCopilot(
     replaceManagedBlock(existing, sections.join('\n')),
     'utf-8',
   );
+
+  await installCopilotPrompts(projectRoot, options.minimal ?? false);
 }
 
 function renderCopilotPromptConventions(): string {

@@ -82,6 +82,33 @@ describe('Codex adapter', () => {
     expect(agents).not.toContain('mancode Modes');
     expect(agents).not.toContain('mancode Platform Downgrade');
   });
+
+  it('creates .agents/skills/ with 5 mode SKILL.md files', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
+      const skill = await readFile(
+        path.join(dir, '.agents', 'skills', mode, 'SKILL.md'),
+        'utf-8',
+      );
+      expect(skill).toContain(`name: ${mode}`);
+      expect(skill).toContain('Mode Persistence');
+      expect(skill).toContain('YAGNI ladder');
+    }
+  });
+
+  it('does not create .agents/skills/ with --minimal', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex', { minimal: true });
+
+    await expect(
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 async function silentInit(dir: string): Promise<void> {

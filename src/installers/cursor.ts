@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installMancodeCore } from './common.js';
+import { installCursorCommands, removeCursorCommands } from './mode-skills.js';
 import type { InstallAdapterOptions } from './registry.js';
 import { generateSharedContent } from './shared-content.js';
 
@@ -102,6 +103,8 @@ export async function installCursor(
     false,
     renderManpsRule(),
   );
+
+  await installCursorCommands(projectRoot, options.minimal ?? false);
 }
 
 async function writeRule(

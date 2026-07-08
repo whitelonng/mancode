@@ -6,6 +6,7 @@ import {
   DEFAULT_MANCODE_START_MARKER,
   replaceManagedBlock,
 } from './managed-block.js';
+import { installCodexSkills, removeCodexSkills } from './mode-skills.js';
 import type { InstallAdapterOptions } from './registry.js';
 import { generateSharedContent } from './shared-content.js';
 
@@ -24,7 +25,7 @@ export async function installCodex(
       slashCommands: 'partial',
       subagents: false,
       hooks: false,
-      skills: 'single-file',
+      skills: 'agents-skills',
     },
     minimal: options.minimal,
     techStack: options.techStack,
@@ -42,4 +43,6 @@ export async function installCodex(
   ].join('\n');
 
   await writeFile(agentsPath, replaceManagedBlock(existing, block), 'utf-8');
+
+  await installCodexSkills(projectRoot, options.minimal ?? false);
 }
