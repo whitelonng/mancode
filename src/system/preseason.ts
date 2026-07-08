@@ -211,6 +211,7 @@ export async function runPreseasonRemediation(
 
   for (let index = 0; index < targets.length; index++) {
     const issue = targets[index];
+    if (!issue) continue;
     write('');
     write(
       `${index + 1}. ${issue.severity} ${issue.id}: ${issue.title}${issue.file ? ` (${issue.file})` : ''}`,
