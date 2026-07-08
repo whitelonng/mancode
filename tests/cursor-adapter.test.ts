@@ -62,6 +62,8 @@ describe('Cursor adapter', () => {
 
     const man = await readRule('mancode-man.mdc');
     expect(man).toContain('alwaysApply: false');
+    expect(man).toContain('Mode Persistence');
+    expect(man).toContain('/mansolo');
     expect(man).toContain('Film Analyst Defense');
   });
 
@@ -120,6 +122,46 @@ describe('Cursor adapter', () => {
       expect(cmd).toContain('Mode Persistence');
       expect(cmd).toContain('YAGNI ladder');
     }
+  });
+
+  it('minimal force install removes mode command files', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    // Verify commands exist before minimal
+    await readFile(path.join(dir, '.cursor', 'commands', 'man8.md'), 'utf-8');
+
+    await install(dir, 'cursor', { force: true, minimal: true });
+
+    await expect(
+      readFile(path.join(dir, '.cursor', 'commands', 'man8.md'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(dir, '.cursor', 'commands', 'mansolo.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('command files use / prefix not $ prefix', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+
+    const man8 = await readFile(
+      path.join(dir, '.cursor', 'commands', 'man8.md'),
+      'utf-8',
+    );
+    expect(man8).toContain('/man8');
+    expect(man8).not.toContain('$man8');
+  });
+
+  it('mansolo command maps state to solo not mansolo', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+
+    const mansolo = await readFile(
+      path.join(dir, '.cursor', 'commands', 'mansolo.md'),
+      'utf-8',
+    );
+    expect(mansolo).toContain('"solo"');
+    expect(mansolo).not.toContain('"mansolo"');
   });
 
   async function readRule(name: string): Promise<string> {

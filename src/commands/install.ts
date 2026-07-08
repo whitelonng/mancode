@@ -91,15 +91,22 @@ export async function install(
   if (alreadyInstalled && !options.force) {
     const status = await checkPlatformStatus(rootDir, platform, true);
     if (status.ready) {
+      if (!options.minimal) {
+        console.log(
+          `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
+        );
+        console.log('   Run with --force to reinstall.');
+        return EXIT_OK;
+      }
       console.log(
-        `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
+        `ℹ️  ${formatPlatformName(platform)} adapter already installed; switching to minimal install.`,
       );
-      console.log('   Run with --force to reinstall.');
-      return EXIT_OK;
+      console.log('   Run with --force to fully reinstall.');
+    } else {
+      console.log(
+        `ℹ️  ${formatPlatformName(platform)} is recorded in config but not ready; repairing generated files.`,
+      );
     }
-    console.log(
-      `ℹ️  ${formatPlatformName(platform)} is recorded in config but not ready; repairing generated files.`,
-    );
   }
 
   // 4. 安装
@@ -110,6 +117,7 @@ export async function install(
       techStack: project.techStack,
       uiLibrary: project.uiLibrary,
       minimal: options.minimal,
+      force: options.force,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

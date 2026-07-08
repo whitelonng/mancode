@@ -60,4 +60,74 @@ describe('team memory', () => {
     expect(decisions).toContain('Keep the existing component library.');
     expect(decisions).toContain('20260629-task');
   });
+
+  it('preserves concurrent team decision appends', async () => {
+    await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        appendTeamDecision(dir, {
+          title: `Decision ${index}`,
+          decision: `Keep decision ${index}.`,
+          date: new Date('2026-06-29T00:00:00.000Z'),
+        }),
+      ),
+    );
+
+    const decisions = await readFile(
+      path.join(dir, '.mancode', 'memory', 'decisions.md'),
+      'utf-8',
+    );
+    for (let index = 0; index < 10; index++) {
+      expect(decisions).toContain(`2026-06-29: Decision ${index}`);
+      expect(decisions).toContain(`Keep decision ${index}.`);
+    }
+  });
+
+  it('does not overwrite decisions already appended by a concurrent caller', async () => {
+    // Simulates the fresh-repo race: another caller already created
+    // decisions.md and appended an ADR. ensureTeamMemory's writeIfMissing
+    // (wx flag) must skip the existing file rather than clobber it.
+    const memoryDir = path.join(dir, '.mancode', 'memory');
+    await mkdir(memoryDir, { recursive: true });
+    const decisionsPath = path.join(memoryDir, 'decisions.md');
+    await writeFile(
+      decisionsPath,
+      '# Architecture Decisions\n\n## 2026-06-29: Existing ADR\n\n- Decision: pre-existing\n',
+      'utf-8',
+    );
+
+    await ensureTeamMemory(dir);
+
+    const decisions = await readFile(decisionsPath, 'utf-8');
+    expect(decisions).toContain('Existing ADR');
+    expect(decisions).toContain('pre-existing');
+    // Template body must not overwrite the existing content
+    expect(decisions).not.toContain(
+      'Record team decisions as dated ADR-style notes',
+    );
+  });
+
+  it('preserves all decisions across 50 concurrent appends on a fresh repo', async () => {
+    // Higher concurrency increases scheduling interleaving probability,
+    // providing stronger (though not strictly deterministic) coverage
+    // than the 10-append test above.
+    const count = 50;
+    await Promise.all(
+      Array.from({ length: count }, (_, index) =>
+        appendTeamDecision(dir, {
+          title: `Decision ${index}`,
+          decision: `Content ${index}`,
+          date: new Date('2026-06-29T00:00:00.000Z'),
+        }),
+      ),
+    );
+
+    const decisions = await readFile(
+      path.join(dir, '.mancode', 'memory', 'decisions.md'),
+      'utf-8',
+    );
+    for (let index = 0; index < count; index++) {
+      expect(decisions).toContain(`Decision ${index}`);
+      expect(decisions).toContain(`Content ${index}`);
+    }
+  });
 });

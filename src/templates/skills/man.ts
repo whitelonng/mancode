@@ -1,4 +1,5 @@
 import type { SkillSpec } from './index.js';
+import { CORE_CODING_PRINCIPLES } from './principles.js';
 
 /**
  * /man skill — Playoffs Mode（docs/03 §4 + docs/14）。
@@ -157,13 +158,7 @@ metadata.json：\`currentStep: 8\`
 - diff 大时只贴 hunk 摘要，让 agent 自己用 Read 看完整 diff
 - 不要 dump 整个源文件到对话
 
-## 铁律（永不违反）
-
-1. **不做无关修改** — 只改 plan 范围内的
-2. **先验证再声称完成** — build/lint/test 必须实际跑
-3. **失败两次必须停下** — 不盲试
-4. **不可逆操作先问** — 删除、force push、worktree 合并
-5. **只解决被问到的问题** — 不加推测性功能
+${CORE_CODING_PRINCIPLES}
 
 收到 \`/man\` 触发后立即开始 Step 1。`,
 };

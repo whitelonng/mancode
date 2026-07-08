@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0",
   "description": "AI coding agent workflow harness. Five modes from practice to playoffs: stop over-engineering, reuse project context, and add multi-agent code review.",
   "homepage": "https://github.com/whitelonng/mancode",
   "license": "AGPL-3.0-only",

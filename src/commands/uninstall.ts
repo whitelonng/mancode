@@ -165,14 +165,17 @@ async function cleanClaudeSettings(rootDir: string): Promise<void> {
       cleanedHooks[event] = groups;
       continue;
     }
-    const filtered = groups.filter((group) => {
-      if (!isRecord(group) || !Array.isArray(group.hooks)) return true;
-      return !group.hooks.some(
+    const filtered = groups.flatMap((group) => {
+      if (!isRecord(group) || !Array.isArray(group.hooks)) return [group];
+      const hooks = group.hooks.filter(
         (hook) =>
-          isRecord(hook) &&
-          typeof hook.command === 'string' &&
-          hook.command.includes('.mancode/hooks/'),
+          !(
+            isRecord(hook) &&
+            typeof hook.command === 'string' &&
+            hook.command.includes('.mancode/hooks/')
+          ),
       );
+      return hooks.length > 0 ? [{ ...group, hooks }] : [];
     });
     if (filtered.length > 0) {
       cleanedHooks[event] = filtered;

@@ -132,10 +132,16 @@ function renderAesthetics(tokens: StyleTokensOnDisk | null): string {
 }
 
 function renderModes(options: SharedContentOptions): string {
-  const commandLabel =
-    options.capabilities.slashCommands === 'native'
-      ? 'Use the named commands directly when available.'
-      : 'Treat these as prompt conventions when native commands are unavailable.';
+  let commandLabel: string;
+  if (options.capabilities.skills === 'agents-skills') {
+    commandLabel =
+      'Invoke mode skills with `$man8`, `$man`, `$manteam`, `$manps`, `$mansolo`.';
+  } else if (options.capabilities.slashCommands === 'native') {
+    commandLabel = 'Use the named commands directly when available.';
+  } else {
+    commandLabel =
+      'Treat these as prompt conventions when native commands are unavailable.';
+  }
 
   return [
     '## mancode Modes',

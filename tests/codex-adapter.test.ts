@@ -109,6 +109,56 @@ describe('Codex adapter', () => {
       ),
     ).rejects.toThrow();
   });
+
+  it('minimal force install removes existing skills', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+    // Verify skills exist before minimal
+    await readFile(
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+      'utf-8',
+    );
+
+    await install(dir, 'codex', { force: true, minimal: true });
+
+    await expect(
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('SKILL.md files use $ prefix for mode invocation', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const man8 = await readFile(
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(man8).toContain('$man8');
+  });
+
+  it('mansolo SKILL.md maps state to solo not mansolo', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const mansolo = await readFile(
+      path.join(dir, '.agents', 'skills', 'mansolo', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(mansolo).toContain('"solo"');
+    expect(mansolo).not.toContain('"mansolo"');
+  });
+
+  it('AGENTS.md includes $man8 invocation guidance for agents-skills', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
+    expect(agents).toContain('$man8');
+  });
 });
 
 async function silentInit(dir: string): Promise<void> {

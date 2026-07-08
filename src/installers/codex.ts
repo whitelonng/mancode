@@ -6,7 +6,7 @@ import {
   DEFAULT_MANCODE_START_MARKER,
   replaceManagedBlock,
 } from './managed-block.js';
-import { installCodexSkills, removeCodexSkills } from './mode-skills.js';
+import { installCodexSkills } from './mode-skills.js';
 import type { InstallAdapterOptions } from './registry.js';
 import { generateSharedContent } from './shared-content.js';
 

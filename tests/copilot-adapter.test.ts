@@ -109,9 +109,58 @@ describe('GitHub Copilot adapter', () => {
         path.join(dir, '.github', 'prompts', `${mode}.prompt.md`),
         'utf-8',
       );
+      expect(prompt).toMatch(/^---\nagent: 'agent'\ndescription: /);
       expect(prompt).toContain('Mode Persistence');
       expect(prompt).toContain('YAGNI ladder');
     }
+  });
+
+  it('minimal force install removes existing prompts', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+    // Verify prompts exist before minimal
+    await readFile(
+      path.join(dir, '.github', 'prompts', 'man8.prompt.md'),
+      'utf-8',
+    );
+
+    await install(dir, 'copilot', { force: true, minimal: true });
+
+    await expect(
+      readFile(path.join(dir, '.github', 'prompts', 'man8.prompt.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('instructions include mansolo in prompt conventions', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+
+    const instructions = await readInstructions();
+    expect(instructions).toContain('mansolo');
+  });
+
+  it('prompt files do not use $ or / prefix', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+
+    const man8 = await readFile(
+      path.join(dir, '.github', 'prompts', 'man8.prompt.md'),
+      'utf-8',
+    );
+    expect(man8).not.toContain('$man8');
+    expect(man8).not.toContain('/man8');
+  });
+
+  it('mansolo prompt maps state to solo not mansolo', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+
+    const mansolo = await readFile(
+      path.join(dir, '.github', 'prompts', 'mansolo.prompt.md'),
+      'utf-8',
+    );
+    expect(mansolo).toContain('"solo"');
+    expect(mansolo).not.toContain('"mansolo"');
   });
 
   async function readInstructions(): Promise<string> {

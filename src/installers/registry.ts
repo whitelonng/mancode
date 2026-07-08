@@ -9,13 +9,16 @@ export interface PlatformCapabilities {
   slashCommands: 'native' | 'partial' | 'none';
   subagents: boolean;
   hooks: boolean;
-  skills: 'native' | 'rules' | 'single-file' | 'instructions';
+  skills: 'native' | 'rules' | 'single-file' | 'instructions' | 'agents-skills';
 }
 
 export interface InstallAdapterOptions {
   techStack: string[];
   uiLibrary: string | null;
   minimal?: boolean;
+  /** --force: explicit reinstall request. When false (auto-repair), adapters should
+   *  avoid overwriting user-customized files — only repair missing ones. */
+  force?: boolean;
 }
 
 export interface PlatformInstaller {
@@ -55,7 +58,7 @@ export const PLATFORM_INSTALLERS: Record<PlatformName, PlatformInstaller> = {
       slashCommands: 'partial',
       subagents: false,
       hooks: false,
-      skills: 'single-file',
+      skills: 'agents-skills',
     },
     install: installCodex,
   },

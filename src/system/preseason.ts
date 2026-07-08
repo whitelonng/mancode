@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import type { Stats } from 'node:fs';
@@ -19,6 +20,7 @@ export type PreseasonIssueType =
   | 'tests'
   | 'config'
   | 'aesthetics'
+  | 'architecture'
   | 'security';
 
 export interface PreseasonIssue {
@@ -116,6 +118,21 @@ interface PackageJson {
   devDependencies?: Record<string, string>;
 }
 
+type MaybePromise<T> = T | Promise<T>;
+
+interface ScanContext {
+  projectRoot: string;
+  area: PreseasonArea;
+  pkg: PackageJson | null;
+  files: string[];
+}
+
+interface PreseasonScanner {
+  name: string;
+  areas: PreseasonArea[];
+  scan(ctx: ScanContext): MaybePromise<PreseasonIssue[]>;
+}
+
 const IGNORE_DIRS = new Set([
   '.git',
   '.mancode',
@@ -138,6 +155,51 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 const MAX_SCAN_DEPTH = 20;
 const MAX_PROJECT_FILES = 5000;
+const DEPCRUISE_TIMEOUT_MS = 15_000;
+const DEPCRUISE_MAX_BUFFER = 4 * 1024 * 1024;
+
+const SCANNERS: PreseasonScanner[] = [
+  {
+    name: 'scripts',
+    areas: ['all', 'config'],
+    scan: ({ pkg }) => scanScripts(pkg),
+  },
+  {
+    name: 'dependency-overlap',
+    areas: ['all', 'deps'],
+    scan: ({ pkg }) => scanDependencyOverlap(pkg),
+  },
+  {
+    name: 'security',
+    areas: ['all', 'security'],
+    scan: ({ pkg }) => scanSecurity(pkg),
+  },
+  {
+    name: 'todos',
+    areas: ['all', 'dead-code'],
+    scan: ({ projectRoot, files }) => scanTodos(projectRoot, files),
+  },
+  {
+    name: 'test-gaps',
+    areas: ['all', 'dead-code'],
+    scan: ({ files }) => scanTestGaps(files),
+  },
+  {
+    name: 'config',
+    areas: ['all', 'config'],
+    scan: ({ projectRoot, files }) => scanConfig(projectRoot, files),
+  },
+  {
+    name: 'aesthetic-drift',
+    areas: ['all'],
+    scan: ({ projectRoot, files }) => scanAestheticDrift(projectRoot, files),
+  },
+  {
+    name: 'architecture',
+    areas: ['all'],
+    scan: ({ projectRoot }) => scanArchitecture(projectRoot),
+  },
+];
 
 export async function runPreseasonScan(
   projectRoot: string,
@@ -151,7 +213,9 @@ export async function runPreseasonScan(
     normalizedArea === 'dead-code' ||
     normalizedArea === 'config';
   const files = needsFiles ? await listProjectFiles(projectRoot) : [];
-  const issues = scanArea(projectRoot, normalizedArea, pkg, files).slice(0, 20);
+  const issues = (
+    await scanArea(projectRoot, normalizedArea, pkg, files)
+  ).slice(0, 20);
 
   const reportDir = path.join(projectRoot, '.mancode', 'preseason-reports');
   await mkdir(reportDir, { recursive: true });
@@ -306,32 +370,16 @@ function normalizeArea(area: string): PreseasonArea {
   );
 }
 
-function scanArea(
+async function scanArea(
   projectRoot: string,
   area: PreseasonArea,
   pkg: PackageJson | null,
   files: string[],
-): PreseasonIssue[] {
-  switch (area) {
-    case 'deps':
-      return scanDependencyOverlap(pkg);
-    case 'security':
-      return scanSecurity(pkg);
-    case 'dead-code':
-      return [...scanTodos(projectRoot, files), ...scanTestGaps(files)];
-    case 'config':
-      return [...scanScripts(pkg), ...scanConfig(projectRoot, files)];
-    case 'all':
-      return [
-        ...scanScripts(pkg),
-        ...scanDependencyOverlap(pkg),
-        ...scanSecurity(pkg),
-        ...scanTodos(projectRoot, files),
-        ...scanTestGaps(files),
-        ...scanConfig(projectRoot, files),
-        ...scanAestheticDrift(projectRoot, files),
-      ];
-  }
+): Promise<PreseasonIssue[]> {
+  const ctx: ScanContext = { projectRoot, area, pkg, files };
+  const active = SCANNERS.filter((scanner) => scanner.areas.includes(area));
+  const chunks = await Promise.all(active.map((scanner) => scanner.scan(ctx)));
+  return chunks.flat();
 }
 
 async function allocateReportPath(
@@ -668,6 +716,203 @@ function scanAestheticDrift(
   return issues;
 }
 
+async function scanArchitecture(
+  projectRoot: string,
+): Promise<PreseasonIssue[]> {
+  const localBinary = path.join(
+    projectRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'depcruise.cmd' : 'depcruise',
+  );
+  const binary = pathExistsSync(localBinary) ? localBinary : 'depcruise';
+  const result = await runDepcruise(binary, projectRoot);
+
+  if (result.status === 'not-found') {
+    return [
+      {
+        id: 'architecture-scanner-unavailable',
+        severity: 'P2',
+        type: 'architecture',
+        title: 'Architecture scanner not installed',
+        detail:
+          'dependency-cruiser was not found in node_modules/.bin or on PATH. Architecture dependency rules cannot be checked.',
+        recommendation:
+          'Install dependency-cruiser (npm i -D dependency-cruiser) and add a .dependency-cruiser config to enable architecture scanning.',
+      },
+    ];
+  }
+
+  const parsed = parseDepcruiseJson(result.stdout);
+  if (!parsed) {
+    return [
+      {
+        id: 'architecture-scan-skipped',
+        severity: 'P2',
+        type: 'architecture',
+        title: 'Architecture scan skipped',
+        detail: summarizeProcessFailure(result),
+        recommendation:
+          'Check the dependency-cruiser configuration or run depcruise manually to inspect the failure.',
+      },
+    ];
+  }
+
+  const violations = extractDepcruiseViolations(parsed);
+  if (violations.length === 0) return [];
+
+  return violations.slice(0, 5).map((violation, index) => ({
+    id: `architecture-${index + 1}`,
+    severity: depcruiseSeverityToPreseason(violation.severity),
+    type: 'architecture',
+    title: `Architecture rule violation: ${violation.ruleName}`,
+    file: violation.from,
+    detail: `${violation.from}${violation.to ? ` -> ${violation.to}` : ''}${violation.comment ? `: ${violation.comment}` : ''}`,
+    recommendation:
+      'Respect the configured dependency boundary or update the dependency-cruiser rule if the architecture decision changed.',
+  }));
+}
+
+interface DepcruiseResult {
+  status: 'ok' | 'failed' | 'not-found';
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  timedOut: boolean;
+}
+
+interface ArchitectureViolation {
+  ruleName: string;
+  severity: string;
+  from: string;
+  to?: string;
+  comment?: string;
+}
+
+function runDepcruise(
+  binary: string,
+  projectRoot: string,
+): Promise<DepcruiseResult> {
+  return new Promise((resolve) => {
+    // Windows .bat/.cmd files cannot be launched via execFile without a shell.
+    // Node.js docs: "spawn() with shell: true ... or invoking cmd.exe" is required.
+    // npm-installed bins on Windows are almost always .cmd shims, whether local
+    // (node_modules/.bin/depcruise.cmd) or global (depcruise → depcruise.cmd on PATH).
+    // Args are fixed (no user input), so shell: true introduces no injection risk.
+    const needsShell = process.platform === 'win32';
+    execFile(
+      binary,
+      ['--output-type', 'json', '.'],
+      {
+        cwd: projectRoot,
+        timeout: DEPCRUISE_TIMEOUT_MS,
+        maxBuffer: DEPCRUISE_MAX_BUFFER,
+        shell: needsShell,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve({
+            status: 'ok',
+            stdout,
+            stderr,
+            exitCode: 0,
+            timedOut: false,
+          });
+          return;
+        }
+
+        const nodeError = error as NodeJS.ErrnoException & {
+          stdout?: string;
+          stderr?: string;
+          code?: string | number;
+          killed?: boolean;
+          signal?: NodeJS.Signals;
+        };
+        if (nodeError.code === 'ENOENT') {
+          resolve({
+            status: 'not-found',
+            stdout: '',
+            stderr: '',
+            exitCode: null,
+            timedOut: false,
+          });
+          return;
+        }
+
+        resolve({
+          status: 'failed',
+          stdout: nodeError.stdout ?? stdout,
+          stderr: nodeError.stderr ?? stderr,
+          exitCode: typeof nodeError.code === 'number' ? nodeError.code : null,
+          timedOut: Boolean(nodeError.killed || nodeError.signal === 'SIGTERM'),
+        });
+      },
+    );
+  });
+}
+
+function parseDepcruiseJson(output: string): unknown | null {
+  if (!output.trim()) return null;
+  try {
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
+}
+
+function extractDepcruiseViolations(value: unknown): ArchitectureViolation[] {
+  if (!isRecord(value)) return [];
+  const rawViolations = Array.isArray(value.violations)
+    ? value.violations
+    : isRecord(value.summary) && Array.isArray(value.summary.violations)
+      ? value.summary.violations
+      : [];
+
+  return rawViolations
+    .map((violation) => normalizeDepcruiseViolation(violation))
+    .filter(
+      (violation): violation is ArchitectureViolation => violation !== null,
+    );
+}
+
+function normalizeDepcruiseViolation(
+  value: unknown,
+): ArchitectureViolation | null {
+  if (!isRecord(value)) return null;
+  const rule = isRecord(value.rule) ? value.rule : {};
+  const from = typeof value.from === 'string' ? value.from : '';
+  const to = typeof value.to === 'string' ? value.to : undefined;
+  const ruleName =
+    typeof rule.name === 'string'
+      ? rule.name
+      : typeof value.name === 'string'
+        ? value.name
+        : 'unnamed-rule';
+  const severity =
+    typeof rule.severity === 'string'
+      ? rule.severity
+      : typeof value.severity === 'string'
+        ? value.severity
+        : 'warn';
+  const comment = typeof value.comment === 'string' ? value.comment : undefined;
+
+  if (!from) return null;
+  return { ruleName, severity, from, to, comment };
+}
+
+function depcruiseSeverityToPreseason(severity: string): PreseasonSeverity {
+  return severity.toLowerCase() === 'error' ? 'P1' : 'P2';
+}
+
+function summarizeProcessFailure(result: DepcruiseResult): string {
+  if (result.timedOut) {
+    return `dependency-cruiser timed out after ${DEPCRUISE_TIMEOUT_MS}ms.`;
+  }
+  const output = `${result.stderr || result.stdout}`.trim();
+  const summary = output.length > 0 ? output.slice(0, 240) : 'No output.';
+  return `dependency-cruiser exited with ${result.exitCode ?? 'unknown'}: ${summary}`;
+}
+
 function containsHardcodedColor(content: string): boolean {
   return content
     .split('\n')
@@ -1000,4 +1245,8 @@ function pathExistsSync(file: string): boolean {
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && 'code' in err;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

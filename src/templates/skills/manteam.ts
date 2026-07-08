@@ -1,4 +1,5 @@
 import type { SkillSpec } from './index.js';
+import { CORE_CODING_PRINCIPLES } from './principles.js';
 
 /**
  * /manteam skill — Team Game（README MVP-2）。
@@ -27,7 +28,6 @@ export const MANTEAM_SKILL: SkillSpec = {
    - \`.mancode/memory/spec.md\`
    - \`.mancode/memory/decisions.md\`
    - \`.mancode/team/commit-template.txt\`
-   - \`.mancode/team/commit-msg.sh\`（仅当团队启用 \`mancode install claude-code --commit-hook\`）
    - \`.github/PULL_REQUEST_TEMPLATE.md\`
 2. 如果 memory 文件不存在，先创建上述 3 个文件，使用简短标题和空模板，不要覆盖已有内容。
 3. 收集团队上下文：
@@ -89,16 +89,16 @@ export const MANTEAM_SKILL: SkillSpec = {
    - workflow: <taskId>
    - validation: <commands>
    \`\`\`
-4. 如果团队需要强制 commit 规范，提醒可运行 \`mancode install claude-code --commit-hook\` 安装可选 Git hook；不要覆盖已有自定义 hook。
+4. 如果团队需要强制 commit 规范，建议在项目层面配置 Git hooks（如 husky 或 native git hooks）；不要覆盖已有自定义 hook。
 5. 如果用户要开 PR，参考 \`.github/PULL_REQUEST_TEMPLATE.md\` 输出 PR 描述。
 
-## 铁律
+${CORE_CODING_PRINCIPLES}
 
-1. 不覆盖未确认的用户/队友改动
-2. 不改 plan 外文件
-3. 共享接口变更必须写兼容性说明
-4. 失败两次停下诊断
-5. 不自动 commit / merge / push
+## 团队扩展纪律
+
+1. **不覆盖未确认的用户/队友改动** — 改动前后都检查工作区状态
+2. **共享接口变更必须写兼容性说明** — 包含迁移、回滚和调用方影响
+3. **不自动 commit / merge / push** — 除非用户明确要求
 
 收到 \`/manteam\` 触发后立即开始 Step 0。`,
 };

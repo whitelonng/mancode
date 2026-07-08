@@ -69,5 +69,8 @@ function renderCopilotPromptConventions(): string {
     '- man: use a careful plan, implementation, verification, and review loop.',
     '- manteam: read team memory and write handoff-friendly summaries.',
     '- manps: prefer `mancode manps [area]` before cleanup.',
+    '- mansolo: exit any active mode and return to default solo behavior.',
+    '',
+    'These correspond to prompt files in `.github/prompts/`. Select the matching prompt to activate a mode.',
   ].join('\n');
 }

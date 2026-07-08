@@ -20,19 +20,30 @@ export type ModeName = (typeof MODE_NAMES)[number];
  * and Copilot (.github/prompts/). The content is platform-agnostic —
  * it assumes no subagents, no hooks, and instructs the AI to simulate
  * the coaching staff in sequence within a single conversation.
+ *
+ * @param commandPrefix Platform-specific invocation prefix:
+ *   - Codex uses `$` (e.g. `$man8`)
+ *   - Cursor uses `/` (e.g. `/man8`)
+ *   - Copilot uses `''` (prompt-file selection, no prefix)
  */
-export function renderModeSkill(mode: ModeName): string {
+export function renderModeSkill(
+  mode: ModeName,
+  commandPrefix: '$' | '/' | '' = '$',
+): string {
   const meta = MODE_META[mode];
+  // mansolo maps to "solo" in state.json — "mansolo" is not a valid currentMode value.
+  const stateMode = mode === 'mansolo' ? 'solo' : mode;
+  const modesList = MODE_NAMES.map((m) => `${commandPrefix}${m}`).join(', ');
   return [
     meta.intro,
     '',
     '## Mode Persistence',
     '',
     'Continue following these instructions for ALL subsequent tasks in this',
-    'conversation until the user switches modes ($man8, $man, $manteam, $manps, $mansolo).',
+    `conversation until the user switches modes (${modesList}).`,
     '',
     'When entering this mode, update `.mancode/state.json` and set',
-    `"currentMode" to "${mode}" so the mode persists across session restarts.`,
+    `"currentMode" to "${stateMode}" so the mode persists across session restarts.`,
     'If unsure whether a mode is active, read `.mancode/state.json` to verify.',
     '',
     '## Practice',
@@ -78,7 +89,7 @@ export async function installCodexSkills(
       `description: ${JSON.stringify(meta.description)}`,
       '---',
       '',
-      renderModeSkill(mode),
+      renderModeSkill(mode, '$'),
       '',
     ].join('\n');
     await writeFile(path.join(modeDir, 'SKILL.md'), content, 'utf-8');
@@ -105,7 +116,7 @@ export async function installCursorCommands(
       `description: ${JSON.stringify(meta.description)}`,
       '---',
       '',
-      renderModeSkill(mode),
+      renderModeSkill(mode, '/'),
       '',
     ].join('\n');
     await writeFile(path.join(commandsDir, `${mode}.md`), content, 'utf-8');
@@ -129,10 +140,11 @@ export async function installCopilotPrompts(
     const meta = MODE_META[mode];
     const content = [
       '---',
+      "agent: 'agent'",
       `description: ${JSON.stringify(meta.description)}`,
       '---',
       '',
-      renderModeSkill(mode),
+      renderModeSkill(mode, ''),
       '',
     ].join('\n');
     await writeFile(

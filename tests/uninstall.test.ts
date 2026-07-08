@@ -91,6 +91,60 @@ describe('mancode uninstall', () => {
     ).rejects.toThrow();
   });
 
+  it('removes Cursor .cursor/commands/ on uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+
+    const code = await uninstall(dir, 'cursor', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    await expect(
+      readFile(path.join(dir, '.cursor', 'commands', 'man8.md'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(dir, '.cursor', 'commands', 'mansolo.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('removes Codex .agents/skills/ on uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const code = await uninstall(dir, 'codex', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    await expect(
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+    await expect(
+      readFile(
+        path.join(dir, '.agents', 'skills', 'mansolo', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('removes Copilot .github/prompts/ on uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+
+    const code = await uninstall(dir, 'copilot', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    await expect(
+      readFile(path.join(dir, '.github', 'prompts', 'man8.prompt.md'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(
+        path.join(dir, '.github', 'prompts', 'mansolo.prompt.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+  });
+
   it('removes Copilot managed block while preserving user instructions', async () => {
     await silentInit(dir);
     await install(dir, 'copilot');
@@ -150,6 +204,54 @@ describe('mancode uninstall', () => {
         }
       }
     }
+  });
+
+  it('removes only mancode hooks from mixed Claude Code matcher groups', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            UserPromptSubmit: [
+              {
+                matcher: '*',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: 'bash .mancode/hooks/user-prompt-submit.sh',
+                  },
+                  {
+                    type: 'command',
+                    command: 'echo user hook',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+    expect(settings.hooks.UserPromptSubmit).toEqual([
+      {
+        matcher: '*',
+        hooks: [
+          {
+            type: 'command',
+            command: 'echo user hook',
+          },
+        ],
+      },
+    ]);
   });
 
   it('updates config.json platforms after single platform uninstall', async () => {

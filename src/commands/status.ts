@@ -14,6 +14,8 @@ import { detectTeamStatus } from '../system/detect-team.js';
 import { type WorkflowMode, readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
+const HOOK_ESTIMATE_TIMEOUT_MS = 2000;
+
 /**
  * 退出码契约 — 见 docs/08-cli-spec.md §4
  */
@@ -392,16 +394,29 @@ function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
       cwd: rootDir,
       stdio: ['pipe', 'pipe', 'ignore'],
     });
+    let settled = false;
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn();
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish(() => reject(new Error('hook estimate timed out')));
+    }, HOOK_ESTIMATE_TIMEOUT_MS);
 
     let stdout = '';
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
     });
-    child.on('error', reject);
+    child.on('error', (err) => finish(() => reject(err)));
     child.on('close', (code) => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(`hook exited with ${code}`));
+      finish(() => {
+        if (code === 0) resolve(stdout);
+        else reject(new Error(`hook exited with ${code}`));
+      });
     });
     child.stdin.end(
       JSON.stringify({ prompt: 'design a button component with tailwind css' }),

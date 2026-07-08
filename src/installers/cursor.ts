@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installMancodeCore } from './common.js';
-import { installCursorCommands, removeCursorCommands } from './mode-skills.js';
+import { installCursorCommands, renderModeSkill } from './mode-skills.js';
 import type { InstallAdapterOptions } from './registry.js';
 import { generateSharedContent } from './shared-content.js';
 
@@ -72,6 +72,7 @@ export async function installCursor(
 
   if (options.minimal) {
     await removeAdvancedRules(rulesDir);
+    await installCursorCommands(projectRoot, true);
     return;
   }
 
@@ -166,58 +167,17 @@ function renderSoloRule(): string {
 }
 
 function renderMan8Rule(): string {
-  return [
-    '# mancode man8',
-    '',
-    'Use this when the user asks for /man8, planning, investigation, architecture, migration, integration, or risk assessment.',
-    '',
-    'Cursor does not provide isolated mancode subagents. Simulate the flow in sequence:',
-    '',
-    '1. Scout: inspect the relevant code and summarize constraints.',
-    '2. Head Coach: write a concrete implementation plan.',
-    '3. Stop for user approval when the user asked for planning only.',
-  ].join('\n');
+  return renderModeSkill('man8', '/');
 }
 
 function renderManRule(): string {
-  return [
-    '# mancode man',
-    '',
-    'Use this when the user asks for /man or a high-risk production change.',
-    '',
-    'Simulate the full workflow in one conversation:',
-    '',
-    '1. Scout investigates the codebase.',
-    '2. Head Coach proposes the plan.',
-    '3. Wait for approval when required.',
-    '4. Implement and self-test.',
-    '5. Film Analyst Offense reviews readability, DRY, and YAGNI.',
-    '6. Fix review findings.',
-    '7. Film Analyst Defense reviews auth, injection, concurrency, and resource risks.',
-    '8. Summarize verification and remaining risk.',
-  ].join('\n');
+  return renderModeSkill('man', '/');
 }
 
 function renderManteamRule(): string {
-  return [
-    '# mancode manteam',
-    '',
-    'Use this when the user asks for /manteam or when the task affects shared team context.',
-    '',
-    '- Read `.mancode/memory/prd.md`, `.mancode/memory/spec.md`, and `.mancode/memory/decisions.md` when relevant.',
-    '- Preserve decisions and leave handoff-friendly summaries.',
-    '- Prefer Conventional Commit style when suggesting commits.',
-  ].join('\n');
+  return renderModeSkill('manteam', '/');
 }
 
 function renderManpsRule(): string {
-  return [
-    '# mancode manps',
-    '',
-    'Use this when the user asks for /manps or project health cleanup.',
-    '',
-    '- Prefer `mancode manps [area]` before manual cleanup.',
-    '- Supported areas: all, deps, security, dead-code, config.',
-    '- Treat scan output as triage data; do not remediate without clear user approval.',
-  ].join('\n');
+  return renderModeSkill('manps', '/');
 }

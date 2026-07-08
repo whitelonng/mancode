@@ -294,6 +294,48 @@ describe('mancode status', () => {
     expect(result.platformStatus.codex.ready).toBe(false);
     expect(result.platformStatus.codex.detail).toContain('not recorded');
   });
+
+  it('does not treat managed block marker examples inside fenced code as ready', async () => {
+    await silentInit(dir, { platform: 'codex' });
+    await writeFile(
+      path.join(dir, 'AGENTS.md'),
+      [
+        '# User Guidance',
+        '',
+        '```html',
+        '<!-- mancode:start -->',
+        '<!-- mancode:end -->',
+        '```',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platformStatus.codex.installed).toBe(true);
+    expect(result.platformStatus.codex.ready).toBe(false);
+    expect(result.platformStatus.codex.detail).toContain('missing');
+  });
+
+  it('times out hook injection estimates instead of hanging status', async () => {
+    await silentInit(dir);
+    await writeFile(
+      path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
+      '#!/usr/bin/env bash\nsleep 5\n',
+      'utf-8',
+    );
+
+    const started = Date.now();
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const elapsedMs = Date.now() - started;
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(elapsedMs).toBeLessThan(4000);
+    expect(result.hookInjection.tokens).toBe(0);
+    expect(result.hookInjection.cap).toBe(800);
+  });
 });
 
 /**

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { SOLO_SKILL } from '../templates/inline.js';
@@ -27,27 +27,32 @@ export async function installClaudeCode(
     techStack: string[];
     uiLibrary: string | null;
     minimal?: boolean;
+    force?: boolean;
   },
 ): Promise<void> {
   const claudeDir = path.join(projectRoot, '.claude');
   const settings = await readClaudeSettings(claudeDir);
+  // When force is false (auto-repair), only write skills/agents that are
+  // missing — do not overwrite user-customized files.
+  const force = options.force ?? false;
 
   await installMancodeCore(projectRoot);
 
   // 1. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
+  // solo skill is core — always repair even without --force
   await installSoloSkill(path.join(claudeDir, 'skills'));
   if (options.minimal) {
     await uninstallMvp2Skills(path.join(claudeDir, 'skills'));
   } else {
-    await installMvp2Skills(path.join(claudeDir, 'skills'));
+    await installMvp2Skills(path.join(claudeDir, 'skills'), force);
   }
 
   // 2. 创建 .claude/agents/ 并写入教练组（MVP-2）
   if (options.minimal) {
     await uninstallAgents(path.join(claudeDir, 'agents'));
   } else {
-    await installAgents(path.join(claudeDir, 'agents'));
+    await installAgents(path.join(claudeDir, 'agents'), force);
   }
 
   // 3. 更新 .claude/settings.json（幂等合并）
@@ -68,10 +73,14 @@ async function installSoloSkill(skillsDir: string): Promise<void> {
  *
  * 目录：.claude/skills/<name>/SKILL.md（Claude Code 通过目录名识别命令）。
  * `--force` 重装时直接覆盖（内容随 mancode 版本演进）。
+ * auto-repair（force=false）时只写入缺失的 skill，不覆盖用户自定义。
  */
-async function installMvp2Skills(skillsDir: string): Promise<void> {
+async function installMvp2Skills(
+  skillsDir: string,
+  force: boolean,
+): Promise<void> {
   for (const skill of MVP2_SKILLS) {
-    await installProjectSkill(skillsDir, skill);
+    await installProjectSkill(skillsDir, skill, force);
     await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`);
   }
 }
@@ -89,10 +98,21 @@ async function uninstallMvp2Skills(skillsDir: string): Promise<void> {
 async function installProjectSkill(
   skillsDir: string,
   skill: { name: string; description: string; body: string },
+  force = true,
 ): Promise<void> {
   const skillDir = path.join(skillsDir, skill.name);
+  const skillPath = path.join(skillDir, 'SKILL.md');
+  if (!force) {
+    // auto-repair: skip if the skill already exists (may be user-customized)
+    try {
+      await access(skillPath);
+      return;
+    } catch {
+      // file missing — proceed to write
+    }
+  }
   await mkdir(skillDir, { recursive: true });
-  await writeFile(path.join(skillDir, 'SKILL.md'), renderSkill(skill), 'utf-8');
+  await writeFile(skillPath, renderSkill(skill), 'utf-8');
 }
 
 async function removeLegacyFlatSkill(
@@ -107,12 +127,23 @@ async function removeLegacyFlatSkill(
  *
  * 每个 agent 渲染为 .claude/agents/<name>.md（YAML frontmatter + body）。
  * `--force` 重装时直接覆盖（内容随 mancode 版本演进）。
+ * auto-repair（force=false）时只写入缺失的 agent，不覆盖用户自定义。
  */
-async function installAgents(agentsDir: string): Promise<void> {
+async function installAgents(agentsDir: string, force: boolean): Promise<void> {
   await mkdir(agentsDir, { recursive: true });
   for (const agent of ALL_AGENTS) {
+    const agentPath = path.join(agentsDir, `${agent.name}.md`);
+    if (!force) {
+      // auto-repair: skip if the agent already exists (may be user-customized)
+      try {
+        await access(agentPath);
+        continue;
+      } catch {
+        // file missing — proceed to write
+      }
+    }
     const content = renderAgent(agent);
-    await writeFile(path.join(agentsDir, `${agent.name}.md`), content, 'utf-8');
+    await writeFile(agentPath, content, 'utf-8');
   }
 }
 
@@ -229,22 +260,25 @@ function createCommandGroup(command: string): ClaudeMatcherGroup {
 
 function normalizeHookGroups(value: unknown): ClaudeMatcherGroup[] {
   if (Array.isArray(value)) {
-    return value.flatMap((entry) => {
-      const group = normalizeMatcherGroup(entry);
-      if (group) return [group];
-
-      const hook = normalizeHookItem(entry);
-      if (hook && !isMancodeHook(hook)) return [{ hooks: [hook] }];
-
-      return [];
-    });
+    return value.flatMap(normalizeHookGroupEntry);
   }
 
   if (isRecord(value)) {
-    return Object.values(value).flatMap((entry) => {
-      const group = normalizeMatcherGroup(entry);
-      return group ? [group] : [];
-    });
+    return Object.values(value).flatMap(normalizeHookGroupEntry);
+  }
+
+  return [];
+}
+
+function normalizeHookGroupEntry(entry: unknown): ClaudeMatcherGroup[] {
+  const group = normalizeMatcherGroup(entry);
+  if (group) return [group];
+
+  const hook = normalizeHookItem(entry);
+  if (hook && !isMancodeHook(hook)) return [{ hooks: [hook] }];
+
+  if (Array.isArray(entry)) {
+    return entry.flatMap(normalizeHookGroupEntry);
   }
 
   return [];

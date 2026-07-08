@@ -19,6 +19,16 @@ export function removeManagedBlock(
   return cleanUpOrphanedNewlines(merged);
 }
 
+export function hasManagedBlock(
+  existing: string,
+  startMarker = DEFAULT_MANCODE_START_MARKER,
+  endMarker = DEFAULT_MANCODE_END_MARKER,
+): boolean {
+  const start = findMarkerLine(existing, startMarker);
+  const end = findMarkerLine(existing, endMarker);
+  return start !== null && end !== null && end.start > start.start;
+}
+
 function cleanUpOrphanedNewlines(content: string): string {
   const trimmed = content.replace(/\n{3,}/gu, '\n\n').replace(/\n+$/u, '\n');
   return trimmed || '';

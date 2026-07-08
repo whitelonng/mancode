@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MANCODE_END_MARKER,
   DEFAULT_MANCODE_START_MARKER,
+  hasManagedBlock,
   replaceManagedBlock,
 } from '../src/installers/managed-block.js';
 
@@ -117,5 +118,34 @@ describe('replaceManagedBlock', () => {
     expect(replaceManagedBlock('prefix', 'body', '<start>', '<end>')).toBe(
       'prefix\n\n<start>\nbody\n<end>\n',
     );
+  });
+});
+
+describe('hasManagedBlock', () => {
+  it('ignores marker examples inside fenced code blocks', () => {
+    const existing = [
+      '# User Notes',
+      '',
+      '```html',
+      DEFAULT_MANCODE_START_MARKER,
+      DEFAULT_MANCODE_END_MARKER,
+      '```',
+      '',
+    ].join('\n');
+
+    expect(hasManagedBlock(existing)).toBe(false);
+  });
+
+  it('detects markers on their own lines outside fences', () => {
+    const existing = [
+      '# User Notes',
+      '',
+      DEFAULT_MANCODE_START_MARKER,
+      'managed',
+      DEFAULT_MANCODE_END_MARKER,
+      '',
+    ].join('\n');
+
+    expect(hasManagedBlock(existing)).toBe(true);
   });
 });

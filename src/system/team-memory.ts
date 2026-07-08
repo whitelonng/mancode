@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface TeamMemorySummary {
@@ -76,12 +76,7 @@ export async function appendTeamDecision(
   const taskLine = entry.taskId ? `\n- Task: ${entry.taskId}` : '';
   const contextLine = entry.context ? `\n- Context: ${entry.context}` : '';
   const block = `\n## ${date}: ${entry.title}\n\n- Decision: ${entry.decision}${contextLine}${taskLine}\n`;
-  const existing = await readFile(summary.files.decisions, 'utf-8');
-  await writeFile(
-    summary.files.decisions,
-    `${existing.trimEnd()}\n${block}`,
-    'utf-8',
-  );
+  await appendFile(summary.files.decisions, block, 'utf-8');
 }
 
 function memoryDir(projectRoot: string): string {
@@ -89,10 +84,16 @@ function memoryDir(projectRoot: string): string {
 }
 
 async function writeIfMissing(file: string, content: string): Promise<void> {
+  // Use O_CREAT | O_EXCL (flag 'wx') for atomic creation.
+  // This eliminates the TOCTOU race in the previous readFile-then-writeFile
+  // approach: two concurrent callers could both see the file as missing and
+  // both writeFile, with the later write clobbering content already appended
+  // by the earlier caller. With 'wx', the OS guarantees only one caller wins
+  // creation; the loser gets EEXIST and safely skips.
   try {
-    await readFile(file, 'utf-8');
-  } catch {
-    await writeFile(file, content, 'utf-8');
+    await writeFile(file, content, { flag: 'wx' });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
   }
 }
 

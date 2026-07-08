@@ -4,6 +4,7 @@ import { MANCODE_CURSOR_CORE_RULE_FILES } from './cursor.js';
 import {
   DEFAULT_MANCODE_END_MARKER,
   DEFAULT_MANCODE_START_MARKER,
+  hasManagedBlock,
 } from './managed-block.js';
 
 export interface PlatformStatus {
@@ -57,17 +58,62 @@ async function checkPlatformReadiness(
   }
 
   if (platform === 'codex') {
+    const hasBlock = await fileHasManagedBlock(path.join(rootDir, 'AGENTS.md'));
+    if (!hasBlock) {
+      return {
+        present: false,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block missing',
+      };
+    }
+    // If .agents/skills/ exists (non-minimal install), verify at least one mode skill.
+    // Minimal installs have no skills directory, so ready stays true.
+    const skillsDir = path.join(rootDir, '.agents', 'skills');
+    if (await pathExists(skillsDir)) {
+      const hasSkill = await pathExists(
+        path.join(skillsDir, 'man8', 'SKILL.md'),
+      );
+      return {
+        present: hasSkill,
+        target: 'AGENTS.md + .agents/skills/',
+        readyDetail: hasSkill
+          ? 'managed block and skills present'
+          : 'skills directory exists but man8 skill missing',
+      };
+    }
     return {
-      present: await fileHasManagedBlock(path.join(rootDir, 'AGENTS.md')),
+      present: true,
       target: 'AGENTS.md',
       readyDetail: 'managed block present',
     };
   }
 
+  // copilot
+  const hasBlock = await fileHasManagedBlock(
+    path.join(rootDir, '.github', 'copilot-instructions.md'),
+  );
+  if (!hasBlock) {
+    return {
+      present: false,
+      target: '.github/copilot-instructions.md',
+      readyDetail: 'managed block missing',
+    };
+  }
+  // If .github/prompts/ exists (non-minimal install), verify at least one prompt.
+  // Minimal installs have no prompts directory, so ready stays true.
+  const promptsDir = path.join(rootDir, '.github', 'prompts');
+  if (await pathExists(promptsDir)) {
+    const hasPrompt = await pathExists(path.join(promptsDir, 'man8.prompt.md'));
+    return {
+      present: hasPrompt,
+      target: '.github/copilot-instructions.md + .github/prompts/',
+      readyDetail: hasPrompt
+        ? 'managed block and prompts present'
+        : 'prompts directory exists but man8 prompt missing',
+    };
+  }
   return {
-    present: await fileHasManagedBlock(
-      path.join(rootDir, '.github', 'copilot-instructions.md'),
-    ),
+    present: true,
     target: '.github/copilot-instructions.md',
     readyDetail: 'managed block present',
   };
@@ -92,9 +138,10 @@ async function allPathsExist(paths: string[]): Promise<boolean> {
 async function fileHasManagedBlock(filePath: string): Promise<boolean> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return (
-      content.includes(DEFAULT_MANCODE_START_MARKER) &&
-      content.includes(DEFAULT_MANCODE_END_MARKER)
+    return hasManagedBlock(
+      content,
+      DEFAULT_MANCODE_START_MARKER,
+      DEFAULT_MANCODE_END_MARKER,
     );
   } catch {
     return false;

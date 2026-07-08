@@ -92,6 +92,135 @@ describe('mancode install', () => {
     expect(await readFile(customAgentPath, 'utf-8')).toBe('# custom agent\n');
   });
 
+  it('install --minimal switches an already-ready adapter without --force', async () => {
+    await silentInit(dir);
+
+    const code = await install(dir, 'claude-code', { minimal: true });
+
+    expect(code).toBe(EXIT_OK);
+    expect(
+      await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
+    ).toBe(true);
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'man8'))).toBe(
+      false,
+    );
+    expect(
+      await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
+    ).toBe(false);
+  });
+
+  it('preserves raw user hooks from legacy object-mapped settings', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: {
+              userLegacyHook: {
+                type: 'command',
+                command: 'echo user legacy hook',
+              },
+              oldMancodeHook: {
+                type: 'command',
+                command: 'bash .mancode/hooks/session-start.sh',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+    const commands = settings.hooks.SessionStart.flatMap(
+      (group: { hooks?: { command?: string }[] }) =>
+        group.hooks?.map((hook) => hook.command) ?? [],
+    );
+    expect(commands).toContain('echo user legacy hook');
+    expect(
+      commands.filter(
+        (command: string) => command === 'bash .mancode/hooks/session-start.sh',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('preserves raw user hook arrays from legacy object-mapped settings', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: {
+              legacyArray: [
+                {
+                  type: 'command',
+                  command: 'echo array user hook',
+                },
+                {
+                  type: 'command',
+                  command: 'bash .mancode/hooks/session-start.sh',
+                },
+              ],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+    const commands = settings.hooks.SessionStart.flatMap(
+      (group: { hooks?: { command?: string }[] }) =>
+        group.hooks?.map((hook) => hook.command) ?? [],
+    );
+    expect(commands).toContain('echo array user hook');
+    expect(
+      commands.filter(
+        (command: string) => command === 'bash .mancode/hooks/session-start.sh',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('auto-repair without --force preserves user-customized skills', async () => {
+    await silentInit(dir);
+
+    // User customizes a skill
+    const man8Path = path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md');
+    const customContent = '# Custom man8 skill\n\nUser customizations here.\n';
+    await writeFile(man8Path, customContent, 'utf-8');
+
+    // Break readiness by deleting settings.json
+    await rm(path.join(dir, '.claude', 'settings.json'), { force: true });
+
+    // Auto-repair without --force
+    const code = await install(dir, 'claude-code');
+    expect(code).toBe(EXIT_OK);
+
+    // settings.json should be restored (hooks registered)
+    const settings = JSON.parse(
+      await readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    );
+    expect(settings.hooks.SessionStart).toBeDefined();
+
+    // User-customized skill should be preserved (not overwritten)
+    const man8Content = await readFile(man8Path, 'utf-8');
+    expect(man8Content).toBe(customContent);
+  });
+
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
     await silentInit(dir);
     const code = await install(dir, 'claude-code');

@@ -1,5 +1,6 @@
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -144,6 +145,140 @@ describe('preseason scan', () => {
 
     expect(report.issues).toHaveLength(1);
     expect(report.issues[0]?.type).toBe('dependency');
+  });
+
+  it('reports dependency-cruiser architecture violations when depcruise is installed locally', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+    await mkdir(path.join(dir, 'node_modules', '.bin'), { recursive: true });
+    const depcruisePath = path.join(dir, 'node_modules', '.bin', 'depcruise');
+    await writeFile(
+      depcruisePath,
+      `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({
+  violations: [{
+    from: "src/ui/button.ts",
+    to: "src/system/config.ts",
+    rule: { name: "ui-not-to-system", severity: "error" },
+    comment: "UI must not depend on system modules"
+  }]
+}));
+`,
+      'utf-8',
+    );
+    await chmod(depcruisePath, 0o755);
+
+    const report = await runPreseasonScan(dir, 'all');
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'architecture-1',
+          severity: 'P1',
+          type: 'architecture',
+          title: 'Architecture rule violation: ui-not-to-system',
+          file: 'src/ui/button.ts',
+        }),
+      ]),
+    );
+  });
+
+  it('reports advisory when dependency-cruiser is not installed', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+    // No depcruise binary created locally or globally → not-found
+
+    const report = await runPreseasonScan(dir, 'all');
+
+    expect(
+      report.issues.some(
+        (issue) => issue.id === 'architecture-scanner-unavailable',
+      ),
+    ).toBe(true);
+  });
+
+  it('reports skipped when depcruise outputs non-JSON', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+    await mkdir(path.join(dir, 'node_modules', '.bin'), { recursive: true });
+    const depcruisePath = path.join(
+      dir,
+      'node_modules',
+      '.bin',
+      'depcruise',
+    );
+    await writeFile(
+      depcruisePath,
+      '#!/usr/bin/env node\nprocess.stdout.write("this is not valid json");\n',
+      'utf-8',
+    );
+    await chmod(depcruisePath, 0o755);
+
+    const report = await runPreseasonScan(dir, 'all');
+
+    expect(
+      report.issues.some((issue) => issue.id === 'architecture-scan-skipped'),
+    ).toBe(true);
+  });
+
+  it('parses violations even when depcruise exits non-zero', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+    await mkdir(path.join(dir, 'node_modules', '.bin'), { recursive: true });
+    const depcruisePath = path.join(
+      dir,
+      'node_modules',
+      '.bin',
+      'depcruise',
+    );
+    await writeFile(
+      depcruisePath,
+      `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({
+  violations: [{
+    from: "src/ui/button.ts",
+    to: "src/system/config.ts",
+    rule: { name: "ui-not-to-system", severity: "error" }
+  }]
+}));
+process.exit(1);
+`,
+      'utf-8',
+    );
+    await chmod(depcruisePath, 0o755);
+
+    const report = await runPreseasonScan(dir, 'all');
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'architecture-1',
+          severity: 'P1',
+          type: 'architecture',
+          title: 'Architecture rule violation: ui-not-to-system',
+        }),
+      ]),
+    );
   });
 
   it('does not overwrite reports generated on the same day for the same area', async () => {

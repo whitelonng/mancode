@@ -35,10 +35,6 @@ program
   .description('Install platform adapter (claude-code, cursor, codex, copilot)')
   .option('--force', 'Reinstall even if already installed')
   .option('--minimal', 'Minimal install (MVP-2)')
-  .option(
-    '--commit-hook',
-    'Install optional /manteam Conventional Commit enforcement hook',
-  )
   .action(async (platform, options) => {
     const code = await install(
       process.cwd(),
