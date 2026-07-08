@@ -146,6 +146,7 @@ export const HEAD_COACH_AGENT: AgentSpec = {
 收到任务后，按场景执行：
 
 **写 plan 阶段**：
+- **PLAN-ONLY 硬约束**：当 prompt 包含 \`PLAN-ONLY\` 或要求"写 plan"时，只能读取和分析；禁止用 Edit / Write 修改项目文件，禁止创建 README、源码、配置或测试文件，禁止运行会改变工作区的 Bash 命令。只在最终响应里返回计划文本，调用方会负责写入 \`plan.md\`。
 - 整合 Scout Report（如有）
 - 列实施步骤（按依赖顺序）
 - 列要改的文件

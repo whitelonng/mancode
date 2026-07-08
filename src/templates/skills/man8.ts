@@ -45,15 +45,10 @@ export const MAN8_SKILL: SkillSpec = {
 
 ### Step 1：Scout 调研
 
-1. 用 Bash 创建 workflow，不要手写 \`metadata.json\`。不要把用户 task 直接插进 shell 命令；用 here-doc 传入变量，再用双引号引用变量：
-   \`\`\`bash
-   TASK=$(cat <<'MANCODE_TASK'
-   <task>
-   MANCODE_TASK
-   )
-   mancode workflow create man8 "$TASK" --json
-   \`\`\`
-   从 JSON 输出的 \`taskId\` 字段取得 \`<taskId>\`。目录会由 CLI 创建在 \`.mancode/workflows/<taskId>/\`。
+1. 用 Write 工具创建 workflow 目录。task id 用 \`YYYYMMDD-HHMMSS-<slug>\` 格式（slug = task 的 kebab-case，截到 30 字符）：
+   - 必须先用 Bash 执行 \`date -u +"%Y%m%d-%H%M%S"\` 获取真实时间戳；不要凭空估算日期时间
+   - 目录：\`.mancode/workflows/<taskId>/\`
+   - 写入 \`metadata.json\`：\`{"taskId":"...","task":"...","mode":"man8","currentStep":1,"skippedSteps":[],"startedAt":"<ISO>","updatedAt":"<ISO>","status":"in_progress"}\`
 2. 用 Agent tool 调用 Scout：
    \`\`\`
    Agent({
@@ -64,20 +59,20 @@ export const MAN8_SKILL: SkillSpec = {
    \`\`\`
 3. 把 Scout 的输出用 Write 工具写入 \`.mancode/workflows/<taskId>/scout-report.md\`
 4. 用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "man8"\`, \`currentTask: "<taskId>"\`, \`currentWorkflowMode: "man8"\`
-5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 2\`
+5. 用 Edit 工具更新 metadata.json：\`currentStep: 2\`
 
-### Step 2：Head Coach 写 plan
+### Step 2：Plan Coach 写 plan
 
-1. 用 Agent tool 调用 Head Coach：
+1. 用 Agent tool 调用 Plan Coach（只读 plan 模式）：
    \`\`\`
    Agent({
-     description: "Head Coach: write plan for <task>",
-     subagent_type: "head-coach",
-     prompt: "任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n写 plan。"
+     description: "Plan Coach: write plan for <task>",
+     subagent_type: "plan-coach",
+     prompt: "任务：<task>\\nScout Report（来自 .mancode/workflows/<taskId>/scout-report.md）：\\n<把 scout-report.md 内容贴进来>\\n\\n只返回 plan markdown，不要修改项目文件。"
    })
    \`\`\`
-2. 把 Head Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
-3. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --step 3\`
+2. 把 Plan Coach 输出写入 \`.mancode/workflows/<taskId>/plan.md\`
+3. 更新 metadata.json：\`currentStep: 3\`
 
 ### Step 3：用户确认
 
@@ -90,7 +85,7 @@ AskUserQuestion({
     header: "Next step",
     options: [
       { label: "切 solo 实施 (Recommended)", description: "切回 solo 模式，按 plan 直接开发" },
-      { label: "修改 plan", description: "重新跑 Step 2（Head Coach 重写 plan）" },
+      { label: "修改 plan", description: "重新跑 Step 2（Plan Coach 重写 plan）" },
       { label: "退出，保留 plan", description: "结束 /man8，plan 保留在 .mancode/workflows/ 供日后参考" }
     ],
     multiSelect: false
@@ -105,27 +100,28 @@ AskUserQuestion({
   2. 读取 \`.mancode/workflows/<taskId>/plan.md\`
   3. 用当前 assistant（solo 模式）立即按 plan 实施；不要再次要求用户输入"开始实施"
   4. 实施完成后运行 plan 里列出的验证命令；如没有验证命令，至少用只读检查确认目标文件内容
-  5. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --status completed --step 3\`
+  5. 用 Edit 更新 metadata.json：\`status: "completed"\`, \`currentStep: 3\`
   6. 最终告诉用户：改了哪些文件、验证结果、plan 路径
 
 - **修改 plan**：
   1. 询问用户希望调整什么
-  2. 重新跑 Step 2（Head Coach 重写 plan，可附用户的修改意见）
+  2. 重新跑 Step 2（Plan Coach 重写 plan，可附用户的修改意见）
 
 - **退出**：
-  1. 用 Bash 更新 workflow：\`mancode workflow update <taskId> --status completed --step 3\`
-  2. 告诉用户："plan 保留在 \`.mancode/workflows/<taskId>/plan.md\`，需要时再叫我。"
+  1. 更新 metadata.json：\`status: "completed"\`
+  2. 用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "man8"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`
+  3. 告诉用户："plan 保留在 \`.mancode/workflows/<taskId>/plan.md\`，需要时再叫我。"
 
 ## 上下文预算
 
 - Scout 的 prompt ≤ 200 tokens
-- Head Coach 的 prompt 把 scout-report.md 全部贴进去（plan 阶段值得）
+- Plan Coach 的 prompt 把 scout-report.md 全部贴进去（plan 阶段值得）
 - 不要 dump 大量代码到对话；让 agent 自己用 Read 读
 
 ## 失败处理
 
 - Agent 调用失败：报告错误，不重试 2 次以上（铁律 1.3）
-- \`mancode workflow create/update\` 失败：停下来诊断，不伪造状态
+- metadata.json 写入失败：停下来诊断，不伪造状态
 
 收到 \`/man8\` 或自动触发后立即开始 Step 1，不要等用户确认。`,
 };

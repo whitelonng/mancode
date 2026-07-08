@@ -3,11 +3,11 @@ import type { Stats } from 'node:fs';
 import path from 'node:path';
 
 /**
- * 审美扫描结果（MVP-1 范围）。
+ * 审美扫描结果。
  *
  * 结构对齐 docs/06-aesthetics.md §9.3 和 docs/13-scanning.md §8.2。
- * MVP-1 只提取 Tailwind colors/fonts + darkMode + uiLibrary。
- * MVP-2 会加 components / cssVariables。
+ * MVP-2 beta 提取 Tailwind colors/fonts、darkMode、uiLibrary、
+ * 常见组件名和 CSS custom properties。
  */
 export interface AestheticsTokens {
   version: string;
@@ -26,17 +26,15 @@ const MAX_COMPONENT_SCAN_DEPTH = 12;
 const MAX_COMPONENT_FILES = 2000;
 
 /**
- * 扫描项目审美 token（MVP-1）。
+ * 扫描项目审美 token。
  *
  * 职责（docs/13-scanning.md §4 + docs/06-aesthetics.md §3）：
  * 1. 检测 tailwind.config.{js,ts,cjs,mjs}，提取 colors 和 fontFamily
  * 2. 检测 darkMode 策略
  * 3. matchLevel: 有 tailwind config → high，有 tailwind 依赖但无 config → low，都没有 → none
  *
- * MVP-1 不做（推迟到 MVP-2）：
- * - shadcn/ui CSS 变量提取（docs/13-scanning.md §4.2）
- * - 组件扫描（docs/13-scanning.md §5）
- * - theme.json / tokens.json 等
+ * MVP-2 beta 仍不做：
+ * - theme.json / tokens.json 等非 Tailwind token 文件
  *
  * @param projectRoot 项目根目录
  * @param uiLibrary 已检测到的 UI 库（从 detectProjectType 传入，避免重复检测）

@@ -383,6 +383,351 @@ describe('preseason scan', () => {
       readFile(path.join(dir, '.mancode', 'preseason-report.md'), 'utf-8'),
     ).resolves.toContain('Area: deps');
   });
+
+  it('records accepted remediation decisions after showing issue files', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'deps', {
+      remediate: true,
+      answers: ['show files', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(issueDb.issues[0]).toMatchObject({
+      status: 'open',
+      remediation: {
+        status: 'accepted',
+        applied: false,
+        sourceRunId: issueDb.latestRunId,
+        response: 'y',
+      },
+    });
+  });
+
+  it('applies safe remediation for missing config files', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(path.join(dir, '.gitignore'), 'utf-8'),
+    ).resolves.toContain('node_modules/');
+    await expect(
+      readFile(path.join(dir, '.editorconfig'), 'utf-8'),
+    ).resolves.toContain('root = true');
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    const gitignoreIssue = issueDb.issues.find(
+      (issue: { id: string }) => issue.id === 'config-gitignore',
+    );
+    expect(gitignoreIssue).toMatchObject({
+      status: 'fixed',
+      remediation: {
+        status: 'accepted',
+        applied: true,
+        action: 'created .gitignore',
+      },
+    });
+    const editorconfigIssue = issueDb.issues.find(
+      (issue: { id: string }) => issue.id === 'config-editorconfig',
+    );
+    expect(editorconfigIssue).toMatchObject({
+      status: 'fixed',
+      remediation: {
+        status: 'accepted',
+        applied: true,
+        action: 'created .editorconfig',
+      },
+    });
+  });
+
+  it('applies safe remediation for missing package scripts when matching tools exist', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        devDependencies: {
+          '@biomejs/biome': '^2.0.0',
+          typescript: '^5.0.0',
+          vitest: '^3.0.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'y', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts).toEqual({
+      test: 'vitest run',
+      lint: 'biome check .',
+      build: 'tsc',
+    });
+
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { type: string; status: string }) =>
+          issue.type === 'scripts' && issue.status === 'fixed',
+      ),
+    ).toHaveLength(3);
+    expect(
+      issueDb.issues.map(
+        (issue: { remediation?: { action?: string } }) =>
+          issue.remediation?.action,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        'added npm test script',
+        'added npm lint script',
+        'added npm build script',
+      ]),
+    );
+  });
+
+  it('does not add package scripts when no matching tool dependency exists', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({}),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y', 'y', 'y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts).toBeUndefined();
+
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { type: string; status: string }) =>
+          issue.type === 'scripts' && issue.status === 'open',
+      ),
+    ).toHaveLength(3);
+    expect(
+      issueDb.issues.every(
+        (issue: { remediation?: { applied?: boolean } }) =>
+          issue.remediation?.applied === false,
+      ),
+    ).toBe(true);
+  });
+
+  it('prefers framework build scripts over plain TypeScript builds', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, '.gitignore'), 'node_modules/\n', 'utf-8');
+    await writeFile(path.join(dir, '.editorconfig'), 'root = true\n', 'utf-8');
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest run', lint: 'biome check .' },
+        devDependencies: {
+          typescript: '^5.0.0',
+          vite: '^7.0.0',
+          vitest: '^3.0.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'config', {
+      remediate: true,
+      answers: ['y'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const pkg = JSON.parse(
+      await readFile(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    expect(pkg.scripts.build).toBe('vite build');
+  });
+
+  it('records skipped remediation decisions without changing issue status', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'deps', {
+      remediate: true,
+      answers: ['skip'],
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(issueDb.issues[0]).toMatchObject({
+      status: 'open',
+      remediation: {
+        status: 'skipped',
+        sourceRunId: issueDb.latestRunId,
+        response: 'skip',
+      },
+    });
+  });
+
+  it('keeps json remediation output parseable', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+    try {
+      const code = await manps(dir, 'deps', {
+        json: true,
+        remediate: true,
+        answers: ['y'],
+      });
+
+      expect(code).toBe(EXIT_OK);
+    } finally {
+      console.log = originalLog;
+    }
+
+    const parsed = JSON.parse(logs.join('\n'));
+    expect(parsed.remediation).toMatchObject({
+      reviewed: 1,
+      accepted: 1,
+      skipped: 0,
+    });
+  });
+
+  it('rejects remediation when scripted answers run out', async () => {
+    await writeFile(
+      path.join(dir, '.mancode', 'state.json'),
+      JSON.stringify({ currentMode: 'solo' }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {},
+        dependencies: { moment: '^2.30.0', dayjs: '^1.11.0' },
+      }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'all', {
+      remediate: true,
+      answers: ['y'],
+    });
+
+    expect(code).toBe(EXIT_INVALID_ARG);
+    await expect(
+      readFile(path.join(dir, '.gitignore'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(dir, '.editorconfig'), 'utf-8'),
+    ).rejects.toThrow();
+    const issueDb = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'preseason-issues.json'),
+        'utf-8',
+      ),
+    );
+    expect(
+      issueDb.issues.filter(
+        (issue: { remediation?: unknown }) => issue.remediation,
+      ),
+    ).toHaveLength(0);
+  });
 });
 
 async function pathExists(file: string): Promise<boolean> {

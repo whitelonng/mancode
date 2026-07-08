@@ -11,7 +11,7 @@ import {
   getPlatformInstallers,
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
-import { readWorkflow } from '../system/workflow.js';
+import { type WorkflowMode, readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -73,7 +73,7 @@ export interface StatusResult {
   currentWorkflow: {
     taskId: string;
     task: string;
-    mode: 'man8' | 'man';
+    mode: WorkflowMode;
     currentStep: number;
     status: string;
   } | null;
@@ -424,7 +424,7 @@ function printText(r: StatusResult): void {
   console.log(`Initialized: ${r.initializedAt}`);
   console.log(`Team:        ${formatTeamStatus(r.team)}`);
   if (r.currentWorkflow) {
-    const stepMax = r.currentWorkflow.mode === 'man' ? 8 : 3;
+    const stepMax = workflowStepMax(r.currentWorkflow.mode);
     console.log(
       `Workflow:    ${r.currentWorkflow.taskId} (Step ${r.currentWorkflow.currentStep}/${stepMax}, ${r.currentWorkflow.status})`,
     );
@@ -466,6 +466,10 @@ function formatTeamStatus(team: StatusResult['team']): string {
   if (team.forced) return `forced (${team.contributors} contributors)`;
   if (team.isTeam) return `detected (${team.contributors} contributors)`;
   return 'solo';
+}
+
+function workflowStepMax(mode: WorkflowMode): number {
+  return mode === 'man8' ? 3 : 8;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

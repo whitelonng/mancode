@@ -40,7 +40,17 @@ export interface PreseasonReport {
   issueDbPath: string;
 }
 
-export type PreseasonIssueStatus = 'open' | 'not-found';
+export type PreseasonIssueStatus = 'open' | 'not-found' | 'fixed';
+export type PreseasonRemediationStatus = 'accepted' | 'skipped';
+
+export interface PreseasonRemediationState {
+  status: PreseasonRemediationStatus;
+  decidedAt: string;
+  sourceRunId: string;
+  response: 'y' | 'n' | 'skip';
+  applied?: boolean;
+  action?: string;
+}
 
 export interface PreseasonIssueRecord extends PreseasonIssue {
   key: string;
@@ -50,6 +60,7 @@ export interface PreseasonIssueRecord extends PreseasonIssue {
   lastArea: string;
   occurrences: number;
   sourceReports: string[];
+  remediation?: PreseasonRemediationState;
 }
 
 export interface PreseasonIssueRun {
@@ -67,6 +78,27 @@ export interface PreseasonIssueDatabase {
   latestRunId: string;
   runs: PreseasonIssueRun[];
   issues: PreseasonIssueRecord[];
+}
+
+export interface PreseasonRemediationOptions {
+  answers?: string[];
+  ask?: (question: string) => Promise<string>;
+  write?: (message: string) => void;
+  now?: string;
+}
+
+export interface PreseasonRemediationResult {
+  issueDbPath: string;
+  reviewed: number;
+  accepted: number;
+  skipped: number;
+  fixed: number;
+  shown: number;
+}
+
+interface PreseasonRemediationDecision {
+  issue: PreseasonIssueRecord;
+  response: 'y' | 'n' | 'skip';
 }
 
 type PreseasonArea = 'all' | 'deps' | 'security' | 'dead-code' | 'config';
@@ -149,6 +181,119 @@ export async function runPreseasonScan(
   );
   await writeJsonAtomic(report.issueDbPath, database);
   return report;
+}
+
+export async function runPreseasonRemediation(
+  projectRoot: string,
+  issues: PreseasonIssue[],
+  options: PreseasonRemediationOptions = {},
+): Promise<PreseasonRemediationResult> {
+  const issueDbPath = path.join(
+    projectRoot,
+    '.mancode',
+    'preseason-issues.json',
+  );
+  const database = await readIssueDatabase(issueDbPath);
+  const keys = new Set(issues.map((issue) => issueKey(issue)));
+  const targets = database.issues.filter(
+    (issue) => keys.has(issue.key) && issue.status === 'open',
+  );
+  const write = options.write ?? ((message: string) => console.log(message));
+  const answerQueue = [...(options.answers ?? [])];
+  const now = options.now ?? new Date().toISOString();
+  const decisions: PreseasonRemediationDecision[] = [];
+  let fixed = 0;
+  let shown = 0;
+
+  if (targets.length === 0) {
+    write('No open preseason issues to review.');
+  }
+
+  for (let index = 0; index < targets.length; index++) {
+    const issue = targets[index];
+    write('');
+    write(
+      `${index + 1}. ${issue.severity} ${issue.id}: ${issue.title}${issue.file ? ` (${issue.file})` : ''}`,
+    );
+    write(`   Recommendation: ${issue.recommendation}`);
+
+    while (true) {
+      const raw = await nextRemediationAnswer(
+        answerQueue,
+        options.ask,
+        '   Fix this item? [y/n/skip/show files] ',
+      );
+      const answer = normalizeRemediationAnswer(raw);
+
+      if (answer === 'show') {
+        shown++;
+        write(`   File: ${issue.file ?? 'n/a'}`);
+        write(`   Detail: ${issue.detail}`);
+        continue;
+      }
+
+      if (answer === 'y') {
+        decisions.push({ issue, response: 'y' });
+        break;
+      }
+
+      decisions.push({ issue, response: answer });
+      break;
+    }
+  }
+
+  let accepted = 0;
+  let skipped = 0;
+  for (const decision of decisions) {
+    const issue = decision.issue;
+    if (decision.response === 'y') {
+      const applied = await applySafeRemediation(projectRoot, issue);
+      issue.remediation = {
+        status: 'accepted',
+        decidedAt: now,
+        sourceRunId: database.latestRunId,
+        response: 'y',
+        applied: applied.applied,
+        action: applied.action,
+      };
+      if (applied.applied) {
+        issue.status = 'fixed';
+        fixed++;
+      }
+      accepted++;
+      write(
+        applied.applied
+          ? `   Decision: fixed (${applied.action}).`
+          : '   Decision: accepted for remediation.',
+      );
+      continue;
+    }
+
+    issue.remediation = {
+      status: 'skipped',
+      decidedAt: now,
+      sourceRunId: database.latestRunId,
+      response: decision.response,
+    };
+    skipped++;
+    write('   Decision: skipped.');
+  }
+
+  database.updatedAt = now;
+  await writeFile(
+    issueDbPath,
+    `${JSON.stringify(database, null, 2)}\n`,
+    'utf-8',
+  );
+
+  return {
+    issueDbPath,
+    reviewed: decisions.length,
+    accepted,
+    skipped,
+    fixed,
+    shown,
+  };
 }
 
 function normalizeArea(area: string): PreseasonArea {
@@ -474,6 +619,21 @@ function scanConfig(projectRoot: string, files: string[]): PreseasonIssue[] {
         'Add a .gitignore that excludes dependencies, build output, coverage, and local env files.',
     });
   }
+  if (
+    !files.includes('.editorconfig') &&
+    !pathExistsSync(path.join(projectRoot, '.editorconfig'))
+  ) {
+    issues.push({
+      id: 'config-editorconfig',
+      severity: 'P2',
+      type: 'config',
+      title: 'Missing .editorconfig',
+      file: '.editorconfig',
+      detail: 'No .editorconfig found at the project root.',
+      recommendation:
+        'Add a small .editorconfig to keep indentation, charset, and line endings consistent across editors.',
+    });
+  }
   return issues;
 }
 
@@ -665,6 +825,154 @@ function compareIssueRecords(
     a.title.localeCompare(b.title) ||
     a.key.localeCompare(b.key)
   );
+}
+
+async function applySafeRemediation(
+  projectRoot: string,
+  issue: PreseasonIssueRecord,
+): Promise<{ applied: boolean; action?: string }> {
+  if (issue.id === 'config-gitignore' && issue.file === '.gitignore') {
+    const gitignorePath = path.join(projectRoot, '.gitignore');
+    if (pathExistsSync(gitignorePath)) {
+      return { applied: false };
+    }
+    await writeFile(gitignorePath, `${DEFAULT_GITIGNORE}\n`, 'utf-8');
+    return { applied: true, action: 'created .gitignore' };
+  }
+  if (issue.id === 'config-editorconfig' && issue.file === '.editorconfig') {
+    const editorconfigPath = path.join(projectRoot, '.editorconfig');
+    if (pathExistsSync(editorconfigPath)) {
+      return { applied: false };
+    }
+    await writeFile(editorconfigPath, `${DEFAULT_EDITORCONFIG}\n`, 'utf-8');
+    return { applied: true, action: 'created .editorconfig' };
+  }
+  if (issue.type === 'scripts' && issue.file === 'package.json') {
+    const scriptName = issue.id.replace(/^scripts-/, '');
+    const script = await inferSafePackageScript(projectRoot, scriptName);
+    if (!script) return { applied: false };
+    const applied = await addPackageScript(projectRoot, scriptName, script);
+    return applied
+      ? { applied: true, action: `added npm ${scriptName} script` }
+      : { applied: false };
+  }
+  return { applied: false };
+}
+
+async function inferSafePackageScript(
+  projectRoot: string,
+  scriptName: string,
+): Promise<string | null> {
+  const pkg = await readPackageJson(projectRoot);
+  if (!pkg) return null;
+  if (pkg.scripts?.[scriptName]) return null;
+
+  switch (scriptName) {
+    case 'test':
+      if (packageHasDependency(pkg, 'vitest')) return 'vitest run';
+      if (packageHasDependency(pkg, 'jest')) return 'jest';
+      return null;
+    case 'lint':
+      if (packageHasDependency(pkg, '@biomejs/biome')) return 'biome check .';
+      if (packageHasDependency(pkg, 'eslint')) return 'eslint .';
+      return null;
+    case 'build':
+      if (packageHasDependency(pkg, 'next')) return 'next build';
+      if (packageHasDependency(pkg, 'vite')) return 'vite build';
+      if (packageHasDependency(pkg, 'typescript')) return 'tsc';
+      return null;
+    default:
+      return null;
+  }
+}
+
+async function addPackageScript(
+  projectRoot: string,
+  scriptName: string,
+  script: string,
+): Promise<boolean> {
+  const packagePath = path.join(projectRoot, 'package.json');
+  let pkg: PackageJson;
+  try {
+    pkg = JSON.parse(await readFile(packagePath, 'utf-8')) as PackageJson;
+  } catch {
+    return false;
+  }
+
+  const scripts = pkg.scripts ?? {};
+  if (scripts[scriptName]) return false;
+
+  pkg.scripts = {
+    ...scripts,
+    [scriptName]: script,
+  };
+  await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf-8');
+  return true;
+}
+
+function packageHasDependency(pkg: PackageJson, name: string): boolean {
+  return Boolean(pkg.dependencies?.[name] || pkg.devDependencies?.[name]);
+}
+
+const DEFAULT_GITIGNORE = `# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store`;
+
+const DEFAULT_EDITORCONFIG = `root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false`;
+
+async function nextRemediationAnswer(
+  answerQueue: string[],
+  ask: PreseasonRemediationOptions['ask'],
+  question: string,
+): Promise<string> {
+  if (answerQueue.length > 0) {
+    return answerQueue.shift() ?? '';
+  }
+  if (!ask) {
+    throw new Error('remediation answer required for each open issue');
+  }
+  return ask(question);
+}
+
+function normalizeRemediationAnswer(
+  answer: string,
+): 'y' | 'n' | 'skip' | 'show' {
+  const normalized = answer.trim().toLowerCase();
+  if (['y', 'yes'].includes(normalized)) return 'y';
+  if (['n', 'no'].includes(normalized)) return 'n';
+  if (['show', 'show files', 'files', 'file', '?'].includes(normalized)) {
+    return 'show';
+  }
+  return 'skip';
 }
 
 function renderSection(title: string, issues: PreseasonIssue[]): string {
