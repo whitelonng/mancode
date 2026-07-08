@@ -1,0 +1,223 @@
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { init } from '../src/commands/init.js';
+import { install } from '../src/commands/install.js';
+import {
+  EXIT_NOT_INITIALIZED,
+  EXIT_OK,
+  EXIT_UNSUPPORTED_PLATFORM,
+  uninstall,
+} from '../src/commands/uninstall.js';
+
+describe('mancode uninstall', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'mancode-uninstall-'));
+    await mkdir(path.join(dir, '.git'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('returns EXIT_NOT_INITIALIZED when mancode is not initialized', async () => {
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    expect(code).toBe(EXIT_NOT_INITIALIZED);
+  });
+
+  it('returns EXIT_UNSUPPORTED_PLATFORM for unknown platform', async () => {
+    await silentInit(dir);
+    const code = await uninstall(dir, 'unknown', { force: true });
+    expect(code).toBe(EXIT_UNSUPPORTED_PLATFORM);
+  });
+
+  it('removes Codex managed block while preserving user AGENTS.md content', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+    await writeFile(
+      path.join(dir, 'AGENTS.md'),
+      '# My Project\n\nKeep this.\n\n<!-- mancode:start -->\nmanaged\n<!-- mancode:end -->\n',
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'codex', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    const content = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
+    expect(content).toContain('Keep this.');
+    expect(content).not.toContain('<!-- mancode:start -->');
+    expect(content).not.toContain('<!-- mancode:end -->');
+  });
+
+  it('removes Codex managed block and deletes AGENTS.md if only mancode content', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const code = await uninstall(dir, 'codex', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('removes Cursor rules while preserving custom rules', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    const rulesDir = path.join(dir, '.cursor', 'rules');
+    await writeFile(path.join(rulesDir, 'custom.mdc'), '# custom\n', 'utf-8');
+
+    const code = await uninstall(dir, 'cursor', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    expect(await readFile(path.join(rulesDir, 'custom.mdc'), 'utf-8')).toBe(
+      '# custom\n',
+    );
+    await expect(
+      readFile(path.join(rulesDir, 'mancode-solo.mdc'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(rulesDir, 'mancode-context.mdc'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('removes Copilot managed block while preserving user instructions', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+    const instructionsPath = path.join(
+      dir,
+      '.github',
+      'copilot-instructions.md',
+    );
+    await writeFile(
+      instructionsPath,
+      '# My Instructions\n\nKeep.\n\n<!-- mancode:start -->\nmanaged\n<!-- mancode:end -->\n',
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'copilot', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    const content = await readFile(instructionsPath, 'utf-8');
+    expect(content).toContain('Keep.');
+    expect(content).not.toContain('<!-- mancode:start -->');
+  });
+
+  it('removes Claude Code skills and agents while preserving custom agents', async () => {
+    await silentInit(dir);
+    const customAgentPath = path.join(dir, '.claude', 'agents', 'custom.md');
+    await writeFile(customAgentPath, '# custom agent\n', 'utf-8');
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'solo'))).toBe(
+      false,
+    );
+    expect(
+      await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
+    ).toBe(false);
+    expect(await readFile(customAgentPath, 'utf-8')).toBe('# custom agent\n');
+  });
+
+  it('cleans mancode hooks from .claude/settings.json but preserves user hooks', async () => {
+    await silentInit(dir);
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    const settings = JSON.parse(
+      await readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    );
+    const hookEvents = Object.keys(settings.hooks ?? {});
+    for (const event of hookEvents) {
+      const groups = settings.hooks[event];
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        if (!group?.hooks) continue;
+        for (const hook of group.hooks) {
+          expect(hook.command).not.toContain('.mancode/hooks/');
+        }
+      }
+    }
+  });
+
+  it('updates config.json platforms after single platform uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    await uninstall(dir, 'codex', { force: true });
+
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+    expect(config.platforms).not.toContain('codex');
+    expect(config.platforms).toContain('claude-code');
+  });
+
+  it('removes all mancode artifacts with --all', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+    await install(dir, 'cursor');
+
+    const code = await uninstall(dir, undefined, {
+      force: true,
+      all: true,
+    });
+    expect(code).toBe(EXIT_OK);
+
+    expect(await pathExists(path.join(dir, '.mancode'))).toBe(false);
+    expect(await pathExists(path.join(dir, 'AGENTS.md'))).toBe(false);
+    expect(
+      await pathExists(path.join(dir, '.cursor', 'rules', 'mancode-solo.mdc')),
+    ).toBe(false);
+  });
+
+  it('removes all mancode artifacts when no platform specified', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+
+    const code = await uninstall(dir, undefined, { force: true });
+    expect(code).toBe(EXIT_OK);
+
+    expect(await pathExists(path.join(dir, '.mancode'))).toBe(false);
+  });
+});
+
+async function silentInit(
+  dir: string,
+  options: Parameters<typeof init>[1] = {},
+): Promise<void> {
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    const code = await init(dir, options);
+    if (code !== 0) {
+      throw new Error(`silentInit failed: init exited with ${code}`);
+    }
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}

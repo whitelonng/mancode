@@ -6,6 +6,7 @@ import { listPlatforms } from './commands/list-platforms.js';
 import { manps } from './commands/manps.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
+import { uninstall } from './commands/uninstall.js';
 import { version } from './commands/version.js';
 import { workflow } from './commands/workflow.js';
 import { VERSION } from './version.js';
@@ -61,6 +62,16 @@ program
   .description('List available and installed mancode platform adapters')
   .action(async () => {
     const code = await listPlatforms(process.cwd());
+    process.exitCode = code;
+  });
+
+program
+  .command('uninstall [platform]')
+  .description('Remove platform adapter or all mancode artifacts')
+  .option('--force', 'Skip confirmation message')
+  .option('--all', 'Remove everything including .mancode/ directory')
+  .action(async (platform, options) => {
+    const code = await uninstall(process.cwd(), platform, options);
     process.exitCode = code;
   });
 

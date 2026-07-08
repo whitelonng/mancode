@@ -1,6 +1,29 @@
 export const DEFAULT_MANCODE_START_MARKER = '<!-- mancode:start -->';
 export const DEFAULT_MANCODE_END_MARKER = '<!-- mancode:end -->';
 
+export function removeManagedBlock(
+  existing: string,
+  startMarker = DEFAULT_MANCODE_START_MARKER,
+  endMarker = DEFAULT_MANCODE_END_MARKER,
+): string {
+  const start = findMarkerLine(existing, startMarker);
+  const end = findMarkerLine(existing, endMarker);
+
+  if (start === null && end === null) return existing;
+  if (start === null || end === null) return existing;
+  if (end.start < start.start) return existing;
+
+  const before = existing.slice(0, start.start);
+  const after = existing.slice(end.end);
+  const merged = `${before}${after}`;
+  return cleanUpOrphanedNewlines(merged);
+}
+
+function cleanUpOrphanedNewlines(content: string): string {
+  const trimmed = content.replace(/\n{3,}/gu, '\n\n').replace(/\n+$/u, '\n');
+  return trimmed || '';
+}
+
 export function replaceManagedBlock(
   existing: string,
   block: string,
