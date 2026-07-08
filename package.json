@@ -58,6 +58,7 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "biome check src tests",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",
@@ -69,6 +70,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"

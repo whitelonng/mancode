@@ -416,6 +416,54 @@ mancode/
 | MVP-3 | Cursor、Codex CLI、GitHub Copilot 适配 |
 | 公开发布 | npm 稳定版、marketplace 分发、文档和演示 |
 
+## 故障排查
+
+### `mancode init` 提示"not a project directory"
+
+mancode 要求目标目录有 `.git` 或 `package.json`。请在 git 仓库或 Node.js
+项目目录中运行 `mancode init`。
+
+### Claude Code hooks 不生效
+
+`mancode init` 后需要重启 Claude Code 以重新加载 `.claude/settings.json`。
+运行 `mancode status` 确认 hooks 已注册。如果仍不生效，运行
+`mancode install claude-code --force` 重写配置。
+
+### `mancode status` 显示某平台 "not ready"
+
+该平台的目标文件缺失。运行 `mancode install <platform> --force` 重新生成。
+对于 Codex 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
+中的受控区可能被手动编辑或删除了。
+
+### AGENTS.md 或 copilot-instructions.md 受控区被误删
+
+运行 `mancode install codex --force`（或 `copilot`）重新插入受控区。
+`<!-- mancode:start -->` 和 `<!-- mancode:end -->` 标记外的用户内容会被保留。
+
+### Cursor rules 不触发
+
+确认 `.cursor/rules/mancode-*.mdc` 文件存在。`alwaysApply: true` 的规则
+（context、practice、solo）在每次对话加载。模式规则（man8、man、manteam、
+manps）按 description 触发——输入 `/man8` 等关键词即可激活。
+
+### 如何完全重装
+
+```bash
+mancode uninstall --all --force
+mancode init
+mancode install <platform>
+```
+
+### 如何完全卸载 mancode
+
+```bash
+mancode uninstall --all --force
+npm uninstall -g mancode
+```
+
+这会移除 `.mancode/`、平台配置文件和 `.claude/settings.json` 中的 mancode
+hooks。用户自定义的 rules 和 instructions 会被保留。
+
 ## 常见问题
 
 ### mancode 是 Claude Code、Cursor、Codex CLI 或 Copilot 的替代品吗？

@@ -444,6 +444,57 @@ mancode/
 | MVP-3 | Cursor, Codex CLI, and GitHub Copilot adapters |
 | Public Release | stable npm release, marketplace distribution, docs, and demos |
 
+## Troubleshooting
+
+### `mancode init` says "not a project directory"
+
+mancode requires either a `.git` directory or a `package.json` in the target
+folder. Run `mancode init` inside a git repository or a Node.js project.
+
+### Claude Code hooks not triggering
+
+After `mancode init`, restart Claude Code so it reloads `.claude/settings.json`.
+Run `mancode status` to verify hooks are registered. If hooks are still missing,
+run `mancode install claude-code --force` to rewrite the settings.
+
+### `mancode status` shows a platform as "not ready"
+
+This means the platform's target files are missing. Run
+`mancode install <platform> --force` to regenerate them. For managed-block
+platforms (Codex, Copilot), the managed block in `AGENTS.md` or
+`.github/copilot-instructions.md` may have been manually edited or deleted.
+
+### AGENTS.md or copilot-instructions.md managed block was accidentally deleted
+
+Run `mancode install codex --force` (or `copilot`) to reinsert the managed
+block. User-authored content outside the `<!-- mancode:start -->` and
+`<!-- mancode:end -->` markers is preserved.
+
+### Cursor rules not triggering
+
+Ensure the `.cursor/rules/mancode-*.mdc` files exist. Rules with
+`alwaysApply: true` (context, practice, solo) load on every conversation.
+Mode-specific rules (man8, man, manteam, manps) trigger based on the
+description field — invoke them by asking for `/man8` or similar.
+
+### How to do a clean reinstall
+
+```bash
+mancode uninstall --all --force
+mancode init
+mancode install <platform>
+```
+
+### How to completely remove mancode
+
+```bash
+mancode uninstall --all --force
+npm uninstall -g mancode
+```
+
+This removes `.mancode/`, platform config files, and mancode hooks from
+`.claude/settings.json`. User-authored rules and instructions are preserved.
+
 ## FAQ
 
 ### Is mancode a replacement for Claude Code, Cursor, Codex CLI, or Copilot?
