@@ -59,8 +59,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check src tests",
+    "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "commander": "^12.1.0"

@@ -2,6 +2,7 @@
 import { program } from 'commander';
 import { init } from './commands/init.js';
 import { install } from './commands/install.js';
+import { listPlatforms } from './commands/list-platforms.js';
 import { manps } from './commands/manps.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
@@ -16,14 +17,13 @@ program
 
 program
   .command('init')
-  .description(
-    'Initialize mancode in the current project (MVP-1: Claude Code only)',
-  )
+  .description('Initialize mancode in the current project')
   .option('--force', 'Reinstall even if already initialized')
   .option('--yes', 'Skip all confirmations (CI mode)')
   .option('--team', 'Force enable team mode (MVP-2)')
   .option('--no-team', 'Force disable team mode (MVP-2)')
   .option('--style <name>', 'Specify aesthetic style (MVP-2)')
+  .option('--platform <platform>', 'Initial adapter platform (MVP-3)')
   .action(async (options) => {
     const code = await init(process.cwd(), options);
     process.exitCode = code;
@@ -31,7 +31,7 @@ program
 
 program
   .command('install [platform]')
-  .description('Install platform adapter (Claude Code supported)')
+  .description('Install platform adapter (claude-code, cursor, codex, copilot)')
   .option('--force', 'Reinstall even if already installed')
   .option('--minimal', 'Minimal install (MVP-2)')
   .action(async (platform, options) => {
@@ -49,6 +49,14 @@ program
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     const code = await status(process.cwd(), options);
+    process.exitCode = code;
+  });
+
+program
+  .command('list-platforms')
+  .description('List available and installed mancode platform adapters')
+  .action(async () => {
+    const code = await listPlatforms(process.cwd());
     process.exitCode = code;
   });
 

@@ -157,6 +157,116 @@ describe('mancode init', () => {
     }
   });
 
+  it('initializes Cursor without creating Claude Code files', async () => {
+    const code = await init(dir, { platform: 'cursor' });
+
+    expect(code).toBe(EXIT_OK);
+    const state: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(state.platform).toBe('cursor');
+    expect(config.platforms).toEqual(['cursor']);
+    await expect(
+      readFile(path.join(dir, '.cursor', 'rules', 'mancode-solo.mdc'), 'utf-8'),
+    ).resolves.toContain('# mancode solo');
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it.each([
+    ['cursor', ['.cursor', 'rules', 'mancode-context.mdc']],
+    ['codex', ['AGENTS.md']],
+    ['copilot', ['.github', 'copilot-instructions.md']],
+  ] as const)(
+    'initializes %s with freshly scanned frontend style tokens',
+    async (platform, outputPath) => {
+      await writeFrontendFixture(dir);
+
+      const code = await init(dir, { platform });
+
+      expect(code).toBe(EXIT_OK);
+      const generated = await readFile(path.join(dir, ...outputPath), 'utf-8');
+      expect(generated).toContain('brand=#123456');
+      expect(generated).not.toContain('No strong project style tokens');
+    },
+  );
+
+  it('initializes Codex without creating Claude Code files', async () => {
+    const code = await init(dir, { platform: 'codex' });
+
+    expect(code).toBe(EXIT_OK);
+    const state: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(state.platform).toBe('codex');
+    expect(config.platforms).toEqual(['codex']);
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).resolves.toContain('Platform adapter: Codex CLI');
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('initializes GitHub Copilot without creating AGENTS.md or Claude Code files', async () => {
+    const code = await init(dir, { platform: 'copilot' });
+
+    expect(code).toBe(EXIT_OK);
+    const state: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(state.platform).toBe('copilot');
+    expect(config.platforms).toEqual(['copilot']);
+    await expect(
+      readFile(path.join(dir, '.github', 'copilot-instructions.md'), 'utf-8'),
+    ).resolves.toContain('Platform adapter: GitHub Copilot');
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('returns init failure for unsupported init platform', async () => {
+    const code = await init(dir, { platform: 'unknown-platform' });
+
+    expect(code).toBe(EXIT_INIT_FAILED);
+    await expect(
+      readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('does not validate Claude settings when initializing another platform', async () => {
+    const claudeDir = path.join(dir, '.claude');
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      path.join(claudeDir, 'settings.json'),
+      '{ invalid',
+      'utf-8',
+    );
+
+    const code = await init(dir, { platform: 'codex' });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).resolves.toContain('Platform adapter: Codex CLI');
+  });
+
   it('does not claim package.json is missing when it has no known deps', async () => {
     await writeFile(
       path.join(dir, 'package.json'),
@@ -375,4 +485,31 @@ async function captureLog(fn: () => Promise<unknown>): Promise<string[]> {
     console.log = originalLog;
   }
   return logs;
+}
+
+async function writeFrontendFixture(dir: string): Promise<void> {
+  await writeFile(
+    path.join(dir, 'package.json'),
+    JSON.stringify({
+      name: 'frontend',
+      dependencies: {
+        react: '^18.0.0',
+        tailwindcss: '^3.4.0',
+      },
+    }),
+    'utf-8',
+  );
+  await writeFile(
+    path.join(dir, 'tailwind.config.js'),
+    `module.exports = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: { brand: '#123456' },
+      fontFamily: { sans: ['Inter', 'sans-serif'] },
+    },
+  },
+};`,
+    'utf-8',
+  );
 }

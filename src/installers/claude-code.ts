@@ -1,20 +1,15 @@
-import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ensureTeamMemory } from '../system/team-memory.js';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
-import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
-import {
-  SESSION_START_HOOK,
-  SOLO_SKILL,
-  USER_PROMPT_SUBMIT_HOOK,
-} from '../templates/inline.js';
+import { SOLO_SKILL } from '../templates/inline.js';
 import { MVP2_SKILLS, renderSkill } from '../templates/skills/index.js';
+import { installMancodeCore } from './common.js';
 
 /**
  * Claude Code 平台安装器。
  *
  * 职责（docs/08-cli-spec.md §2.4）：
- * 1. 创建 .mancode/ 下 8 个文件/目录
+ * 1. 创建/修复平台无关的 .mancode/ 文件（通过 installMancodeCore）
  * 2. 创建 .claude/settings.json（幂等合并，不覆盖用户已有配置）
  * 3. 创建 .claude/skills/<name>/SKILL.md
  *
@@ -34,44 +29,12 @@ export async function installClaudeCode(
     minimal?: boolean;
   },
 ): Promise<void> {
-  const mancodeDir = path.join(projectRoot, '.mancode');
   const claudeDir = path.join(projectRoot, '.claude');
   const settings = await readClaudeSettings(claudeDir);
 
-  // 1. 创建 .mancode/ 子目录
-  await mkdir(path.join(mancodeDir, 'hooks'), { recursive: true });
-  await mkdir(path.join(mancodeDir, 'aesthetics'), { recursive: true });
-  await mkdir(path.join(mancodeDir, 'logs'), { recursive: true });
-  // MVP-2: workflow 目录存放 /man8 /man 的任务进度
-  await mkdir(path.join(mancodeDir, 'workflows'), { recursive: true });
-  // MVP-2 P1: team memory + preseason reports provide durable mode outputs.
-  await ensureTeamMemory(projectRoot);
-  await mkdir(path.join(mancodeDir, 'preseason-reports'), { recursive: true });
+  await installMancodeCore(projectRoot);
 
-  // 2. 写入 config.json
-  const configPath = path.join(mancodeDir, 'config.json');
-  const configContent = `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`;
-  await writeFile(configPath, configContent, 'utf-8');
-
-  // 3. 写入 hooks
-  await installHooks(path.join(mancodeDir, 'hooks'));
-
-  // 4. 写入 style-tokens.json（仅在不存在时写入空模板）
-  // installClaudeCode 是骨架安装器，审美扫描是 init/refresh-style 的职责。
-  // 跳过已存在的文件避免 install --force 擦除已扫描的 token。
-  const tokensPath = path.join(mancodeDir, 'aesthetics', 'style-tokens.json');
-  if (!(await pathExists(tokensPath))) {
-    const tokensContent = `${JSON.stringify(EMPTY_STYLE_TOKENS, null, 2)}\n`;
-    await writeFile(tokensPath, tokensContent, 'utf-8');
-  }
-
-  // 5. 创建空 hooks.log
-  const logPath = path.join(mancodeDir, 'logs', 'hooks.log');
-  if (!(await pathExists(logPath))) {
-    await writeFile(logPath, '', 'utf-8');
-  }
-
-  // 6. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
+  // 1. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
   await installSoloSkill(path.join(claudeDir, 'skills'));
   if (options.minimal) {
@@ -80,27 +43,15 @@ export async function installClaudeCode(
     await installMvp2Skills(path.join(claudeDir, 'skills'));
   }
 
-  // 7. 创建 .claude/agents/ 并写入教练组（MVP-2）
+  // 2. 创建 .claude/agents/ 并写入教练组（MVP-2）
   if (options.minimal) {
     await uninstallAgents(path.join(claudeDir, 'agents'));
   } else {
     await installAgents(path.join(claudeDir, 'agents'));
   }
 
-  // 8. 更新 .claude/settings.json（幂等合并）
+  // 3. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir, settings);
-}
-
-async function installHooks(hooksDir: string): Promise<void> {
-  // session-start.sh
-  const sessionStartDst = path.join(hooksDir, 'session-start.sh');
-  await writeFile(sessionStartDst, SESSION_START_HOOK, 'utf-8');
-  await chmod(sessionStartDst, 0o755);
-
-  // user-prompt-submit.sh
-  const userPromptDst = path.join(hooksDir, 'user-prompt-submit.sh');
-  await writeFile(userPromptDst, USER_PROMPT_SUBMIT_HOOK, 'utf-8');
-  await chmod(userPromptDst, 0o755);
 }
 
 async function installSoloSkill(skillsDir: string): Promise<void> {
@@ -341,13 +292,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && 'code' in err;
-}
-
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
 }

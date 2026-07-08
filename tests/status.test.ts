@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
+import { install } from '../src/commands/install.js';
 import {
   EXIT_CORRUPT_STATE,
   EXIT_NOT_INITIALIZED,
@@ -132,6 +133,18 @@ describe('mancode status', () => {
     expect(output).toContain('settings.json');
   });
 
+  it('omits top-level Hooks section for non-Claude Code projects', async () => {
+    await silentInit(dir, { platform: 'codex' });
+
+    const logs = await captureLog(() => status(dir));
+    const output = logs.join('\n');
+
+    expect(output).toContain('Platform status:');
+    expect(output).toContain('Codex CLI: ready');
+    expect(output).not.toContain('Hooks:');
+    expect(output).not.toContain('registered in .claude/settings.json');
+  });
+
   it('shows active workflow in JSON and text output', async () => {
     await silentInit(dir);
     const workflowMeta = await createWorkflow(
@@ -196,9 +209,65 @@ describe('mancode status', () => {
     const logs = await captureLog(() => status(dir, { json: true }));
     const result: StatusResult = JSON.parse(logs.join('\n'));
     expect(result.team.isTeam).toBe(true);
+    expect(result.team.forced).toBe(true);
+    expect(result.team.autoDetected).toBe(false);
 
     const textLogs = await captureLog(() => status(dir));
-    expect(textLogs.join('\n')).toContain('Team:        detected');
+    expect(textLogs.join('\n')).toContain('Team:        forced');
+  });
+
+  it('shows per-platform installation readiness in JSON', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    await install(dir, 'codex');
+    await install(dir, 'copilot');
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platforms).toEqual([
+      'claude-code',
+      'cursor',
+      'codex',
+      'copilot',
+    ]);
+    expect(result.platformStatus['claude-code'].ready).toBe(true);
+    expect(result.platformStatus.cursor.ready).toBe(true);
+    expect(result.platformStatus.codex.ready).toBe(true);
+    expect(result.platformStatus.copilot.ready).toBe(true);
+    expect(result.platformStatus.cursor.target).toBe('.cursor/rules/');
+  });
+
+  it('treats Cursor minimal install as ready when core rules exist', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor', { force: true, minimal: true });
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platformStatus.cursor.installed).toBe(true);
+    expect(result.platformStatus.cursor.ready).toBe(true);
+  });
+
+  it('does not report unrecorded platform files as ready', async () => {
+    await silentInit(dir);
+    await writeFile(
+      path.join(dir, 'AGENTS.md'),
+      [
+        '<!-- mancode:start -->',
+        '# stale codex block',
+        '<!-- mancode:end -->',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platformStatus.codex.installed).toBe(false);
+    expect(result.platformStatus.codex.ready).toBe(false);
+    expect(result.platformStatus.codex.detail).toContain('not recorded');
   });
 });
 

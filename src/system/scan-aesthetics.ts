@@ -158,7 +158,8 @@ function findKeyBlock(content: string, key: string): string | null {
     let i = absPos + match[0].length;
     while (i < content.length && content[i] !== '{') {
       // 遇到非空白字符说明值不是对象，跳过
-      if (!/\s/.test(content[i])) break;
+      const char = content[i];
+      if (char === undefined || !/\s/.test(char)) break;
       i++;
     }
     if (i >= content.length || content[i] !== '{') {
@@ -216,8 +217,9 @@ function extractTopLevelStringValues(block: string): Record<string, string> {
     if (!isSafeTokenName(key)) continue;
     // 值必须是引号包裹的字符串（不是对象、不是数组）
     const strMatch = value.match(/^['"]([^'"]+)['"]$/);
-    if (strMatch && isSafeColorValue(strMatch[1])) {
-      result[key] = strMatch[1];
+    const tokenValue = strMatch?.[1];
+    if (tokenValue && isSafeColorValue(tokenValue)) {
+      result[key] = tokenValue;
     }
   }
 
@@ -237,8 +239,9 @@ function extractTopLevelArrayValues(block: string): Record<string, string[]> {
     if (!isSafeTokenName(key)) continue;
     // 值必须是数组
     const arrMatch = value.match(/^\[([^\]]+)\]$/);
-    if (arrMatch) {
-      const items = arrMatch[1]
+    const rawItems = arrMatch?.[1];
+    if (rawItems) {
+      const items = rawItems
         .split(',')
         .map((v) => v.trim().replace(/['"]/g, ''))
         .filter((v) => v.length > 0);
@@ -265,7 +268,7 @@ function extractTopLevelPairs(
   let i = 0;
   while (i < block.length) {
     // 跳过空白和逗号
-    while (i < block.length && /[\s,]/.test(block[i])) i++;
+    while (i < block.length && /[\s,]/.test(block[i] ?? '')) i++;
     if (i >= block.length) break;
 
     // 提取 key（可能是带引号或不带引号的标识符）
@@ -278,12 +281,12 @@ function extractTopLevelPairs(
 
     // 跳过 key 后的空白
     i = afterKey;
-    while (i < block.length && /\s/.test(block[i])) i++;
+    while (i < block.length && /\s/.test(block[i] ?? '')) i++;
 
     // 期望冒号
     if (block[i] !== ':') continue;
     i++;
-    while (i < block.length && /\s/.test(block[i])) i++;
+    while (i < block.length && /\s/.test(block[i] ?? '')) i++;
     if (i >= block.length) break;
 
     // 提取 value（在 depth 0）
@@ -404,7 +407,7 @@ function parseValue(
  */
 function extractDarkMode(content: string): string | null {
   const match = content.match(/darkMode\s*:\s*['"](\w+)['"]/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 /**

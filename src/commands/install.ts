@@ -1,7 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { installClaudeCode } from '../installers/claude-code.js';
+import { checkPlatformStatus } from '../installers/platform-status.js';
+import {
+  formatPlatformName,
+  getPlatformInstaller,
+  getPlatformInstallers,
+} from '../installers/registry.js';
 import { detectProjectType } from '../system/detect.js';
 import { DEFAULT_CONFIG } from '../templates/defaults.js';
 
@@ -13,12 +18,10 @@ export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_UNSUPPORTED_PLATFORM = 2;
 export const EXIT_INSTALL_FAILED = 3;
 
-/**
- * 当前支持的平台。
- *
- * 后续会加入 cursor / codex / copilot。
- */
-const SUPPORTED_PLATFORMS = new Set(['claude-code']);
+interface ConfigReadResult {
+  config: Record<string, unknown>;
+  valid: boolean;
+}
 
 export interface InstallOptions {
   /** --force: 覆盖已有配置 */
@@ -32,7 +35,7 @@ export interface InstallOptions {
  *
  * 职责（docs/08-cli-spec.md §3 + docs/15-adapters.md §8）：
  * 1. 检查项目已初始化（state.json 存在）
- * 2. 验证平台名（MVP-1 仅 claude-code）
+ * 2. 验证平台名
  * 3. 调用对应适配器安装
  * 4. 更新 config.json 的 platforms 数组
  * 5. 支持 --force 重装
@@ -57,39 +60,53 @@ export async function install(
   }
 
   // 2. 验证平台名
-  if (!SUPPORTED_PLATFORMS.has(platform)) {
+  const installer = getPlatformInstaller(platform);
+  if (!installer) {
     console.error(`✗  Unsupported platform: ${platform}`);
     console.error('   Supported platforms:');
-    console.error('     claude-code          Claude Code');
-    console.error('');
-    console.error('   Coming in MVP-3:');
-    console.error('     cursor               Cursor');
-    console.error('     codex                Codex CLI');
-    console.error('     copilot              GitHub Copilot');
+    for (const item of getPlatformInstallers()) {
+      console.error(`     ${item.name.padEnd(20)} ${item.displayName}`);
+    }
     return EXIT_UNSUPPORTED_PLATFORM;
   }
 
   // 3. 检查是否已安装（除非 --force）
-  const configResult = await readConfig(rootDir);
-  const config = withDefaultConfig(configResult.config);
+  let configResult: ConfigReadResult;
+  try {
+    configResult = await readConfig(rootDir);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`✗  Cannot read .mancode/config.json: ${msg}`);
+    return EXIT_INSTALL_FAILED;
+  }
+  const config = withDefaultConfig(
+    configResult.config,
+    await readStatePlatform(rootDir),
+  );
   const alreadyInstalled =
     configResult.valid && config.platforms && Array.isArray(config.platforms)
       ? config.platforms.includes(platform)
       : false;
 
   if (alreadyInstalled && !options.force) {
+    const status = await checkPlatformStatus(rootDir, platform, true);
+    if (status.ready) {
+      console.log(
+        `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
+      );
+      console.log('   Run with --force to reinstall.');
+      return EXIT_OK;
+    }
     console.log(
-      `ℹ️  ${formatPlatformName(platform)} adapter already installed.`,
+      `ℹ️  ${formatPlatformName(platform)} is recorded in config but not ready; repairing generated files.`,
     );
-    console.log('   Run with --force to reinstall.');
-    return EXIT_OK;
   }
 
   // 4. 安装
   console.log(`✓  Installing ${formatPlatformName(platform)} adapter...`);
   const project = await detectProjectType(rootDir);
   try {
-    await installClaudeCode(rootDir, {
+    await installer.install(rootDir, {
       techStack: project.techStack,
       uiLibrary: project.uiLibrary,
       minimal: options.minimal,
@@ -99,7 +116,6 @@ export async function install(
     console.error(
       `✗  ${formatPlatformName(platform)} adapter install failed: ${msg}`,
     );
-    await updateConfig(rootDir, config);
     return EXIT_INSTALL_FAILED;
   }
 
@@ -118,17 +134,22 @@ export async function install(
 /**
  * 读取 .mancode/config.json。
  */
-async function readConfig(
-  rootDir: string,
-): Promise<{ config: Record<string, unknown>; valid: boolean }> {
+async function readConfig(rootDir: string): Promise<ConfigReadResult> {
   const configPath = path.join(rootDir, '.mancode', 'config.json');
   try {
     const raw = await fs.readFile(configPath, 'utf-8');
     return { config: JSON.parse(raw) as Record<string, unknown>, valid: true };
-  } catch {
-    // config.json 不存在或损坏——返回空对象，install 会重建 platforms
-    return { config: {}, valid: false };
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      return { config: {}, valid: false };
+    }
+    // config.json 损坏时不要静默覆盖，避免丢失用户配置。
+    throw err;
   }
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && 'code' in err;
 }
 
 /**
@@ -145,26 +166,35 @@ async function updateConfig(
 
 function withDefaultConfig(
   config: Record<string, unknown>,
+  fallbackPlatform: string | null,
 ): Record<string, unknown> {
-  return {
+  const fallback = fallbackPlatform ?? DEFAULT_CONFIG.platforms[0];
+  const platforms = Array.isArray(config.platforms)
+    ? config.platforms
+    : [fallback];
+  const merged = {
     ...DEFAULT_CONFIG,
     ...config,
+  };
+  return {
+    ...merged,
+    platforms,
     hooks: isRecord(config.hooks) ? config.hooks : DEFAULT_CONFIG.hooks,
     logging: isRecord(config.logging) ? config.logging : DEFAULT_CONFIG.logging,
   };
 }
 
-/**
- * 平台内部名 → 显示名。
- */
-function formatPlatformName(p: string): string {
-  const names: Record<string, string> = {
-    'claude-code': 'Claude Code',
-    cursor: 'Cursor',
-    codex: 'Codex CLI',
-    copilot: 'GitHub Copilot',
-  };
-  return names[p] ?? p;
+async function readStatePlatform(rootDir: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(
+      path.join(rootDir, '.mancode', 'state.json'),
+      'utf-8',
+    );
+    const state = JSON.parse(raw) as { platform?: unknown };
+    return typeof state.platform === 'string' ? state.platform : null;
+  } catch {
+    return null;
+  }
 }
 
 async function pathExists(p: string): Promise<boolean> {

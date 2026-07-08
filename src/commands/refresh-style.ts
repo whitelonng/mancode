@@ -58,6 +58,7 @@ export async function refreshStyle(
     'aesthetics',
     'style-tokens.json',
   );
+  await fs.mkdir(path.dirname(tokensPath), { recursive: true });
   await fs.writeFile(
     tokensPath,
     `${JSON.stringify(tokens, null, 2)}\n`,
@@ -106,7 +107,41 @@ export async function refreshStyle(
 
   console.log('');
   console.log('已更新 .mancode/aesthetics/style-tokens.json');
+  await printStaticPlatformRefreshHint(rootDir);
   return EXIT_OK;
+}
+
+async function printStaticPlatformRefreshHint(rootDir: string): Promise<void> {
+  const platforms = await readInstalledPlatforms(rootDir);
+  const staticPlatforms = platforms.filter(
+    (platform) => platform !== 'claude-code',
+  );
+  if (staticPlatforms.length === 0) return;
+
+  console.log('');
+  console.log(
+    `ℹ️  Style tokens updated. Non-Claude-Code platforms (${staticPlatforms.join(', ')}) use static generated instructions.`,
+  );
+  console.log(
+    '   Run `mancode install <platform> --force` to refresh their embedded style summaries.',
+  );
+}
+
+async function readInstalledPlatforms(rootDir: string): Promise<string[]> {
+  try {
+    const raw = await fs.readFile(
+      path.join(rootDir, '.mancode', 'config.json'),
+      'utf-8',
+    );
+    const config = JSON.parse(raw) as { platforms?: unknown };
+    return Array.isArray(config.platforms)
+      ? config.platforms.filter(
+          (platform): platform is string => typeof platform === 'string',
+        )
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 async function pathExists(p: string): Promise<boolean> {

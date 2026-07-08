@@ -1,10 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { validateClaudeCodeSettings } from '../installers/claude-code.js';
+import { installMancodeCore } from '../installers/common.js';
 import {
-  installClaudeCode,
-  validateClaudeCodeSettings,
-} from '../installers/claude-code.js';
+  type PlatformName,
+  getPlatformInstaller,
+} from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectProjectType, detectSystemDeps } from '../system/detect.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
@@ -20,6 +22,8 @@ export const EXIT_USER_CANCEL = 3;
 export const EXIT_NETWORK_ERROR = 4;
 export const EXIT_INIT_FAILED = 5;
 
+const DEFAULT_INIT_PLATFORM: PlatformName = 'claude-code';
+
 /**
  * mancode state 文件的内容。
  *
@@ -33,7 +37,8 @@ export interface MancodeState {
   version: string;
   currentMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
   lastMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
-  platform: 'claude-code';
+  /** Initial/default adapter platform. Installed platforms live in config.json. */
+  platform: PlatformName;
   initializedAt: string;
   techStack: string;
   uiLibrary: string;
@@ -55,6 +60,8 @@ export interface InitOptions {
   team?: boolean;
   /** --style <name>: 指定审美风格（MVP-2）*/
   style?: string;
+  /** --platform <platform>: initial adapter platform (MVP-3) */
+  platform?: string;
 }
 
 /**
@@ -84,9 +91,10 @@ export async function init(
 ): Promise<number> {
   const mancodeDir = path.join(rootDir, '.mancode');
   const stateFile = path.join(mancodeDir, 'state.json');
+  const wasInitialized = await pathExists(stateFile);
 
   // 1. 幂等检查
-  if (await pathExists(stateFile)) {
+  if (wasInitialized) {
     if (!options.force) {
       console.log('ℹ️  mancode already initialized.');
       console.log(`   ${stateFile}`);
@@ -156,6 +164,13 @@ export async function init(
       console.log('   (No package.json found, skipping tech detection)');
     }
 
+    const initPlatformName = options.platform ?? DEFAULT_INIT_PLATFORM;
+    const installer = getPlatformInstaller(initPlatformName);
+    if (!installer) {
+      console.error(`✗  Unsupported platform: ${initPlatformName}`);
+      return EXIT_INIT_FAILED;
+    }
+
     // 4.1 检测多人协作（MVP-2）
     const team = await detectTeamStatus(rootDir);
     const teamModeEnabled = options.team ?? team.isTeam;
@@ -173,7 +188,7 @@ export async function init(
       version: VERSION,
       currentMode: 'solo',
       lastMode: 'solo',
-      platform: 'claude-code',
+      platform: installer.name,
       initializedAt: new Date().toISOString(),
       techStack: techStackStr,
       uiLibrary: uiLibraryStr,
@@ -185,16 +200,14 @@ export async function init(
     };
 
     // 5. 预检用户 Claude Code settings，避免坏 JSON 导致半初始化。
-    await validateClaudeCodeSettings(rootDir);
+    if (installer.name === 'claude-code') {
+      await validateClaudeCodeSettings(rootDir);
+    }
 
-    // 6. 安装 Claude Code 适配（8 个文件）
-    console.log('✓  安装 Claude Code 适配...');
-    await installClaudeCode(rootDir, {
-      techStack: project.techStack,
-      uiLibrary: project.uiLibrary,
-    });
+    // 6. 创建平台无关的 .mancode/ 基础文件。
+    await installMancodeCore(rootDir);
 
-    // 7. 创建 .mancode/state.json
+    // 7. 创建 .mancode/state.json。静态平台 adapter 会读取它生成规则。
     await fs.mkdir(mancodeDir, { recursive: true });
     const stateContent = `${JSON.stringify(state, null, 2)}\n`;
     await fs.writeFile(stateFile, stateContent, 'utf-8');
@@ -202,9 +215,10 @@ export async function init(
     await updateConfigOptions(mancodeDir, {
       forceTeamMode: options.team === true,
       defaultStyle: options.style ?? null,
+      platforms: [installer.name],
     });
 
-    // 8. 审美扫描（前端项目才扫）
+    // 8. 审美扫描（前端项目才扫）。必须早于静态平台规则生成。
     let styleLine = '  .mancode/aesthetics/        # style-tokens.json (空)';
     if (project.hasFrontend) {
       console.log('✓  扫描审美 token...');
@@ -238,7 +252,14 @@ export async function init(
       }
     }
 
-    // 9. 完成
+    // 9. 安装平台适配。
+    console.log(`✓  安装 ${installer.displayName} 适配...`);
+    await installer.install(rootDir, {
+      techStack: project.techStack,
+      uiLibrary: project.uiLibrary,
+    });
+
+    // 10. 完成
     console.log('');
     console.log('✓  mancode initialized.');
     console.log('');
@@ -250,15 +271,19 @@ export async function init(
     );
     console.log(styleLine);
     console.log('  .mancode/logs/              # hooks.log');
-    console.log('  .claude/settings.json       # hook 注册');
-    console.log('  .claude/skills/             # solo + MVP-2 slash skills');
+    printPlatformCreatedFiles(installer.name);
     console.log('');
     console.log('Next:');
     console.log('  mancode status              # Show project state');
-    console.log('  (Restart Claude Code to load hooks)');
+    if (installer.name === 'claude-code') {
+      console.log('  (Restart Claude Code to load hooks)');
+    }
 
     return EXIT_OK;
   } catch (err) {
+    if (!wasInitialized) {
+      await fs.rm(stateFile, { force: true });
+    }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`✗  mancode init failed: ${msg}`);
     return EXIT_INIT_FAILED;
@@ -267,7 +292,11 @@ export async function init(
 
 async function updateConfigOptions(
   mancodeDir: string,
-  patch: { forceTeamMode: boolean; defaultStyle: string | null },
+  patch: {
+    forceTeamMode: boolean;
+    defaultStyle: string | null;
+    platforms: PlatformName[];
+  },
 ): Promise<void> {
   const configPath = path.join(mancodeDir, 'config.json');
   let config: Record<string, unknown> = {};
@@ -284,6 +313,23 @@ async function updateConfigOptions(
     `${JSON.stringify({ ...config, ...patch }, null, 2)}\n`,
     'utf-8',
   );
+}
+
+function printPlatformCreatedFiles(platform: PlatformName): void {
+  if (platform === 'claude-code') {
+    console.log('  .claude/settings.json       # hook 注册');
+    console.log('  .claude/skills/             # solo + MVP-2 slash skills');
+    return;
+  }
+  if (platform === 'cursor') {
+    console.log('  .cursor/rules/              # Cursor project rules');
+    return;
+  }
+  if (platform === 'codex') {
+    console.log('  AGENTS.md                   # Codex managed block');
+    return;
+  }
+  console.log('  .github/copilot-instructions.md # Copilot instructions');
 }
 
 async function pathExists(p: string): Promise<boolean> {

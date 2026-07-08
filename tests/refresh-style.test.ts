@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
+import { install } from '../src/commands/install.js';
 import {
   EXIT_NOT_INITIALIZED,
   EXIT_OK,
@@ -120,6 +121,71 @@ describe('mancode refresh-style', () => {
     expect(tokens2.colors).toHaveProperty('primary', '#ff0000');
     expect(tokens2.lastScanned).not.toBe(tokens1.lastScanned);
   });
+
+  it('warns when static non-Claude platform instructions need refresh', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'test-frontend',
+        dependencies: {
+          react: '^18.0.0',
+          tailwindcss: '^3.4.0',
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'tailwind.config.js'),
+      TAILWIND_CONFIG,
+      'utf-8',
+    );
+
+    await silentInit(dir);
+    await install(dir, 'codex');
+    await install(dir, 'cursor');
+
+    const logs = await captureLog(() => refreshStyle(dir));
+    const output = logs.join('\n');
+
+    expect(output).toContain('Non-Claude-Code platforms (codex, cursor)');
+    expect(output).toContain('mancode install <platform> --force');
+  });
+
+  it('recreates missing aesthetics directory before writing tokens', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'test-frontend',
+        dependencies: {
+          react: '^18.0.0',
+          tailwindcss: '^3.4.0',
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'tailwind.config.js'),
+      TAILWIND_CONFIG,
+      'utf-8',
+    );
+
+    await silentInit(dir);
+    await rm(path.join(dir, '.mancode', 'aesthetics'), {
+      recursive: true,
+      force: true,
+    });
+
+    const code = await refreshStyle(dir);
+
+    expect(code).toBe(EXIT_OK);
+    const tokens = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
+        'utf-8',
+      ),
+    );
+    expect(tokens.colors).toHaveProperty('primary', '#3b82f6');
+  });
 });
 
 const TAILWIND_CONFIG = `module.exports = {
@@ -171,4 +237,16 @@ async function silentInit(dir: string): Promise<void> {
     console.log = originalLog;
     console.error = originalError;
   }
+}
+
+async function captureLog(fn: () => Promise<unknown>): Promise<string[]> {
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+  }
+  return logs;
 }

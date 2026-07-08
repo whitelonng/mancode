@@ -11,6 +11,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
 import {
+  EXIT_INSTALL_FAILED,
   EXIT_NOT_INITIALIZED,
   EXIT_OK,
   EXIT_UNSUPPORTED_PLATFORM,
@@ -99,7 +100,7 @@ describe('mancode install', () => {
 
   it('returns EXIT_UNSUPPORTED_PLATFORM for unknown platform', async () => {
     await silentInit(dir);
-    const code = await install(dir, 'cursor');
+    const code = await install(dir, 'unknown-platform');
     expect(code).toBe(EXIT_UNSUPPORTED_PLATFORM);
   });
 
@@ -175,6 +176,45 @@ describe('mancode install', () => {
     expect(config.defaultStyle).toBeNull();
     expect(config.hooks).toEqual(DEFAULT_CONFIG.hooks);
     expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
+  });
+
+  it('rebuilds missing config.json from the initialized platform', async () => {
+    await silentInit(dir, { platform: 'codex' });
+
+    await rm(path.join(dir, '.mancode', 'config.json'), { force: true });
+
+    const code = await install(dir, 'cursor');
+    expect(code).toBe(EXIT_OK);
+
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+    expect(config.platforms).toEqual(['codex', 'cursor']);
+  });
+
+  it('does not overwrite corrupt config.json', async () => {
+    await silentInit(dir, { platform: 'codex' });
+    const configPath = path.join(dir, '.mancode', 'config.json');
+    const corruptConfig = '{ invalid config';
+    await writeFile(configPath, corruptConfig, 'utf-8');
+
+    const code = await install(dir, 'cursor');
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    expect(await readFile(configPath, 'utf-8')).toBe(corruptConfig);
+  });
+
+  it('repairs a recorded adapter when generated files are missing', async () => {
+    await silentInit(dir, { platform: 'codex' });
+    const agentsPath = path.join(dir, 'AGENTS.md');
+    await rm(agentsPath, { force: true });
+
+    const code = await install(dir, 'codex');
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(agentsPath, 'utf-8')).resolves.toContain(
+      'Platform adapter: Codex CLI',
+    );
   });
 
   it('preserves configured team/style options on forced reinstall', async () => {

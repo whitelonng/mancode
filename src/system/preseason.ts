@@ -327,7 +327,7 @@ function scanDependencyOverlap(pkg: PackageJson | null): PreseasonIssue[] {
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.devDependencies ?? {}),
   ]);
-  const pairs = [
+  const pairs: Array<[string, string]> = [
     ['moment', 'dayjs'],
     ['lodash', 'underscore'],
     ['axios', 'ky'],

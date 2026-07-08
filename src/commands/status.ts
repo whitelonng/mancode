@@ -2,6 +2,14 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  type PlatformStatus,
+  checkPlatformStatus as checkOnePlatformStatus,
+} from '../installers/platform-status.js';
+import {
+  formatPlatformName,
+  getPlatformInstallers,
+} from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { readWorkflow } from '../system/workflow.js';
 import { VERSION } from '../version.js';
@@ -60,6 +68,7 @@ export interface StatusResult {
     recentActive: number;
     hasRemote: boolean;
     autoDetected: boolean;
+    forced: boolean;
   };
   currentWorkflow: {
     taskId: string;
@@ -68,6 +77,14 @@ export interface StatusResult {
     currentStep: number;
     status: string;
   } | null;
+  platformStatus: Record<string, PlatformStatus>;
+}
+
+interface DetectedTeamStatus {
+  isTeam: boolean;
+  contributors: number;
+  recentActive: number;
+  hasRemote: boolean;
 }
 
 interface StatusConfig {
@@ -149,7 +166,9 @@ export async function status(
     hookInjection,
     team: effectiveTeam,
     currentWorkflow,
+    platformStatus: {},
   };
+  result.platformStatus = await checkPlatformStatus(rootDir, result.platforms);
 
   // 4. 输出
   if (options.json) {
@@ -159,6 +178,24 @@ export async function status(
   }
 
   return EXIT_OK;
+}
+
+async function checkPlatformStatus(
+  rootDir: string,
+  installedPlatforms: string[],
+): Promise<Record<string, PlatformStatus>> {
+  const installed = new Set(installedPlatforms);
+  const entries = await Promise.all(
+    getPlatformInstallers().map(async (platform) => {
+      const status = await checkOnePlatformStatus(
+        rootDir,
+        platform.name,
+        installed.has(platform.name),
+      );
+      return [platform.name, status] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
 }
 
 async function getCurrentWorkflow(
@@ -222,18 +259,22 @@ function getInstalledPlatforms(
 function getEffectiveTeamStatus(
   state: StatusState,
   config: StatusConfig,
-  detected: StatusResult['team'],
+  detected: DetectedTeamStatus,
 ): StatusResult['team'] {
   const configuredTeam =
     config.forceTeamMode === true
       ? true
       : (state.teamModeAutoDetected ?? detected.isTeam);
+  const forced = config.forceTeamMode === true;
 
   return {
     ...detected,
     isTeam: configuredTeam,
     contributors: Math.max(detected.contributors, state.contributors ?? 0, 1),
-    autoDetected: state.teamModeAutoDetected ?? detected.isTeam,
+    autoDetected: forced
+      ? false
+      : (state.teamModeAutoDetected ?? detected.isTeam),
+    forced,
   };
 }
 
@@ -381,9 +422,7 @@ function printText(r: StatusResult): void {
   console.log(`Mode:        ${modeLabel}`);
   console.log(`Style:       ${r.uiLibrary}`);
   console.log(`Initialized: ${r.initializedAt}`);
-  console.log(
-    `Team:        ${r.team.isTeam ? `detected (${r.team.contributors} contributors)` : 'solo'}`,
-  );
+  console.log(`Team:        ${formatTeamStatus(r.team)}`);
   if (r.currentWorkflow) {
     const stepMax = r.currentWorkflow.mode === 'man' ? 8 : 3;
     console.log(
@@ -396,31 +435,37 @@ function printText(r: StatusResult): void {
     console.log(`  ✓ ${formatPlatformName(p)}`);
   }
   console.log('');
-  console.log('Hooks:');
-  console.log(`  ${r.hooks.sessionStart ? '✓' : '✗'} session-start.sh`);
-  console.log(
-    `  ${r.hooks.userPromptSubmit ? '✓' : '✗'} user-prompt-submit.sh`,
-  );
-  console.log(
-    `  ${r.hooks.registered ? '✓' : '✗'} registered in .claude/settings.json`,
-  );
-  console.log(
-    `  Hook injection: ~${r.hookInjection.tokens} tokens (cap ${r.hookInjection.cap})`,
-  );
+  console.log('Platform status:');
+  for (const platform of getPlatformInstallers()) {
+    const status = r.platformStatus[platform.name];
+    if (!status) continue;
+    const installedMarker = status.installed ? '✓' : '○';
+    const readyMarker = status.ready ? 'ready' : 'not ready';
+    console.log(
+      `  ${installedMarker} ${platform.displayName}: ${readyMarker} (${status.target})`,
+    );
+  }
   console.log('');
+  if (r.platforms.includes('claude-code')) {
+    console.log('Hooks:');
+    console.log(`  ${r.hooks.sessionStart ? '✓' : '✗'} session-start.sh`);
+    console.log(
+      `  ${r.hooks.userPromptSubmit ? '✓' : '✗'} user-prompt-submit.sh`,
+    );
+    console.log(
+      `  ${r.hooks.registered ? '✓' : '✗'} registered in .claude/settings.json`,
+    );
+    console.log(
+      `  Hook injection: ~${r.hookInjection.tokens} tokens (cap ${r.hookInjection.cap})`,
+    );
+    console.log('');
+  }
 }
 
-/**
- * 平台内部名 → 显示名。
- */
-function formatPlatformName(p: string): string {
-  const names: Record<string, string> = {
-    'claude-code': 'Claude Code',
-    cursor: 'Cursor',
-    codex: 'Codex CLI',
-    copilot: 'GitHub Copilot',
-  };
-  return names[p] ?? p;
+function formatTeamStatus(team: StatusResult['team']): string {
+  if (team.forced) return `forced (${team.contributors} contributors)`;
+  if (team.isTeam) return `detected (${team.contributors} contributors)`;
+  return 'solo';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

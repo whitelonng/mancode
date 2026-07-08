@@ -80,3 +80,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+
+# WorkBuddy agent workspace
+.workbuddy/
+
+# Demo projects (local only, not published)
+examples/
