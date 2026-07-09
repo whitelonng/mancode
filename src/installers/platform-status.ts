@@ -6,6 +6,15 @@ import {
   DEFAULT_MANCODE_START_MARKER,
   hasManagedBlock,
 } from './managed-block.js';
+import {
+  CODEX_SKILL_MANAGED_MARKER,
+  MODE_NAMES,
+  ZCODE_SKILL_MANAGED_MARKER,
+} from './mode-skills.js';
+import {
+  ZCODE_MANCODE_END_MARKER,
+  ZCODE_MANCODE_START_MARKER,
+} from './zcode.js';
 
 export interface PlatformStatus {
   installed: boolean;
@@ -22,7 +31,7 @@ export async function checkPlatformStatus(
   const readiness = await checkPlatformReadiness(rootDir, platform);
   return {
     installed,
-    ready: installed && readiness.present,
+    ready: installed && readiness.ready,
     target: readiness.target,
     detail: describeStatus(installed, readiness),
   };
@@ -31,14 +40,21 @@ export async function checkPlatformStatus(
 async function checkPlatformReadiness(
   rootDir: string,
   platform: string,
-): Promise<{ present: boolean; target: string; readyDetail: string }> {
+): Promise<{
+  present: boolean;
+  ready: boolean;
+  target: string;
+  readyDetail: string;
+}> {
   if (platform === 'claude-code') {
     const hasSoloSkill = await pathExists(
       path.join(rootDir, '.claude', 'skills', 'solo', 'SKILL.md'),
     );
     const registered = await claudeHooksRegistered(rootDir);
+    const present = hasSoloSkill && registered;
     return {
-      present: hasSoloSkill && registered,
+      present,
+      ready: present,
       target: '.claude/',
       readyDetail: 'skills and hooks registered',
     };
@@ -52,6 +68,7 @@ async function checkPlatformReadiness(
     );
     return {
       present,
+      ready: present,
       target: '.cursor/rules/',
       readyDetail: 'mancode rules present',
     };
@@ -62,29 +79,72 @@ async function checkPlatformReadiness(
     if (!hasBlock) {
       return {
         present: false,
+        ready: false,
         target: 'AGENTS.md',
         readyDetail: 'managed block missing',
       };
     }
-    // If .agents/skills/ exists (non-minimal install), verify at least one mode skill.
-    // Minimal installs have no skills directory, so ready stays true.
-    const skillsDir = path.join(rootDir, '.agents', 'skills');
-    if (await pathExists(skillsDir)) {
-      const hasSkill = await pathExists(
-        path.join(skillsDir, 'man8', 'SKILL.md'),
-      );
+    if (await isPlatformMinimal(rootDir, 'codex')) {
       return {
-        present: hasSkill,
-        target: 'AGENTS.md + .agents/skills/',
-        readyDetail: hasSkill
-          ? 'managed block and skills present'
-          : 'skills directory exists but man8 skill missing',
+        present: true,
+        ready: true,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block present',
       };
     }
+
+    // Non-minimal installs should expose all five mancode-managed mode skills.
+    const skillsDir = path.join(rootDir, '.codex', 'skills');
+    const hasSkills = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
+      CODEX_SKILL_MANAGED_MARKER,
+    );
     return {
       present: true,
-      target: 'AGENTS.md',
-      readyDetail: 'managed block present',
+      ready: hasSkills,
+      target: 'AGENTS.md + .codex/skills/',
+      readyDetail: hasSkills
+        ? 'managed block and skills present'
+        : 'mode skills are missing, incomplete, or user-authored',
+    };
+  }
+
+  if (platform === 'zcode') {
+    const hasBlock = await fileHasManagedBlock(
+      path.join(rootDir, 'AGENTS.md'),
+      ZCODE_MANCODE_START_MARKER,
+      ZCODE_MANCODE_END_MARKER,
+    );
+    if (!hasBlock) {
+      return {
+        present: false,
+        ready: false,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block missing',
+      };
+    }
+    if (await isPlatformMinimal(rootDir, 'zcode')) {
+      return {
+        present: true,
+        ready: true,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block present',
+      };
+    }
+
+    // Non-minimal installs should expose all five mancode-managed mode skills.
+    const skillsDir = path.join(rootDir, '.zcode', 'skills');
+    const hasSkills = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
+      ZCODE_SKILL_MANAGED_MARKER,
+    );
+    return {
+      present: true,
+      ready: hasSkills,
+      target: 'AGENTS.md + .zcode/skills/',
+      readyDetail: hasSkills
+        ? 'managed block and skills present'
+        : 'mode skills are missing, incomplete, or user-authored',
     };
   }
 
@@ -95,6 +155,7 @@ async function checkPlatformReadiness(
   if (!hasBlock) {
     return {
       present: false,
+      ready: false,
       target: '.github/copilot-instructions.md',
       readyDetail: 'managed block missing',
     };
@@ -106,6 +167,7 @@ async function checkPlatformReadiness(
     const hasPrompt = await pathExists(path.join(promptsDir, 'man8.prompt.md'));
     return {
       present: hasPrompt,
+      ready: hasPrompt,
       target: '.github/copilot-instructions.md + .github/prompts/',
       readyDetail: hasPrompt
         ? 'managed block and prompts present'
@@ -114,6 +176,7 @@ async function checkPlatformReadiness(
   }
   return {
     present: true,
+    ready: true,
     target: '.github/copilot-instructions.md',
     readyDetail: 'managed block present',
   };
@@ -121,7 +184,7 @@ async function checkPlatformReadiness(
 
 function describeStatus(
   installed: boolean,
-  readiness: { present: boolean; readyDetail: string },
+  readiness: { present: boolean; ready: boolean; readyDetail: string },
 ): string {
   if (installed && readiness.present) return readiness.readyDetail;
   if (!installed && readiness.present) {
@@ -135,14 +198,51 @@ async function allPathsExist(paths: string[]): Promise<boolean> {
   return results.every(Boolean);
 }
 
-async function fileHasManagedBlock(filePath: string): Promise<boolean> {
+async function allManagedSkills(
+  paths: string[],
+  marker: string,
+): Promise<boolean> {
+  const results = await Promise.all(
+    paths.map((filePath) => fileHasText(filePath, marker)),
+  );
+  return results.every(Boolean);
+}
+
+async function fileHasText(filePath: string, needle: string): Promise<boolean> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return hasManagedBlock(
-      content,
-      DEFAULT_MANCODE_START_MARKER,
-      DEFAULT_MANCODE_END_MARKER,
+    return content.includes(needle);
+  } catch {
+    return false;
+  }
+}
+
+async function isPlatformMinimal(
+  rootDir: string,
+  platform: string,
+): Promise<boolean> {
+  try {
+    const raw = await fs.readFile(
+      path.join(rootDir, '.mancode', 'config.json'),
+      'utf-8',
     );
+    const config = JSON.parse(raw) as { platformOptions?: unknown };
+    if (!isRecord(config.platformOptions)) return false;
+    const options = config.platformOptions[platform];
+    return isRecord(options) && options.minimal === true;
+  } catch {
+    return false;
+  }
+}
+
+async function fileHasManagedBlock(
+  filePath: string,
+  startMarker = DEFAULT_MANCODE_START_MARKER,
+  endMarker = DEFAULT_MANCODE_END_MARKER,
+): Promise<boolean> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return hasManagedBlock(content, startMarker, endMarker);
   } catch {
     return false;
   }

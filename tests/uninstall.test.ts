@@ -106,7 +106,7 @@ describe('mancode uninstall', () => {
     ).rejects.toThrow();
   });
 
-  it('removes Codex .agents/skills/ on uninstall', async () => {
+  it('removes Codex .codex/skills/ on uninstall', async () => {
     await silentInit(dir);
     await install(dir, 'codex');
 
@@ -114,17 +114,31 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
 
     await expect(
-      readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-        'utf-8',
-      ),
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'mansolo', 'SKILL.md'),
+        path.join(dir, '.codex', 'skills', 'mansolo', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
+  });
+
+  it('uninstall preserves user-authored same-name Codex skills', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+    await writeFile(
+      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      '# custom man8\n',
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'codex', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+    ).resolves.toBe('# custom man8\n');
   });
 
   it('removes Copilot .github/prompts/ on uninstall', async () => {
@@ -271,6 +285,7 @@ describe('mancode uninstall', () => {
     await silentInit(dir);
     await install(dir, 'codex');
     await install(dir, 'cursor');
+    await install(dir, 'zcode');
 
     const code = await uninstall(dir, undefined, {
       force: true,
@@ -282,6 +297,9 @@ describe('mancode uninstall', () => {
     expect(await pathExists(path.join(dir, 'AGENTS.md'))).toBe(false);
     expect(
       await pathExists(path.join(dir, '.cursor', 'rules', 'mancode-solo.mdc')),
+    ).toBe(false);
+    expect(
+      await pathExists(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md')),
     ).toBe(false);
   });
 

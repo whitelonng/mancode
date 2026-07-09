@@ -11,14 +11,14 @@
 
 <p align="center">
   Adapts to common coding agent tools, including Claude Code, Cursor, Codex CLI,
-  and GitHub Copilot.
+  GitHub Copilot, and ZCode.
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="Status: stable v0.1.0" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex CLI, GitHub Copilot" />
-  <img src="https://img.shields.io/badge/tests-256%20passed-brightgreen?style=flat-square" alt="Tests: 256 passed" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex CLI, GitHub Copilot, ZCode" />
+  <img src="https://img.shields.io/badge/tests-313%20passed-brightgreen?style=flat-square" alt="Tests: 305 passed" />
 </p>
 
 <p align="center">
@@ -34,10 +34,10 @@ different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
 
-mancode ships with adapters for Claude Code, Cursor, Codex CLI, and
-GitHub Copilot. Claude Code gets the full hooks, skills, and subagents setup;
-the other adapters receive durable rules or instruction files with documented
-capability downgrades.
+mancode ships with adapters for Claude Code, Cursor, Codex CLI, GitHub Copilot,
+and ZCode. Claude Code gets the full hooks, skills, and subagents setup; the
+other adapters receive durable rules, skills, or instruction files with
+documented capability downgrades.
 
 mancode installs three things:
 
@@ -82,7 +82,9 @@ testing, and multi-agent review: playoffs, every possession counts.
 .claude/                         # Claude Code: hooks, skills, agents
 .cursor/rules/                   # Cursor: project rules
 AGENTS.md                        # Codex CLI: managed instruction block
+.codex/skills/                   # Codex CLI: mode skills
 .github/copilot-instructions.md  # GitHub Copilot: managed instruction block
+.zcode/skills/                   # ZCode: project mode skills
 ```
 
 `.mancode/` stores local state, project style signals, workflow reports, and
@@ -232,8 +234,9 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.1.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot are
-supported.
+**Status**: stable v0.1.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot
+are supported. ZCode adapter support is included, with project skill discovery
+kept behind a verification gate before release.
 
 ```bash
 npm install -g mancode
@@ -248,6 +251,9 @@ Supported platforms:
 - Cursor: `.cursor/rules/*.mdc` rules
 - Codex CLI: managed `AGENTS.md` block
 - GitHub Copilot: managed `.github/copilot-instructions.md` block
+- ZCode: managed `AGENTS.md` block and provisional `$man*` skills in
+  `.zcode/skills/`; project skill discovery and slash commands pending verified
+  workspace paths
 - Windsurf, Cline, Roo Code: planned later
 
 ### Install Options
@@ -258,7 +264,7 @@ mancode init --yes        # Skip confirmations for CI usage
 mancode init --team       # Force-enable team mode
 mancode init --no-team    # Force-disable team mode
 mancode init --style NAME # Save a default style preference
-mancode init --platform PLATFORM # Initialize for claude-code, cursor, codex, or copilot
+mancode init --platform PLATFORM # Initialize for claude-code, cursor, codex, copilot, or zcode
 mancode install --force   # Reinstall adapter while preserving scanned tokens
 mancode install --minimal # Install only solo-mode essentials
 ```
@@ -279,7 +285,7 @@ mancode install --minimal # Install only solo-mode essentials
 mancode init
 mancode status
 mancode status --json
-mancode install <claude-code|cursor|codex|copilot>
+mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man8|man> "<task>"
 mancode workflow update <taskId> [--step N] [--status in_progress|completed|abandoned]
@@ -309,12 +315,14 @@ Installed platforms:
   ✓ Cursor
   ✓ Codex CLI
   ✓ GitHub Copilot
+  ✓ ZCode
 
 Platform status:
   ✓ Claude Code: ready (.claude/)
   ✓ Cursor: ready (.cursor/rules/)
-  ✓ Codex CLI: ready (AGENTS.md)
+  ✓ Codex CLI: ready (AGENTS.md + .codex/skills/)
   ✓ GitHub Copilot: ready (.github/copilot-instructions.md)
+  ✓ ZCode: ready (AGENTS.md + .zcode/skills/)
 
 Hooks:
   ✓ session-start.sh
@@ -461,14 +469,20 @@ run `mancode install claude-code --force` to rewrite the settings.
 
 This means the platform's target files are missing. Run
 `mancode install <platform> --force` to regenerate them. For managed-block
-platforms (Codex, Copilot), the managed block in `AGENTS.md` or
+platforms (Codex, ZCode, Copilot), the managed block in `AGENTS.md` or
 `.github/copilot-instructions.md` may have been manually edited or deleted.
 
 ### AGENTS.md or copilot-instructions.md managed block was accidentally deleted
 
-Run `mancode install codex --force` (or `copilot`) to reinsert the managed
-block. User-authored content outside the `<!-- mancode:start -->` and
-`<!-- mancode:end -->` markers is preserved.
+Run `mancode install codex --force` (or `zcode`, or `copilot`) to reinsert the
+managed block. User-authored content outside the relevant mancode managed
+markers is preserved.
+
+### ZCode skills not appearing
+
+Ensure `.zcode/skills/man8/SKILL.md` through `.zcode/skills/mansolo/SKILL.md`
+exist, then restart or refresh ZCode. ZCode slash commands are not generated
+yet because the workspace command file path still needs explicit verification.
 
 ### Cursor rules not triggering
 
@@ -522,9 +536,10 @@ are opt-in for work that needs planning, tests, and review.
 
 ### Does mancode work outside Claude Code?
 
-Yes. mancode supports Cursor, Codex CLI, and GitHub Copilot through
-persistent project rules or instruction files. Claude Code remains the richest
-adapter because it supports hooks, skills, and subagents.
+Yes. mancode supports Cursor, Codex CLI, GitHub Copilot, and experimental ZCode
+adaptation through persistent project rules, skills, or instruction files.
+Claude Code remains the richest adapter because it supports hooks, skills, and
+subagents.
 
 ### Can mancode help with frontend consistency?
 

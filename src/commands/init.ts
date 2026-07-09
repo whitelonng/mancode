@@ -216,6 +216,9 @@ export async function init(
       forceTeamMode: options.team === true,
       defaultStyle: options.style ?? null,
       platforms: [installer.name],
+      platformOptions: {
+        [installer.name]: { minimal: false },
+      },
     });
 
     // 8. 审美扫描（前端项目才扫）。必须早于静态平台规则生成。
@@ -296,6 +299,7 @@ async function updateConfigOptions(
     forceTeamMode: boolean;
     defaultStyle: string | null;
     platforms: PlatformName[];
+    platformOptions: Partial<Record<PlatformName, { minimal: boolean }>>;
   },
 ): Promise<void> {
   const configPath = path.join(mancodeDir, 'config.json');
@@ -327,6 +331,12 @@ function printPlatformCreatedFiles(platform: PlatformName): void {
   }
   if (platform === 'codex') {
     console.log('  AGENTS.md                   # Codex managed block');
+    console.log('  .codex/skills/              # Codex mode skills');
+    return;
+  }
+  if (platform === 'zcode') {
+    console.log('  AGENTS.md                   # ZCode managed block');
+    console.log('  .zcode/skills/              # ZCode mode skills');
     return;
   }
   console.log('  .github/copilot-instructions.md # Copilot instructions');

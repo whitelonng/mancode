@@ -188,7 +188,7 @@ process.stdout.write(JSON.stringify({
     );
   });
 
-  it('reports advisory when dependency-cruiser is not installed', async () => {
+  it('does not report dependency-cruiser advisory when no architecture config exists', async () => {
     await writeFile(
       path.join(dir, 'package.json'),
       JSON.stringify({
@@ -196,15 +196,40 @@ process.stdout.write(JSON.stringify({
       }),
       'utf-8',
     );
-    // No depcruise binary created locally or globally → not-found
 
-    const report = await runPreseasonScan(dir, 'all');
+    const report = await withoutPath(async () => runPreseasonScan(dir, 'all'));
 
     expect(
       report.issues.some(
         (issue) => issue.id === 'architecture-scanner-unavailable',
       ),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it('reports advisory when architecture config exists but dependency-cruiser is not installed', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: { test: 'vitest', lint: 'biome check', build: 'tsc' },
+      }),
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, '.dependency-cruiser.json'),
+      JSON.stringify({ forbidden: [] }),
+      'utf-8',
+    );
+
+    const report = await withoutPath(async () => runPreseasonScan(dir, 'all'));
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'architecture-scanner-unavailable',
+          type: 'architecture',
+        }),
+      ]),
+    );
   });
 
   it('reports skipped when depcruise outputs non-JSON', async () => {
@@ -216,12 +241,7 @@ process.stdout.write(JSON.stringify({
       'utf-8',
     );
     await mkdir(path.join(dir, 'node_modules', '.bin'), { recursive: true });
-    const depcruisePath = path.join(
-      dir,
-      'node_modules',
-      '.bin',
-      'depcruise',
-    );
+    const depcruisePath = path.join(dir, 'node_modules', '.bin', 'depcruise');
     await writeFile(
       depcruisePath,
       '#!/usr/bin/env node\nprocess.stdout.write("this is not valid json");\n',
@@ -245,12 +265,7 @@ process.stdout.write(JSON.stringify({
       'utf-8',
     );
     await mkdir(path.join(dir, 'node_modules', '.bin'), { recursive: true });
-    const depcruisePath = path.join(
-      dir,
-      'node_modules',
-      '.bin',
-      'depcruise',
-    );
+    const depcruisePath = path.join(dir, 'node_modules', '.bin', 'depcruise');
     await writeFile(
       depcruisePath,
       `#!/usr/bin/env node
@@ -880,5 +895,27 @@ async function listMarkdownFiles(dir: string): Promise<string[]> {
     return entries.filter((entry) => entry.endsWith('.md'));
   } catch {
     return [];
+  }
+}
+
+async function withoutPath<T>(fn: () => Promise<T>): Promise<T> {
+  const pathKeys = Object.keys(process.env).filter(
+    (key) => key.toLowerCase() === 'path',
+  );
+  const previous = new Map(pathKeys.map((key) => [key, process.env[key]]));
+  for (const key of pathKeys) {
+    process.env[key] = '';
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const key of pathKeys) {
+      const value = previous.get(key);
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
 }

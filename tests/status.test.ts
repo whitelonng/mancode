@@ -246,6 +246,7 @@ describe('mancode status', () => {
     await install(dir, 'cursor');
     await install(dir, 'codex');
     await install(dir, 'copilot');
+    await install(dir, 'zcode');
 
     const logs = await captureLog(() => status(dir, { json: true }));
     const result: StatusResult = JSON.parse(logs.join('\n'));
@@ -255,11 +256,13 @@ describe('mancode status', () => {
       'cursor',
       'codex',
       'copilot',
+      'zcode',
     ]);
     expect(result.platformStatus['claude-code'].ready).toBe(true);
     expect(result.platformStatus.cursor.ready).toBe(true);
     expect(result.platformStatus.codex.ready).toBe(true);
     expect(result.platformStatus.copilot.ready).toBe(true);
+    expect(result.platformStatus.zcode.ready).toBe(true);
     expect(result.platformStatus.cursor.target).toBe('.cursor/rules/');
   });
 

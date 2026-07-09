@@ -132,7 +132,15 @@ export async function install(
   if (!platforms.includes(platform)) {
     platforms.push(platform);
   }
-  await updateConfig(rootDir, { ...config, platforms });
+  await updateConfig(rootDir, {
+    ...config,
+    platforms,
+    platformOptions: updatePlatformOptions(
+      config.platformOptions,
+      platform,
+      options,
+    ),
+  });
 
   // 6. 完成
   console.log(`✓  ${formatPlatformName(platform)} adapter installed.`);
@@ -190,6 +198,20 @@ function withDefaultConfig(
     hooks: isRecord(config.hooks) ? config.hooks : DEFAULT_CONFIG.hooks,
     logging: isRecord(config.logging) ? config.logging : DEFAULT_CONFIG.logging,
   };
+}
+
+function updatePlatformOptions(
+  value: unknown,
+  platform: string,
+  options: InstallOptions,
+): Record<string, unknown> {
+  const platformOptions = isRecord(value) ? { ...value } : {};
+  const existing = platformOptions[platform];
+  platformOptions[platform] = {
+    ...(isRecord(existing) ? existing : {}),
+    minimal: options.minimal === true,
+  };
+  return platformOptions;
 }
 
 async function readStatePlatform(rootDir: string): Promise<string | null> {

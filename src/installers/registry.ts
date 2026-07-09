@@ -2,8 +2,14 @@ import { installClaudeCode } from './claude-code.js';
 import { installCodex } from './codex.js';
 import { installCopilot } from './copilot.js';
 import { installCursor } from './cursor.js';
+import { installZcode } from './zcode.js';
 
-export type PlatformName = 'claude-code' | 'cursor' | 'codex' | 'copilot';
+export type PlatformName =
+  | 'claude-code'
+  | 'cursor'
+  | 'codex'
+  | 'copilot'
+  | 'zcode';
 
 export interface PlatformCapabilities {
   slashCommands: 'native' | 'partial' | 'none';
@@ -72,6 +78,17 @@ export const PLATFORM_INSTALLERS: Record<PlatformName, PlatformInstaller> = {
       skills: 'instructions',
     },
     install: installCopilot,
+  },
+  zcode: {
+    name: 'zcode',
+    displayName: 'ZCode',
+    capabilities: {
+      slashCommands: 'partial',
+      subagents: false,
+      hooks: false,
+      skills: 'agents-skills',
+    },
+    install: installZcode,
   },
 };
 

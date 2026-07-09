@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  适配常见编程代理工具，Claude Code、Cursor、Codex CLI 和 GitHub Copilot。
+  适配常见编程代理工具，Claude Code、Cursor、Codex CLI、GitHub Copilot 和 ZCode。
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="状态：稳定版 v0.1.0" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、Codex CLI、GitHub Copilot" />
-  <img src="https://img.shields.io/badge/tests-256%20passed-brightgreen?style=flat-square" alt="测试：256 通过" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、Codex CLI、GitHub Copilot、ZCode" />
+  <img src="https://img.shields.io/badge/tests-313%20passed-brightgreen?style=flat-square" alt="测试：305 通过" />
 </p>
 
 <p align="center">
@@ -32,9 +32,9 @@
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
 
-mancode 当前支持 Claude Code、Cursor、Codex CLI 和 GitHub Copilot。Claude Code
-获得完整 hooks、skills 和 subagents；其他平台通过持久化 rules 或 instructions 文件提供
-降级适配。
+mancode 当前支持 Claude Code、Cursor、Codex CLI、GitHub Copilot 和 ZCode。
+Claude Code 获得完整 hooks、skills 和 subagents；其他平台通过持久化 rules、
+skills 或 instructions 文件提供降级适配。
 
 mancode 会安装三类能力：
 
@@ -76,7 +76,9 @@ mancode init
 .claude/                         # Claude Code：hooks、skills、agents
 .cursor/rules/                   # Cursor：项目 rules
 AGENTS.md                        # Codex CLI：托管 instruction block
+.codex/skills/                   # Codex CLI：mode skills
 .github/copilot-instructions.md  # GitHub Copilot：托管 instruction block
+.zcode/skills/                   # ZCode：项目 mode skills
 ```
 
 `.mancode/` 保存本地状态、项目风格信号、工作流报告和团队记忆。平台文件保存对应
@@ -209,7 +211,8 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.1.0。Claude Code、Cursor、Codex CLI 和 GitHub Copilot 均已支持。
+**状态**：稳定版 v0.1.0。Claude Code、Cursor、Codex CLI 和 GitHub Copilot
+均已支持。ZCode adapter 已接入，但项目级 skill 发现路径在发布前仍作为验证门禁。
 
 ```bash
 npm install -g mancode
@@ -224,6 +227,8 @@ mancode init --platform cursor
 - Cursor：`.cursor/rules/*.mdc` rules
 - Codex CLI：托管 `AGENTS.md` block
 - GitHub Copilot：托管 `.github/copilot-instructions.md` block
+- ZCode：托管 `AGENTS.md` block，并暂按 `.zcode/skills/` 生成 `$man*`
+  skills；项目级 skill 发现和 slash commands 仍需确认 workspace 路径后再发布承诺
 - Windsurf、Cline、Roo Code：后续计划
 
 ### 安装参数
@@ -234,7 +239,7 @@ mancode init --yes        # CI 场景跳过确认
 mancode init --team       # 强制启用团队模式
 mancode init --no-team    # 强制禁用团队模式
 mancode init --style NAME # 保存默认审美偏好
-mancode init --platform PLATFORM # 初始化 claude-code、cursor、codex 或 copilot
+mancode init --platform PLATFORM # 初始化 claude-code、cursor、codex、copilot 或 zcode
 mancode install --force   # 重装适配并保留已扫描 token
 mancode install --minimal # 只安装 solo 必需文件
 ```
@@ -255,7 +260,7 @@ mancode install --minimal # 只安装 solo 必需文件
 mancode init
 mancode status
 mancode status --json
-mancode install <claude-code|cursor|codex|copilot>
+mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man8|man> "<task>"
 mancode workflow update <taskId> [--step N] [--status in_progress|completed|abandoned]
@@ -285,12 +290,14 @@ Installed platforms:
   ✓ Cursor
   ✓ Codex CLI
   ✓ GitHub Copilot
+  ✓ ZCode
 
 Platform status:
   ✓ Claude Code: ready (.claude/)
   ✓ Cursor: ready (.cursor/rules/)
-  ✓ Codex CLI: ready (AGENTS.md)
+  ✓ Codex CLI: ready (AGENTS.md + .codex/skills/)
   ✓ GitHub Copilot: ready (.github/copilot-instructions.md)
+  ✓ ZCode: ready (AGENTS.md + .zcode/skills/)
 
 Hooks:
   ✓ session-start.sh
@@ -432,13 +439,19 @@ mancode 要求目标目录有 `.git` 或 `package.json`。请在 git 仓库或 N
 ### `mancode status` 显示某平台 "not ready"
 
 该平台的目标文件缺失。运行 `mancode install <platform> --force` 重新生成。
-对于 Codex 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
+对于 Codex、ZCode 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
 中的受控区可能被手动编辑或删除了。
 
 ### AGENTS.md 或 copilot-instructions.md 受控区被误删
 
-运行 `mancode install codex --force`（或 `copilot`）重新插入受控区。
-`<!-- mancode:start -->` 和 `<!-- mancode:end -->` 标记外的用户内容会被保留。
+运行 `mancode install codex --force`（或 `zcode`、`copilot`）重新插入受控区。
+对应 mancode 受控标记外的用户内容会被保留。
+
+### ZCode skills 未出现
+
+确认 `.zcode/skills/man8/SKILL.md` 到 `.zcode/skills/mansolo/SKILL.md`
+都存在，然后重启或刷新 ZCode。当前尚不生成 ZCode `/man*` slash commands，
+因为 workspace command 的文件路径仍需显式验证。
 
 ### Cursor rules 不触发
 
@@ -488,9 +501,9 @@ hooks。用户自定义的 rules 和 instructions 会被保留。
 
 ### mancode 支持 Claude Code 以外的平台吗？
 
-支持。mancode 已通过持久化 rules 或 instruction 文件支持 Cursor、Codex CLI 和
-GitHub Copilot。Claude Code 仍是能力最完整的 adapter，因为它支持 hooks、skills 和
-subagents。
+支持。mancode 已通过持久化 rules、skills 或 instruction 文件支持 Cursor、Codex
+CLI、GitHub Copilot，并提供实验性 ZCode adapter。Claude Code 仍是能力最完整的
+adapter，因为它支持 hooks、skills 和 subagents。
 
 ### mancode 能改善前端一致性吗？
 

@@ -184,6 +184,7 @@ describe('mancode init', () => {
     ['cursor', ['.cursor', 'rules', 'mancode-context.mdc']],
     ['codex', ['AGENTS.md']],
     ['copilot', ['.github', 'copilot-instructions.md']],
+    ['zcode', ['AGENTS.md']],
   ] as const)(
     'initializes %s with freshly scanned frontend style tokens',
     async (platform, outputPath) => {
@@ -214,6 +215,30 @@ describe('mancode init', () => {
     await expect(
       readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
     ).resolves.toContain('Platform adapter: Codex CLI');
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('initializes ZCode without creating Claude Code files', async () => {
+    const code = await init(dir, { platform: 'zcode' });
+
+    expect(code).toBe(EXIT_OK);
+    const state: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(state.platform).toBe('zcode');
+    expect(config.platforms).toEqual(['zcode']);
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).resolves.toContain('Platform adapter: ZCode');
+    await expect(
+      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+    ).resolves.toContain('name: man8');
     await expect(
       readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
     ).rejects.toThrow();

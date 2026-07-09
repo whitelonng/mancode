@@ -32,7 +32,9 @@ program
 
 program
   .command('install [platform]')
-  .description('Install platform adapter (claude-code, cursor, codex, copilot)')
+  .description(
+    'Install platform adapter (claude-code, cursor, codex, copilot, zcode)',
+  )
   .option('--force', 'Reinstall even if already installed')
   .option('--minimal', 'Minimal install (MVP-2)')
   .action(async (platform, options) => {

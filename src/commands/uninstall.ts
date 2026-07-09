@@ -7,11 +7,17 @@ import {
   removeCodexSkills,
   removeCopilotPrompts,
   removeCursorCommands,
+  removeZcodeSkills,
 } from '../installers/mode-skills.js';
 import {
   formatPlatformName,
   getPlatformInstaller,
+  getPlatformInstallers,
 } from '../installers/registry.js';
+import {
+  ZCODE_MANCODE_END_MARKER,
+  ZCODE_MANCODE_START_MARKER,
+} from '../installers/zcode.js';
 
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -68,7 +74,9 @@ export async function uninstall(
     if (!installer) {
       console.error(`✗  Unsupported platform: ${platform}`);
       console.error(
-        '   Supported platforms: claude-code, cursor, codex, copilot',
+        `   Supported platforms: ${getPlatformInstallers()
+          .map((item) => item.name)
+          .join(', ')}`,
       );
       return EXIT_UNSUPPORTED_PLATFORM;
     }
@@ -107,6 +115,8 @@ async function uninstallPlatform(
     await uninstallCodex(rootDir);
   } else if (platform === 'copilot') {
     await uninstallCopilot(rootDir);
+  } else if (platform === 'zcode') {
+    await uninstallZcode(rootDir);
   }
 
   await removeFromConfig(rootDir, platform);
@@ -114,7 +124,7 @@ async function uninstallPlatform(
 
 async function uninstallAll(rootDir: string): Promise<void> {
   console.log('✓  Removing all platform adapters...');
-  for (const p of ['claude-code', 'cursor', 'codex', 'copilot']) {
+  for (const p of getPlatformInstallers().map((platform) => platform.name)) {
     await uninstallPlatform(rootDir, p);
   }
 
@@ -239,6 +249,26 @@ async function uninstallCopilot(rootDir: string): Promise<void> {
   await removeCopilotPrompts(rootDir);
 }
 
+async function uninstallZcode(rootDir: string): Promise<void> {
+  const agentsPath = path.join(rootDir, 'AGENTS.md');
+  try {
+    const content = await readFile(agentsPath, 'utf-8');
+    const cleaned = removeManagedBlock(
+      content,
+      ZCODE_MANCODE_START_MARKER,
+      ZCODE_MANCODE_END_MARKER,
+    );
+    if (cleaned.trim()) {
+      await writeFile(agentsPath, `${cleaned}\n`, 'utf-8');
+    } else {
+      await rm(agentsPath, { force: true });
+    }
+  } catch {
+    // AGENTS.md doesn't exist — nothing to do
+  }
+  await removeZcodeSkills(rootDir);
+}
+
 async function removeFromConfig(
   rootDir: string,
   platform: string,
@@ -246,9 +276,21 @@ async function removeFromConfig(
   const configPath = path.join(rootDir, '.mancode', 'config.json');
   try {
     const raw = await readFile(configPath, 'utf-8');
-    const config = JSON.parse(raw) as { platforms?: string[] };
+    const config = JSON.parse(raw) as {
+      platforms?: string[];
+      platformOptions?: Record<string, unknown>;
+    };
     if (Array.isArray(config.platforms)) {
       config.platforms = config.platforms.filter((p) => p !== platform);
+      if (isRecord(config.platformOptions)) {
+        const platformOptions = Object.fromEntries(
+          Object.entries(config.platformOptions).filter(
+            ([name]) => name !== platform,
+          ),
+        );
+        config.platformOptions =
+          Object.keys(platformOptions).length > 0 ? platformOptions : undefined;
+      }
       await writeFile(
         configPath,
         `${JSON.stringify(config, null, 2)}\n`,

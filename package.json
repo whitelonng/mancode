@@ -33,7 +33,8 @@
     "claude-code-hooks",
     "claude-code-skills",
     "cursor",
-    "codex-cli"
+    "codex-cli",
+    "zcode"
   ],
   "engines": {
     "node": ">=20"

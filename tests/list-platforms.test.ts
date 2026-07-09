@@ -26,6 +26,7 @@ describe('mancode list-platforms', () => {
     expect(output).toContain('○ cursor');
     expect(output).toContain('○ codex');
     expect(output).toContain('○ copilot');
+    expect(output).toContain('○ zcode');
   });
 
   it('marks installed platforms after init and install', async () => {
@@ -40,6 +41,7 @@ describe('mancode list-platforms', () => {
     expect(output).toContain('✓ codex');
     expect(output).toContain('○ cursor');
     expect(output).toContain('○ copilot');
+    expect(output).toContain('○ zcode');
   });
 });
 

@@ -19,6 +19,11 @@ docs/13-scanning.md
 docs/14-orchestration.md
 docs/15-adapters.md
 
+# 公开优化决策文档：PostToolUse P0 设计决策需要随代码提交
+!docs/
+docs/*
+!docs/12-lifecycle.md
+
 # Node.js
 node_modules/
 npm-debug.log*

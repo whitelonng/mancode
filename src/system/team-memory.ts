@@ -85,11 +85,11 @@ function memoryDir(projectRoot: string): string {
 
 async function writeIfMissing(file: string, content: string): Promise<void> {
   // Use O_CREAT | O_EXCL (flag 'wx') for atomic creation.
-  // This eliminates the TOCTOU race in the previous readFile-then-writeFile
-  // approach: two concurrent callers could both see the file as missing and
-  // both writeFile, with the later write clobbering content already appended
-  // by the earlier caller. With 'wx', the OS guarantees only one caller wins
-  // creation; the loser gets EEXIST and safely skips.
+  // This eliminates the TOCTOU race: two concurrent callers could both see
+  // the file as missing and both writeFile, with the later write clobbering
+  // content already appended by the earlier caller. With 'wx', the OS
+  // guarantees only one caller wins creation; the loser gets EEXIST and
+  // safely skips.
   try {
     await writeFile(file, content, { flag: 'wx' });
   } catch (err) {

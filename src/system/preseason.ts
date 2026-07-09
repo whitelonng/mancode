@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import {
+  access,
   lstat,
   mkdir,
   readFile,
@@ -729,18 +730,8 @@ async function scanArchitecture(
   const result = await runDepcruise(binary, projectRoot);
 
   if (result.status === 'not-found') {
-    return [
-      {
-        id: 'architecture-scanner-unavailable',
-        severity: 'P2',
-        type: 'architecture',
-        title: 'Architecture scanner not installed',
-        detail:
-          'dependency-cruiser was not found in node_modules/.bin or on PATH. Architecture dependency rules cannot be checked.',
-        recommendation:
-          'Install dependency-cruiser (npm i -D dependency-cruiser) and add a .dependency-cruiser config to enable architecture scanning.',
-      },
-    ];
+    if (!(await hasDependencyCruiserConfig(projectRoot))) return [];
+    return [architectureScannerUnavailableIssue()];
   }
 
   const parsed = parseDepcruiseJson(result.stdout);
@@ -771,6 +762,37 @@ async function scanArchitecture(
     recommendation:
       'Respect the configured dependency boundary or update the dependency-cruiser rule if the architecture decision changed.',
   }));
+}
+
+async function hasDependencyCruiserConfig(
+  projectRoot: string,
+): Promise<boolean> {
+  const files = [
+    '.dependency-cruiser.js',
+    '.dependency-cruiser.cjs',
+    '.dependency-cruiser.mjs',
+    '.dependency-cruiser.json',
+    'dependency-cruiser.config.js',
+    'dependency-cruiser.config.cjs',
+    'dependency-cruiser.config.mjs',
+  ];
+  const results = await Promise.all(
+    files.map((file) => pathExists(path.join(projectRoot, file))),
+  );
+  return results.some(Boolean);
+}
+
+function architectureScannerUnavailableIssue(): PreseasonIssue {
+  return {
+    id: 'architecture-scanner-unavailable',
+    severity: 'P2',
+    type: 'architecture',
+    title: 'Architecture scanner not installed',
+    detail:
+      'dependency-cruiser config was found, but dependency-cruiser was not found in node_modules/.bin or on PATH. Architecture dependency rules cannot be checked.',
+    recommendation:
+      'Install dependency-cruiser (npm i -D dependency-cruiser) to enable architecture scanning.',
+  };
 }
 
 interface DepcruiseResult {
@@ -1241,6 +1263,15 @@ function readFileSyncSafe(file: string): string {
 
 function pathExistsSync(file: string): boolean {
   return existsSync(file);
+}
+
+async function pathExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {

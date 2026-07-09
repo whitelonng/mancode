@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
-import { EXIT_OK, install } from '../src/commands/install.js';
+import {
+  EXIT_INSTALL_FAILED,
+  EXIT_OK,
+  install,
+} from '../src/commands/install.js';
 
 describe('Codex adapter', () => {
   let dir: string;
@@ -83,30 +87,28 @@ describe('Codex adapter', () => {
     expect(agents).not.toContain('mancode Platform Downgrade');
   });
 
-  it('creates .agents/skills/ with 5 mode SKILL.md files', async () => {
+  it('creates .codex/skills/ with 5 mode SKILL.md files', async () => {
     await silentInit(dir);
     await install(dir, 'codex');
 
     for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
       const skill = await readFile(
-        path.join(dir, '.agents', 'skills', mode, 'SKILL.md'),
+        path.join(dir, '.codex', 'skills', mode, 'SKILL.md'),
         'utf-8',
       );
       expect(skill).toContain(`name: ${mode}`);
+      expect(skill).toContain('Managed by mancode:codex-skill');
       expect(skill).toContain('Mode Persistence');
       expect(skill).toContain('YAGNI ladder');
     }
   });
 
-  it('does not create .agents/skills/ with --minimal', async () => {
+  it('does not create .codex/skills/ with --minimal', async () => {
     await silentInit(dir);
     await install(dir, 'codex', { minimal: true });
 
     await expect(
-      readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-        'utf-8',
-      ),
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -115,17 +117,14 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
     // Verify skills exist before minimal
     await readFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
       'utf-8',
     );
 
     await install(dir, 'codex', { force: true, minimal: true });
 
     await expect(
-      readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-        'utf-8',
-      ),
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -134,7 +133,7 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
 
     const man8 = await readFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
       'utf-8',
     );
     expect(man8).toContain('$man8');
@@ -145,7 +144,7 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
 
     const mansolo = await readFile(
-      path.join(dir, '.agents', 'skills', 'mansolo', 'SKILL.md'),
+      path.join(dir, '.codex', 'skills', 'mansolo', 'SKILL.md'),
       'utf-8',
     );
     expect(mansolo).toContain('"solo"');
@@ -158,6 +157,44 @@ describe('Codex adapter', () => {
 
     const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agents).toContain('$man8');
+  });
+
+  it('refuses to overwrite user-authored same-name Codex skills', async () => {
+    await silentInit(dir);
+    await mkdir(path.join(dir, '.codex', 'skills', 'man8'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      '# custom man8\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'codex');
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+    ).resolves.toBe('# custom man8\n');
+  });
+
+  it('minimal install preserves user-authored same-name Codex skills', async () => {
+    await silentInit(dir);
+    await mkdir(path.join(dir, '.codex', 'skills', 'man8'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      '# custom man8\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'codex', { minimal: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+    ).resolves.toBe('# custom man8\n');
   });
 });
 
