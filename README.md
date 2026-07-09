@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="Status: stable v0.1.0" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.2.0-green?style=flat-square" alt="Status: stable v0.2.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-313%20passed-brightgreen?style=flat-square" alt="Tests: 305 passed" />
 </p>
@@ -234,7 +234,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.1.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot
+**Status**: stable v0.2.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot
 are supported. ZCode adapter support is included, with project skill discovery
 kept behind a verification gate before release.
 
@@ -302,7 +302,7 @@ mancode version
 ### `mancode status`
 
 ```text
-mancode v0.1.0
+mancode v0.2.0
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)

@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.1.0-green?style=flat-square" alt="状态：稳定版 v0.1.0" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.2.0-green?style=flat-square" alt="状态：稳定版 v0.2.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-313%20passed-brightgreen?style=flat-square" alt="测试：305 通过" />
 </p>
@@ -211,7 +211,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.1.0。Claude Code、Cursor、Codex CLI 和 GitHub Copilot
+**状态**：稳定版 v0.2.0。Claude Code、Cursor、Codex CLI 和 GitHub Copilot
 均已支持。ZCode adapter 已接入，但项目级 skill 发现路径在发布前仍作为验证门禁。
 
 ```bash
@@ -277,7 +277,7 @@ mancode version
 ### `mancode status`
 
 ```text
-mancode v0.1.0
+mancode v0.2.0
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
