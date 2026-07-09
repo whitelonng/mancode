@@ -81,7 +81,10 @@ describe('ZCode adapter', () => {
     await install(dir, 'zcode', { minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -96,7 +99,10 @@ describe('ZCode adapter', () => {
     await install(dir, 'zcode', { force: true, minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -200,7 +206,10 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).resolves.toBe('# custom man8\n');
   });
 
@@ -219,7 +228,10 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).resolves.toBe('# custom man8\n');
   });
 
@@ -303,7 +315,10 @@ describe('ZCode adapter', () => {
     expect(agents).toContain('Keep this.');
     expect(agents).not.toContain('<!-- mancode:zcode:start -->');
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
     await expect(
       readFile(path.join(dir, '.agents', 'skills', 'custom.md'), 'utf-8'),
@@ -323,7 +338,10 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).resolves.toBe('# custom man8\n');
   });
 });

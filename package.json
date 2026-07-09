@@ -48,12 +48,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "logo.png",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "logo.png", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

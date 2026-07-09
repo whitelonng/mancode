@@ -6,10 +6,7 @@ import {
   DEFAULT_MANCODE_START_MARKER,
   hasManagedBlock,
 } from './managed-block.js';
-import {
-  MANCODE_AGENT_SKILL_MARKERS,
-  MODE_NAMES,
-} from './mode-skills.js';
+import { MANCODE_AGENT_SKILL_MARKERS, MODE_NAMES } from './mode-skills.js';
 import {
   ZCODE_MANCODE_END_MARKER,
   ZCODE_MANCODE_START_MARKER,

@@ -108,7 +108,10 @@ describe('Codex adapter', () => {
     await install(dir, 'codex', { minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -124,7 +127,10 @@ describe('Codex adapter', () => {
     await install(dir, 'codex', { force: true, minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -174,7 +180,10 @@ describe('Codex adapter', () => {
 
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).resolves.toBe('# custom man8\n');
   });
 
@@ -193,7 +202,10 @@ describe('Codex adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        'utf-8',
+      ),
     ).resolves.toBe('# custom man8\n');
   });
 });
