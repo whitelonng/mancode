@@ -82,9 +82,9 @@ testing, and multi-agent review: playoffs, every possession counts.
 .claude/                         # Claude Code: hooks, skills, agents
 .cursor/rules/                   # Cursor: project rules
 AGENTS.md                        # Codex CLI: managed instruction block
-.codex/skills/                   # Codex CLI: mode skills
+.agents/skills/                   # Codex CLI: mode skills
 .github/copilot-instructions.md  # GitHub Copilot: managed instruction block
-.zcode/skills/                   # ZCode: project mode skills
+.agents/skills/                   # ZCode: project mode skills
 ```
 
 `.mancode/` stores local state, project style signals, workflow reports, and
@@ -252,7 +252,7 @@ Supported platforms:
 - Codex CLI: managed `AGENTS.md` block
 - GitHub Copilot: managed `.github/copilot-instructions.md` block
 - ZCode: managed `AGENTS.md` block and provisional `$man*` skills in
-  `.zcode/skills/`; project skill discovery and slash commands pending verified
+  `.agents/skills/`; project skill discovery and slash commands pending verified
   workspace paths
 - Windsurf, Cline, Roo Code: planned later
 
@@ -320,9 +320,9 @@ Installed platforms:
 Platform status:
   ✓ Claude Code: ready (.claude/)
   ✓ Cursor: ready (.cursor/rules/)
-  ✓ Codex CLI: ready (AGENTS.md + .codex/skills/)
+  ✓ Codex CLI: ready (AGENTS.md + .agents/skills/)
   ✓ GitHub Copilot: ready (.github/copilot-instructions.md)
-  ✓ ZCode: ready (AGENTS.md + .zcode/skills/)
+  ✓ ZCode: ready (AGENTS.md + .agents/skills/)
 
 Hooks:
   ✓ session-start.sh
@@ -480,7 +480,7 @@ markers is preserved.
 
 ### ZCode skills not appearing
 
-Ensure `.zcode/skills/man8/SKILL.md` through `.zcode/skills/mansolo/SKILL.md`
+Ensure `.agents/skills/man8/SKILL.md` through `.agents/skills/mansolo/SKILL.md`
 exist, then restart or refresh ZCode. ZCode slash commands are not generated
 yet because the workspace command file path still needs explicit verification.
 

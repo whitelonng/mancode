@@ -76,9 +76,9 @@ mancode init
 .claude/                         # Claude Code：hooks、skills、agents
 .cursor/rules/                   # Cursor：项目 rules
 AGENTS.md                        # Codex CLI：托管 instruction block
-.codex/skills/                   # Codex CLI：mode skills
+.agents/skills/                   # Codex CLI：mode skills
 .github/copilot-instructions.md  # GitHub Copilot：托管 instruction block
-.zcode/skills/                   # ZCode：项目 mode skills
+.agents/skills/                   # ZCode：项目 mode skills
 ```
 
 `.mancode/` 保存本地状态、项目风格信号、工作流报告和团队记忆。平台文件保存对应
@@ -227,7 +227,7 @@ mancode init --platform cursor
 - Cursor：`.cursor/rules/*.mdc` rules
 - Codex CLI：托管 `AGENTS.md` block
 - GitHub Copilot：托管 `.github/copilot-instructions.md` block
-- ZCode：托管 `AGENTS.md` block，并暂按 `.zcode/skills/` 生成 `$man*`
+- ZCode：托管 `AGENTS.md` block，并暂按 `.agents/skills/` 生成 `$man*`
   skills；项目级 skill 发现和 slash commands 仍需确认 workspace 路径后再发布承诺
 - Windsurf、Cline、Roo Code：后续计划
 
@@ -295,9 +295,9 @@ Installed platforms:
 Platform status:
   ✓ Claude Code: ready (.claude/)
   ✓ Cursor: ready (.cursor/rules/)
-  ✓ Codex CLI: ready (AGENTS.md + .codex/skills/)
+  ✓ Codex CLI: ready (AGENTS.md + .agents/skills/)
   ✓ GitHub Copilot: ready (.github/copilot-instructions.md)
-  ✓ ZCode: ready (AGENTS.md + .zcode/skills/)
+  ✓ ZCode: ready (AGENTS.md + .agents/skills/)
 
 Hooks:
   ✓ session-start.sh
@@ -449,7 +449,7 @@ mancode 要求目标目录有 `.git` 或 `package.json`。请在 git 仓库或 N
 
 ### ZCode skills 未出现
 
-确认 `.zcode/skills/man8/SKILL.md` 到 `.zcode/skills/mansolo/SKILL.md`
+确认 `.agents/skills/man8/SKILL.md` 到 `.agents/skills/mansolo/SKILL.md`
 都存在，然后重启或刷新 ZCode。当前尚不生成 ZCode `/man*` slash commands，
 因为 workspace command 的文件路径仍需显式验证。
 

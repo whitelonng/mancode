@@ -237,7 +237,7 @@ describe('mancode init', () => {
       readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
     ).resolves.toContain('Platform adapter: ZCode');
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toContain('name: man8');
     await expect(
       readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),

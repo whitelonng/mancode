@@ -59,13 +59,13 @@ describe('ZCode adapter', () => {
     expect(count(agents, '<!-- mancode:zcode:end -->')).toBe(1);
   });
 
-  it('creates .zcode/skills/ with 5 mode SKILL.md files', async () => {
+  it('creates .agents/skills/ with 5 mode SKILL.md files', async () => {
     await silentInit(dir);
     await install(dir, 'zcode');
 
     for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
       const skill = await readFile(
-        path.join(dir, '.zcode', 'skills', mode, 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', mode, 'SKILL.md'),
         'utf-8',
       );
       expect(skill).toContain(`name: ${mode}`);
@@ -76,12 +76,12 @@ describe('ZCode adapter', () => {
     }
   });
 
-  it('does not create .zcode/skills/ with --minimal', async () => {
+  it('does not create .agents/skills/ with --minimal', async () => {
     await silentInit(dir);
     await install(dir, 'zcode', { minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -89,14 +89,14 @@ describe('ZCode adapter', () => {
     await silentInit(dir);
     await install(dir, 'zcode');
     await readFile(
-      path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       'utf-8',
     );
 
     await install(dir, 'zcode', { force: true, minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -115,11 +115,11 @@ describe('ZCode adapter', () => {
 
   it('minimal install reports ready when user custom skills remain', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.zcode', 'skills', 'custom'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'custom'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.zcode', 'skills', 'custom', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'custom', 'SKILL.md'),
       '# custom\n',
       'utf-8',
     );
@@ -133,7 +133,7 @@ describe('ZCode adapter', () => {
     expect(result.platformStatus.zcode.target).toBe('AGENTS.md');
     await expect(
       readFile(
-        path.join(dir, '.zcode', 'skills', 'custom', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'custom', 'SKILL.md'),
         'utf-8',
       ),
     ).resolves.toBe('# custom\n');
@@ -149,14 +149,14 @@ describe('ZCode adapter', () => {
     expect(result.platformStatus.zcode.installed).toBe(true);
     expect(result.platformStatus.zcode.ready).toBe(true);
     expect(result.platformStatus.zcode.target).toBe(
-      'AGENTS.md + .zcode/skills/',
+      'AGENTS.md + .agents/skills/',
     );
   });
 
   it('status reports ZCode not ready when a generated skill is missing', async () => {
     await silentInit(dir);
     await install(dir, 'zcode');
-    await rm(path.join(dir, '.zcode', 'skills', 'man8'), {
+    await rm(path.join(dir, '.agents', 'skills', 'man8'), {
       recursive: true,
       force: true,
     });
@@ -172,7 +172,7 @@ describe('ZCode adapter', () => {
   it('status reports ZCode not ready when the generated skills directory is missing', async () => {
     await silentInit(dir);
     await install(dir, 'zcode');
-    await rm(path.join(dir, '.zcode', 'skills'), {
+    await rm(path.join(dir, '.agents', 'skills'), {
       recursive: true,
       force: true,
     });
@@ -187,11 +187,11 @@ describe('ZCode adapter', () => {
 
   it('refuses to overwrite user-authored same-name ZCode skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.zcode', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       '# custom man8\n',
       'utf-8',
     );
@@ -200,17 +200,17 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toBe('# custom man8\n');
   });
 
   it('minimal install preserves user-authored same-name ZCode skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.zcode', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       '# custom man8\n',
       'utf-8',
     );
@@ -219,7 +219,7 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toBe('# custom man8\n');
   });
 
@@ -291,7 +291,7 @@ describe('ZCode adapter', () => {
       'utf-8',
     );
     await writeFile(
-      path.join(dir, '.zcode', 'skills', 'custom.md'),
+      path.join(dir, '.agents', 'skills', 'custom.md'),
       '# custom\n',
       'utf-8',
     );
@@ -303,10 +303,10 @@ describe('ZCode adapter', () => {
     expect(agents).toContain('Keep this.');
     expect(agents).not.toContain('<!-- mancode:zcode:start -->');
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'custom.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'custom.md'), 'utf-8'),
     ).resolves.toBe('# custom\n');
   });
 
@@ -314,7 +314,7 @@ describe('ZCode adapter', () => {
     await silentInit(dir);
     await install(dir, 'zcode');
     await writeFile(
-      path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       '# custom man8\n',
       'utf-8',
     );
@@ -323,7 +323,7 @@ describe('ZCode adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.zcode', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toBe('# custom man8\n');
   });
 });

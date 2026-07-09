@@ -331,12 +331,12 @@ function printPlatformCreatedFiles(platform: PlatformName): void {
   }
   if (platform === 'codex') {
     console.log('  AGENTS.md                   # Codex managed block');
-    console.log('  .codex/skills/              # Codex mode skills');
+    console.log('  .agents/skills/              # Codex mode skills');
     return;
   }
   if (platform === 'zcode') {
     console.log('  AGENTS.md                   # ZCode managed block');
-    console.log('  .zcode/skills/              # ZCode mode skills');
+    console.log('  .agents/skills/             # ZCode mode skills');
     return;
   }
   console.log('  .github/copilot-instructions.md # Copilot instructions');

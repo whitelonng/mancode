@@ -226,7 +226,11 @@ async function uninstallCodex(rootDir: string): Promise<void> {
   } catch {
     // AGENTS.md doesn't exist — nothing to do
   }
-  await removeCodexSkills(rootDir);
+  // Codex and ZCode share .agents/skills/. Only remove skills if ZCode is not
+  // also active, otherwise we would delete the other platform's skills too.
+  if (!(await otherAgentSkillsPlatformActive(rootDir, 'codex'))) {
+    await removeCodexSkills(rootDir);
+  }
 }
 
 async function uninstallCopilot(rootDir: string): Promise<void> {
@@ -266,7 +270,11 @@ async function uninstallZcode(rootDir: string): Promise<void> {
   } catch {
     // AGENTS.md doesn't exist — nothing to do
   }
-  await removeZcodeSkills(rootDir);
+  // Codex and ZCode share .agents/skills/. Only remove skills if Codex is not
+  // also active, otherwise we would delete the other platform's skills too.
+  if (!(await otherAgentSkillsPlatformActive(rootDir, 'zcode'))) {
+    await removeZcodeSkills(rootDir);
+  }
 }
 
 async function removeFromConfig(
@@ -310,6 +318,31 @@ async function pathExists(p: string): Promise<boolean> {
   try {
     await access(p);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether another agents-skills platform (Codex/ZCode) is still recorded
+ * in config.json. Both platforms share the .agents/skills/ directory, so when
+ * uninstalling one we must not delete skill files if the other is still active.
+ */
+async function otherAgentSkillsPlatformActive(
+  rootDir: string,
+  excluding: string,
+): Promise<boolean> {
+  try {
+    const raw = await readFile(
+      path.join(rootDir, '.mancode', 'config.json'),
+      'utf-8',
+    );
+    const config = JSON.parse(raw) as { platforms?: unknown };
+    const platforms = Array.isArray(config.platforms)
+      ? (config.platforms as string[])
+      : [];
+    const peers = ['codex', 'zcode'].filter((p) => p !== excluding);
+    return platforms.some((p) => peers.includes(p));
   } catch {
     return false;
   }

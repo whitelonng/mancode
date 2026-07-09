@@ -7,9 +7,8 @@ import {
   hasManagedBlock,
 } from './managed-block.js';
 import {
-  CODEX_SKILL_MANAGED_MARKER,
+  MANCODE_AGENT_SKILL_MARKERS,
   MODE_NAMES,
-  ZCODE_SKILL_MANAGED_MARKER,
 } from './mode-skills.js';
 import {
   ZCODE_MANCODE_END_MARKER,
@@ -94,15 +93,15 @@ async function checkPlatformReadiness(
     }
 
     // Non-minimal installs should expose all five mancode-managed mode skills.
-    const skillsDir = path.join(rootDir, '.codex', 'skills');
+    const skillsDir = path.join(rootDir, '.agents', 'skills');
     const hasSkills = await allManagedSkills(
       MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
-      CODEX_SKILL_MANAGED_MARKER,
+      MANCODE_AGENT_SKILL_MARKERS,
     );
     return {
       present: true,
       ready: hasSkills,
-      target: 'AGENTS.md + .codex/skills/',
+      target: 'AGENTS.md + .agents/skills/',
       readyDetail: hasSkills
         ? 'managed block and skills present'
         : 'mode skills are missing, incomplete, or user-authored',
@@ -133,15 +132,15 @@ async function checkPlatformReadiness(
     }
 
     // Non-minimal installs should expose all five mancode-managed mode skills.
-    const skillsDir = path.join(rootDir, '.zcode', 'skills');
+    const skillsDir = path.join(rootDir, '.agents', 'skills');
     const hasSkills = await allManagedSkills(
       MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
-      ZCODE_SKILL_MANAGED_MARKER,
+      MANCODE_AGENT_SKILL_MARKERS,
     );
     return {
       present: true,
       ready: hasSkills,
-      target: 'AGENTS.md + .zcode/skills/',
+      target: 'AGENTS.md + .agents/skills/',
       readyDetail: hasSkills
         ? 'managed block and skills present'
         : 'mode skills are missing, incomplete, or user-authored',
@@ -200,18 +199,21 @@ async function allPathsExist(paths: string[]): Promise<boolean> {
 
 async function allManagedSkills(
   paths: string[],
-  marker: string,
+  markers: readonly string[],
 ): Promise<boolean> {
   const results = await Promise.all(
-    paths.map((filePath) => fileHasText(filePath, marker)),
+    paths.map((filePath) => fileHasAnyMarker(filePath, markers)),
   );
   return results.every(Boolean);
 }
 
-async function fileHasText(filePath: string, needle: string): Promise<boolean> {
+async function fileHasAnyMarker(
+  filePath: string,
+  needles: readonly string[],
+): Promise<boolean> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return content.includes(needle);
+    return needles.some((needle) => content.includes(needle));
   } catch {
     return false;
   }

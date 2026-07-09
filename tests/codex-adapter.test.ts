@@ -87,13 +87,13 @@ describe('Codex adapter', () => {
     expect(agents).not.toContain('mancode Platform Downgrade');
   });
 
-  it('creates .codex/skills/ with 5 mode SKILL.md files', async () => {
+  it('creates .agents/skills/ with 5 mode SKILL.md files', async () => {
     await silentInit(dir);
     await install(dir, 'codex');
 
     for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
       const skill = await readFile(
-        path.join(dir, '.codex', 'skills', mode, 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', mode, 'SKILL.md'),
         'utf-8',
       );
       expect(skill).toContain(`name: ${mode}`);
@@ -103,12 +103,12 @@ describe('Codex adapter', () => {
     }
   });
 
-  it('does not create .codex/skills/ with --minimal', async () => {
+  it('does not create .agents/skills/ with --minimal', async () => {
     await silentInit(dir);
     await install(dir, 'codex', { minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -117,14 +117,14 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
     // Verify skills exist before minimal
     await readFile(
-      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       'utf-8',
     );
 
     await install(dir, 'codex', { force: true, minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).rejects.toThrow();
   });
 
@@ -133,7 +133,7 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
 
     const man8 = await readFile(
-      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       'utf-8',
     );
     expect(man8).toContain('$man8');
@@ -144,7 +144,7 @@ describe('Codex adapter', () => {
     await install(dir, 'codex');
 
     const mansolo = await readFile(
-      path.join(dir, '.codex', 'skills', 'mansolo', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'mansolo', 'SKILL.md'),
       'utf-8',
     );
     expect(mansolo).toContain('"solo"');
@@ -161,11 +161,11 @@ describe('Codex adapter', () => {
 
   it('refuses to overwrite user-authored same-name Codex skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.codex', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       '# custom man8\n',
       'utf-8',
     );
@@ -174,17 +174,17 @@ describe('Codex adapter', () => {
 
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(
-      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toBe('# custom man8\n');
   });
 
   it('minimal install preserves user-authored same-name Codex skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.codex', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
       '# custom man8\n',
       'utf-8',
     );
@@ -193,7 +193,7 @@ describe('Codex adapter', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(
-      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
     ).resolves.toBe('# custom man8\n');
   });
 });
