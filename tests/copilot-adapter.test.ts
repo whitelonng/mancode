@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
 import { EXIT_OK, install } from '../src/commands/install.js';
+import { checkPlatformStatus } from '../src/installers/platform-status.js';
 
 describe('GitHub Copilot adapter', () => {
   let dir: string;
@@ -104,7 +105,7 @@ describe('GitHub Copilot adapter', () => {
     await silentInit(dir);
     await install(dir, 'copilot');
 
-    for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
+    for (const mode of ['mamba', 'man', 'manteam', 'manps', 'mansolo']) {
       const prompt = await readFile(
         path.join(dir, '.github', 'prompts', `${mode}.prompt.md`),
         'utf-8',
@@ -115,20 +116,67 @@ describe('GitHub Copilot adapter', () => {
     }
   });
 
+  it('preserves a user-authored legacy man8 prompt during upgrade', async () => {
+    await silentInit(dir);
+    const promptsDir = path.join(dir, '.github', 'prompts');
+    await mkdir(promptsDir, { recursive: true });
+    const legacyPath = path.join(promptsDir, 'man8.prompt.md');
+    await writeFile(legacyPath, '# user-authored man8 prompt\n', 'utf-8');
+
+    await install(dir, 'copilot');
+
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toBe(
+      '# user-authored man8 prompt\n',
+    );
+  });
+
   it('minimal force install removes existing prompts', async () => {
     await silentInit(dir);
     await install(dir, 'copilot');
     // Verify prompts exist before minimal
     await readFile(
-      path.join(dir, '.github', 'prompts', 'man8.prompt.md'),
+      path.join(dir, '.github', 'prompts', 'mamba.prompt.md'),
       'utf-8',
     );
 
     await install(dir, 'copilot', { force: true, minimal: true });
 
     await expect(
-      readFile(path.join(dir, '.github', 'prompts', 'man8.prompt.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.github', 'prompts', 'mamba.prompt.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
+  });
+
+  it('reports a minimal install ready even when user prompt files remain', async () => {
+    await silentInit(dir);
+    const promptsDir = path.join(dir, '.github', 'prompts');
+    await mkdir(promptsDir, { recursive: true });
+    await writeFile(
+      path.join(promptsDir, 'custom.prompt.md'),
+      '# custom prompt\n',
+      'utf-8',
+    );
+
+    await install(dir, 'copilot', { minimal: true });
+    const result = await checkPlatformStatus(dir, 'copilot', true);
+
+    expect(result.ready).toBe(true);
+    await expect(
+      readFile(path.join(promptsDir, 'custom.prompt.md'), 'utf-8'),
+    ).resolves.toBe('# custom prompt\n');
+  });
+
+  it('requires every generated prompt for a non-minimal install', async () => {
+    await silentInit(dir);
+    await install(dir, 'copilot');
+    await rm(path.join(dir, '.github', 'prompts', 'mamba.prompt.md'));
+
+    const result = await checkPlatformStatus(dir, 'copilot', true);
+
+    expect(result.ready).toBe(false);
+    expect(result.detail).toContain('missing');
   });
 
   it('instructions include mansolo in prompt conventions', async () => {
@@ -143,12 +191,12 @@ describe('GitHub Copilot adapter', () => {
     await silentInit(dir);
     await install(dir, 'copilot');
 
-    const man8 = await readFile(
-      path.join(dir, '.github', 'prompts', 'man8.prompt.md'),
+    const mamba = await readFile(
+      path.join(dir, '.github', 'prompts', 'mamba.prompt.md'),
       'utf-8',
     );
-    expect(man8).not.toContain('$man8');
-    expect(man8).not.toContain('/man8');
+    expect(mamba).not.toContain('$mamba');
+    expect(mamba).not.toContain('/mamba');
   });
 
   it('mansolo prompt maps state to solo not mansolo', async () => {

@@ -69,20 +69,31 @@ describe('coaching staff agents', () => {
       expect(HEAD_COACH_AGENT.body).toMatch(/Phase 1/);
       expect(HEAD_COACH_AGENT.body).toMatch(/Phase 2/);
       expect(HEAD_COACH_AGENT.body).toMatch(/Phase 3/);
+      expect(HEAD_COACH_AGENT.body).toMatch(/恢复为 in_progress/);
       // 有 Edit 权限（要写代码）
       expect(HEAD_COACH_AGENT.tools).toContain('Edit');
       expect(HEAD_COACH_AGENT.tools).toContain('Write');
     });
 
     it('film analyst offense body describes quality review', () => {
+      expect(FILM_ANALYST_OFFENSE_AGENT.description).toMatch(/Step 7/);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/质量|quality/i);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/可读性|readability/i);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/信息层级/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(
+        /空、加载、失败、无权限、成功/,
+      );
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/project-profile\.json/);
       expect(FILM_ANALYST_OFFENSE_AGENT.tools).not.toContain('Edit');
     });
 
     it('film analyst defense body describes security review', () => {
+      expect(FILM_ANALYST_DEFENSE_AGENT.description).toMatch(/Step 8/);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/边界|boundary/i);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/安全|security/i);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/键盘可用性/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/对比/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/权限与错误路径/);
       expect(FILM_ANALYST_DEFENSE_AGENT.tools).not.toContain('Edit');
     });
   });

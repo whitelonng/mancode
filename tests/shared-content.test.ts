@@ -12,6 +12,11 @@ describe('generateSharedContent', () => {
     await mkdir(path.join(dir, '.mancode', 'aesthetics'), {
       recursive: true,
     });
+    await writeProfile({
+      projectKind: 'web',
+      uiAssets: 'detected',
+      availableValidation: [],
+    });
   });
 
   afterEach(async () => {
@@ -43,9 +48,53 @@ describe('generateSharedContent', () => {
     expect(content).toContain('read `.mancode/state.json`');
     expect(content).toContain('read `.mancode/aesthetics/style-tokens.json`');
     expect(content).toContain('YAGNI ladder');
-    expect(content).toContain('man8: investigate first');
+    expect(content).toContain('mamba: diagnose bugs');
     expect(content).toContain('Platform Downgrade');
     expect(content).toContain('Simulate the coaching staff');
+    expect(content).toContain('Scout, Plan Coach, Head Coach');
+  });
+
+  it('uses the live install profile instead of stale persisted context', async () => {
+    await writeState({
+      currentMode: 'solo',
+      techStack: 'JavaScript/TypeScript + React',
+      uiLibrary: 'MUI',
+    });
+    await writeTokens({
+      matchLevel: 'high',
+      colors: { stale: '#123456' },
+      fonts: {},
+      components: [],
+      cssVariables: {},
+    });
+
+    const content = await generateSharedContent(dir, {
+      platform: 'codex',
+      displayName: 'Codex CLI',
+      capabilities: {
+        slashCommands: 'partial',
+        subagents: false,
+        hooks: false,
+        skills: 'agents-skills',
+      },
+      techStack: ['Go', 'Go modules'],
+      uiLibrary: null,
+      projectProfile: {
+        projectKind: 'backend',
+        languages: ['Go'],
+        frameworks: ['Go modules'],
+        availableValidation: ['go test ./...'],
+        uiAssets: 'none',
+      },
+    });
+
+    expect(content).toContain('Tech stack: Go + Go modules');
+    expect(content).toContain('UI library: None');
+    expect(content).toContain(
+      'Project profile: backend; validation: go test ./...',
+    );
+    expect(content).not.toContain('JavaScript/TypeScript + React');
+    expect(content).not.toContain('stale=#123456');
   });
 
   it('uses provided project detection when state is missing', async () => {
@@ -137,6 +186,37 @@ describe('generateSharedContent', () => {
     expect(content).not.toContain('prefer these tokens and components');
   });
 
+  it('does not embed stale tokens when the project profile has no UI', async () => {
+    await writeProfile({
+      projectKind: 'backend',
+      uiAssets: 'none',
+      availableValidation: ['go test ./...'],
+    });
+    await writeTokens({
+      matchLevel: 'high',
+      colors: { stale: '#123456' },
+      fonts: {},
+      components: [],
+      cssVariables: {},
+    });
+
+    const content = await generateSharedContent(dir, {
+      platform: 'codex',
+      displayName: 'Codex CLI',
+      capabilities: {
+        slashCommands: 'partial',
+        subagents: false,
+        hooks: false,
+        skills: 'single-file',
+      },
+      techStack: [],
+      uiLibrary: null,
+    });
+
+    expect(content).not.toContain('stale=#123456');
+    expect(content).not.toContain('mancode Aesthetics');
+  });
+
   it('omits mode and downgrade sections for minimal output', async () => {
     const content = await generateSharedContent(dir, {
       platform: 'copilot',
@@ -168,6 +248,14 @@ describe('generateSharedContent', () => {
   async function writeTokens(value: unknown): Promise<void> {
     await writeFile(
       path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
+      `${JSON.stringify(value, null, 2)}\n`,
+      'utf-8',
+    );
+  }
+
+  async function writeProfile(value: unknown): Promise<void> {
+    await writeFile(
+      path.join(dir, '.mancode', 'project-profile.json'),
       `${JSON.stringify(value, null, 2)}\n`,
       'utf-8',
     );

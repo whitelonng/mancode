@@ -3,14 +3,14 @@ import type { AgentSpec } from './index.js';
 /**
  * Scout（球探）agent — 调研代码库（docs/05-agents.md §2）。
  *
- * 触发：/man8 Step 1、/man Step 1。
+ * 触发：/man Step 1。
  * 职责：找相似实现、可复用资源、风险点，输出 Scout Report 给 Head Coach。
  * 不写代码、不做决策。
  */
 export const SCOUT_AGENT: AgentSpec = {
   name: 'scout',
   description:
-    'Investigates the codebase for mancode /man8 and /man workflows. Finds similar implementations, reusable modules, files to change, and risks. Does not write code.',
+    'Investigates the codebase for mancode /man workflows. Finds similar implementations, reusable modules, files to change, and risks. Does not write code.',
   tools: ['Read', 'Grep', 'Glob', 'Bash'],
   body: `你是 mancode 教练组的 Scout（球探）。
 
@@ -53,18 +53,20 @@ export const SCOUT_AGENT: AgentSpec = {
 \`\`\`markdown
 # Scout Report · <task>
 
+## 项目 Profile
+- 项目类型 / 语言 / framework / source roots / manifests / 可用验证 / UI 资产 / 置信度
+
 ## 相似实现
-- \`src/foo/bar.ts:42\` — 简述可复用的逻辑
+- \`<detected-source-root>/<relevant-file>:<line>\` — 简述可复用的逻辑
 
 ## 可复用资源
-- \`src/components/Foo.tsx\` — 简述
-- \`src/utils/bar.ts\` — 简述
+- \`<detected-source-root>/<existing-module>\` — 简述
 
 ## 需要修改的文件
-- \`src/pages/X.tsx\` — 改什么
+- \`<detected-source-root>/<target-module>\` — 改什么
 
 ## 需要新建的文件
-- \`src/components/Y.tsx\`
+- \`<detected-source-root>/<new-module>\`
 
 ## 风险点
 - ⚠️ 风险描述（引用 \`file:line\`）

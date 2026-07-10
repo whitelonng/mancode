@@ -1,164 +1,65 @@
 import type { SkillSpec } from './index.js';
 import { CORE_CODING_PRINCIPLES } from './principles.js';
 
-/**
- * /man skill — Playoffs Mode（docs/03 §4 + docs/14）。
- *
- * 8 步季后赛流程：Scout → Plan → 用户确认 → 实施 → 自测 →
- * Film #1 → 修复 → Film #2 → 收尾。
- */
 export const MAN_SKILL: SkillSpec = {
   name: 'man',
   description:
-    'Full 8-step playoffs workflow with coaching staff. Scout → Plan → Implement → Self-test → Film Offense → Fix → Film Defense → Wrap-up. Use for production code, complex features, critical modules.',
-  body: `# mancode · /man (Playoffs Mode)
+    'Progressive 9-step engineering workflow: research, clarify, plan, choose plan-only or execution, implement, validate, review, and wrap up. Use for complex or high-risk changes.',
+  body: `# mancode · /man (Progressive Governance)
 
-用户用 \`/man <task>\` 触发你。这是**完整 8 步流程**，教练组全员上场。
+用户用 \`/man <task>\` 触发你。立即读 \`.mancode/state.json\`。若已有不同的 active workflow，不得直接清空指针；先让用户选择恢复原流程或用 \`/mansolo\` 放弃。task 为空时询问任务，等待期间仍是 \`man\` 模式。
 
-## 提取 task
+用 \`mancode workflow create man "<task>" --json\` 创建 workflow 并读取返回的 taskId；不得直接创建或改写 metadata.json。随后只用 \`mancode workflow update\` 更新 step/status/planVersion/skippedSteps。state 的 \`currentMode\`、\`currentTask\` 和 \`currentWorkflowMode\` 指向本 task。
 
-1. 先用 Read 读取 \`.mancode/state.json\`。
-2. 立即用 Edit 更新 state：
-   - \`lastMode\` ← 原 \`currentMode\`
-   - \`currentMode\` → \`"man"\`
-   - \`currentTask\` → \`null\`
-   - \`currentWorkflowMode\` → \`null\`
-   - \`skippedSteps\` → \`[]\`
-3. 从 \`/man <task>\` 提取 \`<task>\`。
-4. 如 task 为空，用 AskUserQuestion 问用户："要用 /man 处理什么任务？"。等待任务期间，当前模式仍是 \`man\`；如果用户问"现在是什么模式"，回答 man 模式。
+## 新项目技术选择关卡（仅在适用时）
 
-## 8 步流程
+先读 \`.mancode/project-profile.json\`。如果用户要新建项目、profile 为 unknown，且用户没有指定技术栈：先收集目标平台、用户规模、离线/部署、团队熟悉度、预算与集成约束；列出 2–3 个可行方案的优缺点和推荐理由，取得用户确认后才创建脚手架。不要把任何语言、框架、UI 库或浏览器自动化当作默认。已有项目则以检测到的事实和仓库约定为准。
 
-### Step 1: Scout Report（球探报告）
+### Step 1: Scout 调研
 
-1. 创建 workflow 目录：\`.mancode/workflows/<YYYYMMDD-HHMMSS-slug>/\`
-   - 写入 \`metadata.json\`：\`{"taskId":"...","task":"...","mode":"man","currentStep":1,"skippedSteps":[],"startedAt":"<ISO>","updatedAt":"<ISO>","status":"in_progress"}\`
-2. 调用 Scout：
-   \`\`\`
-   Agent({ subagent_type: "scout", description: "Scout: <task>",
-     prompt: "任务：<task>\\n项目栈：<从 state.json>\\n开始调研。" })
-   \`\`\`
-3. Write scout 输出到 \`scout-report.md\`
-4. 更新 state.json：\`currentMode: "man"\`, \`currentTask: "<taskId>"\`, \`currentWorkflowMode: "man"\`
-5. metadata.json：\`currentStep: 2\`
+调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”。运行 \`mancode workflow update <taskId> --step 2\`。
 
-### Step 2: Game Plan
+### Step 2: 需求澄清
 
-1. 读 \`scout-report.md\` 内容
-2. 调用 Plan Coach（只读 plan 模式）：
-   \`\`\`
-   Agent({ subagent_type: "plan-coach", description: "Plan Coach: plan <task>",
-     prompt: "任务：<task>\\nScout Report：\\n<scout-report.md 内容>\\n\\n只返回 plan markdown，不要修改项目文件。" })
-   \`\`\`
-3. Write 到 \`plan.md\`
-4. metadata.json：\`currentStep: 3\`
+主 skill 直接基于 Scout 报告和任务歧义提问：客观题用 AskUserQuestion（每次最多 4 个），主观题开放提问。最多两轮，回答写 \`requirements.md\`；无问题则通过 CLI 将 \`clarify\` 写入累计 skippedSteps。第二轮后将假设、未决风险和保守默认值写入 requirements，不无限追问。完成后更新至 Step 3。
 
-### 用户确认 plan
+### Step 3: Plan Coach 出计划
 
-用 AskUserQuestion：
+调用只读 \`plan-coach\`，输入 task、scout-report 和 requirements；Plan Coach 只返回计划文本，由主 skill 写入 \`plan.md\`。计划必须含任务分级、模块索引、复用资源与 scout 行号、最小策略、不做什么、完成定义、验证与 smoke test、预估。首次计划写入成功后运行 \`mancode workflow update <taskId> --step 4\`，由 CLI upsert Active Plans 并进入计划关卡；重写计划时保持在 Step 4，运行 \`--plan-version <当前版本+1>\`，不得直接编辑 planVersion。
 
-\`\`\`
-AskUserQuestion({
-  questions: [{
-    question: "Plan 见 .mancode/workflows/<taskId>/plan.md。怎么做？",
-    header: "Plan review",
-    options: [
-      { label: "按 plan 实施 (Recommended)", description: "进入 Step 3" },
-      { label: "修改 plan", description: "回 Step 2 重写" },
-      { label: "退出", description: "放弃，标记 abandoned" }
-    ],
-    multiSelect: false
-  }]
-})
-\`\`\`
+### Step 4: 计划关卡
 
-- "退出" → metadata.json \`status: "abandoned"\`；用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "man"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`；然后结束。
-- "修改 plan" → 回 Step 2，附用户修改意见。
-- metadata.json：\`currentStep: 3\`
+用 AskUserQuestion 让用户选择：
+1. **只要计划**：CLI 更新 \`status: planned\`，state 回 solo 并清空 workflow 指针，结束。
+2. **继续执行（推荐）**：CLI 更新至 Step 5。
+3. **修改计划**：收集意见并重跑 Step 3 的 Plan Coach，workflow 指针保持 Step 4；计划重写完成后递增 planVersion。
 
-### Step 3: Tip-off（实施）
+### Step 5: 实施
 
-1. 如任务规模大（多文件、新模块），建议用 EnterWorktree 创建 worktree（可选，问用户）
-2. 调用 Head Coach（实施模式）：
-   \`\`\`
-   Agent({ subagent_type: "head-coach", description: "Head Coach: implement <task>",
-     prompt: "任务：<task>\\nPlan：\\n<plan.md 内容>\\n\\n按 plan 实施。" })
-   \`\`\`
-3. metadata.json：\`currentStep: 4\`
+调用 \`head-coach\` 按确认计划实施。多文件、新模块或高风险任务可建议 worktree，必须先获用户同意。实施完成后通过 CLI 更新至 Step 6。
 
-### Step 4: Head Coach 自测
+### Step 6: 自测、诊断与回归
 
-让 Head Coach 跑验证：\`npm run build && npm run lint && npm test\`（或项目实际命令）。
+运行实际 build/lint/typecheck/test 和 smoke test。相同代码、环境、命令下相同错误签名失败两次，停止盲试并诊断根因。需要真实浏览器、复杂复现或回归时，用 \`mancode workflow create mamba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；若父曾因该子任务 blocked，先通过 \`workflow update --status in_progress\` 恢复，再更新至 Step 7。blocked 或 manual_test_required 会由 CLI 自动阻塞父任务，不得手改父 metadata，也不得自动越过人工验证要求。
 
-**铁律 1.3：失败两次必须停下诊断根因**。
+### Step 7: Film #1 代码质量审查与修复
 
-通过后 metadata.json：\`currentStep: 5\`
+调用 \`film-analyst-offense\` 审查质量、复用、复杂度和测试，写 \`film-report-1.md\`；Head Coach 修复 🔴，对 🟡 写修复或权衡。完成后更新至 Step 8。
 
-### Step 5: Film Session #1（进攻）
+### Step 8: Film #2 安全与边界审查
 
-用 AskUserQuestion 问用户："准备叫录像分析师 #1（进攻）上场，需要吗？"
-- 跳过：metadata.json \`skippedSteps: ["film-1"]\`，直接 Step 7
-- 执行：
+调用 \`film-analyst-defense\` 审查安全、权限、错误路径、兼容性和边界，写 \`film-report-2.md\`。双审默认执行；用户明确要求才可跳过，通过 CLI 写入累计 skippedSteps 和残余风险。完成后更新至 Step 9。
 
-\`\`\`
-Agent({ subagent_type: "film-analyst-offense", description: "Film #1: offense review",
-  prompt: "任务：<task>\\nScout Report：\\n<scout-report.md>\\n\\n本次改动的 git diff：\\n<git diff HEAD>\\n\\n开始审查。" })
-\`\`\`
+### Step 9: 增强收尾
 
-Write 输出到 \`film-report-1.md\`。metadata.json：\`currentStep: 6\`
+1. 修复 Film #2 的 🔴 并重跑验证。
+2. 写 \`summary.md\`：改动、新建、复用、验证、双审和跳过步骤。
+3. 验证通过且 🔴 清零才用 CLI 写 \`completed\`；否则用 \`--status blocked --blocking-reason "<原因>"\`。
+4. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。
+5. worktree 合并前取得用户确认；终态写入成功后 state 回 solo 并清空 workflow 指针。
 
-### Step 6: Halftime 修复
-
-调用 Head Coach（修复模式）：
-\`\`\`
-Agent({ subagent_type: "head-coach", description: "Head Coach: fix film-1",
-  prompt: "任务：<task>\\nFilm Report #1：\\n<film-report-1.md>\\n\\n修复指出的问题（🔴 必修 > 🟡 建议 > 🟢 可选）。" })
-\`\`\`
-
-修复后重跑 build/lint/test。metadata.json：\`currentStep: 7\`
-
-### Step 7: Film Session #2（防守）
-
-问用户："叫录像分析师 #2（防守）上场？"
-- 跳过：metadata.json \`skippedSteps\` 加 \`"film-2"\`，直接 Step 8
-- 执行：
-
-\`\`\`
-Agent({ subagent_type: "film-analyst-defense", description: "Film #2: defense review",
-  prompt: "任务：<task>\\nScout Report：\\n<scout-report.md>\\nFilm Report #1 已指出（不要重复）：\\n<film-report-1.md>\\n\\n本次改动的 git diff：\\n<git diff HEAD>\\n\\n开始防守审查。" })
-\`\`\`
-
-Write 到 \`film-report-2.md\`。
-metadata.json：\`currentStep: 8\`
-
-### Step 8: Post-game 收尾
-
-1. 调用 Head Coach（收尾模式）修复 Film Report #2 的 🔴 问题：
-   \`\`\`
-   Agent({ subagent_type: "head-coach", description: "Head Coach: wrap up",
-     prompt: "任务：<task>\\nFilm Report #2：\\n<film-report-2.md>\\n\\n修复 🔴 必修问题，然后生成 summary。" })
-   \`\`\`
-2. 把 summary 写到 \`summary.md\`
-3. 如有 worktree，合并回主分支（用户确认后）
-4. 更新 state.json：\`currentMode: "solo"\`, \`lastMode: "man"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`
-5. metadata.json：\`status: "completed"\`
-
-## 最终输出
-
-告诉用户：
-- 改了哪些文件 / 新建了哪些文件
-- 复用了哪些已有代码
-- 哪些步骤被跳过（⚠️ 标注）
-- 验证结果（build/lint/test 是否通过）
-- summary 路径
-
-## 上下文预算
-
-- 调用 subagent 时，**只贴必要文件内容**（scout-report.md 全文、film-report 全文）
-- diff 大时只贴 hunk 摘要，让 agent 自己用 Read 看完整 diff
-- 不要 dump 整个源文件到对话
+任何 step/status/outcome/planVersion 变化都必须经过 workflow CLI；CLI 拒绝时保留当前 state 并报告原因，不可绕过校验直接改 metadata.json。
 
 ${CORE_CODING_PRINCIPLES}
-
-收到 \`/man\` 触发后立即开始 Step 1。`,
+`,
 };

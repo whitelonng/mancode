@@ -4,7 +4,7 @@ import { CORE_CODING_PRINCIPLES } from './principles.js';
 /**
  * /manteam skill — Team Game（README MVP-2）。
  *
- * 团队模式：在 /man 的 8 步流程上增加协作上下文、变更边界、
+ * 团队模式：在 /man 的 9 步流程上增加协作上下文、变更边界、
  * commit/hand-off 约束，避免多人并行时互相踩改动。
  */
 export const MANTEAM_SKILL: SkillSpec = {
@@ -13,7 +13,9 @@ export const MANTEAM_SKILL: SkillSpec = {
     'Team workflow for shared repositories. Adds contributor context, coordination notes, commit discipline, and hand-off summaries to the full /man flow.',
   body: `# mancode · /manteam (Team Game)
 
-用户用 \`/manteam <task>\` 触发你。这是多人协作版的完整工作流：先理解团队上下文，再按 /man 的 8 步流程推进。
+用户用 \`/manteam <task>\` 触发你。这是多人协作版的完整工作流：先理解团队上下文，再按 /man 的 9 步流程推进。
+
+用 \`mancode workflow create manteam "<task>" --json\` 创建 workflow，并将 state 指向返回的 taskId。后续 step/status/planVersion/skippedSteps 全部使用 \`mancode workflow update\`；不得直接改 metadata.json。若已有 active workflow，先让用户选择恢复或放弃，不能清空旧指针。
 
 ## 适用场景
 
@@ -44,21 +46,21 @@ export const MANTEAM_SKILL: SkillSpec = {
    - files likely to touch
    - coordination risks
 
-## Step 1-8: Run Playoffs Flow
+## Step 1-9: Run Progressive /man Flow
 
-按 \`/man\` 的 8 步流程执行，但每一步增加团队约束：
+按 \`/man\` 的 9 步流程执行（含澄清、计划关卡和增强收尾），但每一步增加团队约束：
 
 1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件。
-2. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式。
-   - Plan Coach 写计划：只返回计划文本，禁止提前修改业务文件或团队 memory。
-3. Tip-off：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
-4. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。
-5. Film #1：重点审查可维护性、命名一致性、团队风格一致性。
-6. Halftime Fix：只修 plan 和 film 指出的内容。
-7. Film #2：重点审查边界条件、安全、性能、并发、兼容性。
-8. Post-game：生成 hand-off summary。
+2. 澄清：最多两轮；把已确认约束和保守默认值写入 requirements.md。
+3. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式；Plan Coach 只返回计划文本，禁止提前修改业务文件或团队 memory。
+4. 计划关卡：用户可只保留计划、继续执行或重写计划；Active Plans 按 taskId 更新。
+5. 实施：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
+6. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。需要真实验证时创建带 parentTaskId 的 /mamba 子任务。子任务修复后若父任务曾因此 blocked，先用 workflow CLI 恢复父任务为 in_progress；manual_test_required 不得自动恢复。
+7. Film #1：重点审查可维护性、命名一致性、团队风格一致性，并修复 🔴。
+8. Film #2：重点审查边界条件、安全、性能、并发、兼容性。双审默认执行；用户明确要求才可跳过，写入 \`skippedSteps\` 和残余风险；跳过不阻止 completed，但不得声称"已完成双审"。
+9. Post-game：复验，写 summary 与 hand-off；验证失败或未修复 🔴 时标记 blocked，不得标 completed。
 
-如果用户在确认阶段选择"退出"或放弃团队 workflow：标记当前 workflow \`metadata.json.status = "abandoned"\`，并用 Edit 更新 \`.mancode/state.json\`：\`currentMode: "solo"\`, \`lastMode: "manteam"\`, \`currentTask: null\`, \`currentWorkflowMode: null\`, \`skippedSteps: []\`。不要把 abandoned workflow 留在 active state。
+如果用户在确认阶段选择"退出"或放弃团队 workflow：用 \`mancode workflow update <taskId> --status abandoned\` 更新并清理 Active Plans；若有活跃 mamba 子任务，先取得确认并逐个 abandoned。成功后再用 Edit 更新 state 回 solo。不要直接改 metadata，也不要把 abandoned workflow 留在 active state。
 
 ## Team Hand-off Summary
 

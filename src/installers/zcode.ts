@@ -29,6 +29,7 @@ export async function installZcode(
     minimal: options.minimal,
     techStack: options.techStack,
     uiLibrary: options.uiLibrary,
+    projectProfile: options.projectProfile,
   });
 
   const block = [

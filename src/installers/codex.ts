@@ -30,6 +30,7 @@ export async function installCodex(
     minimal: options.minimal,
     techStack: options.techStack,
     uiLibrary: options.uiLibrary,
+    projectProfile: options.projectProfile,
   });
 
   const block = [

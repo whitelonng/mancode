@@ -16,9 +16,9 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.2.0-green?style=flat-square" alt="Status: stable v0.2.0" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.2.1-green?style=flat-square" alt="Status: stable v0.2.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex CLI, GitHub Copilot, ZCode" />
-  <img src="https://img.shields.io/badge/tests-313%20passed-brightgreen?style=flat-square" alt="Tests: 305 passed" />
+  <img src="https://img.shields.io/badge/tests-364%20passed-brightgreen?style=flat-square" alt="Tests: 364 passed" />
 </p>
 
 <p align="center">
@@ -43,10 +43,10 @@ mancode installs three things:
 
 1. **Hooks** that inject project context, design tokens, and YAGNI checks into
    agent prompts.
-2. **Skills / modes** for `solo`, `/man8`, `/man`, `/manteam`, `/manps`, and
+2. **Skills / modes** for `solo`, `/mamba`, `/man`, `/manteam`, `/manps`, and
    `/mansolo`.
-3. **Coaching-staff subagents**: Scout, Head Coach, Film Analyst (Offense), and
-   Film Analyst (Defense).
+3. **Coaching-staff subagents**: Scout, Plan Coach, Head Coach, Film Analyst
+   (Offense), and Film Analyst (Defense).
 
 Use mancode when an AI coding agent writes too much code, ignores your existing
 UI system, skips planning, or needs a repeatable engineering workflow for
@@ -95,9 +95,10 @@ coding agent reads.
 
 - **Reduce AI over-engineering**: prefer existing code, standard libraries,
   installed dependencies, and one-line fixes before writing new abstractions.
-- **Match your frontend design system**: scan Tailwind, package metadata, and
-  existing components so the agent reuses your colors, fonts, and UI patterns.
-- **Add structured AI code review**: use `/man` for an 8-step workflow with
+- **Match an existing UI system when present**: inspect project UI dependencies,
+  Tailwind configuration, CSS variables, and components so the agent reuses
+  established colors, fonts, and interaction patterns.
+- **Add structured AI code review**: use `/man` for a 9-step workflow with
   research, plan approval, implementation, tests, and dual review.
 - **Keep workflow artifacts on disk**: save research, plans, review reports,
   and summaries under `.mancode/workflows/<taskId>/`.
@@ -110,12 +111,12 @@ coding agent reads.
 
 mancode is useful for:
 
-- Developers using AI coding agents on JavaScript or TypeScript projects
+- Developers using AI coding agents on backend, web, mobile, desktop, CLI,
+  library, data, or mixed projects
 - Claude Code users who want hooks, skills, and subagents today
 - Teams that want AI agents to reuse existing components and patterns
 - Projects that need a repeatable AI-assisted code review workflow
-- Frontend codebases with Tailwind, shadcn/ui, MUI, Ant Design, or similar UI
-  conventions
+- UI codebases with existing design conventions (when a UI is present)
 - Teams that want local workflow memory without telemetry
 
 mancode is not a replacement for your coding agent. It is a workflow layer that
@@ -136,19 +137,22 @@ design tokens:
 </Button>
 ```
 
-The default workflow asks three questions before writing code:
+The default workflow asks six questions before writing code:
 
 1. What problem does this change solve?
 2. Can an existing implementation be reused?
 3. What is the smallest change that works?
+4. Can this avoid a new subsystem?
+5. What is the smallest meaningful runtime check?
+6. What remains uncertain after checking the code and docs?
 
 ## Modes
 
 | Mode | Best For | What It Does |
 |---|---|---|
 | `solo` | Daily coding · practice day | Lightweight hooks, style awareness, and YAGNI checks |
-| `/man8` | Research before implementation · 4 AM warmup | Scout investigates the codebase, then Head Coach writes a plan |
-| `/man` | Production or high-risk changes · playoffs | Full 8-step workflow with dual multi-agent review |
+| `/mamba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
+| `/man` | Production or high-risk changes · playoffs | Full 9-step workflow with dual multi-agent review |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
 | `/mansolo` | Returning to default mode | Resets current mode back to `solo` |
@@ -156,18 +160,17 @@ The default workflow asks three questions before writing code:
 ## How `/man` Works: Playoffs Mode
 
 `/man` is playoffs mode for production work. It creates a durable workflow under
-`.mancode/workflows/<taskId>/` and moves through eight steps:
+`.mancode/workflows/<taskId>/` and moves through nine steps:
 
-1. **Scout report**: a research subagent maps the code you are about to touch.
-2. **Game plan**: Head Coach writes an implementation plan.
-3. **Plan approval**: a human approves the plan before code changes begin.
-4. **Implementation and self-test**: build, lint, and tests must pass.
-5. **Film session 1**: code quality review for readability, DRY, YAGNI, and
-   complexity.
-6. **Fix round**: Head Coach addresses review findings.
-7. **Film session 2**: security and edge-case review for auth, XSS, SQL
-   injection, concurrency, and resource leaks.
-8. **Post-game summary**: final summary, skipped steps, and artifact locations.
+1. **Scout report**: maps existing code, risks, and unknowns.
+2. **Clarification**: resolves requirements in up to two rounds.
+3. **Plan**: Plan Coach creates a durable, verifiable plan.
+4. **Plan gate**: choose plan-only, execution, or plan revision.
+5. **Implementation**: Head Coach applies the confirmed plan.
+6. **Validation**: build, lint, tests, smoke checks, and `/mamba` when real diagnosis is needed.
+7. **Film session 1**: code quality review and fixes.
+8. **Film session 2**: security and boundary review.
+9. **Wrap-up**: final verification, summary, workflow status, and memory updates.
 
 Skipped steps are recorded. Artifacts remain on disk so you can inspect why a
 decision was made later.
@@ -189,7 +192,10 @@ rules or instruction files that carry the same practice rules and mode guidance.
 
 ### Design Token Awareness
 
-mancode scans project files such as:
+mancode first writes `.mancode/project-profile.json` from detected project facts.
+It can work with backend services, web applications, mobile apps, desktop apps,
+CLIs, libraries, and mixed repositories; it does not assume a JavaScript or UI
+stack. It scans signals such as:
 
 ```text
 tailwind.config.js
@@ -199,13 +205,14 @@ src/components/
 
 It detects common signals:
 
-- Tech stack: React, Vue, Svelte, TypeScript, Tailwind, styled-components
-- UI libraries: shadcn/ui, MUI, Ant Design, Headless UI
-- Design tokens: colors, fonts, spacing, components
+- Languages, manifests, source roots, and available validation commands
+- UI assets and UI libraries when they are actually detected (for example, a web UI)
+- Design signals: colors, fonts, CSS variables, and components
 - Team status: contributor count and team-mode hints
 
-For frontend work, the agent is nudged to reuse existing UI components and
-design tokens instead of inventing generic styles.
+For UI work in a project with detected UI assets, the agent is nudged to reuse
+existing components and design tokens instead of inventing generic styles.
+For other project types, it follows the detected runtime and validation path.
 
 ### YAGNI Ladder
 
@@ -234,7 +241,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.2.0. Claude Code, Cursor, Codex CLI, and GitHub Copilot
+**Status**: stable v0.2.1. Claude Code, Cursor, Codex CLI, and GitHub Copilot
 are supported. ZCode adapter support is included, with project skill discovery
 kept behind a verification gate before release.
 
@@ -272,8 +279,8 @@ mancode install --minimal # Install only solo-mode essentials
 ## Agent Modes
 
 ```bash
-/man8                      # Research and plan before implementation
-/man                       # Full 8-step workflow with dual review
+/mamba                      # Diagnose bugs and validate real user flows
+/man                       # Full 9-step workflow with dual review
 /manps                     # Project health check
 /manteam                   # Team mode and shared memory
 /mansolo                   # Return to solo mode
@@ -287,10 +294,10 @@ mancode status
 mancode status --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
-mancode workflow create <man8|man> "<task>"
-mancode workflow update <taskId> [--step N] [--status in_progress|completed|abandoned]
-mancode workflow list
-mancode workflow show <taskId>
+mancode workflow create <man|mamba|manteam> "<task>" [--parent-task <taskId>]
+mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
+mancode workflow list [--json]
+mancode workflow show <taskId> [--json]
 mancode workflow clean [--older-than 30d] [--dry-run]
 mancode manps [area]
 mancode refresh-style
@@ -300,6 +307,8 @@ mancode version
 ## Command Output Examples
 
 ### `mancode status`
+
+Example output for a UI project (not a default stack):
 
 ```text
 mancode v0.2.0
@@ -364,12 +373,16 @@ mancode status --json
 
 ### `mancode workflow`
 
-Creates and manages workflow metadata used by `/man8` and `/man`.
+Creates and manages validated workflow metadata used by `/mamba`, `/man`, and
+`/manteam`. A linked `/mamba` child can only be created while its parent is
+active at Step 6.
 
 ```bash
 mancode workflow create man "refactor auth module"
-mancode workflow update <taskId> --step 4
-mancode workflow show <taskId>
+mancode workflow update <taskId> --step 4 --plan-version 2
+mancode workflow create mamba "verify auth regression" --parent-task <taskId>
+mancode workflow update <mambaTaskId> --status completed --outcome verified
+mancode workflow show <taskId> --json
 mancode workflow clean --older-than 30d --dry-run
 ```
 
@@ -395,10 +408,12 @@ Outputs:
 
 ### `mancode refresh-style`
 
-Rescans project design tokens and updates:
+Refreshes the project profile and, when UI assets are detected, rescans design
+tokens. It updates:
 
 ```text
 .mancode/aesthetics/style-tokens.json
+.mancode/project-profile.json
 ```
 
 Claude Code reads refreshed tokens through hooks. Cursor, Codex CLI, and GitHub
@@ -420,13 +435,15 @@ mancode/
 │
 ├── Skills
 │   ├── solo/SKILL.md
-│   ├── man8/SKILL.md
+│   ├── mamba/SKILL.md
 │   ├── man/SKILL.md
 │   ├── manteam/SKILL.md
-│   └── manps/SKILL.md
+│   ├── manps/SKILL.md
+│   └── mansolo/SKILL.md
 │
 └── Subagents
     ├── Scout
+    ├── Plan Coach
     ├── Head Coach
     ├── Film Analyst (Offense)
     └── Film Analyst (Defense)
@@ -437,7 +454,9 @@ mancode/
 - mancode is local-first.
 - Scans are written under `.mancode/`.
 - No telemetry is sent by mancode.
-- `.mancode/` is git-ignored by default unless you choose to commit parts of it.
+- mancode does not rewrite your project's `.gitignore`. Review `.mancode/`
+  before committing and ignore local workflow evidence or browser artifacts
+  that may contain sensitive data.
 - `/manps` scans only; remediation should be explicitly confirmed before code
   changes.
 - Irreversible operations such as force pushes, schema migrations, and bulk
@@ -448,7 +467,7 @@ mancode/
 | Phase | Focus |
 |---|---|
 | MVP-1 | solo mode, aesthetics, and Claude Code hooks |
-| MVP-2 | `/man8`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
+| MVP-2 | `/mamba`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
 | MVP-3 | Cursor, Codex CLI, and GitHub Copilot adapters |
 | Public Release | stable npm release, marketplace distribution, docs, and demos |
 
@@ -456,8 +475,10 @@ mancode/
 
 ### `mancode init` says "not a project directory"
 
-mancode requires either a `.git` directory or a `package.json` in the target
-folder. Run `mancode init` inside a git repository or a Node.js project.
+mancode requires either a `.git` directory or a recognized project manifest
+(such as `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`,
+`build.gradle`, `build.gradle.kts`, `Package.swift`, or `pubspec.yaml`). Run `mancode init` inside
+a git repository or a supported project directory.
 
 ### Claude Code hooks not triggering
 
@@ -480,7 +501,7 @@ markers is preserved.
 
 ### ZCode skills not appearing
 
-Ensure `.agents/skills/man8/SKILL.md` through `.agents/skills/mansolo/SKILL.md`
+Ensure `.agents/skills/mamba/SKILL.md` through `.agents/skills/mansolo/SKILL.md`
 exist, then restart or refresh ZCode. ZCode slash commands are not generated
 yet because the workspace command file path still needs explicit verification.
 
@@ -488,8 +509,8 @@ yet because the workspace command file path still needs explicit verification.
 
 Ensure the `.cursor/rules/mancode-*.mdc` files exist. Rules with
 `alwaysApply: true` (context, practice, solo) load on every conversation.
-Mode-specific rules (man8, man, manteam, manps) trigger based on the
-description field — invoke them by asking for `/man8` or similar.
+Mode-specific rules (mamba, man, manteam, manps) trigger based on the
+description field — invoke them by asking for `/mamba` or similar.
 
 ### How to do a clean reinstall
 

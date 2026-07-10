@@ -57,6 +57,52 @@ describe('mancode install', () => {
     const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
     const content = await readFile(hookPath, 'utf-8');
     expect(content).toContain('mancode');
+    await expect(
+      readFile(
+        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).resolves.toContain('Managed by mancode:claude-skill');
+    await expect(
+      readFile(path.join(dir, '.claude', 'agents', 'scout.md'), 'utf-8'),
+    ).resolves.toContain('Managed by mancode:claude-agent');
+  });
+
+  it('force install refuses to overwrite user-authored same-name Claude files', async () => {
+    await silentInit(dir);
+    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
+    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(agentPath, '# custom scout\n', 'utf-8');
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
+      '# custom mamba\n',
+    );
+    await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
+      '# custom scout\n',
+    );
+  });
+
+  it('preserves a user-authored legacy Claude man8 skill during upgrade', async () => {
+    await silentInit(dir);
+    const legacyDir = path.join(dir, '.claude', 'skills', 'man8');
+    await mkdir(legacyDir, { recursive: true });
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await writeFile(
+      legacyPath,
+      '---\nname: man8\n---\n\n# mancode custom workflow\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toContain(
+      '# mancode custom workflow',
+    );
   });
 
   it('install --minimal --force keeps only solo skill and removes only mancode agents', async () => {
@@ -65,7 +111,9 @@ describe('mancode install', () => {
     await writeFile(customAgentPath, '# custom agent\n', 'utf-8');
 
     expect(
-      await pathExists(path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md')),
+      await pathExists(
+        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+      ),
     ).toBe(true);
     expect(
       await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
@@ -80,7 +128,7 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
     ).toBe(true);
-    expect(await pathExists(path.join(dir, '.claude', 'skills', 'man8'))).toBe(
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'mamba'))).toBe(
       false,
     );
     expect(
@@ -101,12 +149,30 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
     ).toBe(true);
-    expect(await pathExists(path.join(dir, '.claude', 'skills', 'man8'))).toBe(
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'mamba'))).toBe(
       false,
     );
     expect(
       await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
     ).toBe(false);
+  });
+
+  it('minimal install preserves user-authored same-name Claude files', async () => {
+    await silentInit(dir);
+    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
+    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(agentPath, '# custom scout\n', 'utf-8');
+
+    const code = await install(dir, 'claude-code', { minimal: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
+      '# custom mamba\n',
+    );
+    await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
+      '# custom scout\n',
+    );
   });
 
   it('preserves raw user hooks from legacy object-mapped settings', async () => {
@@ -195,13 +261,43 @@ describe('mancode install', () => {
     ).toHaveLength(1);
   });
 
+  it('removes only exact legacy mancode skill mappings from Claude settings', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {},
+          skills: {
+            solo: '.claude/skills/custom-solo.md',
+            man: '.claude/skills/mancode-man.md',
+            custom: '.claude/skills/custom.md',
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+
+    expect(code).toBe(EXIT_OK);
+    expect(settings.skills).toEqual({
+      solo: '.claude/skills/custom-solo.md',
+      custom: '.claude/skills/custom.md',
+    });
+  });
+
   it('auto-repair without --force preserves user-customized skills', async () => {
     await silentInit(dir);
 
     // User customizes a skill
-    const man8Path = path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md');
-    const customContent = '# Custom man8 skill\n\nUser customizations here.\n';
-    await writeFile(man8Path, customContent, 'utf-8');
+    const mambaPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const customContent = '# Custom mamba skill\n\nUser customizations here.\n';
+    await writeFile(mambaPath, customContent, 'utf-8');
 
     // Break readiness by deleting settings.json
     await rm(path.join(dir, '.claude', 'settings.json'), { force: true });
@@ -217,8 +313,8 @@ describe('mancode install', () => {
     expect(settings.hooks.SessionStart).toBeDefined();
 
     // User-customized skill should be preserved (not overwritten)
-    const man8Content = await readFile(man8Path, 'utf-8');
-    expect(man8Content).toBe(customContent);
+    const mambaContent = await readFile(mambaPath, 'utf-8');
+    expect(mambaContent).toBe(customContent);
   });
 
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
@@ -346,6 +442,44 @@ describe('mancode install', () => {
     );
   });
 
+  it('repairs a minimal adapter without silently upgrading it to full', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex', { minimal: true });
+    await rm(path.join(dir, 'AGENTS.md'));
+
+    const code = await install(dir, 'codex');
+    const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(code).toBe(EXIT_OK);
+    expect(agents).toContain('mancode Practice Rules');
+    expect(agents).not.toContain('mancode Modes');
+    expect(config.platformOptions.codex.minimal).toBe(true);
+    expect(
+      await pathExists(
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      ),
+    ).toBe(false);
+  });
+
+  it('generates a newly installed static adapter from the live project profile', async () => {
+    await silentInit(dir);
+    await writeFile(path.join(dir, 'go.mod'), 'module example\n', 'utf-8');
+    await mkdir(path.join(dir, 'server'));
+
+    const code = await install(dir, 'codex');
+    const content = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
+
+    expect(code).toBe(EXIT_OK);
+    expect(content).toContain('Tech stack: Go + Go modules');
+    expect(content).toContain(
+      'Project profile: backend; validation: go test ./...',
+    );
+    expect(content).not.toContain('Tech stack: Unknown');
+  });
+
   it('preserves configured team/style options on forced reinstall', async () => {
     await silentInit(dir, { team: true, style: 'brutalist' });
 
@@ -421,7 +555,7 @@ describe('mancode install', () => {
     const configPath = path.join(dir, '.mancode', 'config.json');
     const logPath = path.join(dir, '.mancode', 'logs', 'hooks.log');
     const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
-    const skillPath = path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
     const invalidSettings = '{ invalid json';
     const existingConfig = {

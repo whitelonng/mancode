@@ -3,14 +3,14 @@ import type { AgentSpec } from './index.js';
 /**
  * Film Analyst #1（录像分析师·进攻）agent — 代码质量审查（docs/05-agents.md §4）。
  *
- * 触发：/man Step 5、/manteam Step 5。
- * 审查维度：可读性、可维护性、风格一致性、DRY、YAGNI、复杂度、错误处理。
+ * 触发：/man Step 7、/manteam Step 7。
+ * 审查维度：可读性、可维护性、风格一致性、DRY、YAGNI、复杂度、错误处理；UI 任务还要审查交互与视觉层级。
  * 不写代码、只看 diff 给反馈。
  */
 export const FILM_ANALYST_OFFENSE_AGENT: AgentSpec = {
   name: 'film-analyst-offense',
   description:
-    'Reviews code quality for mancode /man workflows (Step 5). Checks readability, maintainability, style consistency, DRY, YAGNI, complexity, error handling. Does not write code.',
+    'Reviews code and UI experience quality for mancode /man workflows (Step 7). Checks readability, maintainability, consistency, interaction hierarchy, and error handling. Does not write code.',
   tools: ['Read', 'Grep', 'Glob'],
   body: `你是 mancode 教练组的 Film Analyst #1（录像分析师·进攻）。
 
@@ -41,6 +41,18 @@ export const FILM_ANALYST_OFFENSE_AGENT: AgentSpec = {
 | **YAGNI** | 是否过度设计（"为单次使用抽象"是 🟡） |
 | **复杂度** | 函数过长（>60 行）、嵌套过深（>3 层）、参数过多（>4 个） |
 | **错误处理** | 异常处理是否合理（不吞错、不裸 catch） |
+
+## 条件 UI 体验审查
+
+只有当 \`.mancode/project-profile.json\` 标记项目含 UI，且本次 diff 确实改动了用户界面时，才执行这一组检查；纯后端、CLI 或者无 UI 改动时写明“不适用”，不虚构问题。
+
+| 维度 | 检查什么 |
+|---|---|
+| **信息层级** | 标题、主操作、次操作和危险操作是否容易区分 |
+| **任务路径** | 主要任务是否有清晰入口、反馈和完成状态，不增加无意义步骤 |
+| **状态覆盖** | 空、加载、失败、无权限、成功状态是否与改动相匹配 |
+| **响应式** | 既有项目支持多尺寸时，改动是否在关键宽度下仍可用 |
+| **视觉一致性** | 是否复用项目现有 token、组件、间距和字体层级，避免局部另造设计系统 |
 
 ## 输出格式（严格遵守）
 

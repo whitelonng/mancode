@@ -13,7 +13,9 @@ import { VERSION } from './version.js';
 
 program
   .name('mancode')
-  .description('AI coding agent harness. Five modes: practice to playoffs.')
+  .description(
+    'AI coding agent harness. Modes: solo, /man, /mamba, /manteam, /manps.',
+  )
   .version(VERSION);
 
 program
@@ -80,6 +82,13 @@ program
   .option('--older-than <duration>', 'Clean workflows older than (e.g. 30d)')
   .option('--step <n>', 'Update workflow current step')
   .option('--status <status>', 'Update workflow status')
+  .option(
+    '--parent-task <taskId>',
+    'Parent /man or /manteam workflow for mamba',
+  )
+  .option('--blocking-reason <reason>', 'Explain why a workflow is blocked')
+  .option('--outcome <outcome>', 'Set mamba outcome')
+  .option('--plan-version <n>', 'Set the next man/manteam plan revision')
   .option('--skipped <steps>', 'Update skipped steps as comma-separated values')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (subcommand, args, options) => {
@@ -99,7 +108,7 @@ program
 
 program
   .command('refresh-style')
-  .description('Rescan project design tokens and update style-tokens.json')
+  .description('Refresh project profile and rescan applicable design tokens')
   .action(async () => {
     const code = await refreshStyle(process.cwd());
     process.exitCode = code;

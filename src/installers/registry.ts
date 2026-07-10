@@ -1,3 +1,4 @@
+import type { ProjectProfile } from '../system/project-profile.js';
 import { installClaudeCode } from './claude-code.js';
 import { installCodex } from './codex.js';
 import { installCopilot } from './copilot.js';
@@ -21,6 +22,8 @@ export interface PlatformCapabilities {
 export interface InstallAdapterOptions {
   techStack: string[];
   uiLibrary: string | null;
+  /** Live profile detected for this install. Static adapters use it instead of stale state. */
+  projectProfile?: ProjectProfile;
   minimal?: boolean;
   /** --force: explicit reinstall request. When false (auto-repair), adapters should
    *  avoid overwriting user-customized files — only repair missing ones. */

@@ -7,7 +7,10 @@ import {
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
-import { detectProjectType } from '../system/detect.js';
+import {
+  detectProjectProfile,
+  primaryUiLibrary,
+} from '../system/project-profile.js';
 import { DEFAULT_CONFIG } from '../templates/defaults.js';
 
 /**
@@ -87,6 +90,13 @@ export async function install(
     configResult.valid && config.platforms && Array.isArray(config.platforms)
       ? config.platforms.includes(platform)
       : false;
+  const configuredMinimal = readConfiguredMinimal(
+    config.platformOptions,
+    platform,
+  );
+  const effectiveMinimal =
+    options.minimal === true ||
+    (!options.force && alreadyInstalled && configuredMinimal);
 
   if (alreadyInstalled && !options.force) {
     const status = await checkPlatformStatus(rootDir, platform, true);
@@ -111,12 +121,13 @@ export async function install(
 
   // 4. 安装
   console.log(`✓  Installing ${formatPlatformName(platform)} adapter...`);
-  const project = await detectProjectType(rootDir);
+  const profile = await detectProjectProfile(rootDir);
   try {
     await installer.install(rootDir, {
-      techStack: project.techStack,
-      uiLibrary: project.uiLibrary,
-      minimal: options.minimal,
+      techStack: [...profile.languages, ...profile.frameworks],
+      uiLibrary: primaryUiLibrary(profile),
+      projectProfile: profile,
+      minimal: effectiveMinimal,
       force: options.force,
     });
   } catch (err) {
@@ -135,11 +146,10 @@ export async function install(
   await updateConfig(rootDir, {
     ...config,
     platforms,
-    platformOptions: updatePlatformOptions(
-      config.platformOptions,
-      platform,
-      options,
-    ),
+    platformOptions: updatePlatformOptions(config.platformOptions, platform, {
+      ...options,
+      minimal: effectiveMinimal,
+    }),
   });
 
   // 6. 完成
@@ -212,6 +222,12 @@ function updatePlatformOptions(
     minimal: options.minimal === true,
   };
   return platformOptions;
+}
+
+function readConfiguredMinimal(value: unknown, platform: string): boolean {
+  if (!isRecord(value)) return false;
+  const platformOptions = value[platform];
+  return isRecord(platformOptions) && platformOptions.minimal === true;
 }
 
 async function readStatePlatform(rootDir: string): Promise<string | null> {

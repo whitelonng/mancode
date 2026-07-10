@@ -1,12 +1,26 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { MANCODE_CURSOR_CORE_RULE_FILES } from './cursor.js';
+import { ALL_AGENTS } from '../templates/agents/index.js';
+import { MVP2_SKILLS } from '../templates/skills/index.js';
+import {
+  isGeneratedClaudeAgent,
+  isGeneratedClaudeSkill,
+} from './claude-code.js';
+import {
+  CURSOR_RULE_MANAGED_MARKER,
+  MANCODE_CURSOR_CORE_RULE_FILES,
+  MANCODE_CURSOR_RULE_FILES,
+} from './cursor.js';
 import {
   DEFAULT_MANCODE_END_MARKER,
   DEFAULT_MANCODE_START_MARKER,
   hasManagedBlock,
 } from './managed-block.js';
-import { MANCODE_AGENT_SKILL_MARKERS, MODE_NAMES } from './mode-skills.js';
+import {
+  MANCODE_AGENT_SKILL_MARKERS,
+  MODE_FILE_MANAGED_MARKER,
+  MODE_NAMES,
+} from './mode-skills.js';
 import {
   ZCODE_MANCODE_END_MARKER,
   ZCODE_MANCODE_START_MARKER,
@@ -43,30 +57,72 @@ async function checkPlatformReadiness(
   readyDetail: string;
 }> {
   if (platform === 'claude-code') {
-    const hasSoloSkill = await pathExists(
-      path.join(rootDir, '.claude', 'skills', 'solo', 'SKILL.md'),
-    );
-    const registered = await claudeHooksRegistered(rootDir);
-    const present = hasSoloSkill && registered;
+    const [hasSoloSkill, registered, hasHookFiles] = await Promise.all([
+      fileMatches(
+        path.join(rootDir, '.claude', 'skills', 'solo', 'SKILL.md'),
+        (content) => isGeneratedClaudeSkill(content, 'solo'),
+      ),
+      claudeHooksRegistered(rootDir),
+      pathsExist([
+        path.join(rootDir, '.mancode', 'hooks', 'session-start.sh'),
+        path.join(rootDir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
+      ]),
+    ]);
+    const present = hasSoloSkill && registered && hasHookFiles;
+    const minimal = await isPlatformMinimal(rootDir, 'claude-code');
+    const fullContentReady = minimal
+      ? true
+      : await claudeFullContentReady(rootDir);
     return {
       present,
-      ready: present,
+      ready: present && fullContentReady,
       target: '.claude/',
-      readyDetail: 'skills and hooks registered',
+      readyDetail:
+        present && fullContentReady
+          ? minimal
+            ? 'solo skill and hooks ready'
+            : 'skills, agents, and hooks ready'
+          : 'skills, agents, hook files, or hook registration are incomplete',
     };
   }
 
   if (platform === 'cursor') {
-    const present = await allPathsExist(
+    const hasCoreRules = await allManagedSkills(
       MANCODE_CURSOR_CORE_RULE_FILES.map((file) =>
         path.join(rootDir, '.cursor', 'rules', file),
       ),
+      [CURSOR_RULE_MANAGED_MARKER],
     );
+    if (await isPlatformMinimal(rootDir, 'cursor')) {
+      return {
+        present: hasCoreRules,
+        ready: hasCoreRules,
+        target: '.cursor/rules/',
+        readyDetail: 'mancode core rules present',
+      };
+    }
+    const [hasRules, hasCommands] = await Promise.all([
+      allManagedSkills(
+        MANCODE_CURSOR_RULE_FILES.map((file) =>
+          path.join(rootDir, '.cursor', 'rules', file),
+        ),
+        [CURSOR_RULE_MANAGED_MARKER],
+      ),
+      allManagedSkills(
+        MODE_NAMES.map((mode) =>
+          path.join(rootDir, '.cursor', 'commands', `${mode}.md`),
+        ),
+        [MODE_FILE_MANAGED_MARKER],
+      ),
+    ]);
     return {
-      present,
-      ready: present,
-      target: '.cursor/rules/',
-      readyDetail: 'mancode rules present',
+      present: hasCoreRules,
+      ready: hasRules && hasCommands,
+      target: '.cursor/rules/ + .cursor/commands/',
+      readyDetail:
+        hasRules && hasCommands
+          ? 'mancode rules and commands present'
+          : 'mode rules or commands are missing, incomplete, or user-authored',
     };
   }
 
@@ -156,18 +212,19 @@ async function checkPlatformReadiness(
       readyDetail: 'managed block missing',
     };
   }
-  // If .github/prompts/ exists (non-minimal install), verify at least one prompt.
-  // Minimal installs have no prompts directory, so ready stays true.
-  const promptsDir = path.join(rootDir, '.github', 'prompts');
-  if (await pathExists(promptsDir)) {
-    const hasPrompt = await pathExists(path.join(promptsDir, 'man8.prompt.md'));
+  if (!(await isPlatformMinimal(rootDir, 'copilot'))) {
+    const promptsDir = path.join(rootDir, '.github', 'prompts');
+    const hasPrompts = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(promptsDir, `${mode}.prompt.md`)),
+      [MODE_FILE_MANAGED_MARKER],
+    );
     return {
-      present: hasPrompt,
-      ready: hasPrompt,
+      present: true,
+      ready: hasPrompts,
       target: '.github/copilot-instructions.md + .github/prompts/',
-      readyDetail: hasPrompt
+      readyDetail: hasPrompts
         ? 'managed block and prompts present'
-        : 'prompts directory exists but man8 prompt missing',
+        : 'mode prompts are missing, incomplete, or user-authored',
     };
   }
   return {
@@ -189,11 +246,6 @@ function describeStatus(
   return 'missing generated files or registration';
 }
 
-async function allPathsExist(paths: string[]): Promise<boolean> {
-  const results = await Promise.all(paths.map(pathExists));
-  return results.every(Boolean);
-}
-
 async function allManagedSkills(
   paths: string[],
   markers: readonly string[],
@@ -202,6 +254,38 @@ async function allManagedSkills(
     paths.map((filePath) => fileHasAnyMarker(filePath, markers)),
   );
   return results.every(Boolean);
+}
+
+async function claudeFullContentReady(rootDir: string): Promise<boolean> {
+  const skillChecks = MVP2_SKILLS.map((skill) =>
+    fileMatches(
+      path.join(rootDir, '.claude', 'skills', skill.name, 'SKILL.md'),
+      (content) => isGeneratedClaudeSkill(content, skill.name),
+    ),
+  );
+  const agentChecks = ALL_AGENTS.map((agent) =>
+    fileMatches(
+      path.join(rootDir, '.claude', 'agents', `${agent.name}.md`),
+      (content) => isGeneratedClaudeAgent(content, agent.name),
+    ),
+  );
+  const results = await Promise.all([...skillChecks, ...agentChecks]);
+  return results.every(Boolean);
+}
+
+async function fileMatches(
+  filePath: string,
+  predicate: (content: string) => boolean,
+): Promise<boolean> {
+  try {
+    return predicate(await fs.readFile(filePath, 'utf-8'));
+  } catch {
+    return false;
+  }
+}
+
+async function pathsExist(paths: string[]): Promise<boolean> {
+  return (await Promise.all(paths.map(pathExists))).every(Boolean);
 }
 
 async function fileHasAnyMarker(

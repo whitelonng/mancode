@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installMancodeCore } from './common.js';
 import { installCursorCommands, renderModeSkill } from './mode-skills.js';
@@ -12,11 +12,16 @@ export const MANCODE_CURSOR_CORE_RULE_FILES = [
 ] as const;
 
 export const MANCODE_CURSOR_ADVANCED_RULE_FILES = [
-  'mancode-man8.mdc',
+  'mancode-mamba.mdc',
   'mancode-man.mdc',
   'mancode-manteam.mdc',
   'mancode-manps.mdc',
 ] as const;
+
+export const MANCODE_CURSOR_LEGACY_RULE_FILES = ['mancode-man8.mdc'] as const;
+
+export const CURSOR_RULE_MANAGED_MARKER =
+  '<!-- Managed by mancode:cursor-rule. Do not edit this marker. -->';
 
 export const MANCODE_CURSOR_RULE_FILES = [
   ...MANCODE_CURSOR_CORE_RULE_FILES,
@@ -46,6 +51,7 @@ export async function installCursor(
     minimal: true,
     techStack: options.techStack,
     uiLibrary: options.uiLibrary,
+    projectProfile: options.projectProfile,
   });
 
   await writeRule(
@@ -76,12 +82,13 @@ export async function installCursor(
     return;
   }
 
+  await removeLegacyCursorRules(projectRoot);
   await writeRule(
     rulesDir,
-    'mancode-man8.mdc',
-    'Use when the user invokes /man8 or asks for investigation and planning before implementation',
+    'mancode-mamba.mdc',
+    'Use for bug diagnosis and real regression testing',
     false,
-    renderMan8Rule(),
+    renderMambaRule(),
   );
   await writeRule(
     rulesDir,
@@ -126,13 +133,105 @@ async function writeRule(
   frontmatter.push('---');
 
   const content = `${frontmatter.join('\n')}\n\n${body.trim()}\n`;
-
-  await writeFile(path.join(rulesDir, fileName), content, 'utf-8');
+  const rulePath = path.join(rulesDir, fileName);
+  const existing = await readTextIfExists(rulePath);
+  if (existing !== null && !isGeneratedCursorRule(existing, fileName)) {
+    throw new Error(
+      `refusing to overwrite user-authored Cursor rule: ${rulePath}`,
+    );
+  }
+  await writeFile(
+    rulePath,
+    content.replace('---\n\n', `---\n\n${CURSOR_RULE_MANAGED_MARKER}\n\n`),
+    'utf-8',
+  );
 }
 
 async function removeAdvancedRules(rulesDir: string): Promise<void> {
   for (const fileName of MANCODE_CURSOR_ADVANCED_RULE_FILES) {
-    await rm(path.join(rulesDir, fileName), { force: true });
+    await removeGeneratedCursorRule(rulesDir, fileName);
+  }
+  await removeLegacyCursorRules(path.dirname(path.dirname(rulesDir)));
+}
+
+/** Remove current Cursor rules only when they are mancode-generated. */
+export async function removeCursorGeneratedRules(
+  projectRoot: string,
+): Promise<void> {
+  const rulesDir = path.join(projectRoot, '.cursor', 'rules');
+  for (const fileName of MANCODE_CURSOR_RULE_FILES) {
+    await removeGeneratedCursorRule(rulesDir, fileName);
+  }
+  await removeLegacyCursorRules(projectRoot);
+}
+
+/** Remove the old man8 rule only when it matches mancode's generated body. */
+export async function removeLegacyCursorRules(
+  projectRoot: string,
+): Promise<void> {
+  const legacyPath = path.join(
+    projectRoot,
+    '.cursor',
+    'rules',
+    'mancode-man8.mdc',
+  );
+  try {
+    const content = await readFile(legacyPath, 'utf-8');
+    if (
+      content.includes('# mancode man8 — Investigate and Plan') &&
+      content.includes('## Mode Persistence')
+    ) {
+      await rm(legacyPath, { force: true });
+    }
+  } catch {
+    // Missing or unreadable legacy rule: preserve it and continue installation.
+  }
+}
+
+async function removeGeneratedCursorRule(
+  rulesDir: string,
+  fileName: (typeof MANCODE_CURSOR_RULE_FILES)[number],
+): Promise<void> {
+  const rulePath = path.join(rulesDir, fileName);
+  const content = await readTextIfExists(rulePath);
+  if (content && isGeneratedCursorRule(content, fileName)) {
+    await rm(rulePath, { force: true });
+  }
+}
+
+function isGeneratedCursorRule(
+  content: string,
+  fileName: (typeof MANCODE_CURSOR_RULE_FILES)[number],
+): boolean {
+  if (content.includes(CURSOR_RULE_MANAGED_MARKER)) return true;
+  if (fileName === 'mancode-context.mdc') {
+    return (
+      content.includes('# mancode Configuration') &&
+      content.includes('Platform adapter: Cursor')
+    );
+  }
+  if (fileName === 'mancode-practice.mdc') {
+    return (
+      content.includes('# mancode Practice') && content.includes('YAGNI ladder')
+    );
+  }
+  if (fileName === 'mancode-solo.mdc') {
+    return (
+      content.includes('# mancode solo') && content.includes('Use solo mode')
+    );
+  }
+  const mode = fileName.replace(/^mancode-/, '').replace(/\.mdc$/, '');
+  return (
+    content.includes(`# mancode ${mode} —`) &&
+    content.includes('## Mode Persistence')
+  );
+}
+
+async function readTextIfExists(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, 'utf-8');
+  } catch {
+    return null;
   }
 }
 
@@ -161,13 +260,13 @@ function renderSoloRule(): string {
     '',
     '- Keep the diff narrow.',
     '- Reuse existing functions, components, styles, and dependencies.',
-    '- For UI work, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles.',
+    '- Read `.mancode/project-profile.json` before choosing tools or validation. For detected UI assets and UI work, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles.',
     '- Verify with the narrowest meaningful test, lint, build, or smoke check.',
   ].join('\n');
 }
 
-function renderMan8Rule(): string {
-  return renderModeSkill('man8', '/');
+function renderMambaRule(): string {
+  return renderModeSkill('mamba', '/');
 }
 
 function renderManRule(): string {

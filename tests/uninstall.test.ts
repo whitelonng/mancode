@@ -76,6 +76,11 @@ describe('mancode uninstall', () => {
     await install(dir, 'cursor');
     const rulesDir = path.join(dir, '.cursor', 'rules');
     await writeFile(path.join(rulesDir, 'custom.mdc'), '# custom\n', 'utf-8');
+    await writeFile(
+      path.join(rulesDir, 'mancode-man8.mdc'),
+      '# mancode man8 — Investigate and Plan\n\n## Mode Persistence\n',
+      'utf-8',
+    );
 
     const code = await uninstall(dir, 'cursor', { force: true });
     expect(code).toBe(EXIT_OK);
@@ -84,11 +89,40 @@ describe('mancode uninstall', () => {
       '# custom\n',
     );
     await expect(
+      readFile(path.join(rulesDir, 'mancode-man8.mdc'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
       readFile(path.join(rulesDir, 'mancode-solo.mdc'), 'utf-8'),
     ).rejects.toThrow();
     await expect(
       readFile(path.join(rulesDir, 'mancode-context.mdc'), 'utf-8'),
     ).rejects.toThrow();
+  });
+
+  it('preserves a user-authored legacy Cursor rule on uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    const legacyPath = path.join(dir, '.cursor', 'rules', 'mancode-man8.mdc');
+    await writeFile(legacyPath, '# user-authored legacy rule\n', 'utf-8');
+
+    await uninstall(dir, 'cursor', { force: true });
+
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toBe(
+      '# user-authored legacy rule\n',
+    );
+  });
+
+  it('preserves a user-authored same-name current Cursor rule on uninstall', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    const customPath = path.join(dir, '.cursor', 'rules', 'mancode-solo.mdc');
+    await writeFile(customPath, '# custom solo rule\n', 'utf-8');
+
+    await uninstall(dir, 'cursor', { force: true });
+
+    await expect(readFile(customPath, 'utf-8')).resolves.toBe(
+      '# custom solo rule\n',
+    );
   });
 
   it('removes Cursor .cursor/commands/ on uninstall', async () => {
@@ -99,7 +133,7 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
 
     await expect(
-      readFile(path.join(dir, '.cursor', 'commands', 'man8.md'), 'utf-8'),
+      readFile(path.join(dir, '.cursor', 'commands', 'mamba.md'), 'utf-8'),
     ).rejects.toThrow();
     await expect(
       readFile(path.join(dir, '.cursor', 'commands', 'mansolo.md'), 'utf-8'),
@@ -115,7 +149,7 @@ describe('mancode uninstall', () => {
 
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -131,8 +165,8 @@ describe('mancode uninstall', () => {
     await silentInit(dir);
     await install(dir, 'codex');
     await writeFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-      '# custom man8\n',
+      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      '# custom mamba\n',
       'utf-8',
     );
 
@@ -141,23 +175,23 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toBe('# custom man8\n');
+    ).resolves.toBe('# custom mamba\n');
   });
 
   it('also removes legacy .codex/skills/ managed files from pre-fix versions', async () => {
     await silentInit(dir);
     // Simulate a pre-fix install that wrote managed skills to .codex/skills/.
-    await mkdir(path.join(dir, '.codex', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.codex', 'skills', 'mamba'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.codex', 'skills', 'mamba', 'SKILL.md'),
       [
         '---',
-        'name: man8',
+        'name: mamba',
         'description: "legacy"',
         '---',
         '',
@@ -172,8 +206,54 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
 
     await expect(
-      readFile(path.join(dir, '.codex', 'skills', 'man8', 'SKILL.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.codex', 'skills', 'mamba', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
+  });
+
+  it.each([
+    ['codex', 'zcode'],
+    ['zcode', 'codex'],
+  ] as const)(
+    'handles shared skills safely when %s is installed before %s',
+    async (first, second) => {
+      await silentInit(dir);
+      await install(dir, first);
+      await install(dir, second);
+      const skillPath = path.join(
+        dir,
+        '.agents',
+        'skills',
+        'mamba',
+        'SKILL.md',
+      );
+
+      await uninstall(dir, second, { force: true });
+      await expect(readFile(skillPath, 'utf-8')).resolves.toContain(
+        'Managed by mancode:',
+      );
+
+      await uninstall(dir, first, { force: true });
+      await expect(readFile(skillPath, 'utf-8')).rejects.toThrow();
+    },
+  );
+
+  it('does not let one minimal adapter delete shared skills needed by its peer', async () => {
+    await silentInit(dir);
+    await install(dir, 'codex');
+    await install(dir, 'zcode');
+
+    await install(dir, 'zcode', { force: true, minimal: true });
+
+    const skillPath = path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md');
+    await expect(readFile(skillPath, 'utf-8')).resolves.toContain(
+      'Managed by mancode:zcode-skill',
+    );
+
+    await uninstall(dir, 'codex', { force: true });
+    await expect(readFile(skillPath, 'utf-8')).rejects.toThrow();
   });
 
   it('removes Copilot .github/prompts/ on uninstall', async () => {
@@ -184,7 +264,10 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
 
     await expect(
-      readFile(path.join(dir, '.github', 'prompts', 'man8.prompt.md'), 'utf-8'),
+      readFile(
+        path.join(dir, '.github', 'prompts', 'mamba.prompt.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
     await expect(
       readFile(
@@ -231,6 +314,30 @@ describe('mancode uninstall', () => {
       await pathExists(path.join(dir, '.claude', 'agents', 'scout.md')),
     ).toBe(false);
     expect(await readFile(customAgentPath, 'utf-8')).toBe('# custom agent\n');
+    await expect(
+      readFile(
+        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('preserves user-authored same-name Claude skills and agents', async () => {
+    await silentInit(dir);
+    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
+    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(agentPath, '# custom scout\n', 'utf-8');
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
+      '# custom mamba\n',
+    );
+    await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
+      '# custom scout\n',
+    );
   });
 
   it('cleans mancode hooks from .claude/settings.json but preserves user hooks', async () => {
@@ -303,6 +410,71 @@ describe('mancode uninstall', () => {
     ]);
   });
 
+  it('removes legacy object-mapped mancode hooks while preserving user entries', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: {
+              mancode: {
+                type: 'command',
+                command: 'bash .mancode/hooks/session-start.sh',
+              },
+              user: {
+                type: 'command',
+                command: 'echo user hook',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+
+    expect(code).toBe(EXIT_OK);
+    expect(settings.hooks.SessionStart.mancode).toBeUndefined();
+    expect(settings.hooks.SessionStart.user).toEqual([
+      { type: 'command', command: 'echo user hook' },
+    ]);
+  });
+
+  it('cleans exact legacy Claude skill mappings without deleting same-name user mappings', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    await writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          skills: {
+            solo: '.claude/skills/mancode-solo.md',
+            man: '.claude/skills/custom-man.md',
+            custom: '.claude/skills/custom.md',
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+
+    expect(code).toBe(EXIT_OK);
+    expect(settings.skills).toEqual({
+      man: '.claude/skills/custom-man.md',
+      custom: '.claude/skills/custom.md',
+    });
+  });
+
   it('updates config.json platforms after single platform uninstall', async () => {
     await silentInit(dir);
     await install(dir, 'codex');
@@ -334,7 +506,9 @@ describe('mancode uninstall', () => {
       await pathExists(path.join(dir, '.cursor', 'rules', 'mancode-solo.mdc')),
     ).toBe(false);
     expect(
-      await pathExists(path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md')),
+      await pathExists(
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      ),
     ).toBe(false);
   });
 

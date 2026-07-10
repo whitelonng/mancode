@@ -48,7 +48,7 @@ describe('scanAesthetics', () => {
     expect(result.version).toBe('1.0.0');
     expect(result.matchLevel).toBe('high');
     expect(result.sourceFiles).toContain('tailwind.config.js');
-    expect(result.sourceFiles).toContain('package.json');
+    expect(result.sourceFiles).not.toContain('package.json');
     expect(result.uiLibrary).toBe('shadcn/ui');
   });
 
@@ -100,6 +100,21 @@ describe('scanAesthetics', () => {
 
     const result = await scanAesthetics(dir, null);
     expect(result.darkMode).toBeNull();
+  });
+
+  it('does not extract a commented theme before the real configuration', async () => {
+    await writeFile(
+      path.join(dir, 'tailwind.config.js'),
+      `// theme: { extend: { colors: { stale: '#000000' } } }
+module.exports = {
+  theme: { extend: { colors: { current: '#ffffff' } } },
+};`,
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, null);
+
+    expect(result.colors).toEqual({ current: '#ffffff' });
   });
 
   it('handles tailwind.config.ts', async () => {
@@ -309,6 +324,21 @@ describe('scanAesthetics', () => {
     expect(result.cssVariables).toHaveProperty('background', '#ffffff');
     expect(result.cssVariables).toHaveProperty('radius', '8px');
     expect(result.sourceFiles).toContain('src/app/globals.css');
+    expect(result.matchLevel).toBe('high');
+  });
+
+  it('recognizes project-native Flutter widgets as reusable UI assets', async () => {
+    await mkdir(path.join(dir, 'lib', 'widgets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'lib', 'widgets', 'primary_button.dart'),
+      'class PrimaryButton {}',
+      'utf-8',
+    );
+
+    const result = await scanAesthetics(dir, 'Flutter');
+
+    expect(result.components).toContain('PrimaryButton');
+    expect(result.matchLevel).toBe('high');
   });
 
   it('skips unsafe or oversized CSS variables without hanging', async () => {

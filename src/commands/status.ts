@@ -11,7 +11,14 @@ import {
   getPlatformInstallers,
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
-import { type WorkflowMode, readWorkflow } from '../system/workflow.js';
+import {
+  type WorkflowMode,
+  type WorkflowOutcome,
+  type WorkflowStatus,
+  listWorkflows,
+  maxWorkflowStep,
+  readWorkflow,
+} from '../system/workflow.js';
 import { VERSION } from '../version.js';
 
 const HOOK_ESTIMATE_TIMEOUT_MS = 2000;
@@ -77,7 +84,16 @@ export interface StatusResult {
     task: string;
     mode: WorkflowMode;
     currentStep: number;
-    status: string;
+    status: WorkflowStatus;
+    blockingReason?: string;
+    parentTaskId?: string;
+    outcome?: WorkflowOutcome;
+    planVersion?: number;
+    activeChildren?: Array<{
+      taskId: string;
+      currentStep: number;
+      status: WorkflowStatus;
+    }>;
   } | null;
   platformStatus: Record<string, PlatformStatus>;
 }
@@ -207,12 +223,33 @@ async function getCurrentWorkflow(
   if (!taskId) return null;
   const meta = await readWorkflow(rootDir, taskId);
   if (!meta) return null;
+  const activeChildren =
+    meta.mode === 'man' || meta.mode === 'manteam'
+      ? (await listWorkflows(rootDir))
+          .filter(
+            (candidate) =>
+              candidate.mode === 'mamba' &&
+              candidate.parentTaskId === meta.taskId &&
+              (candidate.status === 'in_progress' ||
+                candidate.status === 'blocked'),
+          )
+          .map((candidate) => ({
+            taskId: candidate.taskId,
+            currentStep: candidate.currentStep,
+            status: candidate.status,
+          }))
+      : undefined;
   return {
     taskId: meta.taskId,
     task: meta.task,
     mode: meta.mode,
     currentStep: meta.currentStep,
     status: meta.status,
+    ...(meta.blockingReason ? { blockingReason: meta.blockingReason } : {}),
+    ...(meta.parentTaskId ? { parentTaskId: meta.parentTaskId } : {}),
+    ...(meta.outcome ? { outcome: meta.outcome } : {}),
+    ...(meta.planVersion ? { planVersion: meta.planVersion } : {}),
+    ...(activeChildren ? { activeChildren } : {}),
   };
 }
 
@@ -443,6 +480,23 @@ function printText(r: StatusResult): void {
     console.log(
       `Workflow:    ${r.currentWorkflow.taskId} (Step ${r.currentWorkflow.currentStep}/${stepMax}, ${r.currentWorkflow.status})`,
     );
+    if (r.currentWorkflow.parentTaskId) {
+      console.log(`Parent:      ${r.currentWorkflow.parentTaskId}`);
+    }
+    if (r.currentWorkflow.planVersion !== undefined) {
+      console.log(`Plan version: ${r.currentWorkflow.planVersion}`);
+    }
+    if (r.currentWorkflow.outcome) {
+      console.log(`Outcome:     ${r.currentWorkflow.outcome}`);
+    }
+    if (r.currentWorkflow.blockingReason) {
+      console.log(`Blocked:     ${r.currentWorkflow.blockingReason}`);
+    }
+    if (r.currentWorkflow.activeChildren?.length) {
+      console.log(
+        `Children:    ${r.currentWorkflow.activeChildren.map((child) => `${child.taskId} (${child.status})`).join(', ')}`,
+      );
+    }
   }
   console.log('');
   console.log('Installed platforms:');
@@ -484,7 +538,7 @@ function formatTeamStatus(team: StatusResult['team']): string {
 }
 
 function workflowStepMax(mode: WorkflowMode): number {
-  return mode === 'man8' ? 3 : 8;
+  return maxWorkflowStep(mode);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

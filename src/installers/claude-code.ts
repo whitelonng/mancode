@@ -1,9 +1,28 @@
-import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { ALL_AGENTS, renderAgent } from '../templates/agents/index.js';
 import { SOLO_SKILL } from '../templates/inline.js';
 import { MVP2_SKILLS, renderSkill } from '../templates/skills/index.js';
 import { installMancodeCore } from './common.js';
+
+export const CLAUDE_SKILL_MANAGED_MARKER =
+  '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->';
+export const CLAUDE_AGENT_MANAGED_MARKER =
+  '<!-- Managed by mancode:claude-agent. Do not edit this marker. -->';
+
+export const LEGACY_CLAUDE_SKILL_SETTINGS: Readonly<Record<string, string>> = {
+  solo: '.claude/skills/mancode-solo.md',
+  man8: '.claude/skills/mancode-man8.md',
+  man: '.claude/skills/mancode-man.md',
+  mansolo: '.claude/skills/mancode-mansolo.md',
+};
 
 /**
  * Claude Code 平台安装器。
@@ -41,7 +60,7 @@ export async function installClaudeCode(
   // 1. 创建 .claude/skills/ 并写入 solo skill + MVP-2 skills
   await mkdir(path.join(claudeDir, 'skills'), { recursive: true });
   // solo skill is core — always repair even without --force
-  await installSoloSkill(path.join(claudeDir, 'skills'));
+  await installSoloSkill(path.join(claudeDir, 'skills'), force);
   if (options.minimal) {
     await uninstallMvp2Skills(path.join(claudeDir, 'skills'));
   } else {
@@ -59,39 +78,49 @@ export async function installClaudeCode(
   await updateClaudeSettings(claudeDir, settings);
 }
 
-async function installSoloSkill(skillsDir: string): Promise<void> {
-  await installProjectSkill(skillsDir, {
-    name: 'solo',
-    description: 'Default mancode solo-mode guidance for small, focused tasks.',
-    body: SOLO_SKILL,
-  });
-  await removeLegacyFlatSkill(skillsDir, 'mancode-solo');
+async function installSoloSkill(
+  skillsDir: string,
+  force: boolean,
+): Promise<void> {
+  await installProjectSkill(
+    skillsDir,
+    {
+      name: 'solo',
+      description:
+        'Default mancode solo-mode guidance for small, focused tasks.',
+      body: SOLO_SKILL,
+    },
+    force,
+  );
+  await removeLegacyFlatSkill(skillsDir, 'mancode-solo', 'solo');
 }
 
 /**
- * 写入 MVP-2 skill 目录（/man8 /man /mansolo，docs/03）。
+ * 写入 MVP-2 skill 目录（/man /mamba /mansolo，docs/03）。
  *
  * 目录：.claude/skills/<name>/SKILL.md（Claude Code 通过目录名识别命令）。
- * `--force` 重装时直接覆盖（内容随 mancode 版本演进）。
+ * `--force` 重装时只覆盖可识别的 mancode 生成文件。
  * auto-repair（force=false）时只写入缺失的 skill，不覆盖用户自定义。
  */
 async function installMvp2Skills(
   skillsDir: string,
   force: boolean,
 ): Promise<void> {
+  await removeManagedLegacyMan8Skill(skillsDir);
   for (const skill of MVP2_SKILLS) {
     await installProjectSkill(skillsDir, skill, force);
-    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`);
+    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`, skill.name);
   }
+}
+
+async function removeManagedLegacyMan8Skill(skillsDir: string): Promise<void> {
+  await removeGeneratedSkillDir(skillsDir, 'man8');
 }
 
 async function uninstallMvp2Skills(skillsDir: string): Promise<void> {
   for (const skill of MVP2_SKILLS) {
-    await rm(path.join(skillsDir, skill.name), {
-      recursive: true,
-      force: true,
-    });
-    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`);
+    await removeGeneratedSkillDir(skillsDir, skill.name);
+    await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`, skill.name);
   }
 }
 
@@ -102,24 +131,37 @@ async function installProjectSkill(
 ): Promise<void> {
   const skillDir = path.join(skillsDir, skill.name);
   const skillPath = path.join(skillDir, 'SKILL.md');
-  if (!force) {
-    // auto-repair: skip if the skill already exists (may be user-customized)
-    try {
-      await access(skillPath);
-      return;
-    } catch {
-      // file missing — proceed to write
-    }
+  const existing = await readTextIfExists(skillPath);
+  if (existing !== null && !force) {
+    return;
+  }
+  if (
+    existing !== null &&
+    force &&
+    !isGeneratedClaudeSkill(existing, skill.name)
+  ) {
+    throw new Error(
+      `refusing to overwrite user-authored Claude Code skill: ${skillPath}`,
+    );
   }
   await mkdir(skillDir, { recursive: true });
-  await writeFile(skillPath, renderSkill(skill), 'utf-8');
+  await writeFile(
+    skillPath,
+    addManagedMarker(renderSkill(skill), CLAUDE_SKILL_MANAGED_MARKER),
+    'utf-8',
+  );
 }
 
 async function removeLegacyFlatSkill(
   skillsDir: string,
   legacyName: string,
+  modeName: string,
 ): Promise<void> {
-  await rm(path.join(skillsDir, `${legacyName}.md`), { force: true });
+  const legacyPath = path.join(skillsDir, `${legacyName}.md`);
+  const content = await readTextIfExists(legacyPath);
+  if (content && isGeneratedClaudeSkill(content, modeName)) {
+    await rm(legacyPath, { force: true });
+  }
 }
 
 /**
@@ -142,14 +184,104 @@ async function installAgents(agentsDir: string, force: boolean): Promise<void> {
         // file missing — proceed to write
       }
     }
-    const content = renderAgent(agent);
+    const existing = await readTextIfExists(agentPath);
+    if (
+      existing !== null &&
+      force &&
+      !isGeneratedClaudeAgent(existing, agent.name)
+    ) {
+      throw new Error(
+        `refusing to overwrite user-authored Claude Code agent: ${agentPath}`,
+      );
+    }
+    const content = addManagedMarker(
+      renderAgent(agent),
+      CLAUDE_AGENT_MANAGED_MARKER,
+    );
     await writeFile(agentPath, content, 'utf-8');
   }
 }
 
 async function uninstallAgents(agentsDir: string): Promise<void> {
   for (const agent of ALL_AGENTS) {
-    await rm(path.join(agentsDir, `${agent.name}.md`), { force: true });
+    const agentPath = path.join(agentsDir, `${agent.name}.md`);
+    const content = await readTextIfExists(agentPath);
+    if (content && isGeneratedClaudeAgent(content, agent.name)) {
+      await rm(agentPath, { force: true });
+    }
+  }
+}
+
+/** Remove only Claude skills and agents that can be identified as generated. */
+export async function removeClaudeGeneratedContent(
+  projectRoot: string,
+): Promise<void> {
+  const claudeDir = path.join(projectRoot, '.claude');
+  const skillsDir = path.join(claudeDir, 'skills');
+  for (const modeName of [
+    'solo',
+    'man8',
+    ...MVP2_SKILLS.map((skill) => skill.name),
+  ]) {
+    await removeGeneratedSkillDir(skillsDir, modeName);
+    await removeLegacyFlatSkill(skillsDir, `mancode-${modeName}`, modeName);
+  }
+  await uninstallAgents(path.join(claudeDir, 'agents'));
+}
+
+async function removeGeneratedSkillDir(
+  skillsDir: string,
+  modeName: string,
+): Promise<void> {
+  const skillDir = path.join(skillsDir, modeName);
+  const skillPath = path.join(skillDir, 'SKILL.md');
+  const content = await readTextIfExists(skillPath);
+  if (!content || !isGeneratedClaudeSkill(content, modeName)) return;
+  await rm(skillPath, { force: true });
+  await removeIfEmpty(skillDir);
+}
+
+export function isGeneratedClaudeSkill(
+  content: string,
+  modeName: string,
+): boolean {
+  if (content.includes(CLAUDE_SKILL_MANAGED_MARKER)) return true;
+  if (!content.includes(`name: ${modeName}`)) return false;
+  const heading =
+    modeName === 'solo'
+      ? '# mancode · solo mode'
+      : modeName === 'man8'
+        ? '# mancode · /man8 (4 AM Warmup)'
+        : `# mancode · /${modeName}`;
+  return content.includes(heading);
+}
+
+export function isGeneratedClaudeAgent(content: string, name: string): boolean {
+  return (
+    content.includes(CLAUDE_AGENT_MANAGED_MARKER) ||
+    (content.includes(`name: ${name}`) && content.includes('mancode 教练组'))
+  );
+}
+
+function addManagedMarker(content: string, marker: string): string {
+  return content.replace('---\n\n', `---\n\n${marker}\n\n`);
+}
+
+async function readTextIfExists(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+async function removeIfEmpty(dir: string): Promise<void> {
+  try {
+    if ((await readdir(dir)).length === 0) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  } catch {
+    // Missing directory: nothing to clean.
   }
 }
 
@@ -233,16 +365,10 @@ async function updateClaudeSettings(
 
 function removeLegacyMancodeSkillSettings(settings: ClaudeSettings): void {
   if (!settings.skills) return;
-  const legacyNames = new Set([
-    'solo',
-    'man8',
-    'man',
-    'manteam',
-    'manps',
-    'mansolo',
-  ]);
   const retained = Object.fromEntries(
-    Object.entries(settings.skills).filter(([name]) => !legacyNames.has(name)),
+    Object.entries(settings.skills).filter(
+      ([name, value]) => LEGACY_CLAUDE_SKILL_SETTINGS[name] !== value,
+    ),
   );
   settings.skills = Object.keys(retained).length > 0 ? retained : undefined;
 }

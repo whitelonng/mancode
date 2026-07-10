@@ -90,6 +90,20 @@ describe('UserPromptSubmit hook context budget', () => {
     expect(output).not.toContain('Colors (前 8):');
   });
 
+  it('does not inject UI tokens when the project profile has no UI assets', async () => {
+    await writeTokens(dir, { colors: { primary: '#111111' } });
+    await writeFile(
+      path.join(dir, '.mancode', 'project-profile.json'),
+      `${JSON.stringify({ uiAssets: 'none' })}\n`,
+      'utf-8',
+    );
+
+    const output = await runHook(dir);
+
+    expect(output).not.toContain('## 审美 token');
+    expect(output).not.toContain('primary=#111111');
+  });
+
   it('keeps frontend hook output below the 800-token budget', async () => {
     await writeTokens(dir, {
       colors: Object.fromEntries(
@@ -111,7 +125,7 @@ describe('UserPromptSubmit hook context budget', () => {
     expect(Buffer.byteLength(output, 'utf-8')).toBeLessThan(3200);
   });
 
-  it('routes planning/research prompts to the man8 skill', async () => {
+  it('routes planning/research prompts to the man skill', async () => {
     await writeState(dir, {
       currentMode: 'solo',
       teamModeAutoDetected: false,
@@ -127,11 +141,11 @@ describe('UserPromptSubmit hook context budget', () => {
     );
 
     expect(output).toContain('## mancode 自动路由');
-    expect(output).toContain("skill='man8'");
+    expect(output).toContain("skill='man'");
     expect(output).toContain('不要直接进入 solo 实施');
   });
 
-  it('routes English planning prompts to the man8 skill', async () => {
+  it('routes English planning prompts to the man skill', async () => {
     await writeState(dir, {
       currentMode: 'solo',
       teamModeAutoDetected: false,
@@ -148,10 +162,10 @@ describe('UserPromptSubmit hook context budget', () => {
     );
 
     expect(output).toContain('## mancode 自动路由');
-    expect(output).toContain("skill='man8'");
+    expect(output).toContain("skill='man'");
   });
 
-  it('does not route small direct edits to man8', async () => {
+  it('does not route small direct edits to man', async () => {
     await writeState(dir, {
       currentMode: 'solo',
       teamModeAutoDetected: false,
@@ -167,7 +181,7 @@ describe('UserPromptSubmit hook context budget', () => {
     );
 
     expect(output).not.toContain('## mancode 自动路由');
-    expect(output).not.toContain("skill='man8'");
+    expect(output).not.toContain("skill='man'");
   });
 });
 
@@ -329,6 +343,11 @@ async function writeTokens(
   await writeFile(
     path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
     `${JSON.stringify(tokens, null, 2)}\n`,
+    'utf-8',
+  );
+  await writeFile(
+    path.join(dir, '.mancode', 'project-profile.json'),
+    `${JSON.stringify({ uiAssets: 'detected' })}\n`,
     'utf-8',
   );
 }

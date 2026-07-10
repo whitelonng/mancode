@@ -3,7 +3,7 @@ import type { AgentSpec } from './index.js';
 /**
  * Plan Coach — read-only planning agent.
  *
- * Used before user confirmation in /man8, /man, and /manteam. It must not
+ * Used before user confirmation in /man and /manteam. It must not
  * modify project files; the caller writes its returned plan to plan.md.
  */
 export const PLAN_COACH_AGENT: AgentSpec = {
@@ -25,21 +25,25 @@ export const PLAN_COACH_AGENT: AgentSpec = {
 ## 输出格式
 
 \`\`\`markdown
-# Game Plan · <task>
+# Plan · <task>
 
-## Goal
-
-## Assumptions
-
-## Files To Change
-
-## Steps
-
-## Validation
-
-## Risks
-
-## Questions
+## 需求摘要
+## 任务分级
+- 简单 / 中等 / 复杂；说明理由
+## 模块索引
+## 技术与交付约束（仅新项目或技术选择未定时）
+- 候选方案（2–3 个）、优缺点、推荐与确认点；已有项目写“沿用检测到的项目约定”
+## 模块：<名称>
+### 改动文件 / 新建文件
+### 复用资源（引用 scout-report.md 行号）
+### 最小实现策略
+### 不做什么
+### 实施步骤
+### 风险点
+### 完成定义
+## 验证计划
+- build / lint / typecheck / test / smoke test
+## 预估
 \`\`\`
 
 如果任务不应继续实施，明确写在 Risks 或 Questions 中。`,

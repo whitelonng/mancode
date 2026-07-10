@@ -1,7 +1,11 @@
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { MANCODE_CURSOR_RULE_FILES } from '../installers/cursor.js';
+import {
+  LEGACY_CLAUDE_SKILL_SETTINGS,
+  removeClaudeGeneratedContent,
+} from '../installers/claude-code.js';
+import { removeCursorGeneratedRules } from '../installers/cursor.js';
 import { removeManagedBlock } from '../installers/managed-block.js';
 import {
   removeCodexSkills,
@@ -22,22 +26,6 @@ import {
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_UNSUPPORTED_PLATFORM = 2;
-
-const CLAUDE_SKILL_DIRS = [
-  'solo',
-  'man8',
-  'man',
-  'manteam',
-  'manps',
-  'mansolo',
-];
-const CLAUDE_AGENT_FILES = [
-  'scout.md',
-  'head-coach.md',
-  'film-analyst-offense.md',
-  'film-analyst-defense.md',
-  'plan-coach.md',
-];
 
 export interface UninstallOptions {
   /** --force: skip confirmation */
@@ -136,18 +124,7 @@ async function uninstallAll(rootDir: string): Promise<void> {
 }
 
 async function uninstallClaudeCode(rootDir: string): Promise<void> {
-  const claudeDir = path.join(rootDir, '.claude');
-  const skillsDir = path.join(claudeDir, 'skills');
-  const agentsDir = path.join(claudeDir, 'agents');
-
-  for (const skillDir of CLAUDE_SKILL_DIRS) {
-    await rm(path.join(skillsDir, skillDir), { recursive: true, force: true });
-  }
-
-  for (const agentFile of CLAUDE_AGENT_FILES) {
-    await rm(path.join(agentsDir, agentFile), { force: true });
-  }
-
+  await removeClaudeGeneratedContent(rootDir);
   await cleanClaudeSettings(rootDir);
 }
 
@@ -167,35 +144,24 @@ async function cleanClaudeSettings(rootDir: string): Promise<void> {
     return;
   }
 
-  if (!isRecord(settings.hooks)) return;
-
   const cleanedHooks: Record<string, unknown> = {};
-  for (const [event, groups] of Object.entries(settings.hooks)) {
-    if (!Array.isArray(groups)) {
-      cleanedHooks[event] = groups;
-      continue;
+  if (isRecord(settings.hooks)) {
+    for (const [event, value] of Object.entries(settings.hooks)) {
+      const cleaned = cleanClaudeHookValue(value);
+      if (cleaned !== undefined) cleanedHooks[event] = cleaned;
     }
-    const filtered = groups.flatMap((group) => {
-      if (!isRecord(group) || !Array.isArray(group.hooks)) return [group];
-      const hooks = group.hooks.filter(
-        (hook) =>
-          !(
-            isRecord(hook) &&
-            typeof hook.command === 'string' &&
-            hook.command.includes('.mancode/hooks/')
-          ),
-      );
-      return hooks.length > 0 ? [{ ...group, hooks }] : [];
-    });
-    if (filtered.length > 0) {
-      cleanedHooks[event] = filtered;
-    }
+    settings.hooks =
+      Object.keys(cleanedHooks).length > 0 ? cleanedHooks : undefined;
   }
 
-  if (Object.keys(cleanedHooks).length > 0) {
-    settings.hooks = cleanedHooks;
-  } else {
-    settings.hooks = undefined;
+  if (isRecord(settings.skills)) {
+    const retainedSkills = Object.fromEntries(
+      Object.entries(settings.skills).filter(
+        ([name, value]) => LEGACY_CLAUDE_SKILL_SETTINGS[name] !== value,
+      ),
+    );
+    settings.skills =
+      Object.keys(retainedSkills).length > 0 ? retainedSkills : undefined;
   }
 
   await writeFile(
@@ -205,11 +171,44 @@ async function cleanClaudeSettings(rootDir: string): Promise<void> {
   );
 }
 
-async function uninstallCursor(rootDir: string): Promise<void> {
-  const rulesDir = path.join(rootDir, '.cursor', 'rules');
-  for (const file of MANCODE_CURSOR_RULE_FILES) {
-    await rm(path.join(rulesDir, file), { force: true });
+function cleanClaudeHookValue(value: unknown): unknown | undefined {
+  if (Array.isArray(value)) {
+    const entries = value.flatMap(cleanClaudeHookEntry);
+    return entries.length > 0 ? entries : undefined;
   }
+  if (!isRecord(value)) return value;
+  if (Array.isArray(value.hooks) || typeof value.command === 'string') {
+    const entries = cleanClaudeHookEntry(value);
+    return entries.length > 0 ? entries : undefined;
+  }
+
+  const entries = Object.entries(value).flatMap(([key, item]) => {
+    const cleaned = cleanClaudeHookValue(item);
+    return cleaned === undefined ? [] : [[key, cleaned] as const];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function cleanClaudeHookEntry(entry: unknown): unknown[] {
+  if (Array.isArray(entry)) return entry.flatMap(cleanClaudeHookEntry);
+  if (!isRecord(entry)) return [entry];
+  if (Array.isArray(entry.hooks)) {
+    const hooks = entry.hooks.filter((hook) => !isMancodeHookEntry(hook));
+    return hooks.length > 0 ? [{ ...entry, hooks }] : [];
+  }
+  return isMancodeHookEntry(entry) ? [] : [entry];
+}
+
+function isMancodeHookEntry(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.command === 'string' &&
+    value.command.includes('.mancode/hooks/')
+  );
+}
+
+async function uninstallCursor(rootDir: string): Promise<void> {
+  await removeCursorGeneratedRules(rootDir);
   await removeCursorCommands(rootDir);
 }
 
@@ -226,11 +225,7 @@ async function uninstallCodex(rootDir: string): Promise<void> {
   } catch {
     // AGENTS.md doesn't exist — nothing to do
   }
-  // Codex and ZCode share .agents/skills/. Only remove skills if ZCode is not
-  // also active, otherwise we would delete the other platform's skills too.
-  if (!(await otherAgentSkillsPlatformActive(rootDir, 'codex'))) {
-    await removeCodexSkills(rootDir);
-  }
+  await removeCodexSkills(rootDir);
 }
 
 async function uninstallCopilot(rootDir: string): Promise<void> {
@@ -270,11 +265,7 @@ async function uninstallZcode(rootDir: string): Promise<void> {
   } catch {
     // AGENTS.md doesn't exist — nothing to do
   }
-  // Codex and ZCode share .agents/skills/. Only remove skills if Codex is not
-  // also active, otherwise we would delete the other platform's skills too.
-  if (!(await otherAgentSkillsPlatformActive(rootDir, 'zcode'))) {
-    await removeZcodeSkills(rootDir);
-  }
+  await removeZcodeSkills(rootDir);
 }
 
 async function removeFromConfig(
@@ -318,31 +309,6 @@ async function pathExists(p: string): Promise<boolean> {
   try {
     await access(p);
     return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check whether another agents-skills platform (Codex/ZCode) is still recorded
- * in config.json. Both platforms share the .agents/skills/ directory, so when
- * uninstalling one we must not delete skill files if the other is still active.
- */
-async function otherAgentSkillsPlatformActive(
-  rootDir: string,
-  excluding: string,
-): Promise<boolean> {
-  try {
-    const raw = await readFile(
-      path.join(rootDir, '.mancode', 'config.json'),
-      'utf-8',
-    );
-    const config = JSON.parse(raw) as { platforms?: unknown };
-    const platforms = Array.isArray(config.platforms)
-      ? (config.platforms as string[])
-      : [];
-    const peers = ['codex', 'zcode'].filter((p) => p !== excluding);
-    return platforms.some((p) => peers.includes(p));
   } catch {
     return false;
   }

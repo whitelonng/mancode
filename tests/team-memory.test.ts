@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendTeamDecision,
   ensureTeamMemory,
+  upsertActivePlan,
 } from '../src/system/team-memory.js';
 
 describe('team memory', () => {
@@ -59,6 +60,55 @@ describe('team memory', () => {
     expect(decisions).toContain('2026-06-29: Use shadcn/ui');
     expect(decisions).toContain('Keep the existing component library.');
     expect(decisions).toContain('20260629-task');
+  });
+
+  it('upserts active plans by task id', async () => {
+    await upsertActivePlan(dir, {
+      taskId: '20260710-login',
+      status: 'in_progress',
+      planVersion: 1,
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+    });
+    await upsertActivePlan(dir, {
+      taskId: '20260710-login',
+      status: 'planned',
+      planVersion: 2,
+      updatedAt: new Date('2026-07-11T00:00:00.000Z'),
+    });
+
+    const spec = await readFile(
+      path.join(dir, '.mancode', 'memory', 'spec.md'),
+      'utf-8',
+    );
+    expect(spec).toContain('## Active Plans');
+    expect(spec).toContain('planned | plan v2');
+    expect(spec.match(/20260710-login/g)).toHaveLength(2);
+
+    await upsertActivePlan(dir, {
+      taskId: '20260710-login',
+      status: 'completed',
+      planVersion: 2,
+    });
+    const completed = await readFile(
+      path.join(dir, '.mancode', 'memory', 'spec.md'),
+      'utf-8',
+    );
+    expect(completed).not.toContain('20260710-login');
+  });
+
+  it('does not create an Active Plans entry for a terminal first update', async () => {
+    await upsertActivePlan(dir, {
+      taskId: '20260710-terminal',
+      status: 'completed',
+      planVersion: 1,
+    });
+
+    const spec = await readFile(
+      path.join(dir, '.mancode', 'memory', 'spec.md'),
+      'utf-8',
+    );
+    expect(spec).not.toContain('20260710-terminal');
+    expect(spec).not.toContain('## Active Plans');
   });
 
   it('preserves concurrent team decision appends', async () => {

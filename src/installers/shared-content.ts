@@ -9,6 +9,7 @@ export interface SharedContentOptions {
   minimal?: boolean;
   techStack: string[];
   uiLibrary: string | null;
+  projectProfile?: ProjectProfileOnDisk;
 }
 
 interface MancodeStateOnDisk {
@@ -27,23 +28,35 @@ interface StyleTokensOnDisk {
   matchLevel?: string;
 }
 
+interface ProjectProfileOnDisk {
+  projectKind?: string;
+  languages?: string[];
+  frameworks?: string[];
+  availableValidation?: string[];
+  uiAssets?: 'none' | 'detected';
+}
+
 export async function generateSharedContent(
   projectRoot: string,
   options: SharedContentOptions,
 ): Promise<string> {
-  const [state, tokens] = await Promise.all([
+  const [state, tokens, profile] = await Promise.all([
     readJson<MancodeStateOnDisk>(
       path.join(projectRoot, '.mancode', 'state.json'),
     ),
     readJson<StyleTokensOnDisk>(
       path.join(projectRoot, '.mancode', 'aesthetics', 'style-tokens.json'),
     ),
+    readJson<ProjectProfileOnDisk>(
+      path.join(projectRoot, '.mancode', 'project-profile.json'),
+    ),
   ]);
+  const currentProfile = options.projectProfile ?? profile;
 
   const sections = [
-    renderProjectContext(state, tokens, options),
+    renderProjectContext(state, tokens, profile, options),
     renderPracticeRules(),
-    renderAesthetics(tokens),
+    currentProfile?.uiAssets === 'detected' ? renderAesthetics(tokens) : '',
   ];
 
   if (!options.minimal) {
@@ -56,12 +69,16 @@ export async function generateSharedContent(
 function renderProjectContext(
   state: MancodeStateOnDisk | null,
   tokens: StyleTokensOnDisk | null,
+  profile: ProjectProfileOnDisk | null,
   options: SharedContentOptions,
 ): string {
-  const techStack =
-    state?.techStack || options.techStack.join(' + ') || 'Unknown';
-  const uiLibrary =
-    state?.uiLibrary || tokens?.uiLibrary || options.uiLibrary || 'None';
+  const currentProfile = options.projectProfile ?? profile;
+  const techStack = options.projectProfile
+    ? options.techStack.join(' + ') || 'Unknown'
+    : state?.techStack || options.techStack.join(' + ') || 'Unknown';
+  const uiLibrary = options.projectProfile
+    ? options.uiLibrary || 'None'
+    : state?.uiLibrary || tokens?.uiLibrary || options.uiLibrary || 'None';
   const mode = state?.currentMode || 'solo';
 
   return [
@@ -71,8 +88,9 @@ function renderProjectContext(
     `- Current mode: ${mode}`,
     `- Tech stack: ${techStack}`,
     `- UI library: ${uiLibrary}`,
+    `- Project profile: ${currentProfile?.projectKind || 'unknown'}; validation: ${currentProfile?.availableValidation?.join(', ') || 'inspect project'}`,
     '- At the start of each session, read `.mancode/state.json` to check the current mode and project context.',
-    '- For UI tasks, read `.mancode/aesthetics/style-tokens.json` for current design tokens.',
+    '- Read `.mancode/project-profile.json` before choosing tools or validation. Only for a UI task in a profile with detected UI assets, read `.mancode/aesthetics/style-tokens.json`.',
   ].join('\n');
 }
 
@@ -135,7 +153,7 @@ function renderModes(options: SharedContentOptions): string {
   let commandLabel: string;
   if (options.capabilities.skills === 'agents-skills') {
     commandLabel =
-      'Invoke mode skills with `$man8`, `$man`, `$manteam`, `$manps`, `$mansolo`.';
+      'Invoke mode skills with `$man`, `$mamba`, `$manteam`, `$manps`, `$mansolo`.';
   } else if (options.capabilities.slashCommands === 'native') {
     commandLabel = 'Use the named commands directly when available.';
   } else {
@@ -147,8 +165,8 @@ function renderModes(options: SharedContentOptions): string {
     '## mancode Modes',
     '',
     `- solo: default lightweight mode. ${commandLabel}`,
-    '- man8: investigate first, then produce a plan before implementation.',
-    '- man: full high-risk workflow with plan, implementation, verification, and review.',
+    '- man: progressive governance workflow with planning and optional full execution.',
+    '- mamba: diagnose bugs and validate real user flows or regressions.',
     '- manteam: use team memory and leave handoff-friendly summaries.',
     '- manps: run project health and cleanup scans before remediation.',
     '- mansolo: return to solo mode.',
@@ -177,7 +195,7 @@ function renderPlatformDowngrade(options: SharedContentOptions): string {
   }
   if (!options.capabilities.subagents) {
     lines.push(
-      '- Simulate the coaching staff in sequence inside the same conversation: Scout, Head Coach, Film Analyst Offense, Film Analyst Defense.',
+      '- Simulate the coaching staff in sequence inside the same conversation: Scout, Plan Coach, Head Coach, Film Analyst Offense, Film Analyst Defense.',
     );
   }
 

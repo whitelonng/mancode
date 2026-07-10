@@ -1,7 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { detectProjectType } from '../system/detect.js';
+import {
+  detectProjectProfile,
+  primaryUiLibrary,
+} from '../system/project-profile.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
 
 /**
@@ -39,19 +42,36 @@ export async function refreshStyle(
     return EXIT_NOT_INITIALIZED;
   }
 
-  // 2. 检测项目类型（需要 uiLibrary 和 hasFrontend）
-  const project = await detectProjectType(rootDir);
+  // 2. 刷新 project profile
+  console.log('✓  刷新项目 profile...');
+  const profile = await detectProjectProfile(rootDir);
+  const profilePath = path.join(rootDir, '.mancode', 'project-profile.json');
+  await fs.writeFile(
+    profilePath,
+    `${JSON.stringify(profile, null, 2)}\n`,
+    'utf-8',
+  );
+  const uiLibraryHint = primaryUiLibrary(profile);
+  await refreshLegacyStateContext(rootDir, profile, uiLibraryHint);
+  console.log(
+    `   类型: ${profile.projectKind} | UI: ${profile.uiAssets} | 浏览器: ${profile.browserAutomation}`,
+  );
 
-  if (!project.hasFrontend) {
-    console.log('ℹ️  No frontend framework detected. Nothing to scan.');
+  // 3. 审美扫描（仅在 profile 确认 UI 资产时执行）
+  if (profile.uiAssets !== 'detected') {
+    console.log(
+      'ℹ️  No UI assets detected in project profile. Skipping style scan.',
+    );
+    console.log('   Updated .mancode/project-profile.json.');
+    await printStaticPlatformRefreshHint(rootDir);
     return EXIT_OK;
   }
 
-  // 3. 扫描审美 token
+  // 4. 扫描审美 token
   console.log('✓  扫描项目设计 token...');
-  const tokens = await scanAesthetics(rootDir, project.uiLibrary);
+  const tokens = await scanAesthetics(rootDir, uiLibraryHint);
 
-  // 4. 写入 style-tokens.json
+  // 5. 写入 style-tokens.json
   const tokensPath = path.join(
     rootDir,
     '.mancode',
@@ -65,11 +85,13 @@ export async function refreshStyle(
     'utf-8',
   );
 
-  // 5. 输出摘要
+  // 6. 输出摘要
   console.log('');
   if (tokens.matchLevel === 'none') {
     console.log('未检测到设计 token。');
-    console.log('  建议：添加 tailwind.config.js 或手动编辑 style-tokens.json');
+    console.log(
+      '  建议：检查项目现有主题、组件或 token 文件，必要时手动维护 style-tokens.json',
+    );
   } else {
     if (tokens.sourceFiles.length > 0) {
       console.log('扫描来源：');
@@ -106,7 +128,9 @@ export async function refreshStyle(
   }
 
   console.log('');
-  console.log('已更新 .mancode/aesthetics/style-tokens.json');
+  console.log(
+    '已更新 .mancode/project-profile.json 和 .mancode/aesthetics/style-tokens.json',
+  );
   await printStaticPlatformRefreshHint(rootDir);
   return EXIT_OK;
 }
@@ -125,6 +149,37 @@ async function printStaticPlatformRefreshHint(rootDir: string): Promise<void> {
   console.log(
     '   Run `mancode install <platform> --force` to refresh their embedded style summaries.',
   );
+}
+
+async function refreshLegacyStateContext(
+  rootDir: string,
+  profile: Awaited<ReturnType<typeof detectProjectProfile>>,
+  uiLibrary: string | null,
+): Promise<void> {
+  const statePath = path.join(rootDir, '.mancode', 'state.json');
+  try {
+    const state = JSON.parse(await fs.readFile(statePath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    const stack = [...profile.languages, ...profile.frameworks];
+    await fs.writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          ...state,
+          techStack: stack.join(' + ') || profile.projectKind,
+          uiLibrary: uiLibrary ?? 'None',
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    );
+  } catch {
+    // state.json was validated before refresh; keep profile refresh usable if a
+    // concurrent process removes or replaces it.
+  }
 }
 
 async function readInstalledPlatforms(rootDir: string): Promise<string[]> {

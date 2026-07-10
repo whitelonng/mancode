@@ -33,6 +33,7 @@ export async function installCopilot(
     minimal: true,
     techStack: options.techStack,
     uiLibrary: options.uiLibrary,
+    projectProfile: options.projectProfile,
   });
 
   const sections = [
@@ -65,8 +66,8 @@ function renderCopilotPromptConventions(): string {
     '',
     'GitHub Copilot does not provide native mancode slash commands, hooks, or isolated subagents. Treat these names as user prompt conventions:',
     '',
-    '- man8: investigate first and produce a plan before implementation.',
-    '- man: use a careful plan, implementation, verification, and review loop.',
+    '- man: use progressive research, planning, implementation, verification, and review.',
+    '- mamba: diagnose bugs and validate real user flows or regressions.',
     '- manteam: read team memory and write handoff-friendly summaries.',
     '- manps: prefer `mancode manps [area]` before cleanup.',
     '- mansolo: exit any active mode and return to default solo behavior.',

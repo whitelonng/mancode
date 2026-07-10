@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface TeamMemorySummary {
@@ -79,6 +79,57 @@ export async function appendTeamDecision(
   await appendFile(summary.files.decisions, block, 'utf-8');
 }
 
+export async function upsertActivePlan(
+  projectRoot: string,
+  entry: {
+    taskId: string;
+    status: string;
+    planVersion: number;
+    updatedAt?: Date;
+  },
+): Promise<void> {
+  const summary = await ensureTeamMemory(projectRoot);
+  const updatedAt = (entry.updatedAt ?? new Date()).toISOString();
+  const line = `- ${entry.taskId} | ${entry.status} | plan v${entry.planVersion} | .mancode/workflows/${entry.taskId}/plan.md | ${updatedAt}`;
+  const raw = await readFile(summary.files.spec, 'utf-8');
+  const heading = '## Active Plans';
+  const start = raw.indexOf(heading);
+  const isActive = entry.status === 'in_progress' || entry.status === 'planned';
+  if (start === -1) {
+    if (!isActive) return;
+    await writeFile(
+      summary.files.spec,
+      `${raw.trimEnd()}\n\n${heading}\n\n${line}\n`,
+      'utf-8',
+    );
+    return;
+  }
+  const afterHeading = start + heading.length;
+  const nextHeading = raw.indexOf('\n## ', afterHeading);
+  const end = nextHeading === -1 ? raw.length : nextHeading;
+  const section = raw.slice(afterHeading, end);
+  const entryPattern = new RegExp(
+    `^- ${escapeRegExp(entry.taskId)} \\|.*(?:\\n|$)`,
+    'm',
+  );
+  if (!isActive) {
+    await writeFile(
+      summary.files.spec,
+      `${raw.slice(0, afterHeading)}${section.replace(entryPattern, '')}${raw.slice(end)}`,
+      'utf-8',
+    );
+    return;
+  }
+  const replaced = section.replace(entryPattern, line);
+  const nextSection =
+    replaced === section ? `${section.trimEnd()}\n${line}\n` : replaced;
+  await writeFile(
+    summary.files.spec,
+    `${raw.slice(0, afterHeading)}${nextSection}${raw.slice(end)}`,
+    'utf-8',
+  );
+}
+
 function memoryDir(projectRoot: string): string {
   return path.join(projectRoot, '.mancode', 'memory');
 }
@@ -99,4 +150,8 @@ async function writeIfMissing(file: string, content: string): Promise<void> {
 
 function renderMemoryFile(title: string, body: string): string {
   return `# ${title}\n\n${body}\n`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

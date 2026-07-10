@@ -31,13 +31,13 @@ const MAX_COMPONENT_FILES = 2000;
  * 职责（docs/13-scanning.md §4 + docs/06-aesthetics.md §3）：
  * 1. 检测 tailwind.config.{js,ts,cjs,mjs}，提取 colors 和 fontFamily
  * 2. 检测 darkMode 策略
- * 3. matchLevel: 有 tailwind config → high，有 tailwind 依赖但无 config → low，都没有 → none
+ * 3. matchLevel: 检测到配置、CSS token 或组件 → high；只有 UI 依赖 → low；否则 none
  *
  * MVP-2 beta 仍不做：
  * - theme.json / tokens.json 等非 Tailwind token 文件
  *
  * @param projectRoot 项目根目录
- * @param uiLibrary 已检测到的 UI 库（从 detectProjectType 传入，避免重复检测）
+ * @param uiLibrary 已检测到的 UI 库（从 project profile 传入，避免重复检测）
  */
 export async function scanAesthetics(
   projectRoot: string,
@@ -56,7 +56,8 @@ export async function scanAesthetics(
   if (configResult) {
     sourceFiles.push(configResult.relPath);
     const content = await fs.readFile(configResult.absPath, 'utf-8');
-    const themeBlock = findKeyBlock(content, 'theme');
+    const inspectableContent = stripJsComments(content);
+    const themeBlock = findKeyBlock(inspectableContent, 'theme');
     if (themeBlock) {
       // 先在 theme.extend 里找 section，找不到再在 theme 里直接找
       const extendBlock = findKeyBlock(themeBlock, 'extend');
@@ -72,18 +73,23 @@ export async function scanAesthetics(
         fonts = extractTopLevelArrayValues(fontsBlock);
       }
     }
-    darkMode = extractDarkMode(stripJsComments(content));
+    darkMode = extractDarkMode(inspectableContent);
   }
 
-  // 2. 判断 matchLevel
+  // 2. 判断 matchLevel。项目原生 CSS token 或组件与 Tailwind 配置一样，
+  // 都属于可复用的高置信度 UI 资产。
   let matchLevel: AestheticsTokens['matchLevel'] = 'none';
-  if (configResult) {
+  if (
+    configResult ||
+    components.length > 0 ||
+    Object.keys(cssScan.variables).length > 0
+  ) {
     matchLevel = 'high';
-  } else if (await hasTailwindDep(projectRoot)) {
+  } else if ((await hasTailwindDep(projectRoot)) || uiLibrary) {
     matchLevel = 'low';
   }
 
-  if (uiLibrary) {
+  if (uiLibrary && (await pathExists(path.join(projectRoot, 'package.json')))) {
     sourceFiles.push('package.json');
   }
   sourceFiles.push(...cssScan.sourceFiles);
@@ -467,7 +473,14 @@ function stripJsComments(content: string): string {
 }
 
 async function scanComponents(projectRoot: string): Promise<string[]> {
-  const roots = ['src/components', 'components', 'app/components'];
+  const roots = [
+    'src/components',
+    'components',
+    'app/components',
+    'lib/widgets',
+    'lib/screens',
+    'Sources',
+  ];
   const names = new Set<string>();
   let visitedFiles = 0;
   for (const relRoot of roots) {
@@ -510,10 +523,14 @@ async function collectComponentNames(
       fileCount = await collectComponentNames(abs, names, depth + 1, fileCount);
       continue;
     }
-    if (!/\.(tsx|jsx|ts|js|vue|svelte)$/.test(entry)) continue;
+    if (!/\.(tsx|jsx|ts|js|vue|svelte|dart|swift|kt|kts)$/.test(entry))
+      continue;
     fileCount++;
     if (isNonComponentFile(entry)) continue;
-    let base = entry.replace(/\.(tsx|jsx|ts|js|vue|svelte)$/, '');
+    let base = entry.replace(
+      /\.(tsx|jsx|ts|js|vue|svelte|dart|swift|kt|kts)$/,
+      '',
+    );
     if (base === 'index') {
       base = path.basename(dir);
     }

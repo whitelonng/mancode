@@ -33,11 +33,25 @@ describe('mancode refresh-style', () => {
     expect(code).toBe(EXIT_OK);
   });
 
-  it('skips scan for non-frontend project', async () => {
+  it('skips scan for a project without detected UI assets', async () => {
     await silentInit(dir);
-    // no package.json with frontend deps → hasFrontend=false
     const code = await refreshStyle(dir);
     expect(code).toBe(EXIT_OK);
+  });
+
+  it('does not recommend Tailwind for a Flutter project', async () => {
+    await writeFile(
+      path.join(dir, 'pubspec.yaml'),
+      'name: example\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      'utf-8',
+    );
+    await silentInit(dir);
+
+    const logs = await captureLog(() => refreshStyle(dir));
+    const output = logs.join('\n');
+
+    expect(output).toContain('匹配度:   low');
+    expect(output).not.toContain('tailwind.config');
   });
 
   it('writes scanned tokens to style-tokens.json', async () => {
@@ -185,6 +199,35 @@ describe('mancode refresh-style', () => {
       ),
     );
     expect(tokens.colors).toHaveProperty('primary', '#3b82f6');
+  });
+
+  it('clears a stale UI library while retaining detected native CSS assets', async () => {
+    await silentInit(dir);
+    const statePath = path.join(dir, '.mancode', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+    await writeFile(
+      statePath,
+      `${JSON.stringify({ ...state, uiLibrary: 'Stale UI' }, null, 2)}\n`,
+      'utf-8',
+    );
+    await writeFile(path.join(dir, 'index.html'), '<main>App</main>\n');
+    await writeFile(
+      path.join(dir, 'globals.css'),
+      ':root { --surface: #ffffff; }\n',
+    );
+
+    await refreshStyle(dir);
+
+    const refreshedState = JSON.parse(await readFile(statePath, 'utf-8'));
+    const tokens = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
+        'utf-8',
+      ),
+    );
+    expect(refreshedState.uiLibrary).toBe('None');
+    expect(tokens.uiLibrary).toBeNull();
+    expect(tokens.cssVariables.surface).toBe('#ffffff');
   });
 });
 

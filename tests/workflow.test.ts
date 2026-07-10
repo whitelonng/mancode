@@ -50,11 +50,12 @@ describe('workflow helpers', () => {
 
   describe('createWorkflow', () => {
     it('creates directory and metadata.json with initial state', async () => {
-      const meta = await createWorkflow(dir, 'add oauth', 'man8');
+      const meta = await createWorkflow(dir, 'add oauth', 'man');
 
       expect(meta.taskId).toBeTruthy();
       expect(meta.task).toBe('add oauth');
-      expect(meta.mode).toBe('man8');
+      expect(meta.mode).toBe('man');
+      expect(meta.planVersion).toBe(1);
       expect(meta.currentStep).toBe(1);
       expect(meta.skippedSteps).toEqual([]);
       expect(meta.status).toBe('in_progress');
@@ -127,6 +128,42 @@ describe('workflow helpers', () => {
       const created = await createWorkflow(dir, 'coordinate login', 'manteam');
       const result = await readWorkflow(dir, created.taskId);
       expect(result?.mode).toBe('manteam');
+      expect(result?.planVersion).toBe(1);
+    });
+
+    it('creates mamba children only for man workflows', async () => {
+      const parent = await createWorkflow(dir, 'implement login', 'man');
+      await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+      const child = await createWorkflow(dir, 'diagnose login', 'mamba', {
+        parentTaskId: parent.taskId,
+      });
+
+      expect(child.parentTaskId).toBe(parent.taskId);
+      await expect(
+        createWorkflow(dir, 'invalid child', 'man', {
+          parentTaskId: parent.taskId,
+        }),
+      ).rejects.toThrow(/only mamba/);
+    });
+
+    it('rejects a mamba child unless its parent is active at step 6', async () => {
+      const parent = await createWorkflow(dir, 'implement login', 'man');
+
+      await expect(
+        createWorkflow(dir, 'too early', 'mamba', {
+          parentTaskId: parent.taskId,
+        }),
+      ).rejects.toThrow(/step 6/);
+
+      await updateWorkflow(dir, parent.taskId, {
+        currentStep: 9,
+        status: 'completed',
+      });
+      await expect(
+        createWorkflow(dir, 'too late', 'mamba', {
+          parentTaskId: parent.taskId,
+        }),
+      ).rejects.toThrow(/step 6/);
     });
 
     it('returns null for malformed metadata', async () => {
@@ -145,6 +182,24 @@ describe('workflow helpers', () => {
       );
       const result = await readWorkflow(dir, 'broken-task');
       expect(result).toBeNull();
+    });
+
+    it('rejects mode-specific invalid metadata shapes', async () => {
+      const created = await createWorkflow(dir, 'invalid shape', 'mamba');
+      const metadataPath = path.join(
+        dir,
+        '.mancode',
+        'workflows',
+        created.taskId,
+        'metadata.json',
+      );
+      await writeFile(
+        metadataPath,
+        `${JSON.stringify({ ...created, planVersion: 1 }, null, 2)}\n`,
+        'utf-8',
+      );
+
+      await expect(readWorkflow(dir, created.taskId)).resolves.toBeNull();
     });
   });
 
@@ -194,6 +249,169 @@ describe('workflow helpers', () => {
       expect(result?.startedAt).toBe(created.startedAt);
     });
 
+    it('enforces status transitions and mamba outcomes', async () => {
+      const mamba = await createWorkflow(dir, 'verify login', 'mamba');
+
+      await expect(
+        updateWorkflow(dir, mamba.taskId, {
+          currentStep: 5,
+          status: 'completed',
+        }),
+      ).rejects.toThrow(/require an outcome/);
+      await expect(
+        updateWorkflow(dir, mamba.taskId, { status: 'blocked' }),
+      ).rejects.toThrow(/blocking reason/);
+      await expect(
+        updateWorkflow(dir, mamba.taskId, { outcome: 'verified' }),
+      ).rejects.toThrow(/only be set on completed/);
+
+      await updateWorkflow(dir, mamba.taskId, {
+        status: 'blocked',
+        blockingReason: 'test environment unavailable',
+      });
+      await updateWorkflow(dir, mamba.taskId, { status: 'abandoned' });
+      const abandoned = await readWorkflow(dir, mamba.taskId);
+      expect(abandoned?.blockingReason).toBeUndefined();
+
+      const retry = await createWorkflow(dir, 'retry verification', 'mamba');
+      await updateWorkflow(dir, retry.taskId, {
+        status: 'blocked',
+        blockingReason: 'test environment unavailable',
+      });
+      await updateWorkflow(dir, retry.taskId, {
+        status: 'in_progress',
+      });
+      await updateWorkflow(dir, retry.taskId, {
+        currentStep: 5,
+        status: 'completed',
+        outcome: 'verified',
+      });
+
+      await expect(
+        updateWorkflow(dir, retry.taskId, { status: 'in_progress' }),
+      ).rejects.toThrow(/invalid workflow status transition/);
+    });
+
+    it('does not finish a parent with an active mamba child', async () => {
+      const parent = await createWorkflow(dir, 'implement login', 'man');
+      await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+      await createWorkflow(dir, 'diagnose login', 'mamba', {
+        parentTaskId: parent.taskId,
+      });
+
+      await expect(
+        updateWorkflow(dir, parent.taskId, {
+          currentStep: 9,
+          status: 'completed',
+        }),
+      ).rejects.toThrow(/active mamba child/);
+    });
+
+    it('rejects lifecycle states before their required workflow step', async () => {
+      const man = await createWorkflow(dir, 'early finish', 'man');
+      const mamba = await createWorkflow(dir, 'early diagnosis', 'mamba');
+
+      await expect(
+        updateWorkflow(dir, man.taskId, { status: 'planned' }),
+      ).rejects.toThrow(/step 4/);
+      await expect(
+        updateWorkflow(dir, man.taskId, {
+          status: 'completed',
+          currentStep: 8,
+        }),
+      ).rejects.toThrow(/step 9/);
+      await expect(
+        updateWorkflow(dir, mamba.taskId, {
+          status: 'completed',
+          currentStep: 4,
+          outcome: 'verified',
+        }),
+      ).rejects.toThrow(/step 5/);
+    });
+
+    it('rejects malformed skipped steps and non-sequential plan versions', async () => {
+      const man = await createWorkflow(dir, 'validate metadata patch', 'man');
+
+      await expect(
+        updateWorkflow(dir, man.taskId, {
+          skippedSteps: [1] as unknown as string[],
+        }),
+      ).rejects.toThrow(/skipped steps/);
+      await expect(
+        updateWorkflow(dir, man.taskId, { planVersion: 3 }),
+      ).rejects.toThrow(/increase exactly once/);
+    });
+
+    it('propagates a blocked child to its parent and removes Active Plans', async () => {
+      const parent = await createWorkflow(dir, 'implement login', 'man');
+      await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+      const child = await createWorkflow(dir, 'diagnose login', 'mamba', {
+        parentTaskId: parent.taskId,
+      });
+
+      await updateWorkflow(dir, child.taskId, {
+        status: 'blocked',
+        blockingReason: 'test environment missing',
+      });
+
+      await expect(readWorkflow(dir, parent.taskId)).resolves.toMatchObject({
+        status: 'blocked',
+        blockingReason: expect.stringContaining(child.taskId),
+      });
+      const spec = await readFile(
+        path.join(dir, '.mancode', 'memory', 'spec.md'),
+        'utf-8',
+      );
+      expect(spec).not.toContain(parent.taskId);
+    });
+
+    it('allows an explicitly resolved child to resume its blocked parent', async () => {
+      const parent = await createWorkflow(dir, 'implement recovery', 'man');
+      await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+      const child = await createWorkflow(dir, 'diagnose recovery', 'mamba', {
+        parentTaskId: parent.taskId,
+      });
+      await updateWorkflow(dir, child.taskId, {
+        status: 'blocked',
+        blockingReason: 'temporary test outage',
+      });
+
+      await updateWorkflow(dir, child.taskId, { status: 'in_progress' });
+      await updateWorkflow(dir, child.taskId, {
+        currentStep: 5,
+        status: 'completed',
+        outcome: 'fixed',
+      });
+      await updateWorkflow(dir, parent.taskId, { status: 'in_progress' });
+
+      await expect(readWorkflow(dir, parent.taskId)).resolves.toMatchObject({
+        currentStep: 6,
+        status: 'in_progress',
+      });
+      expect((await readWorkflow(dir, parent.taskId))?.blockingReason).toBe(
+        undefined,
+      );
+    });
+
+    it('propagates a manual-test-required child outcome to its parent', async () => {
+      const parent = await createWorkflow(dir, 'implement checkout', 'man');
+      await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+      const child = await createWorkflow(dir, 'verify checkout', 'mamba', {
+        parentTaskId: parent.taskId,
+      });
+
+      await updateWorkflow(dir, child.taskId, {
+        currentStep: 5,
+        status: 'completed',
+        outcome: 'manual_test_required',
+      });
+
+      await expect(readWorkflow(dir, parent.taskId)).resolves.toMatchObject({
+        status: 'blocked',
+        blockingReason: expect.stringContaining('requires manual testing'),
+      });
+    });
+
     it('throws when workflow does not exist', async () => {
       await expect(
         updateWorkflow(dir, 'nonexistent', { currentStep: 2 }),
@@ -209,7 +427,7 @@ describe('workflow helpers', () => {
 
     it('lists workflows sorted by startedAt descending', async () => {
       // 创建 3 个 workflow，时间从早到晚
-      const a = await createWorkflow(dir, 'task a', 'man8');
+      const a = await createWorkflow(dir, 'task a', 'mamba');
       await new Promise((resolve) => setTimeout(resolve, 10));
       const b = await createWorkflow(dir, 'task b', 'man');
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -236,7 +454,7 @@ describe('workflow helpers', () => {
     });
 
     it('removes workflow directory', async () => {
-      const created = await createWorkflow(dir, 'temp task', 'man8');
+      const created = await createWorkflow(dir, 'temp task', 'mamba');
       const removed = await deleteWorkflow(dir, created.taskId);
       expect(removed).toBe(true);
 

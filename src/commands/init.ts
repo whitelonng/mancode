@@ -8,7 +8,12 @@ import {
   getPlatformInstaller,
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
-import { detectProjectType, detectSystemDeps } from '../system/detect.js';
+import { detectSystemDeps } from '../system/detect.js';
+import {
+  PROJECT_MANIFESTS,
+  detectProjectProfile,
+  primaryUiLibrary,
+} from '../system/project-profile.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
 import { VERSION } from '../version.js';
 
@@ -31,12 +36,12 @@ const DEFAULT_INIT_PLATFORM: PlatformName = 'claude-code';
  * 的 SessionStart hook 读取逻辑（json_get "currentMode"）保持一致。
  *
  * MVP-2 新增字段（currentTask / currentWorkflowMode / skippedSteps /
- * teamModeAutoDetected / contributors）支持 /man /man8 流程和团队检测。
+ * teamModeAutoDetected / contributors）支持 /man /mamba 流程和团队检测。
  */
 export interface MancodeState {
   version: string;
-  currentMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
-  lastMode: 'solo' | 'man8' | 'man' | 'manteam' | 'manps';
+  currentMode: 'solo' | 'man' | 'mamba' | 'manteam' | 'manps';
+  lastMode: 'solo' | 'man' | 'mamba' | 'manteam' | 'manps';
   /** Initial/default adapter platform. Installed platforms live in config.json. */
   platform: PlatformName;
   initializedAt: string;
@@ -44,7 +49,7 @@ export interface MancodeState {
   uiLibrary: string;
   // MVP-2: workflow 状态
   currentTask: string | null;
-  currentWorkflowMode: 'man8' | 'man' | null;
+  currentWorkflowMode: 'man' | 'mamba' | 'manteam' | null;
   skippedSteps: string[];
   // MVP-2: 团队检测
   teamModeAutoDetected: boolean;
@@ -69,13 +74,13 @@ export interface InitOptions {
  *
  * 职责（docs/08-cli-spec.md §2.1-2.4）：
  * 1. 检测系统依赖（bash/git/jq）
- * 2. 检测项目类型（frontend/backend/tech stack）
+ * 2. 检测中立 project profile（类型、语言、框架与验证能力）
  * 3. 创建 8 个文件/目录（.mancode/ + .claude/）
  * 4. 支持 --force / --yes / --team / --style 参数
  *
  * MVP-1 实现范围：
  * - ✅ 系统依赖检测 + 警告
- * - ✅ 项目类型检测（基于 package.json）
+ * - ✅ 跨常见生态的保守 project profile 检测
  * - ✅ 创建 8 个文件
  * - ✅ --force / --yes 参数
  * - ✅ --team / --no-team / --style 参数（MVP-2）
@@ -92,6 +97,7 @@ export async function init(
   const mancodeDir = path.join(rootDir, '.mancode');
   const stateFile = path.join(mancodeDir, 'state.json');
   const wasInitialized = await pathExists(stateFile);
+  let reinstallSnapshots: FileSnapshot[] = [];
 
   // 1. 幂等检查
   if (wasInitialized) {
@@ -100,6 +106,18 @@ export async function init(
       console.log(`   ${stateFile}`);
       console.log('   Run `mancode init --force` to reinstall.');
       return EXIT_ALREADY_INITIALIZED;
+    }
+    try {
+      reinstallSnapshots = await snapshotFiles([
+        stateFile,
+        path.join(mancodeDir, 'config.json'),
+        path.join(mancodeDir, 'project-profile.json'),
+        path.join(mancodeDir, 'aesthetics', 'style-tokens.json'),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`✗  Cannot snapshot existing mancode state: ${message}`);
+      return EXIT_INIT_FAILED;
     }
     // --force: 继续，覆盖已有配置
     console.log('⚠️  Reinstalling with --force...');
@@ -111,16 +129,21 @@ export async function init(
     return EXIT_NOT_A_PROJECT_DIR;
   }
 
-  // 2.1 校验是项目目录（至少有 .git 或 package.json）
+  // 2.1 校验是项目目录（git 或任一常见项目 manifest）
   const isGitRepo = await pathExists(path.join(rootDir, '.git'));
-  const hasPackageJson = await pathExists(path.join(rootDir, 'package.json'));
+  const hasManifest = await Promise.any(
+    PROJECT_MANIFESTS.map(async (name) => {
+      if (await pathExists(path.join(rootDir, name))) return true;
+      throw new Error('manifest missing');
+    }),
+  ).catch(() => false);
 
-  if (!isGitRepo && !hasPackageJson) {
+  if (!isGitRepo && !hasManifest) {
     console.error(`✗  Not a project directory: ${rootDir}`);
-    console.error('   (No .git or package.json found)');
+    console.error('   (No .git or recognized project manifest found)');
     console.error('');
     console.error(
-      '   Run mancode init in a git repository or Node.js project.',
+      '   Run mancode init in a git repository or a recognized project directory.',
     );
     return EXIT_NOT_A_PROJECT_DIR;
   }
@@ -149,19 +172,23 @@ export async function init(
 
     // 4. 检测项目类型
     console.log('✓  检测项目类型...');
-    const project = await detectProjectType(rootDir);
-    const techStackStr = project.techStack.join(' + ') || 'Unknown';
-    const uiLibraryStr = project.uiLibrary || 'None';
+    const profile = await detectProjectProfile(rootDir);
+    const profileStack = [...profile.languages, ...profile.frameworks];
+    const techStackStr = profileStack.join(' + ') || 'Unknown';
+    const uiLibrary = primaryUiLibrary(profile);
+    const uiLibraryStr = uiLibrary || 'None';
 
-    if (project.techStack.length > 0) {
+    if (profileStack.length > 0) {
       console.log(`   ${techStackStr}`);
-      if (project.uiLibrary) {
+      if (uiLibrary) {
         console.log(`   UI: ${uiLibraryStr}`);
       }
-    } else if (hasPackageJson) {
-      console.log('   package.json found, no known framework dependencies');
+    } else if (hasManifest) {
+      console.log('   project manifest found, no known framework dependencies');
     } else {
-      console.log('   (No package.json found, skipping tech detection)');
+      console.log(
+        '   (No recognized manifest found, profile confidence is low)',
+      );
     }
 
     const initPlatformName = options.platform ?? DEFAULT_INIT_PLATFORM;
@@ -173,7 +200,11 @@ export async function init(
 
     // 4.1 检测多人协作（MVP-2）
     const team = await detectTeamStatus(rootDir);
-    const teamModeEnabled = options.team ?? team.isTeam;
+    const existingPreferences = wasInitialized
+      ? await readExistingInitPreferences(mancodeDir)
+      : {};
+    const teamModeEnabled =
+      options.team ?? existingPreferences.forceTeamMode ?? team.isTeam;
     if (options.team === true) {
       console.log('   team: forced on (--team)');
     } else if (options.team === false) {
@@ -211,21 +242,36 @@ export async function init(
     await fs.mkdir(mancodeDir, { recursive: true });
     const stateContent = `${JSON.stringify(state, null, 2)}\n`;
     await fs.writeFile(stateFile, stateContent, 'utf-8');
+    await fs.writeFile(
+      path.join(mancodeDir, 'project-profile.json'),
+      `${JSON.stringify(profile, null, 2)}\n`,
+      'utf-8',
+    );
 
-    await updateConfigOptions(mancodeDir, {
-      forceTeamMode: options.team === true,
-      defaultStyle: options.style ?? null,
-      platforms: [installer.name],
-      platformOptions: {
-        [installer.name]: { minimal: false },
+    await updateConfigOptions(
+      mancodeDir,
+      {
+        forceTeamMode:
+          options.team === undefined && wasInitialized
+            ? undefined
+            : options.team === true,
+        defaultStyle:
+          options.style === undefined && wasInitialized
+            ? undefined
+            : (options.style ?? null),
+        platforms: [installer.name],
+        platformOptions: {
+          [installer.name]: { minimal: false },
+        },
       },
-    });
+      wasInitialized,
+    );
 
-    // 8. 审美扫描（前端项目才扫）。必须早于静态平台规则生成。
+    // 8. 审美扫描（profile 确认 UI 资产时才扫）。必须早于静态平台规则生成。
     let styleLine = '  .mancode/aesthetics/        # style-tokens.json (空)';
-    if (project.hasFrontend) {
+    if (profile.uiAssets === 'detected') {
       console.log('✓  扫描审美 token...');
-      const tokens = await scanAesthetics(rootDir, project.uiLibrary);
+      const tokens = await scanAesthetics(rootDir, uiLibrary);
       const tokensPath = path.join(
         mancodeDir,
         'aesthetics',
@@ -245,7 +291,9 @@ export async function init(
         );
         styleLine = `  .mancode/aesthetics/        # style-tokens.json (${colorCount} colors)`;
       } else if (tokens.matchLevel === 'low') {
-        console.log('   Tailwind detected, no config found (match: low)');
+        console.log(
+          '   UI assets detected, no reusable tokens found (match: low)',
+        );
         styleLine =
           '  .mancode/aesthetics/        # style-tokens.json (low match)';
       } else {
@@ -258,8 +306,10 @@ export async function init(
     // 9. 安装平台适配。
     console.log(`✓  安装 ${installer.displayName} 适配...`);
     await installer.install(rootDir, {
-      techStack: project.techStack,
-      uiLibrary: project.uiLibrary,
+      techStack: profileStack,
+      uiLibrary,
+      projectProfile: profile,
+      force: options.force,
     });
 
     // 10. 完成
@@ -268,6 +318,7 @@ export async function init(
     console.log('');
     console.log('Created:');
     console.log('  .mancode/state.json         # 项目状态');
+    console.log('  .mancode/project-profile.json # 检测到的项目事实');
     console.log('  .mancode/config.json        # 配置');
     console.log(
       '  .mancode/hooks/             # SessionStart + UserPromptSubmit',
@@ -284,8 +335,13 @@ export async function init(
 
     return EXIT_OK;
   } catch (err) {
-    if (!wasInitialized) {
+    if (wasInitialized) {
+      await restoreFiles(reinstallSnapshots);
+    } else {
       await fs.rm(stateFile, { force: true });
+      await fs.rm(path.join(mancodeDir, 'project-profile.json'), {
+        force: true,
+      });
     }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`✗  mancode init failed: ${msg}`);
@@ -296,11 +352,12 @@ export async function init(
 async function updateConfigOptions(
   mancodeDir: string,
   patch: {
-    forceTeamMode: boolean;
-    defaultStyle: string | null;
+    forceTeamMode?: boolean;
+    defaultStyle?: string | null;
     platforms: PlatformName[];
     platformOptions: Partial<Record<PlatformName, { minimal: boolean }>>;
   },
+  preserveInstalledPlatforms: boolean,
 ): Promise<void> {
   const configPath = path.join(mancodeDir, 'config.json');
   let config: Record<string, unknown> = {};
@@ -312,11 +369,88 @@ async function updateConfigOptions(
   } catch {
     // installClaudeCode normally writes config.json; keep init robust if it did not.
   }
+  const existingPlatforms = Array.isArray(config.platforms)
+    ? config.platforms.filter(
+        (platform): platform is string => typeof platform === 'string',
+      )
+    : [];
+  const existingPlatformOptions = isRecord(config.platformOptions)
+    ? config.platformOptions
+    : {};
+  const definedPatch = Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  );
+  const mergedPatch = preserveInstalledPlatforms
+    ? {
+        ...definedPatch,
+        platforms: Array.from(
+          new Set([...existingPlatforms, ...patch.platforms]),
+        ),
+        platformOptions: {
+          ...existingPlatformOptions,
+          ...patch.platformOptions,
+        },
+      }
+    : definedPatch;
   await fs.writeFile(
     configPath,
-    `${JSON.stringify({ ...config, ...patch }, null, 2)}\n`,
+    `${JSON.stringify({ ...config, ...mergedPatch }, null, 2)}\n`,
     'utf-8',
   );
+}
+
+async function readExistingInitPreferences(
+  mancodeDir: string,
+): Promise<{ forceTeamMode?: boolean }> {
+  try {
+    const config = JSON.parse(
+      await fs.readFile(path.join(mancodeDir, 'config.json'), 'utf-8'),
+    ) as Record<string, unknown>;
+    return typeof config.forceTeamMode === 'boolean'
+      ? { forceTeamMode: config.forceTeamMode }
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+interface FileSnapshot {
+  filePath: string;
+  content: string | null;
+}
+
+async function snapshotFiles(filePaths: string[]): Promise<FileSnapshot[]> {
+  return Promise.all(
+    filePaths.map(async (filePath) => {
+      try {
+        return { filePath, content: await fs.readFile(filePath, 'utf-8') };
+      } catch (error) {
+        if (isNodeError(error) && error.code === 'ENOENT') {
+          return { filePath, content: null };
+        }
+        throw error;
+      }
+    }),
+  );
+}
+
+async function restoreFiles(snapshots: FileSnapshot[]): Promise<void> {
+  for (const snapshot of snapshots) {
+    if (snapshot.content === null) {
+      await fs.rm(snapshot.filePath, { force: true });
+      continue;
+    }
+    await fs.mkdir(path.dirname(snapshot.filePath), { recursive: true });
+    await fs.writeFile(snapshot.filePath, snapshot.content, 'utf-8');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 function printPlatformCreatedFiles(platform: PlatformName): void {

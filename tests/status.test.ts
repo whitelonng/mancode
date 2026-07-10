@@ -11,7 +11,7 @@ import {
   type StatusResult,
   status,
 } from '../src/commands/status.js';
-import { createWorkflow } from '../src/system/workflow.js';
+import { createWorkflow, updateWorkflow } from '../src/system/workflow.js';
 import { VERSION } from '../src/version.js';
 
 describe('mancode status', () => {
@@ -93,6 +93,21 @@ describe('mancode status', () => {
     expect(result.hooks.sessionStart).toBe(false);
     expect(result.hooks.userPromptSubmit).toBe(true);
     expect(result.hooks.registered).toBe(true);
+    expect(result.platformStatus['claude-code'].ready).toBe(false);
+  });
+
+  it('reports a full Claude adapter incomplete when a generated skill is missing', async () => {
+    await silentInit(dir);
+    await rm(path.join(dir, '.claude', 'skills', 'mamba'), {
+      recursive: true,
+      force: true,
+    });
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platformStatus['claude-code'].ready).toBe(false);
+    expect(result.platformStatus['claude-code'].detail).toContain('incomplete');
   });
 
   it('detects when hooks are not registered in settings.json', async () => {
@@ -168,10 +183,40 @@ describe('mancode status', () => {
     const output = textLogs.join('\n');
     expect(output).toContain('Workflow:');
     expect(output).toContain(workflowMeta.taskId);
-    expect(output).toContain('Step 1/8');
+    expect(output).toContain('Step 1/9');
+    expect(output).toContain('Plan version: 1');
   });
 
-  it('shows manteam active workflow as an 8-step workflow', async () => {
+  it('shows workflow relationships and blocking details', async () => {
+    await silentInit(dir);
+    const parent = await createWorkflow(dir, 'parent workflow', 'man');
+    await updateWorkflow(dir, parent.taskId, { currentStep: 6 });
+    const child = await createWorkflow(dir, 'child workflow', 'mamba', {
+      parentTaskId: parent.taskId,
+    });
+    const statePath = path.join(dir, '.mancode', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+    state.currentMode = 'man';
+    state.currentTask = parent.taskId;
+    state.currentWorkflowMode = 'man';
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+
+    const jsonLogs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(jsonLogs.join('\n'));
+    expect(result.currentWorkflow?.activeChildren).toEqual([
+      expect.objectContaining({ taskId: child.taskId }),
+    ]);
+
+    await updateWorkflow(dir, child.taskId, {
+      status: 'blocked',
+      blockingReason: 'missing test account',
+    });
+    const blockedLogs = await captureLog(() => status(dir));
+    expect(blockedLogs.join('\n')).toContain('Blocked:');
+    expect(blockedLogs.join('\n')).toContain(child.taskId);
+  });
+
+  it('shows manteam active workflow as a 9-step workflow', async () => {
     await silentInit(dir);
     const workflowMeta = await createWorkflow(
       dir,
@@ -193,7 +238,7 @@ describe('mancode status', () => {
     const output = textLogs.join('\n');
     expect(output).toContain('Workflow:');
     expect(output).toContain(workflowMeta.taskId);
-    expect(output).toContain('Step 1/8');
+    expect(output).toContain('Step 1/9');
   });
 
   it('returns EXIT_CORRUPT_STATE for malformed state.json', async () => {
@@ -263,7 +308,9 @@ describe('mancode status', () => {
     expect(result.platformStatus.codex.ready).toBe(true);
     expect(result.platformStatus.copilot.ready).toBe(true);
     expect(result.platformStatus.zcode.ready).toBe(true);
-    expect(result.platformStatus.cursor.target).toBe('.cursor/rules/');
+    expect(result.platformStatus.cursor.target).toBe(
+      '.cursor/rules/ + .cursor/commands/',
+    );
   });
 
   it('treats Cursor minimal install as ready when core rules exist', async () => {
@@ -275,6 +322,18 @@ describe('mancode status', () => {
 
     expect(result.platformStatus.cursor.installed).toBe(true);
     expect(result.platformStatus.cursor.ready).toBe(true);
+  });
+
+  it('reports a non-minimal Cursor adapter incomplete when a mode command is missing', async () => {
+    await silentInit(dir);
+    await install(dir, 'cursor');
+    await rm(path.join(dir, '.cursor', 'commands', 'mamba.md'));
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result.platformStatus.cursor.ready).toBe(false);
+    expect(result.platformStatus.cursor.detail).toContain('missing');
   });
 
   it('does not report unrecorded platform files as ready', async () => {

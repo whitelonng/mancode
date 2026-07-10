@@ -107,16 +107,16 @@ describe('mancode init', () => {
     expect(skillContent).toContain('YAGNI');
 
     // 验证 MVP-2 slash skills 使用 Claude Code 官方目录结构
-    const man8Skill = await readFile(
-      path.join(dir, '.claude', 'skills', 'man8', 'SKILL.md'),
+    const mambaSkill = await readFile(
+      path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
       'utf-8',
     );
-    expect(man8Skill).toContain('name: man8');
+    expect(mambaSkill).toContain('name: mamba');
 
     const skillNames = await readdir(path.join(dir, '.claude', 'skills'));
     expect(skillNames.sort()).toEqual([
+      'mamba',
       'man',
-      'man8',
       'manps',
       'mansolo',
       'manteam',
@@ -238,10 +238,10 @@ describe('mancode init', () => {
     ).resolves.toContain('Platform adapter: ZCode');
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toContain('name: man8');
+    ).resolves.toContain('name: mamba');
     await expect(
       readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
     ).rejects.toThrow();
@@ -307,10 +307,26 @@ describe('mancode init', () => {
     const logs = await captureLog(() => init(dir));
     const output = logs.join('\n');
 
-    expect(output).toContain(
-      'package.json found, no known framework dependencies',
-    );
+    expect(output).toContain('JavaScript/TypeScript');
     expect(output).not.toContain('No package.json found');
+  });
+
+  it('initializes a non-git Go project and writes its neutral project profile', async () => {
+    await rm(path.join(dir, '.git'), { recursive: true, force: true });
+    await writeFile(path.join(dir, 'go.mod'), 'module example\n', 'utf-8');
+
+    const code = await init(dir);
+    const profile = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'project-profile.json'),
+        'utf-8',
+      ),
+    );
+
+    expect(code).toBe(EXIT_OK);
+    expect(profile.projectKind).toBe('unknown');
+    expect(profile.languages).toContain('Go');
+    expect(profile.availableValidation).toContain('go test ./...');
   });
 
   it('returns EXIT_ALREADY_INITIALIZED on second run without --force', async () => {
@@ -342,6 +358,76 @@ describe('mancode init', () => {
 
     expect(code).toBe(EXIT_OK);
     expect(secondState.initializedAt).not.toBe(firstState.initializedAt);
+  });
+
+  it('preserves other installed platform records during a forced reinitialization', async () => {
+    await init(dir);
+    const configPath = path.join(dir, '.mancode', 'config.json');
+    const config = JSON.parse(await readFile(configPath, 'utf-8'));
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          platforms: ['claude-code', 'cursor'],
+          platformOptions: {
+            'claude-code': { minimal: false },
+            cursor: { minimal: true },
+          },
+          forceTeamMode: true,
+          defaultStyle: 'brutalist',
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    );
+
+    const code = await init(dir, { force: true });
+    const updated = JSON.parse(await readFile(configPath, 'utf-8'));
+
+    expect(code).toBe(EXIT_OK);
+    expect(updated.platforms).toEqual(['claude-code', 'cursor']);
+    expect(updated.platformOptions.cursor).toEqual({ minimal: true });
+    expect(updated.platformOptions['claude-code']).toEqual({ minimal: false });
+    expect(updated.forceTeamMode).toBe(true);
+    expect(updated.defaultStyle).toBe('brutalist');
+    const state = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    expect(state.teamModeAutoDetected).toBe(true);
+  });
+
+  it('restores core state when a forced adapter reinstall fails', async () => {
+    await init(dir);
+    const coreFiles = [
+      path.join(dir, '.mancode', 'state.json'),
+      path.join(dir, '.mancode', 'config.json'),
+      path.join(dir, '.mancode', 'project-profile.json'),
+      path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
+    ];
+    const before = await Promise.all(
+      coreFiles.map((filePath) => readFile(filePath, 'utf-8')),
+    );
+    const customSkill = path.join(
+      dir,
+      '.claude',
+      'skills',
+      'mamba',
+      'SKILL.md',
+    );
+    await writeFile(customSkill, '# user mamba\n', 'utf-8');
+
+    const code = await init(dir, { force: true });
+    const after = await Promise.all(
+      coreFiles.map((filePath) => readFile(filePath, 'utf-8')),
+    );
+
+    expect(code).toBe(EXIT_INIT_FAILED);
+    expect(after).toEqual(before);
+    await expect(readFile(customSkill, 'utf-8')).resolves.toBe(
+      '# user mamba\n',
+    );
   });
 
   it('returns EXIT_OK when .mancode dir pre-exists but no state.json', async () => {
@@ -481,7 +567,7 @@ describe('mancode init', () => {
       'bash .mancode/hooks/user-prompt-submit.sh',
     );
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
-    expect(settings.skills.man8).toBeUndefined();
+    expect(settings.skills.mamba).toBeUndefined();
   });
 
   it('returns init failure without writing state when Claude settings are invalid', async () => {

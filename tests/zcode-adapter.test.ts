@@ -33,7 +33,7 @@ describe('ZCode adapter', () => {
     expect(agents).toContain('<!-- mancode:zcode:start -->');
     expect(agents).toContain('# mancode Configuration');
     expect(agents).toContain('Platform adapter: ZCode');
-    expect(agents).toContain('$man8');
+    expect(agents).toContain('$mamba');
 
     const config = JSON.parse(
       await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
@@ -63,7 +63,7 @@ describe('ZCode adapter', () => {
     await silentInit(dir);
     await install(dir, 'zcode');
 
-    for (const mode of ['man8', 'man', 'manteam', 'manps', 'mansolo']) {
+    for (const mode of ['mamba', 'man', 'manteam', 'manps', 'mansolo']) {
       const skill = await readFile(
         path.join(dir, '.agents', 'skills', mode, 'SKILL.md'),
         'utf-8',
@@ -72,7 +72,7 @@ describe('ZCode adapter', () => {
       expect(skill).toContain('Managed by mancode:zcode-skill');
       expect(skill).toContain('Mode Persistence');
       expect(skill).toContain('YAGNI ladder');
-      expect(skill).toContain('$man8');
+      expect(skill).toContain('$mamba');
     }
   });
 
@@ -82,7 +82,7 @@ describe('ZCode adapter', () => {
 
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -92,7 +92,7 @@ describe('ZCode adapter', () => {
     await silentInit(dir);
     await install(dir, 'zcode');
     await readFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
       'utf-8',
     );
 
@@ -100,7 +100,7 @@ describe('ZCode adapter', () => {
 
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -162,7 +162,7 @@ describe('ZCode adapter', () => {
   it('status reports ZCode not ready when a generated skill is missing', async () => {
     await silentInit(dir);
     await install(dir, 'zcode');
-    await rm(path.join(dir, '.agents', 'skills', 'man8'), {
+    await rm(path.join(dir, '.agents', 'skills', 'mamba'), {
       recursive: true,
       force: true,
     });
@@ -193,12 +193,12 @@ describe('ZCode adapter', () => {
 
   it('refuses to overwrite user-authored same-name ZCode skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'mamba'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-      '# custom man8\n',
+      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      '# custom mamba\n',
       'utf-8',
     );
 
@@ -207,20 +207,20 @@ describe('ZCode adapter', () => {
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toBe('# custom man8\n');
+    ).resolves.toBe('# custom mamba\n');
   });
 
   it('minimal install preserves user-authored same-name ZCode skills', async () => {
     await silentInit(dir);
-    await mkdir(path.join(dir, '.agents', 'skills', 'man8'), {
+    await mkdir(path.join(dir, '.agents', 'skills', 'mamba'), {
       recursive: true,
     });
     await writeFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-      '# custom man8\n',
+      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      '# custom mamba\n',
       'utf-8',
     );
 
@@ -229,10 +229,10 @@ describe('ZCode adapter', () => {
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toBe('# custom man8\n');
+    ).resolves.toBe('# custom mamba\n');
   });
 
   it('coexists with Codex AGENTS.md managed block', async () => {
@@ -316,7 +316,7 @@ describe('ZCode adapter', () => {
     expect(agents).not.toContain('<!-- mancode:zcode:start -->');
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -329,8 +329,8 @@ describe('ZCode adapter', () => {
     await silentInit(dir);
     await install(dir, 'zcode');
     await writeFile(
-      path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
-      '# custom man8\n',
+      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+      '# custom mamba\n',
       'utf-8',
     );
 
@@ -339,10 +339,10 @@ describe('ZCode adapter', () => {
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'man8', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toBe('# custom man8\n');
+    ).resolves.toBe('# custom mamba\n');
   });
 });
 
