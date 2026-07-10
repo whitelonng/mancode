@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.0-green?style=flat-square" alt="状态：稳定版 v0.3.0" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="状态：稳定版 v0.3.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-370%20passed-brightgreen?style=flat-square" alt="测试：370 通过" />
 </p>
@@ -224,7 +224,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.0。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：稳定版 v0.3.1。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
 发现路径在发布前仍作为验证门禁。
 
@@ -302,7 +302,7 @@ mancode version
 以下是 UI 项目的输出示例，并非默认技术栈：
 
 ```text
-mancode v0.3.0
+mancode v0.3.1
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)

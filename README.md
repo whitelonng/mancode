@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.0-green?style=flat-square" alt="Status: stable v0.3.0" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="Status: stable v0.3.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-370%20passed-brightgreen?style=flat-square" alt="Tests: 370 passed" />
 </p>
@@ -252,7 +252,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.0. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.1. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
 
@@ -331,7 +331,7 @@ mancode version
 Example output for a UI project (not a default stack):
 
 ```text
-mancode v0.3.0
+mancode v0.3.1
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
