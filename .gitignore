@@ -91,3 +91,10 @@ coverage/
 
 # Demo projects (local only, not published)
 examples/
+
+# Local-only publishing and planning documents
+.npmrc
+MVP2_BETA_TEST_PLAN.md
+MVP2_BETA_TEST_PLAN.zh-CN.md
+OPTIMIZATION_PLAN.md
+COMMAND_REFACTOR_*.md
