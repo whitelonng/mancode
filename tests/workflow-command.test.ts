@@ -430,6 +430,17 @@ describe('mancode workflow command', () => {
       outcome: 'verified',
     });
 
+    const dryRunLogs = await captureLog(() =>
+      workflow(dir, 'clean', [], {
+        olderThan: '30d',
+        dryRun: true,
+        json: true,
+      }),
+    );
+    const dryRunResult = JSON.parse(dryRunLogs.stdout.join('\n'));
+    expect(dryRunResult.count).toBe(0);
+    expect(dryRunResult.workflows).toEqual([]);
+
     const logs = await captureLog(() =>
       workflow(dir, 'clean', [], { olderThan: '30d', json: true }),
     );

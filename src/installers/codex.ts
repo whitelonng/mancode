@@ -20,7 +20,7 @@ export async function installCodex(
   const existing = await readTextIfExists(agentsPath);
   const sharedContent = await generateSharedContent(projectRoot, {
     platform: 'codex',
-    displayName: 'Codex CLI',
+    displayName: 'Codex (ChatGPT desktop/CLI)',
     capabilities: {
       slashCommands: 'partial',
       subagents: false,

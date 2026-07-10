@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { version } from '../src/commands/version.js';
 import { VERSION } from '../src/version.js';
@@ -9,6 +10,19 @@ describe('version', () => {
 
   it('is a stable release without prerelease tag', () => {
     expect(VERSION).not.toMatch(/-(alpha|beta|rc)\./);
+  });
+
+  it('keeps README release metadata aligned', async () => {
+    const readmes = await Promise.all(
+      ['../README.md', '../README.zh-CN.md'].map((file) =>
+        readFile(new URL(file, import.meta.url), 'utf-8'),
+      ),
+    );
+
+    for (const readme of readmes) {
+      expect(readme).toContain(`v${VERSION}`);
+      expect(readme).toContain(`status-stable%20v${VERSION}`);
+    }
   });
 });
 

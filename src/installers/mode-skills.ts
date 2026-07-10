@@ -91,7 +91,8 @@ export function renderModeSkill(
 }
 
 /**
- * Write mode skill files for Codex (.agents/skills/<name>/SKILL.md).
+ * Write mode skill files for Codex in the ChatGPT desktop app and Codex CLI
+ * (.agents/skills/<name>/SKILL.md).
  */
 export async function installCodexSkills(
   projectRoot: string,
@@ -241,7 +242,8 @@ export async function installCopilotPrompts(
 }
 
 export async function removeCodexSkills(projectRoot: string): Promise<void> {
-  // Current path — Codex scans .agents/skills/ (developers.openai.com/codex/skills).
+  // Current path — Codex scans .agents/skills/ in the ChatGPT desktop app,
+  // CLI, and IDE extension (learn.chatgpt.com/docs/build-skills).
   // Codex and ZCode share this directory. Preserve it while a non-minimal
   // ZCode adapter still needs the same generated skills; otherwise either
   // platform marker is safe to remove because the shared content is identical.

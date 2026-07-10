@@ -438,7 +438,7 @@ describe('mancode install', () => {
 
     expect(code).toBe(EXIT_OK);
     await expect(readFile(agentsPath, 'utf-8')).resolves.toContain(
-      'Platform adapter: Codex CLI',
+      'Platform adapter: Codex (ChatGPT desktop/CLI)',
     );
   });
 

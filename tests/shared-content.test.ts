@@ -32,7 +32,7 @@ describe('generateSharedContent', () => {
 
     const content = await generateSharedContent(dir, {
       platform: 'codex',
-      displayName: 'Codex CLI',
+      displayName: 'Codex (ChatGPT desktop/CLI)',
       capabilities: {
         slashCommands: 'partial',
         subagents: false,
@@ -43,7 +43,7 @@ describe('generateSharedContent', () => {
       uiLibrary: null,
     });
 
-    expect(content).toContain('Platform adapter: Codex CLI');
+    expect(content).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     expect(content).toContain('Tech stack: React + TypeScript');
     expect(content).toContain('read `.mancode/state.json`');
     expect(content).toContain('read `.mancode/aesthetics/style-tokens.json`');
@@ -70,7 +70,7 @@ describe('generateSharedContent', () => {
 
     const content = await generateSharedContent(dir, {
       platform: 'codex',
-      displayName: 'Codex CLI',
+      displayName: 'Codex (ChatGPT desktop/CLI)',
       capabilities: {
         slashCommands: 'partial',
         subagents: false,
@@ -169,7 +169,7 @@ describe('generateSharedContent', () => {
 
     const content = await generateSharedContent(dir, {
       platform: 'codex',
-      displayName: 'Codex CLI',
+      displayName: 'Codex (ChatGPT desktop/CLI)',
       capabilities: {
         slashCommands: 'partial',
         subagents: false,
@@ -202,7 +202,7 @@ describe('generateSharedContent', () => {
 
     const content = await generateSharedContent(dir, {
       platform: 'codex',
-      displayName: 'Codex CLI',
+      displayName: 'Codex (ChatGPT desktop/CLI)',
       capabilities: {
         slashCommands: 'partial',
         subagents: false,

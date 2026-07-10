@@ -8,6 +8,7 @@ import {
   EXIT_OK,
   install,
 } from '../src/commands/install.js';
+import { getPlatformInstaller } from '../src/installers/registry.js';
 
 describe('Codex adapter', () => {
   let dir: string;
@@ -21,6 +22,12 @@ describe('Codex adapter', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it('reports partial slash support because desktop skills appear in the slash list', () => {
+    expect(getPlatformInstaller('codex')?.capabilities.slashCommands).toBe(
+      'partial',
+    );
+  });
+
   it('installs AGENTS.md and records codex in config platforms', async () => {
     await silentInit(dir);
 
@@ -30,7 +37,7 @@ describe('Codex adapter', () => {
     const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agents).toContain('<!-- mancode:start -->');
     expect(agents).toContain('# mancode Configuration');
-    expect(agents).toContain('Platform adapter: Codex CLI');
+    expect(agents).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     expect(agents).toContain('mancode Platform Downgrade');
 
     const config = JSON.parse(
@@ -65,14 +72,17 @@ describe('Codex adapter', () => {
     const original = await readFile(agentsPath, 'utf-8');
     await writeFile(
       agentsPath,
-      original.replace('Platform adapter: Codex CLI', 'Platform adapter: Old'),
+      original.replace(
+        'Platform adapter: Codex (ChatGPT desktop/CLI)',
+        'Platform adapter: Old',
+      ),
       'utf-8',
     );
 
     await install(dir, 'codex', { force: true });
 
     const agents = await readFile(agentsPath, 'utf-8');
-    expect(agents).toContain('Platform adapter: Codex CLI');
+    expect(agents).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     expect(agents).not.toContain('Platform adapter: Old');
   });
 

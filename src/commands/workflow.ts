@@ -381,12 +381,25 @@ async function workflowClean(
     return EXIT_INVALID_ARG;
   }
 
-  const candidates = workflows.filter((meta) => {
+  const eligible = workflows.filter((meta) => {
     if (!isTerminalWorkflowStatus(meta.status)) return false;
     if (!cutoff) return true;
     const started = Date.parse(meta.startedAt);
     return Number.isFinite(started) && started < cutoff.getTime();
   });
+  const eligibleIds = new Set(eligible.map((meta) => meta.taskId));
+  const candidates = eligible
+    .filter((meta) => {
+      if (meta.mode !== 'man' && meta.mode !== 'manteam') return true;
+      const children = workflows.filter(
+        (candidate) =>
+          candidate.mode === 'mamba' && candidate.parentTaskId === meta.taskId,
+      );
+      return children.every((child) => eligibleIds.has(child.taskId));
+    })
+    // Children must be removed before their parent. This also keeps dry-run
+    // output aligned with what a real clean can remove.
+    .sort((a, b) => Number(a.mode !== 'mamba') - Number(b.mode !== 'mamba'));
 
   const removed: WorkflowMeta[] = [];
   if (!options.dryRun) {

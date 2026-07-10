@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import {
   LEGACY_CLAUDE_SKILL_SETTINGS,
+  isGeneratedMancodeHookCommand,
   removeClaudeGeneratedContent,
 } from '../installers/claude-code.js';
 import { removeCursorGeneratedRules } from '../installers/cursor.js';
@@ -183,6 +184,7 @@ function cleanClaudeHookValue(value: unknown): unknown | undefined {
   }
 
   const entries = Object.entries(value).flatMap(([key, item]) => {
+    if (key === 'mancode' && containsLegacyMancodeHookPath(item)) return [];
     const cleaned = cleanClaudeHookValue(item);
     return cleaned === undefined ? [] : [[key, cleaned] as const];
   });
@@ -203,8 +205,20 @@ function isMancodeHookEntry(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.command === 'string' &&
-    value.command.includes('.mancode/hooks/')
+    isGeneratedMancodeHookCommand(value.command)
   );
+}
+
+function containsLegacyMancodeHookPath(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsLegacyMancodeHookPath);
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.command === 'string' &&
+    value.command.includes('.mancode/hooks/')
+  ) {
+    return true;
+  }
+  return Object.values(value).some(containsLegacyMancodeHookPath);
 }
 
 async function uninstallCursor(rootDir: string): Promise<void> {

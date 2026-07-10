@@ -456,7 +456,7 @@ await fs.writeJson(statePath, state, { spaces: 2 });
 ```
 用户执行：mancode init
   ↓
-检测平台（Claude Code / Cursor / Codex）
+检测平台（Claude Code / Cursor / ChatGPT 桌面端 / Codex CLI）
   ↓
 创建 .mancode/ 目录
   ↓
@@ -472,8 +472,9 @@ await fs.writeJson(statePath, state, { spaces: 2 });
   ├─ Cursor:
   │    └─ 写入 .cursor/rules/mancode.mdc
   │
-  └─ Codex:
-       └─ 写入 AGENTS.md (受控区块)
+  └─ ChatGPT 桌面端 / Codex CLI:
+       ├─ 写入 AGENTS.md (受控区块)
+       └─ 写入 .agents/skills/<mode>/SKILL.md
   ↓
 扫描项目
   ↓

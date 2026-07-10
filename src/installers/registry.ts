@@ -62,7 +62,7 @@ export const PLATFORM_INSTALLERS: Record<PlatformName, PlatformInstaller> = {
   },
   codex: {
     name: 'codex',
-    displayName: 'Codex CLI',
+    displayName: 'Codex (ChatGPT desktop/CLI)',
     capabilities: {
       slashCommands: 'partial',
       subagents: false,

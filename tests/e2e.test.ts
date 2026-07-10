@@ -38,7 +38,7 @@ describe('e2e: full mancode lifecycle', () => {
     await silentRun(() => install(dir, 'codex'));
     const agentsMd = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agentsMd).toContain('<!-- mancode:start -->');
-    expect(agentsMd).toContain('Platform adapter: Codex CLI');
+    expect(agentsMd).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
 
     // 3. status shows both platforms ready
     const statusResult = await silentJson(() => status(dir, { json: true }));

@@ -410,6 +410,35 @@ describe('mancode uninstall', () => {
     ]);
   });
 
+  it('preserves user hooks stored under .mancode/hooks during uninstall', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
+    settings.hooks.SessionStart.unshift({
+      hooks: [
+        {
+          type: 'command',
+          command: 'bash .mancode/hooks/custom-user-hook.sh',
+        },
+      ],
+    });
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify(settings, null, 2)}\n`,
+      'utf-8',
+    );
+
+    const code = await uninstall(dir, 'claude-code', { force: true });
+    const updated = JSON.parse(await readFile(settingsPath, 'utf-8'));
+    const commands = updated.hooks.SessionStart.flatMap(
+      (group: { hooks?: Array<{ command?: string }> }) =>
+        group.hooks?.map((hook) => hook.command) ?? [],
+    );
+
+    expect(code).toBe(EXIT_OK);
+    expect(commands).toEqual(['bash .mancode/hooks/custom-user-hook.sh']);
+  });
+
   it('removes legacy object-mapped mancode hooks while preserving user entries', async () => {
     await silentInit(dir);
     const settingsPath = path.join(dir, '.claude', 'settings.json');
@@ -421,7 +450,7 @@ describe('mancode uninstall', () => {
             SessionStart: {
               mancode: {
                 type: 'command',
-                command: 'bash .mancode/hooks/session-start.sh',
+                command: 'bash .mancode/hooks/old.sh',
               },
               user: {
                 type: 'command',

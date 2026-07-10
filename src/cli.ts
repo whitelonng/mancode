@@ -14,7 +14,7 @@ import { VERSION } from './version.js';
 program
   .name('mancode')
   .description(
-    'AI coding agent harness. Modes: solo, /man, /mamba, /manteam, /manps.',
+    'AI coding agent harness. Modes: solo, man, mamba, manteam, manps.',
   )
   .version(VERSION);
 

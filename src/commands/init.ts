@@ -191,7 +191,11 @@ export async function init(
       );
     }
 
-    const initPlatformName = options.platform ?? DEFAULT_INIT_PLATFORM;
+    const existingPlatform = wasInitialized
+      ? await readExistingInitPlatform(stateFile)
+      : null;
+    const initPlatformName =
+      options.platform ?? existingPlatform ?? DEFAULT_INIT_PLATFORM;
     const installer = getPlatformInstaller(initPlatformName);
     if (!installer) {
       console.error(`✗  Unsupported platform: ${initPlatformName}`);
@@ -201,8 +205,9 @@ export async function init(
     // 4.1 检测多人协作（MVP-2）
     const team = await detectTeamStatus(rootDir);
     const existingPreferences = wasInitialized
-      ? await readExistingInitPreferences(mancodeDir)
+      ? await readExistingInitPreferences(mancodeDir, installer.name)
       : {};
+    const initialMinimal = existingPreferences.minimal ?? false;
     const teamModeEnabled =
       options.team ?? existingPreferences.forceTeamMode ?? team.isTeam;
     if (options.team === true) {
@@ -261,7 +266,7 @@ export async function init(
             : (options.style ?? null),
         platforms: [installer.name],
         platformOptions: {
-          [installer.name]: { minimal: false },
+          [installer.name]: { minimal: initialMinimal },
         },
       },
       wasInitialized,
@@ -309,6 +314,7 @@ export async function init(
       techStack: profileStack,
       uiLibrary,
       projectProfile: profile,
+      minimal: initialMinimal,
       force: options.force,
     });
 
@@ -331,6 +337,10 @@ export async function init(
     console.log('  mancode status              # Show project state');
     if (installer.name === 'claude-code') {
       console.log('  (Restart Claude Code to load hooks)');
+    } else if (installer.name === 'codex') {
+      console.log(
+        '  (If skills do not appear, restart the ChatGPT desktop app or Codex session)',
+      );
     }
 
     return EXIT_OK;
@@ -401,16 +411,45 @@ async function updateConfigOptions(
 
 async function readExistingInitPreferences(
   mancodeDir: string,
-): Promise<{ forceTeamMode?: boolean }> {
+  platform: PlatformName,
+): Promise<{ forceTeamMode?: boolean; minimal?: boolean }> {
   try {
     const config = JSON.parse(
       await fs.readFile(path.join(mancodeDir, 'config.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    return typeof config.forceTeamMode === 'boolean'
-      ? { forceTeamMode: config.forceTeamMode }
-      : {};
+    const preferences: { forceTeamMode?: boolean; minimal?: boolean } = {};
+    if (typeof config.forceTeamMode === 'boolean') {
+      preferences.forceTeamMode = config.forceTeamMode;
+    }
+    if (
+      Array.isArray(config.platforms) &&
+      config.platforms.includes(platform) &&
+      isRecord(config.platformOptions)
+    ) {
+      const platformOptions = config.platformOptions[platform];
+      if (isRecord(platformOptions) && platformOptions.minimal === true) {
+        preferences.minimal = true;
+      }
+    }
+    return preferences;
   } catch {
     return {};
+  }
+}
+
+async function readExistingInitPlatform(
+  stateFile: string,
+): Promise<PlatformName | null> {
+  try {
+    const state = JSON.parse(await fs.readFile(stateFile, 'utf-8')) as {
+      platform?: unknown;
+    };
+    return typeof state.platform === 'string' &&
+      getPlatformInstaller(state.platform)
+      ? (state.platform as PlatformName)
+      : null;
+  } catch {
+    return null;
   }
 }
 

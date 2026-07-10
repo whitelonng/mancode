@@ -10,14 +10,15 @@
 </p>
 
 <p align="center">
-  适配常见编程代理工具，Claude Code、Cursor、Codex CLI、GitHub Copilot 和 ZCode。
+  适配常见编程代理工具，包括 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+  Codex CLI、GitHub Copilot 和 ZCode。
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.2.1-green?style=flat-square" alt="状态：稳定版 v0.2.1" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、Codex CLI、GitHub Copilot、ZCode" />
-  <img src="https://img.shields.io/badge/tests-364%20passed-brightgreen?style=flat-square" alt="测试：364 通过" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.0-green?style=flat-square" alt="状态：稳定版 v0.3.0" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
+  <img src="https://img.shields.io/badge/tests-370%20passed-brightgreen?style=flat-square" alt="测试：370 通过" />
 </p>
 
 <p align="center">
@@ -32,9 +33,9 @@
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
 
-mancode 当前支持 Claude Code、Cursor、Codex CLI、GitHub Copilot 和 ZCode。
-Claude Code 获得完整 hooks、skills 和 subagents；其他平台通过持久化 rules、
-skills 或 instructions 文件提供降级适配。
+mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
+GitHub Copilot 和 ZCode。Claude Code 获得完整 hooks、skills 和 subagents；其他
+平台通过持久化 rules、skills 或 instructions 文件提供降级适配。
 
 mancode 会安装三类能力：
 
@@ -58,6 +59,14 @@ mancode init
 初始化后，继续正常使用你的编码代理。`solo` 默认自动生效：日常训练，零仪式感。遇到需要
 计划、测试和多 agent 审查的任务时，使用 `/man`：季后赛，每球必争。
 
+不同界面的调用方式不同：Claude Code 和 Cursor 使用 `/man`、`/mamba` 等命令；
+ChatGPT 桌面端、Codex CLI 和 Codex IDE 扩展会从 `.agents/skills/` 读取项目 skill，
+其中 `$man`、`$mamba` 等 `$` mention 是跨界面稳定的显式调用方式。ChatGPT 桌面端
+还会把已启用的 skill 显示在 slash command 列表，因此发现并启用 `man` 后可从列表中
+选择 `/man`；CLI/IDE 则使用 `$man` 或 `/skills`。这些属于 agent skills，而不是已弃用
+的 custom prompts。参见官方 [skills 文档](https://learn.chatgpt.com/docs/build-skills)
+和 [slash command 文档](https://learn.chatgpt.com/docs/reference/slash-commands)。
+
 ## 安装后创建哪些文件？
 
 `mancode init` 会创建本地工作流文件和平台适配文件：
@@ -75,8 +84,8 @@ mancode init
 
 .claude/                         # Claude Code：hooks、skills、agents
 .cursor/rules/                   # Cursor：项目 rules
-AGENTS.md                        # Codex CLI：托管 instruction block
-.agents/skills/                   # Codex CLI：mode skills
+AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 instructions
+.agents/skills/                   # Codex（ChatGPT 桌面端/CLI）：mode skills
 .github/copilot-instructions.md  # GitHub Copilot：托管 instruction block
 .agents/skills/                   # ZCode：项目 mode skills
 ```
@@ -104,7 +113,7 @@ mancode 适合：
 - 已有 UI 组件、主题、CSS 变量或设计约定的界面项目
 - 希望保留本地团队记忆、但不希望引入遥测的团队
 
-mancode 不是 Claude Code、Cursor、Codex CLI 或 Copilot 的替代品。它是在现有 agent
+mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在现有 agent
 上加的一层工作流：提供上下文、模式切换和审查纪律。
 
 ## 前后对比
@@ -167,8 +176,8 @@ mancode 会为 Claude Code 会话安装真实 hooks：
 - `user-prompt-submit`：在 agent 响应前注入紧凑项目摘要、设计 token 和 YAGNI 检查。
 
 Hook 注入保持轻量。设计 token 摘要有上限，完整扫描结果保存在 `.mancode/` 中供按需读取。
-Cursor、Codex CLI 和 GitHub Copilot 没有等价 hook 能力，因此 mancode 会写入持久化
-rules 或 instruction 文件，把同一套实践规则和模式指导带过去。
+当前 mancode 的 Cursor、Codex 和 GitHub Copilot adapter 尚未配置等价的 hook 注入，
+因此会写入持久化 rules 或 instruction 文件，把同一套实践规则和模式指导带过去。
 
 ### 设计 Token 感知
 
@@ -215,8 +224,9 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.2.1。Claude Code、Cursor、Codex CLI 和 GitHub Copilot
-均已支持。ZCode adapter 已接入，但项目级 skill 发现路径在发布前仍作为验证门禁。
+**状态**：稳定版 v0.3.0。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
+发现路径在发布前仍作为验证门禁。
 
 ```bash
 npm install -g mancode
@@ -229,7 +239,8 @@ mancode init --platform cursor
 
 - Claude Code：完整 hooks、skills、agents 和 workflow 集成
 - Cursor：`.cursor/rules/*.mdc` rules
-- Codex CLI：托管 `AGENTS.md` block
+- Codex（ChatGPT 桌面端、CLI、IDE 扩展）：托管 `AGENTS.md` block，并在
+  `.agents/skills/` 下提供 `$man*` 项目 skills
 - GitHub Copilot：托管 `.github/copilot-instructions.md` block
 - ZCode：托管 `AGENTS.md` block，并暂按 `.agents/skills/` 生成 `$man*`
   skills；项目级 skill 发现和 slash commands 仍需确认 workspace 路径后再发布承诺
@@ -251,11 +262,19 @@ mancode install --minimal # 只安装 solo 必需文件
 ## Agent Modes
 
 ```bash
-/mamba                      # 定位 bug 并验证真实用户路径
+# Claude Code / Cursor
+/mamba                     # 定位 bug 并验证真实用户路径
 /man                       # 完整 9 步流程和双重审查
 /manps                     # 项目健康检查
 /manteam                   # 团队模式和共享记忆
 /mansolo                   # 回到 solo 模式
+
+# ChatGPT 桌面端 Codex / Codex CLI / IDE
+$mamba
+$man
+$manps
+$manteam
+$mansolo
 ```
 
 ## CLI 参考
@@ -283,7 +302,7 @@ mancode version
 以下是 UI 项目的输出示例，并非默认技术栈：
 
 ```text
-mancode v0.2.0
+mancode v0.3.0
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -294,14 +313,14 @@ Team:        detected (3 contributors)
 Installed platforms:
   ✓ Claude Code
   ✓ Cursor
-  ✓ Codex CLI
+  ✓ Codex (ChatGPT desktop/CLI)
   ✓ GitHub Copilot
   ✓ ZCode
 
 Platform status:
   ✓ Claude Code: ready (.claude/)
   ✓ Cursor: ready (.cursor/rules/)
-  ✓ Codex CLI: ready (AGENTS.md + .agents/skills/)
+  ✓ Codex (ChatGPT desktop/CLI): ready (AGENTS.md + .agents/skills/)
   ✓ GitHub Copilot: ready (.github/copilot-instructions.md)
   ✓ ZCode: ready (AGENTS.md + .agents/skills/)
 
@@ -383,9 +402,9 @@ mancode manps config
 .mancode/project-profile.json
 ```
 
-Claude Code 会通过 hooks 读取刷新后的 token。Cursor、Codex CLI 和 GitHub Copilot 使用静态生成的
-instructions，因此这些 adapter 已安装时，`refresh-style` 后需要运行 `mancode install <platform> --force`
-刷新嵌入的风格摘要。
+Claude Code 会通过 hooks 读取刷新后的 token。当前 mancode 的 Cursor、Codex 和
+GitHub Copilot adapter 使用静态 instructions，因此这些 adapter 已安装时，
+`refresh-style` 后需要运行 `mancode install <platform> --force` 刷新嵌入的风格摘要。
 
 ## 项目文件
 
@@ -431,7 +450,7 @@ mancode/
 |---|---|
 | MVP-1 | solo 模式、审美扫描、Claude Code hooks |
 | MVP-2 | `/mamba`、`/man`、`/manteam`、`/manps` 和教练组 subagents |
-| MVP-3 | Cursor、Codex CLI、GitHub Copilot 适配 |
+| MVP-3 | Cursor、Codex（ChatGPT 桌面端/CLI）、GitHub Copilot 适配 |
 | 公开发布 | npm 稳定版、marketplace 分发、文档和演示 |
 
 ## 故障排查
@@ -489,7 +508,7 @@ hooks。用户自定义的 rules 和 instructions 会被保留。
 
 ## 常见问题
 
-### mancode 是 Claude Code、Cursor、Codex CLI 或 Copilot 的替代品吗？
+### mancode 是 Claude Code、Cursor、Codex 或 Copilot 的替代品吗？
 
 不是。mancode 是编码代理的 workflow harness，在你已经使用的 agent 之上添加工作流结构、
 项目上下文、模式切换和审查纪律。
@@ -511,9 +530,10 @@ hooks。用户自定义的 rules 和 instructions 会被保留。
 
 ### mancode 支持 Claude Code 以外的平台吗？
 
-支持。mancode 已通过持久化 rules、skills 或 instruction 文件支持 Cursor、Codex
-CLI、GitHub Copilot，并提供实验性 ZCode adapter。Claude Code 仍是能力最完整的
-adapter，因为它支持 hooks、skills 和 subagents。
+支持。mancode 已通过持久化 rules、skills 或 instruction 文件支持 Cursor、
+ChatGPT 桌面端中的 Codex、Codex CLI、GitHub Copilot，并提供实验性 ZCode adapter。
+Claude Code 仍是当前 mancode 集成最完整的平台，因为本项目已为它配置 hooks、skills
+和 subagents。
 
 ### mancode 能改善前端一致性吗？
 
@@ -527,8 +547,9 @@ adapter，因为它支持 hooks、skills 和 subagents。
 
 mancode 最适合被描述为：
 
-> 面向 Claude Code、Cursor、Codex CLI 和 GitHub Copilot 的 AI 编码代理工作流调度工具
-> 和 npm CLI，安装 hooks、rules、skills/modes、instruction 文件和教练组指导，用于
+> 面向 Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI 和 GitHub Copilot 的
+> AI 编码代理工作流调度工具和 npm CLI，安装 hooks、rules、skills/modes、instruction
+> 文件和教练组指导，用于
 > 项目感知 AI 编码流程、YAGNI 约束、设计 token 感知前端改动、本地团队记忆、季前赛
 > 项目健康扫描和多 agent 代码审查。
 
@@ -537,7 +558,7 @@ mancode 最适合被描述为：
 - 如何防止 AI 编码代理过度设计
 - 如何给 AI 编码代理加结构化工作流
 - Claude Code hooks、skills 和 subagents
-- Cursor、Codex CLI 或 Copilot workflow adapters
+- Cursor、Codex（ChatGPT 桌面端/CLI）或 Copilot workflow adapters
 - 如何对 AI 生成代码做多 agent 审查
 - 如何让 AI agent 复用已有项目组件
 - 如何在 AI 编码会话之间维护本地团队记忆

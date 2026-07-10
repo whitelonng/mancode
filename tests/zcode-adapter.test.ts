@@ -242,7 +242,7 @@ describe('ZCode adapter', () => {
 
     const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agents).toContain('<!-- mancode:start -->');
-    expect(agents).toContain('Platform adapter: Codex CLI');
+    expect(agents).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     expect(agents).toContain('<!-- mancode:zcode:start -->');
     expect(agents).toContain('Platform adapter: ZCode');
 
@@ -262,7 +262,7 @@ describe('ZCode adapter', () => {
     expect(code).toBe(EXIT_OK);
     const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agents).toContain('<!-- mancode:start -->');
-    expect(agents).toContain('Platform adapter: Codex CLI');
+    expect(agents).toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     expect(agents).not.toContain('<!-- mancode:zcode:start -->');
 
     const logs = await captureLog(() => status(dir, { json: true }));

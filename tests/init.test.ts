@@ -214,9 +214,58 @@ describe('mancode init', () => {
     expect(config.platforms).toEqual(['codex']);
     await expect(
       readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
-    ).resolves.toContain('Platform adapter: Codex CLI');
+    ).resolves.toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
     await expect(
       readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('preserves the initial Codex platform on forced reinitialization', async () => {
+    await init(dir, { platform: 'codex' });
+
+    const code = await init(dir, { force: true });
+    const state: MancodeState = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    const config = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
+    );
+
+    expect(code).toBe(EXIT_OK);
+    expect(state.platform).toBe('codex');
+    expect(config.platforms).toEqual(['codex']);
+    await expect(
+      readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
+    ).resolves.toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
+    await expect(
+      readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('preserves the initial platform minimal mode on forced reinitialization', async () => {
+    await init(dir, { platform: 'codex' });
+    const configPath = path.join(dir, '.mancode', 'config.json');
+    const config = JSON.parse(await readFile(configPath, 'utf-8'));
+    config.platformOptions.codex.minimal = true;
+    await writeFile(
+      configPath,
+      `${JSON.stringify(config, null, 2)}\n`,
+      'utf-8',
+    );
+
+    const code = await init(dir, { force: true });
+    const updated = JSON.parse(await readFile(configPath, 'utf-8'));
+    const agents = await readFile(path.join(dir, 'AGENTS.md'), 'utf-8');
+
+    expect(code).toBe(EXIT_OK);
+    expect(updated.platformOptions.codex.minimal).toBe(true);
+    expect(agents).toContain('mancode Practice Rules');
+    expect(agents).not.toContain('mancode Modes');
+    await expect(
+      readFile(
+        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        'utf-8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -294,7 +343,7 @@ describe('mancode init', () => {
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(path.join(dir, 'AGENTS.md'), 'utf-8'),
-    ).resolves.toContain('Platform adapter: Codex CLI');
+    ).resolves.toContain('Platform adapter: Codex (ChatGPT desktop/CLI)');
   });
 
   it('does not claim package.json is missing when it has no known deps', async () => {
@@ -499,6 +548,46 @@ describe('mancode init', () => {
     // 用户 skill 应该保留
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
     expect(settings.skills.solo).toBeUndefined();
+  });
+
+  it('preserves user hooks stored under .mancode/hooks', async () => {
+    const claudeDir = path.join(dir, '.claude');
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      path.join(claudeDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: [
+              {
+                hooks: [
+                  {
+                    type: 'command',
+                    command: 'bash .mancode/hooks/custom-user-hook.sh',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const code = await init(dir);
+    const settings = JSON.parse(
+      await readFile(path.join(claudeDir, 'settings.json'), 'utf-8'),
+    );
+    const commands = settings.hooks.SessionStart.flatMap(
+      (group: { hooks?: Array<{ command?: string }> }) =>
+        group.hooks?.map((hook) => hook.command) ?? [],
+    );
+
+    expect(code).toBe(EXIT_OK);
+    expect(commands).toContain('bash .mancode/hooks/custom-user-hook.sh');
+    expect(commands).toContain('bash .mancode/hooks/session-start.sh');
   });
 
   it('migrates legacy hook settings and removes old mancode hooks on --force', async () => {

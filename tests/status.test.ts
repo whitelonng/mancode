@@ -155,7 +155,7 @@ describe('mancode status', () => {
     const output = logs.join('\n');
 
     expect(output).toContain('Platform status:');
-    expect(output).toContain('Codex CLI: ready');
+    expect(output).toContain('Codex (ChatGPT desktop/CLI): ready');
     expect(output).not.toContain('Hooks:');
     expect(output).not.toContain('registered in .claude/settings.json');
   });

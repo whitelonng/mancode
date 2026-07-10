@@ -17,6 +17,16 @@ export const CLAUDE_SKILL_MANAGED_MARKER =
 export const CLAUDE_AGENT_MANAGED_MARKER =
   '<!-- Managed by mancode:claude-agent. Do not edit this marker. -->';
 
+export const MANCODE_HOOK_COMMANDS = [
+  'bash .mancode/hooks/session-start.sh',
+  'bash .mancode/hooks/user-prompt-submit.sh',
+] as const;
+
+export function isGeneratedMancodeHookCommand(command: string): boolean {
+  const normalized = command.trim();
+  return MANCODE_HOOK_COMMANDS.some((item) => item === normalized);
+}
+
 export const LEGACY_CLAUDE_SKILL_SETTINGS: Readonly<Record<string, string>> = {
   solo: '.claude/skills/mancode-solo.md',
   man8: '.claude/skills/mancode-man8.md',
@@ -319,7 +329,7 @@ interface ClaudeSettings {
  *
  * 幂等策略：
  * - 兼容旧版数组 hook item、错误对象 map、官方 matcher group 数组
- * - 过滤旧 mancode hook（按 command 里的 .mancode/hooks/ 判断）
+ * - 过滤 mancode 生成的 hook（只匹配已知的精确命令）
  * - 追加新的 mancode matcher group
  * - 不覆盖用户已有 matcher groups
  */
@@ -349,11 +359,11 @@ async function updateClaudeSettings(
 
   settings.hooks.SessionStart = [
     ...normalizeHookGroups(settings.hooks.SessionStart),
-    createCommandGroup('bash .mancode/hooks/session-start.sh'),
+    createCommandGroup(MANCODE_HOOK_COMMANDS[0]),
   ];
   settings.hooks.UserPromptSubmit = [
     ...normalizeHookGroups(settings.hooks.UserPromptSubmit),
-    createCommandGroup('bash .mancode/hooks/user-prompt-submit.sh'),
+    createCommandGroup(MANCODE_HOOK_COMMANDS[1]),
   ];
 
   removeLegacyMancodeSkillSettings(settings);
@@ -390,7 +400,10 @@ function normalizeHookGroups(value: unknown): ClaudeMatcherGroup[] {
   }
 
   if (isRecord(value)) {
-    return Object.values(value).flatMap(normalizeHookGroupEntry);
+    return Object.entries(value).flatMap(([key, entry]) => {
+      if (key === 'mancode' && containsLegacyMancodeHookPath(entry)) return [];
+      return normalizeHookGroupEntry(entry);
+    });
   }
 
   return [];
@@ -443,7 +456,19 @@ function normalizeHookItem(value: unknown): ClaudeHookItem | null {
 }
 
 function isMancodeHook(hook: ClaudeHookItem): boolean {
-  return hook.command.includes('.mancode/hooks/');
+  return isGeneratedMancodeHookCommand(hook.command);
+}
+
+function containsLegacyMancodeHookPath(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsLegacyMancodeHookPath);
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.command === 'string' &&
+    value.command.includes('.mancode/hooks/')
+  ) {
+    return true;
+  }
+  return Object.values(value).some(containsLegacyMancodeHookPath);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
