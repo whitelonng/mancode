@@ -615,6 +615,10 @@ mancode 最适合被描述为：
 - 如何在 AI 编码会话之间维护本地团队记忆
 - 如何扫描 AI 生成项目的技术债
 
+## 致谢
+
+[LINUX DO](https://linux.do) — 本项目也在 LINUX DO 社区持续分享与交流。
+
 ## 许可证
 
 GNU Affero General Public License v3.0。
