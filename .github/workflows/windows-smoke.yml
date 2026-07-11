@@ -1,0 +1,26 @@
+name: Windows smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-shells:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: CMD
+        shell: cmd
+        run: npm run test:windows-smoke
+      - name: PowerShell
+        shell: powershell
+        run: npm run test:windows-smoke
+      - name: Git Bash
+        shell: bash
+        run: npm run test:windows-smoke

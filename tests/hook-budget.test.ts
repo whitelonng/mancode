@@ -77,17 +77,16 @@ describe('UserPromptSubmit hook context budget', () => {
     expect(output).not.toContain('font6=Font 6');
   });
 
-  it('falls back to a pointer when jq is unavailable', async () => {
+  it('injects the capped summary without jq or Bash on PATH', async () => {
     await writeTokens(dir, {
       colors: { primary: '#111111' },
       fonts: { sans: ['Inter', 'sans-serif'] },
     });
 
-    const output = await runHook(dir, { MANCODE_DISABLE_JQ: '1' });
+    const output = await runHook(dir, { PATH: '' });
 
-    expect(output).toContain('## 审美 token');
-    expect(output).toContain('读取 .mancode/aesthetics/style-tokens.json');
-    expect(output).not.toContain('Colors (前 8):');
+    expect(output).toContain('## 审美 token 摘要');
+    expect(output).toContain('Colors (前 8): primary=#111111');
   });
 
   it('does not inject UI tokens when the project profile has no UI assets', async () => {
@@ -361,8 +360,8 @@ function runHook(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
-      '/bin/bash',
-      [path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.sh')],
+      process.execPath,
+      [path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.mjs')],
       {
         cwd: dir,
         env: { ...process.env, ...env },
@@ -425,8 +424,8 @@ async function writeState(
 function runSessionStartHook(dir: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
-      '/bin/bash',
-      [path.join(dir, '.mancode', 'hooks', 'session-start.sh')],
+      process.execPath,
+      [path.join(dir, '.mancode', 'hooks', 'session-start.mjs')],
       {
         cwd: dir,
         env: process.env,

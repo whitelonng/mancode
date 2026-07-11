@@ -18,13 +18,20 @@ export const CLAUDE_AGENT_MANAGED_MARKER =
   '<!-- Managed by mancode:claude-agent. Do not edit this marker. -->';
 
 export const MANCODE_HOOK_COMMANDS = [
+  'node ".mancode/hooks/session-start.mjs"',
+  'node ".mancode/hooks/user-prompt-submit.mjs"',
+] as const;
+
+const LEGACY_MANCODE_HOOK_COMMANDS = [
   'bash .mancode/hooks/session-start.sh',
   'bash .mancode/hooks/user-prompt-submit.sh',
 ] as const;
 
 export function isGeneratedMancodeHookCommand(command: string): boolean {
   const normalized = command.trim();
-  return MANCODE_HOOK_COMMANDS.some((item) => item === normalized);
+  return [...MANCODE_HOOK_COMMANDS, ...LEGACY_MANCODE_HOOK_COMMANDS].some(
+    (item) => item === normalized,
+  );
 }
 
 export const LEGACY_CLAUDE_SKILL_SETTINGS: Readonly<Record<string, string>> = {
@@ -86,6 +93,15 @@ export async function installClaudeCode(
 
   // 3. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir, settings);
+  await removeLegacyHookFiles(projectRoot);
+}
+
+async function removeLegacyHookFiles(projectRoot: string): Promise<void> {
+  const hooksDir = path.join(projectRoot, '.mancode', 'hooks');
+  await Promise.all([
+    rm(path.join(hooksDir, 'session-start.sh'), { force: true }),
+    rm(path.join(hooksDir, 'user-prompt-submit.sh'), { force: true }),
+  ]);
 }
 
 async function installSoloSkill(

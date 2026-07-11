@@ -64,8 +64,8 @@ async function checkPlatformReadiness(
       ),
       claudeHooksRegistered(rootDir),
       pathsExist([
-        path.join(rootDir, '.mancode', 'hooks', 'session-start.sh'),
-        path.join(rootDir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
+        path.join(rootDir, '.mancode', 'hooks', 'session-start.mjs'),
+        path.join(rootDir, '.mancode', 'hooks', 'user-prompt-submit.mjs'),
       ]),
     ]);
     const present = hasSoloSkill && registered && hasHookFiles;
@@ -350,10 +350,10 @@ function hooksRegistered(settings: unknown): boolean {
   if (!isRecord(hooks)) return false;
 
   return (
-    hasHookCommand(hooks.SessionStart, '.mancode/hooks/session-start.sh') &&
+    hasHookCommand(hooks.SessionStart, '.mancode/hooks/session-start.mjs') &&
     hasHookCommand(
       hooks.UserPromptSubmit,
-      '.mancode/hooks/user-prompt-submit.sh',
+      '.mancode/hooks/user-prompt-submit.mjs',
     )
   );
 }

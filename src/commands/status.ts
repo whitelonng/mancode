@@ -328,9 +328,9 @@ async function checkHooks(rootDir: string): Promise<{
   registered: boolean;
 }> {
   const [sessionStart, userPromptSubmit, registered] = await Promise.all([
-    pathExists(path.join(rootDir, '.mancode', 'hooks', 'session-start.sh')),
+    pathExists(path.join(rootDir, '.mancode', 'hooks', 'session-start.mjs')),
     pathExists(
-      path.join(rootDir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
+      path.join(rootDir, '.mancode', 'hooks', 'user-prompt-submit.mjs'),
     ),
     isRegistered(rootDir),
   ]);
@@ -374,10 +374,10 @@ function hooksRegistered(settings: unknown): boolean {
   if (!isRecord(hooks)) return false;
 
   return (
-    hasHookCommand(hooks.SessionStart, '.mancode/hooks/session-start.sh') &&
+    hasHookCommand(hooks.SessionStart, '.mancode/hooks/session-start.mjs') &&
     hasHookCommand(
       hooks.UserPromptSubmit,
-      '.mancode/hooks/user-prompt-submit.sh',
+      '.mancode/hooks/user-prompt-submit.mjs',
     )
   );
 }
@@ -408,7 +408,7 @@ async function estimateHookInjection(
     rootDir,
     '.mancode',
     'hooks',
-    'user-prompt-submit.sh',
+    'user-prompt-submit.mjs',
   );
   if (!(await pathExists(hookPath))) {
     return { tokens: 0, cap: 800 };
@@ -427,7 +427,7 @@ async function estimateHookInjection(
 
 function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bash', [hookPath], {
+    const child = spawn(process.execPath, [hookPath], {
       cwd: rootDir,
       stdio: ['pipe', 'pipe', 'ignore'],
     });
@@ -517,9 +517,9 @@ function printText(r: StatusResult): void {
   console.log('');
   if (r.platforms.includes('claude-code')) {
     console.log('Hooks:');
-    console.log(`  ${r.hooks.sessionStart ? '✓' : '✗'} session-start.sh`);
+    console.log(`  ${r.hooks.sessionStart ? '✓' : '✗'} session-start.mjs`);
     console.log(
-      `  ${r.hooks.userPromptSubmit ? '✓' : '✗'} user-prompt-submit.sh`,
+      `  ${r.hooks.userPromptSubmit ? '✓' : '✗'} user-prompt-submit.mjs`,
     );
     console.log(
       `  ${r.hooks.registered ? '✓' : '✗'} registered in .claude/settings.json`,

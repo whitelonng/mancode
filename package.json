@@ -58,6 +58,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:windows-smoke": "node scripts/windows-smoke.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "biome check src tests",

@@ -2,216 +2,230 @@
  * Hook 和 Skill 模板（内联，避免打包后路径问题）
  */
 
-export const SESSION_START_HOOK = `#!/bin/bash
-# .mancode/hooks/session-start.sh
-# mancode SessionStart hook - 加载项目上下文
-# 系统依赖：bash、git、（可选）jq
-set -uo pipefail
+export const SESSION_START_HOOK = String.raw`#!/usr/bin/env node
+// .mancode/hooks/session-start.mjs
+// mancode SessionStart hook - cross-platform project context
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
-PROFILE_FILE="$PROJECT_ROOT/.mancode/project-profile.json"
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+const state = readJson(path.join(projectRoot, '.mancode', 'state.json'));
+const profile =
+  readJson(path.join(projectRoot, '.mancode', 'project-profile.json')) || {};
 
-HAS_JQ=0
-if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
-    command -v jq >/dev/null 2>&1 && HAS_JQ=1
-fi
-
-json_get() {
-    local key="$1"
-    local file="$2"
-    if [ "$HAS_JQ" = "1" ]; then
-        jq -r ".$key // empty" "$file" 2>/dev/null || true
-    else
-        grep "\\"$key\\"" "$file" 2>/dev/null | sed -E 's/.*: *"([^"]*)".*/\\1/' || true
-    fi
+if (!state) {
+  console.log('ℹ️ mancode 未初始化。运行 mancode init 开始。');
+  process.exit(0);
 }
 
-json_any_get() {
-    local key="$1"
-    local file="$2"
-    if [ "$HAS_JQ" = "1" ]; then
-        jq -r ".$key // empty" "$file" 2>/dev/null || true
-    else
-        grep "\\"$key\\"" "$file" 2>/dev/null | head -n 1 | sed -E 's/.*: *"?([^",}]*)"?[,]?.*/\\1/' || true
-    fi
+const mode = text(state.currentMode) || 'solo';
+const techStack = sanitize(state.techStack);
+const uiLibrary = sanitize(state.uiLibrary);
+const output = [
+  'mancode_mode: ' + mode,
+  'project_type: ' + techStack,
+  'ui_library: ' + uiLibrary,
+  '',
+  '## mancode · ' + mode + ' mode',
+  '',
+  '你正在使用 mancode ' + mode + ' 模式。',
+  '',
+  '### 核心原则',
+  '1. **优先复用项目已有代码**',
+  '   - 检查已检测到的源码目录和已有类似实现',
+  '   - 复用现有组件、函数、样式',
+  '',
+];
+
+if (profile.uiAssets === 'detected') {
+  output.push(
+    '2. **应用项目审美 token**（仅在项目 profile 确认有 UI 资产且任务涉及 UI 时）',
+    '   - UI library: ' + uiLibrary,
+    '   - 使用项目已有的设计 token',
+  );
+} else {
+  output.push(
+    '2. **按项目能力工作**',
+    '   - 不假定存在 UI、浏览器或特定技术栈',
+    '   - 先读取 project-profile 与项目现有验证方式',
+  );
 }
 
-if [ ! -f "$STATE_FILE" ]; then
-    echo "ℹ️ mancode 未初始化。运行 \\\`mancode init\\\` 开始。"
-    exit 0
-fi
+output.push(
+  '',
+  '3. **最小改动**',
+  '   - 只改用户要求的部分',
+  '   - 不重构无关代码',
+);
 
-# 清洗函数：去换行、限制长度（防止脏数据污染 prompt）
-sanitize() {
-    printf '%s' "\$1" | tr '\\n\\r' ' ' | head -c 200
+if (state.teamModeAutoDetected === true && mode === 'solo') {
+  output.push(
+    '',
+    '### 团队协作提醒',
+    '检测到团队项目（contributors: ' +
+      (Number.isFinite(state.contributors) ? state.contributors : 2) +
+      '）。',
+    '- 涉及多人协作、交接、PR、共享模块时，优先使用 /manteam <task>。',
+    '- 只做个人小改动时，可以继续 solo；需要退出流程用 /mansolo。',
+  );
 }
 
-MODE=$(json_get "currentMode" "$STATE_FILE")
-TECH_STACK=$(json_get "techStack" "$STATE_FILE")
-UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
-TEAM_AUTO=$(json_any_get "teamModeAutoDetected" "$STATE_FILE")
-CONTRIBUTORS=$(json_any_get "contributors" "$STATE_FILE")
+console.log(output.join('\n'));
 
-echo "mancode_mode: \${MODE:-solo}"
-echo "project_type: $(sanitize "$TECH_STACK")"
-echo "ui_library: $(sanitize "$UI_LIBRARY")"
-echo ""
+function readJson(filePath) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
 
-echo "## mancode · \${MODE:-solo} mode"
-echo ""
-echo "你正在使用 mancode \${MODE:-solo} 模式。"
-echo ""
-echo "### 核心原则"
-echo "1. **优先复用项目已有代码**"
-echo "   - 检查已检测到的源码目录和已有类似实现"
-echo "   - 复用现有组件、函数、样式"
-echo ""
-if [ "$(json_get "uiAssets" "$PROFILE_FILE")" = "detected" ]; then
-    echo "2. **应用项目审美 token**（仅在项目 profile 确认有 UI 资产且任务涉及 UI 时）"
-    echo "   - UI library: $(sanitize "$UI_LIBRARY")"
-    echo "   - 使用项目已有的设计 token"
-else
-    echo "2. **按项目能力工作**"
-    echo "   - 不假定存在 UI、浏览器或特定技术栈"
-    echo "   - 先读取 project-profile 与项目现有验证方式"
-fi
-echo ""
-echo "3. **最小改动**"
-echo "   - 只改用户要求的部分"
-echo "   - 不重构无关代码"
+function text(value) {
+  return typeof value === 'string' ? value : '';
+}
 
-if [ "$TEAM_AUTO" = "true" ] && [ "\${MODE:-solo}" = "solo" ]; then
-    echo ""
-    echo "### 团队协作提醒"
-    echo "检测到团队项目（contributors: \${CONTRIBUTORS:-2}）。"
-    echo '- 涉及多人协作、交接、PR、共享模块时，优先使用 /manteam <task>。'
-    echo '- 只做个人小改动时，可以继续 solo；需要退出流程用 /mansolo。'
-fi
+function sanitize(value) {
+  return String(value ?? '').replace(/[\r\n]/g, ' ').slice(0, 200);
+}
 `;
 
-export const USER_PROMPT_SUBMIT_HOOK = `#!/bin/bash
-# .mancode/hooks/user-prompt-submit.sh
-# mancode UserPromptSubmit hook - 注入 6 问追问 + 审美 token
-set -uo pipefail
+export const USER_PROMPT_SUBMIT_HOOK = String.raw`#!/usr/bin/env node
+// .mancode/hooks/user-prompt-submit.mjs
+// mancode UserPromptSubmit hook - cross-platform prompt and style context
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
-AESTHETICS_FILE="$PROJECT_ROOT/.mancode/aesthetics/style-tokens.json"
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+const mancodeDir = path.join(projectRoot, '.mancode');
+const state = readJson(path.join(mancodeDir, 'state.json')) || {};
+const profile = readJson(path.join(mancodeDir, 'project-profile.json')) || {};
+const mode = typeof state.currentMode === 'string' ? state.currentMode : '';
+const output = [];
 
-HAS_JQ=0
-if [ "\${MANCODE_DISABLE_JQ:-0}" != "1" ]; then
-    command -v jq >/dev/null 2>&1 && HAS_JQ=1
-fi
-
-json_get() {
-    local key="$1"
-    local file="$2"
-    if [ "$HAS_JQ" = "1" ]; then
-        jq -r ".$key // empty" "$file" 2>/dev/null || true
-    else
-        grep "\\"$key\\"" "$file" 2>/dev/null | sed -E 's/.*: *"([^"]*)".*/\\1/' || true
-    fi
+if (mode === 'solo') {
+  output.push(
+    '## 动手前，先想六个问题：',
+    '',
+    '1. **为什么做？**',
+    '   - 这个改动解决什么问题？',
+    '',
+    '2. **已经有什么？**',
+    '   - 项目里有没有类似的实现可以复用？',
+    '',
+    '3. **最少改多少？**',
+    '   - 能用一行解决吗？能复用现有代码吗？',
+    '',
+    '4. **能不能不拆新系统？**',
+    '   - 不新建文件或模块能完成吗？',
+    '',
+    '5. **非平凡逻辑怎样最小运行验证？**',
+    '',
+    '6. **有什么没把握的？**',
+    '   - 先自行查代码或文档，最多 2 次工具调用；仍不确定再问用户。',
+    '',
+  );
 }
 
-# 清洗注入到 prompt 的动态值：去换行、限制长度，避免脏 token 污染上下文结构
-sanitize() {
-    printf '%s' "$1" | tr '\\n\\r' ' ' | head -c 200
+const rawInput = readFileSync(0, 'utf8');
+const userPrompt = readPrompt(rawInput);
+const planningPattern = /先(?:别|不要|看|看看|调研|分析|评估)|给.*方案|给.*计划|怎么.*做|如何.*做|怎么.*实现|如何.*实现|应该怎么|怎么.*拆|拆分|只给.*计划|不要.*改代码|别.*改代码|不要.*动代码|别.*动代码|评估.*风险|风险.*评估|设计.*方案|架构|迁移|集成|\b(?:plan|planning|research|investigate|approach|proposal|architecture|risk|migration|integration)\b|how (?:should|would|to)|do not (?:edit|modify|change)|don.t (?:edit|modify|change)|no code changes|without changing code/iu;
+
+if (mode === 'solo' && planningPattern.test(userPrompt)) {
+  output.push(
+    '## mancode 自动路由',
+    '',
+    '这个请求是规划/调研类任务。不要直接进入 solo 实施。',
+    "必须先调用 Skill tool，skill='man'，把用户原始请求作为 task，执行 Scout 调研、澄清和 Plan Coach plan。",
+    '用户只要计划时，在 Step 4 选择“只要计划”；不要切到另一个命令。',
+    '',
+  );
 }
 
-MODE=$(json_get "currentMode" "$STATE_FILE")
+const uiPattern = /\b(?:button|component|page|style|ui|design|layout|css|color|font|theme|card|input|modal|dialog|header|footer|sidebar|dropdown|tooltip|toast|avatar|badge)\b|界面|页面|按钮|样式|颜色|字体|布局|组件|弹窗|导航|卡片|输入框|主题|美化|优化.*界面|调整.*样式/iu;
 
-# 只在 solo 模式下输出 6 问
-if [ "$MODE" = "solo" ]; then
-    echo "## 动手前，先想六个问题："
-    echo ""
-    echo "1. **为什么做？**"
-    echo "   - 这个改动解决什么问题？"
-    echo ""
-    echo "2. **已经有什么？**"
-    echo "   - 项目里有没有类似的实现可以复用？"
-    echo ""
-    echo "3. **最少改多少？**"
-    echo "   - 能用一行解决吗？能复用现有代码吗？"
-    echo ""
-    echo "4. **能不能不拆新系统？**"
-    echo "   - 不新建文件或模块能完成吗？"
-    echo ""
-    echo "5. **非平凡逻辑怎样最小运行验证？**"
-    echo ""
-    echo "6. **有什么没把握的？**"
-    echo "   - 先自行查代码或文档，最多 2 次工具调用；仍不确定再问用户。"
-    echo ""
-fi
+if (profile.uiAssets === 'detected' && uiPattern.test(userPrompt)) {
+  appendAestheticSummary(
+    output,
+    readJson(path.join(mancodeDir, 'aesthetics', 'style-tokens.json')),
+  );
+}
 
-# Claude Code 通过 stdin 传入 JSON: {"prompt": "...", ...}
-# 先读取完整输入，再解析
-INPUT=$(cat)
+if (output.length > 0) console.log(output.join('\n'));
 
-if [ "$HAS_JQ" = "1" ]; then
-    USER_PROMPT=$(echo "$INPUT" | jq -r '.prompt // ""' 2>/dev/null)
-    # jq 失败或返回空，fallback 到原始输入
-    if [ -z "$USER_PROMPT" ]; then
-        USER_PROMPT="$INPUT"
-    fi
-else
-    # 无 jq: 使用 sed 提取 JSON 中的 prompt 字段
-    USER_PROMPT=$(echo "$INPUT" | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
-    # sed 失败，fallback 到原始输入
-    if [ -z "$USER_PROMPT" ]; then
-        USER_PROMPT="$INPUT"
-    fi
-fi
+function appendAestheticSummary(lines, tokens) {
+  if (!tokens || tokens.matchLevel !== 'high') return;
 
-if [ "$MODE" = "solo" ] && echo "$USER_PROMPT" | grep -qiE "先(别|不要|看|看看|调研|分析|评估)|给.*方案|给.*计划|怎么.*做|如何.*做|怎么.*实现|如何.*实现|应该怎么|怎么.*拆|拆分|只给.*计划|不要.*改代码|别.*改代码|不要.*动代码|别.*动代码|评估.*风险|风险.*评估|设计.*方案|架构|迁移|集成|\\b(plan|planning|research|investigate|approach|proposal|architecture|risk|migration|integration)\\b|how (should|would|to)|do not (edit|modify|change)|don.t (edit|modify|change)|no code changes|without changing code"; then
-    echo "## mancode 自动路由"
-    echo ""
-    echo "这个请求是规划/调研类任务。不要直接进入 solo 实施。"
-    echo "必须先调用 Skill tool，skill='man'，把用户原始请求作为 task，执行 Scout 调研、澄清和 Plan Coach plan。"
-    echo "用户只要计划时，在 Step 4 选择“只要计划”；不要切到另一个命令。"
-    echo ""
-fi
+  const colors = safeEntries(tokens.colors, 8).map(
+    ([key, value]) => key + '=' + String(value),
+  );
+  const fonts = safeEntries(tokens.fonts, 4)
+    .filter(([, value]) => Array.isArray(value) && value.length > 0)
+    .map(([key, value]) => key + '=' + String(value[0]));
+  const components = Array.isArray(tokens.components)
+    ? tokens.components
+        .filter(
+          (value) =>
+            typeof value === 'string' && /^[A-Z][A-Za-z0-9]{0,79}$/.test(value),
+        )
+        .slice(0, 8)
+    : [];
+  const cssVariables = safeEntries(tokens.cssVariables, 8).map(
+    ([key, value]) => '--' + key + '=' + String(value),
+  );
 
-# UI token 仅在 profile 确认存在 UI 资产且任务明确涉及 UI 时注入。
-PROFILE_FILE="$PROJECT_ROOT/.mancode/project-profile.json"
-UI_ASSETS=""
-if [ -f "$PROFILE_FILE" ]; then
-    UI_ASSETS=$(json_get "uiAssets" "$PROFILE_FILE")
-fi
-if [ "$UI_ASSETS" = "detected" ] && echo "$USER_PROMPT" | grep -qiE "\\b(button|component|page|style|ui|design|layout|css|color|font|theme|card|input|modal|dialog|header|footer|sidebar|dropdown|tooltip|toast|avatar|badge)\\b|界面|页面|按钮|样式|颜色|字体|布局|组件|弹窗|导航|卡片|输入框|主题|美化|优化.*界面|调整.*样式"; then
-    if [ -f "$AESTHETICS_FILE" ]; then
-        MATCH_LEVEL=$(json_get "matchLevel" "$AESTHETICS_FILE")
+  lines.push('## 审美 token 摘要');
+  appendValue(lines, 'UI', tokens.uiLibrary);
+  appendValue(lines, 'Dark', tokens.darkMode);
+  appendValue(lines, 'Match', tokens.matchLevel);
+  appendValue(lines, 'Colors (前 8)', colors.join(', '));
+  appendValue(lines, 'Fonts (前 4)', fonts.join(', '));
+  appendValue(lines, 'Components (前 8)', components.join(', '));
+  appendValue(lines, 'CSS variables (前 8)', cssVariables.join(', '));
+  lines.push('完整 token: .mancode/aesthetics/style-tokens.json', '');
+}
 
-        if [ "$MATCH_LEVEL" = "high" ]; then
-            if [ "$HAS_JQ" = "1" ]; then
-            # 提取摘要 + cap（docs/07 §4.1：colors ≤8, fonts ≤4, 总 < 800 tokens）
-            UI=$(jq -r '.uiLibrary // empty' "$AESTHETICS_FILE" 2>/dev/null)
-            DARK=$(jq -r '.darkMode // empty' "$AESTHETICS_FILE" 2>/dev/null)
-            MATCH=$(jq -r '.matchLevel // empty' "$AESTHETICS_FILE" 2>/dev/null)
-            COLORS=$(jq -r '.colors | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:8] | map("\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            FONTS=$(jq -r '.fonts | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:4] | map("\\(.key)=\\(.value | first)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            COMPONENTS=$(jq -r '(.components // []) | map(select(test("^[A-Z][A-Za-z0-9]{0,79}$"))) | .[0:8] | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
-            CSS_VARS=$(jq -r '(.cssVariables // {}) | to_entries | map(select(.key | test("^[A-Za-z0-9_-]{1,80}$"))) | .[0:8] | map("--\\(.key)=\\(.value)") | join(", ")' "$AESTHETICS_FILE" 2>/dev/null)
+function safeEntries(value, limit) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value)
+    .filter(([key]) => /^[A-Za-z0-9_-]{1,80}$/.test(key))
+    .slice(0, limit);
+}
 
-            echo "## 审美 token 摘要"
-            [ -n "$UI" ] && echo "UI: $(sanitize "$UI")"
-            [ -n "$DARK" ] && echo "Dark: $(sanitize "$DARK")"
-            [ -n "$MATCH" ] && echo "Match: $(sanitize "$MATCH")"
-            [ -n "$COLORS" ] && echo "Colors (前 8): $(sanitize "$COLORS")"
-            [ -n "$FONTS" ] && echo "Fonts (前 4): $(sanitize "$FONTS")"
-            [ -n "$COMPONENTS" ] && echo "Components (前 8): $(sanitize "$COMPONENTS")"
-            [ -n "$CSS_VARS" ] && echo "CSS variables (前 8): $(sanitize "$CSS_VARS")"
-            echo "完整 token: .mancode/aesthetics/style-tokens.json"
-            echo ""
-        else
-            # 无 jq: 只输出指针（cap 无法严格执行）
-            echo "## 审美 token"
-            echo "读取 .mancode/aesthetics/style-tokens.json"
-            echo ""
-        fi
-    fi
-fi
-fi
+function appendValue(lines, label, value) {
+  const clean = sanitize(value);
+  if (clean) lines.push(label + ': ' + clean);
+}
+
+function readPrompt(input) {
+  try {
+    const parsed = JSON.parse(input);
+    return typeof parsed.prompt === 'string' && parsed.prompt
+      ? parsed.prompt
+      : input;
+  } catch {
+    return input;
+  }
+}
+
+function readJson(filePath) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function sanitize(value) {
+  return String(value ?? '').replace(/[\r\n]/g, ' ').slice(0, 200);
+}
 `;
 
 export const SOLO_SKILL = `# mancode · solo mode

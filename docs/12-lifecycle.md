@@ -1,38 +1,35 @@
 # 12 - Harness 生命周期
 
-mancode 的运行时生命周期：hook 触发、上下文注入、状态管理。
+mancode 的运行时生命周期：跨平台 hook、上下文注入、状态管理与团队检测。
 
 ---
 
 ## 1. 生命周期概览
 
-```
-用户启动 Claude Code
+```text
+用户执行 mancode init
   ↓
-[SessionStart Hook 触发]
-  ↓ 读取 .mancode/state.json
-  ↓ 检测项目状态
-  ↓ 选择模式（solo / team）
-  ↓ 注入系统 prompt
+Node CLI 检测项目 profile
   ↓
-用户输入 prompt
+Git 可用 → 读取团队活动
+Git 不可用 → 使用 solo 默认值，不阻止初始化
   ↓
-[UserPromptSubmit Hook 触发]
-  ↓ 提醒 6 个问题（solo 模式）
-  ↓ 读取项目 profile；仅在 UI 资产已检测且任务涉及 UI 时读取审美 token
+创建 .mancode/state.json 与平台适配文件
   ↓
+Claude Code 启动
+  ↓
+node .mancode/hooks/session-start.mjs
+  ↓ 注入模式与项目上下文
+用户提交 prompt
+  ↓
+node .mancode/hooks/user-prompt-submit.mjs
+  ↓ 注入 solo 六问、自动路由与条件审美 token
 Claude 处理请求
-  ↓
-[PostToolUse Hook 触发]（计划中，尚未实现）
-  ↓ 格式化代码
-  ↓ 运行 linter
-  ↓
-用户关闭 Claude Code
-  ↓
-[SessionEnd Hook 触发]（可选）
-  ↓ 更新 state.json
-  ↓ 记录统计
 ```
+
+当前两个 runtime hook 都是 Node `.mjs` 脚本。它们不依赖 Bash、jq、grep、
+sed 或 Git，因此可以从 macOS、Linux、Windows CMD、PowerShell 与 Git Bash
+运行。
 
 ---
 
@@ -40,521 +37,175 @@ Claude 处理请求
 
 ### 2.1 SessionStart Hook
 
-**触发时机**：Claude Code 启动会话，加载项目
+**位置**：`.mancode/hooks/session-start.mjs`
 
-**位置**：`.mancode/hooks/session-start.sh`
+**触发时机**：Claude Code 启动会话并加载项目。
 
 **职责**：
-1. 检测项目是否已初始化 mancode（检查 `.mancode/state.json`）
-2. 读取项目状态和项目 profile（mode、团队、源码目录与可用能力）
-3. 检测多人协作（git contributors + recent activity）
-4. 选择默认模式（solo / team）
-5. 生成系统 prompt 注入
 
-**输出格式**：
-```bash
-#!/bin/bash
-# 输出到 stdout，Claude Code 自动注入到系统 prompt
+1. 从 hook 文件位置计算项目根目录，不依赖当前 shell 或 Git。
+2. 读取 `.mancode/state.json` 与 `.mancode/project-profile.json`。
+3. 注入当前模式、技术栈、UI 能力和最小改动原则。
+4. 已检测到团队且仍处于 solo 时，提示按需使用 `/manteam`。
+5. 状态不存在或 JSON 无法读取时安全退出，不抛出未处理异常。
 
-echo "mancode_mode: solo"
-echo "project_type: <detected project profile>"
-echo "ui_library: <detected UI library or none>"
-echo "team_mode: false"
-echo ""
-echo "## mancode · solo mode"
-echo ""
-echo "你正在使用 mancode solo 模式。"
-echo ""
-echo "### 核心原则"
-echo "1. 优先复用项目已有代码"
-echo "2. 按项目 profile 使用已检测到的能力"
-echo "3. 最小改动"
-```
-
-**实现**（借鉴 Ponytail 的 hook 注入思路）：
-
-```bash
-#!/bin/bash
-# 注意：hook 脚本不要用 `set -e` + 全局 `trap ... ERR`。
-# 原因：探测型 pipeline（git remote | grep ...）在无匹配时会触发 ERR，
-# 整个脚本被退出，后续探测无法继续。改用：
-#   - `set -uo pipefail`：仅保护未定义变量和 pipeline 中段失败
-#   - 显式 `|| true`：容忍单个探测命令的失败
-#   - 默认值用 `${var:-fallback}`
-set -uo pipefail
-
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
-
-# jq fallback
-HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
-
-json_get() {
-    local key="$1"
-    local file="$2"
-    if [ "$HAS_JQ" = "1" ]; then
-        jq -r ".$key // empty" "$file" 2>/dev/null || true
-    else
-        grep "\"$key\"" "$file" 2>/dev/null | sed 's/.*: "\(.*\)".*/\1/' || true
-    fi
-}
-
-# 检查是否已初始化
-if [ ! -f "$STATE_FILE" ]; then
-    echo "ℹ️ mancode 未初始化。运行 \`mancode init\` 开始。"
-    exit 0
-fi
-
-# 读取状态
-MODE=$(json_get "currentMode" "$STATE_FILE")
-TECH_STACK=$(json_get "techStack" "$STATE_FILE")
-UI_LIBRARY=$(json_get "uiLibrary" "$STATE_FILE")
-
-# 检测多人协作 —— 探测型命令一律 || true，避免污染后续逻辑
-contributors=$(git shortlog -sn --all 2>/dev/null | wc -l | xargs || echo 0)
-has_remote=$( { git remote -v 2>/dev/null || true; } | grep -E "github\.com|gitlab\.com|bitbucket\.org" | wc -l | xargs || echo 0)
-recent_active=$(git shortlog -sn --since='30 days ago' 2>/dev/null | wc -l | xargs || echo 0)
-
-# 兜底：确保三个变量是数字（避免 `integer expression expected`）
-contributors="${contributors//[!0-9]/}"
-has_remote="${has_remote//[!0-9]/}"
-recent_active="${recent_active//[!0-9]/}"
-contributors="${contributors:-0}"
-has_remote="${has_remote:-0}"
-recent_active="${recent_active:-0}"
-
-TEAM_MODE_AUTO="false"
-if [ "$contributors" -gt 1 ] && [ "$has_remote" -gt 0 ] && [ "$recent_active" -gt 1 ]; then
-    TEAM_MODE_AUTO="true"
-fi
-
-# 输出元数据
-echo "mancode_mode: ${MODE:-solo}"
-echo "project_type: $TECH_STACK"
-echo "ui_library: $UI_LIBRARY"
-echo "team_mode_auto: $TEAM_MODE_AUTO"
-echo ""
-
-# 注入系统 prompt
-if [ "$TEAM_MODE_AUTO" = "true" ]; then
-    echo "## mancode · team mode detected"
-    echo ""
-    echo "检测到多人协作项目（$contributors 个贡献者，最近 30 天有 $recent_active 人活跃）。"
-    echo ""
-    echo "建议使用 \`/manteam\` 模式以启用团队记忆和协调功能。"
-    echo ""
-fi
-
-echo "## mancode · ${MODE:-solo} mode"
-echo ""
-echo "你正在使用 mancode ${MODE:-solo} 模式。"
-echo ""
-echo "### 核心原则"
-echo "1. **优先复用项目已有代码**"
-echo "   - 检查 profile 中已检测到的源码目录是否已有类似实现"
-echo "   - 复用现有组件、函数、样式"
-echo ""
-echo "2. **按项目能力工作**"
-echo "   - 不假定特定语言、UI 或浏览器存在"
-echo "   - 仅在 UI 资产已检测且任务涉及 UI 时使用设计 token"
-echo ""
-echo "3. **最小改动**"
-echo "   - 只改用户要求的部分"
-echo "   - 不重构无关代码"
-```
-
----
+动态值会移除换行并限制为 200 个字符，避免项目状态污染 prompt 结构。
 
 ### 2.2 UserPromptSubmit Hook
 
-**触发时机**：用户提交 prompt 后、Claude 开始处理前
+**位置**：`.mancode/hooks/user-prompt-submit.mjs`
 
-**位置**：`.mancode/hooks/user-prompt-submit.sh`
+**触发时机**：用户提交 prompt 后、Claude 开始处理前。
 
 **职责**：
-1. 在 solo 模式下提醒 6 个问题
-2. 读取项目 profile；仅在 UI 资产已检测且任务涉及 UI 时读取审美 token
-3. 提醒 YAGNI 原则
 
-**输出格式**：
-```bash
-echo "## 动手前，先想六个问题："
-echo ""
-echo "1. **为什么做？**"
-echo "   - 这个改动解决什么问题？"
-echo ""
-echo "2. **已经有什么？**"
-echo "   - 项目里有没有类似的实现可以复用？"
-echo ""
-echo "3. **最少改多少？**"
-echo "   - 能用一行解决吗？能复用现有代码吗？"
-```
+1. 在 solo 模式下注入六个动手前问题。
+2. 从 stdin 读取 Claude Code 提供的 JSON，并提取原始 prompt。
+3. 识别规划或调研请求，提示路由到 `man` skill。
+4. 只有项目 profile 确认存在 UI 资产且 prompt 涉及 UI 时，才注入审美摘要。
+5. 对颜色、字体、组件和 CSS variable 设置数量与字符上限。
 
-**实现**（借鉴 grill-me 的追问思路）：
-
-```bash
-#!/bin/bash
-# 同 session-start：避免 `set -e` + 全局 ERR trap，用 `set -uo pipefail` + 显式 || true
-set -uo pipefail
-
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-STATE_FILE="$PROJECT_ROOT/.mancode/state.json"
-
-HAS_JQ=0
-command -v jq >/dev/null 2>&1 && HAS_JQ=1
-
-json_get() {
-    local key="$1"
-    local file="$2"
-    if [ "$HAS_JQ" = "1" ]; then
-        jq -r ".$key // empty" "$file" 2>/dev/null || true
-    else
-        grep "\"$key\"" "$file" 2>/dev/null | sed 's/.*: "\(.*\)".*/\1/' || true
-    fi
-}
-
-# 读取模式
-MODE=$(json_get "currentMode" "$STATE_FILE")
-
-# solo 模式：提醒 6 个问题
-if [ "$MODE" = "solo" ] || [ -z "$MODE" ]; then
-    echo "## 动手前，先想六个问题："
-    echo ""
-    echo "1. **为什么做？**"
-    echo "   - 这个改动解决什么问题？"
-    echo ""
-    echo "2. **已经有什么？**"
-    echo "   - 项目里有没有类似的实现可以复用？"
-    echo ""
-    echo "3. **最少改多少？**"
-    echo "   - 能用一行解决吗？能复用现有代码吗？"
-    echo ""
-fi
-
-# 先读 project-profile；仅当 UI 资产已检测且任务涉及 UI 才注入 token。
-USER_PROMPT="$1"
-if [ "$(json_get \"uiAssets\" \"$PROJECT_ROOT/.mancode/project-profile.json\")" = "detected" ] && echo "$USER_PROMPT" | grep -qiE "button|component|page|style|ui|design|layout|css"; then
-    AESTHETICS_FILE="$PROJECT_ROOT/.mancode/aesthetics/style-tokens.json"
-    if [ -f "$AESTHETICS_FILE" ]; then
-        echo "## 审美 token 已加载"
-        echo ""
-        echo "使用项目已有的设计 token（颜色、字体、组件）。"
-        echo ""
-        # 可选：注入具体 token
-        # cat "$AESTHETICS_FILE"
-    fi
-fi
-```
-
----
+Node 直接解析 JSON。不存在 jq fallback，也不会调用任何外部进程。
 
 ### 2.3 PostToolUse Hook（计划中，尚未实现）
 
-> **注意**：此 hook 尚未在 installer 中注册。以下为设计文档，供未来实现参考。
+未来如果实现 PostToolUse，必须继续满足同一跨平台约束：
 
-**触发时机**：Claude 使用工具（Edit / Write）后
-
-**位置**：`.mancode/hooks/post-tool-use.sh`
-
-**P0 设计决策**：
-
-1. **默认启用策略**：P1 MVP 先 opt-in，通过 `.mancode/config.json` 显式开启；确认误报和性能后再考虑默认启用。
-2. **处理范围**：只处理本次 Edit / Write 命中的单个项目内文件；跳过 `.git/`、`.mancode/`、`node_modules/`、构建产物和非文本文件。
-3. **format 行为**：formatter 可以改刚刚由 Agent 修改的文件，但不得格式化整仓或改未触达文件。
-4. **lint / test 阻断**：format 失败只提示；lint / typecheck 失败返回非零并阻断“完成”声称；test 默认不在每次 PostToolUse 跑，交给 workflow 自测阶段。
-5. **超时降级**：单次 hook 总时限 15 秒；超时后停止子进程并输出 warning，不阻塞用户继续编辑，但必须在最终验证里补跑。
-6. **并发冲突**：hook 不做跨进程锁；只对当前文件运行幂等命令。涉及整仓读写、缓存或报告文件的操作必须放到后续显式命令里处理。
-
-**实现边界**：P0 只记录上述决策；hook 模板、installer 注册和配置迁移留到 P1 实现。
-
-**职责**：
-1. 自动格式化代码（prettier / eslint --fix）
-2. 运行 linter 检查
-3. 类型检查（TypeScript）
-
-**输出格式**：
-```bash
-echo "✓ 格式化代码"
-echo "✓ Linter 通过"
-echo "⚠️ 类型检查发现 2 个警告"
-```
-
-**实现**（概念示例 — P1 实现时须严格遵循上方 6 个 P0 决策）：
-
-```bash
-#!/bin/bash
-# PostToolUse hook — CONCEPTUAL SKETCH, not production-ready.
-# 实际 P1 实现必须覆盖全部 6 个 P0 决策，下方注释标出对应位置。
-
-set -uo pipefail
-
-MODIFIED_FILE="$1"
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-
-# ── 决策 1: opt-in ──
-# P0 决策要求先 opt-in，通过 .mancode/config.json 显式开启。
-# 未开启时直接退出，不执行任何格式化或 lint。
-CONFIG_FILE="$PROJECT_ROOT/.mancode/config.json"
-if [ ! -f "$CONFIG_FILE" ] || ! grep -q '"postToolUse"[[:space:]]*:[[:space:]]*true' "$CONFIG_FILE" 2>/dev/null; then
-    exit 0
-fi
-
-# ── 决策 2: 处理范围 ──
-# 只处理本次 Edit/Write 命中的单个文件；跳过非项目内文件。
-case "$MODIFIED_FILE" in
-    .git/*|.mancode/*|node_modules/*|dist/*|build/*|coverage/*|*.min.js|*.map)
-        exit 0 ;;
-esac
-
-# 真实实现应根据 project-profile 中的 manifest 与验证能力选择命令。
-if [ ! -f ".mancode/project-profile.json" ]; then
-    exit 0
-fi
-
-# ── 决策 3: format 行为 ──
-# formatter 只改 Agent 刚修改的 $MODIFIED_FILE，不得格式化整仓。
-if command -v prettier >/dev/null 2>&1; then
-    # ── 决策 5: 超时降级 ──
-    # 单步限时；超时后 warning 退出，不阻塞用户继续编辑。
-    timeout 5 prettier --write "$MODIFIED_FILE" 2>&1 | grep -v "^$" || true
-    echo "✓ 格式化代码"
-fi
-
-# ── 决策 4: lint 阻断 ──
-# lint/typecheck 失败返回非零并阻断"完成"声称。
-# ── 决策 6: 并发冲突 ──
-# 只对当前文件运行幂等命令，不做跨进程锁。
-if command -v eslint >/dev/null 2>&1; then
-    # 直接捕获 eslint 退出码，不通过 grep 管道检查
-    # （grep -v "^$" 对空输出返回 1，会在 lint 通过时误报失败）
-    lint_output=$(timeout 10 eslint --fix "$MODIFIED_FILE" 2>&1)
-    lint_exit=$?
-    if [ "$lint_exit" -ne 0 ]; then
-        echo "$lint_output" | grep -v "^$" || true
-        echo "⚠️ Linter 检查失败，需修复后才能声称完成"
-        exit 1
-    fi
-    echo "✓ Linter 检查"
-fi
-```
+- 使用 Node 脚本，不调用 Bash 或 POSIX 管道。
+- 默认 opt-in，只处理本次修改的项目内文本文件。
+- 不格式化整仓，不修改未触达文件。
+- 子进程使用 `execFile` / `spawn` 参数数组，不拼接 shell 字符串。
+- 单次执行设置超时；超时提示但不无限阻塞编辑流程。
+- lint/typecheck 的失败必须保留真实退出状态。
 
 ---
 
-## 3. 上下文注入机制
+## 3. 团队检测
 
-### 3.1 注入层次
+团队检测发生在 CLI 初始化和状态查询阶段，不在 hook 内执行。
 
-```
-┌─────────────────────────────────────┐
-│  User Prompt                        │
-├─────────────────────────────────────┤
-│  UserPromptSubmit Hook 注入         │  ← solo 六问、条件审美 token
-├─────────────────────────────────────┤
-│  System Prompt (SessionStart Hook) │  ← 模式、项目状态
-├─────────────────────────────────────┤
-│  SKILL.md (solo / mamba / man...)   │  ← 模式规则
-├─────────────────────────────────────┤
-│  Claude 基础能力                     │
-└─────────────────────────────────────┘
-```
+判定为团队需要同时满足：
 
-### 3.2 注入优先级
+1. Git 历史贡献者超过 1 人。
+2. 存在 GitHub、GitLab 或 Bitbucket remote。
+3. 最近 30 天活跃贡献者超过 1 人。
 
-| 优先级 | 来源 | 内容 | 可覆盖 |
-|---|---|---|---|
-| 1 | User Prompt | 用户的具体任务 | — |
-| 2 | UserPromptSubmit Hook | 追问、审美提醒 | 可选 |
-| 3 | SKILL.md | 模式规则 | ❌ 不可覆盖 |
-| 4 | SessionStart Hook | 项目状态 | ❌ 不可覆盖 |
+实现通过 Node `execFile('git', args)` 直接调用 Git，并在 Node 中拆分、去重邮箱；
+不使用 `/bin/bash`、`sort`、`grep`、重定向或管道。以下情况统一安全降级：
+
+- Git 未安装或不在 PATH。
+- 项目来自 ZIP，没有 `.git`。
+- Git 历史为空或命令执行失败。
+- 当前目录不是独立仓库根目录。
+
+降级结果为 `isTeam: false`、`contributors: 1`、`recentActive: 1`，不会阻止
+`mancode init`。用户仍可通过 `--team` 或 `--no-team` 明确覆盖。
 
 ---
 
-## 4. `.mancode/state.json` 结构
-
-### 4.1 完整结构
+## 4. `.mancode/state.json`
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.3.2",
   "currentMode": "solo",
   "lastMode": "solo",
+  "platform": "claude-code",
+  "initializedAt": "2026-07-11T10:30:00.000Z",
+  "techStack": "JavaScript/TypeScript + React",
+  "uiLibrary": "Tailwind CSS",
   "currentTask": null,
+  "currentWorkflowMode": null,
   "skippedSteps": [],
-  "techStack": "<detected stack or Unknown>",
-  "uiLibrary": "<detected UI library or None>",
-  "packageManager": "npm",
-  "buildTool": "vite",
-  "linter": "eslint",
-  "formatter": "prettier",
   "teamModeAutoDetected": false,
-  "contributors": 1,
-  "recentActivity": {
-    "lastScan": "2026-06-27T10:30:00Z",
-    "lastTask": "add logout button",
-    "lastUpdated": "2026-06-27T10:30:00Z"
-  },
-  "aesthetics": {
-    "scanned": true,
-    "lastUpdate": "2026-06-27T10:30:00Z",
-    "tokensFile": ".mancode/aesthetics/style-tokens.json"
-  },
-  "installedPlatforms": ["claude-code"]
+  "contributors": 1
 }
 ```
 
-### 4.2 字段说明
+| 字段 | 说明 |
+|---|---|
+| `currentMode` / `lastMode` | 当前和上一次工作流模式 |
+| `platform` | 初始化时选择的默认适配器 |
+| `techStack` / `uiLibrary` | 从 project profile 得到的摘要 |
+| `currentTask` / `currentWorkflowMode` | 当前持久化工作流信息 |
+| `skippedSteps` | 用户明确跳过的工作流步骤 |
+| `teamModeAutoDetected` | 自动检测或显式配置后的团队状态 |
+| `contributors` | 检测到的贡献者数量；降级时为 1 |
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `version` | string | mancode 版本 |
-| `currentMode` | string | 当前模式（solo / mamba / man / manteam / manps）|
-| `lastMode` | string | 上一次模式 |
-| `currentTask` | string \| null | 当前任务（如在 /man 流程中）|
-| `skippedSteps` | string[] | 跳过的步骤（/man 流程中用户选择跳过的步骤）|
-| `techStack` | string | 检测到的技术栈摘要（未知时为 Unknown） |
-| `uiLibrary` | string | 检测到的 UI 库；非 UI 项目为 None |
-| `packageManager` | string | 包管理器（npm / yarn / pnpm） |
-| `buildTool` | string | 构建工具（vite / webpack / next / none）|
-| `linter` | string | Linter（eslint / none）|
-| `formatter` | string | 格式化工具（prettier / none）|
-| `teamModeAutoDetected` | boolean | 是否自动检测到多人协作 |
-| `contributors` | number | 贡献者数量 |
-| `recentActivity` | object | 最近活动记录 |
-| `aesthetics` | object | 审美扫描状态 |
-| `installedPlatforms` | array | 已安装平台 |
-
-### 4.3 读写操作
-
-**读取**（hook 脚本）：
-```bash
-# 用 jq（推荐）
-MODE=$(jq -r '.currentMode' .mancode/state.json)
-
-# 无 jq fallback（grep + sed）
-MODE=$(grep '"currentMode"' .mancode/state.json | sed 's/.*: "\(.*\)".*/\1/')
-```
-
-**写入**（CLI）：
-```typescript
-import fs from 'fs-extra';
-
-const statePath = path.join(projectRoot, '.mancode/state.json');
-const state = await fs.readJson(statePath);
-state.currentMode = 'mamba';
-state.lastMode = 'solo';
-state.recentActivity.lastUpdated = new Date().toISOString();
-await fs.writeJson(statePath, state, { spaces: 2 });
-```
+CLI 负责写入 state；hooks 只读，不在会话启动或 prompt 提交时修改磁盘状态。
 
 ---
 
-## 5. 与 Claude Code 的集成流程
+## 5. Claude Code 集成
 
-### 5.1 安装流程
-
-```
-用户执行：mancode init
-  ↓
-检测平台（Claude Code / Cursor / ChatGPT 桌面端 / Codex CLI）
-  ↓
-创建 .mancode/ 目录
-  ↓
-生成 state.json
-  ↓
-安装平台适配器
-  ↓
-  ├─ Claude Code: 
-  │    ├─ 写入 .claude/settings.json (hooks配置)
-  │    ├─ 写入 .claude/skills/solo/SKILL.md
-  │    └─ 安装 hook 脚本到 .mancode/hooks/
-  │
-  ├─ Cursor:
-  │    └─ 写入 .cursor/rules/mancode.mdc
-  │
-  └─ ChatGPT 桌面端 / Codex CLI:
-       ├─ 写入 AGENTS.md (受控区块)
-       └─ 写入 .agents/skills/<mode>/SKILL.md
-  ↓
-扫描项目
-  ↓
-生成 style-tokens.json（如有前端）
-  ↓
-完成
-```
-
-### 5.2 Claude Code settings.json 配置
+### 5.1 settings.json
 
 ```json
 {
   "hooks": {
     "SessionStart": [
       {
-        "command": "bash .mancode/hooks/session-start.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".mancode/hooks/session-start.mjs\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
       {
-        "command": "bash .mancode/hooks/user-prompt-submit.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".mancode/hooks/user-prompt-submit.mjs\""
+          }
+        ]
       }
     ]
-  },
-  "skills": {
-    "solo": ".claude/skills/solo/SKILL.md"
   }
 }
 ```
 
-### 5.3 运行时集成
+命令只使用 `node` 和带引号的相对路径，在 CMD、PowerShell、Git Bash 与 POSIX
+shell 中语义一致。
 
-```
-Claude Code 启动
-```
-Claude Code 启动
-  ↓
-读取 .claude/settings.json
-  ↓
-发现 hooks.SessionStart
-  ↓
-执行 .mancode/hooks/session-start.sh
-  ↓ 输出系统 prompt
-  ↓
-Claude Code 注入到系统 prompt
-  ↓
-用户输入 prompt
-  ↓
-Claude Code 发现 hooks.UserPromptSubmit
-  ↓
-执行 .mancode/hooks/user-prompt-submit.sh
-  ↓ 输出追问
-  ↓
-Claude 看到：
-  - 系统 prompt（项目状态）
-  - 追问（6 个问题）
-  - 用户 prompt
-  ↓
-Claude 处理
-```
+### 5.2 旧版本迁移
+
+`mancode init --force` 或 `mancode install claude-code --force` 会：
+
+1. 识别并移除 mancode 生成的旧命令：
+   `bash .mancode/hooks/session-start.sh` 与
+   `bash .mancode/hooks/user-prompt-submit.sh`。
+2. 注册新的 Node hook 命令。
+3. 删除两个旧 `.sh` 文件并生成 `.mjs` 文件。
+4. 保留无法精确识别为 mancode 生成内容的用户 hook。
+
+卸载同样同时识别新旧 mancode hook，不会删除无关用户命令。
 
 ---
 
-## 6. 借鉴来源
+## 6. 验证矩阵
 
-本文档参考了以下项目的设计思路（仅用于内部开发参考，对外文档不提及）：
+本地测试覆盖：
 
-| 项目 | License | 借鉴内容 |
-|---|---|---|
-| **Ponytail** | MIT | Hook 注入机制、系统 prompt 生成方式 |
-| **grill-me** | MIT | 追问模式的早期参考 |
-| **Superpowers** | MIT | SessionStart hook 的项目检测逻辑 |
-| **Trellis** | AGPL-3.0 | state.json 的**结构思路**（仅看 README，未看源码）|
+- Git 存在与 PATH 中没有 Git。
+- 非 Git manifest 项目正常初始化。
+- 团队检测的单人、多人、remote 与近期活跃组合。
+- Node hooks 的上下文输出、自动路由、token cap 与不可信 token 清洗。
+- 旧 Bash hook 设置迁移、新 hook 状态检查与卸载。
+
+Windows CI 会在同一个 `windows-latest` runner 上分别从 CMD、PowerShell 和 Git
+Bash 执行 smoke test。测试清空子进程 PATH 来模拟 Git/Bash 不可用，验证 Codex
+初始化、solo 降级、Claude Code 初始化和两个 Node hooks 均能完成。
 
 ---
 
-## 7. 实施顺序
+## 7. 实施状态
 
-| 阶段 | 实现内容 |
+| 阶段 | 内容 |
 |---|---|
-| **MVP-1** | SessionStart hook + UserPromptSubmit hook + state.json 读写 |
-| **MVP-2** | 多模式切换（PostToolUse hook 计划中，尚未实现） |
-| **MVP-3** | 多平台适配（Cursor / Codex）|
+| MVP-1 | SessionStart、UserPromptSubmit、state.json |
+| MVP-2 | 多模式切换；PostToolUse 仍为计划项 |
+| MVP-3 | Claude Code、Cursor、Codex、Copilot、ZCode 适配 |
+| Windows native | Node hooks、无 shell 团队检测、Git 可选、三 shell smoke |

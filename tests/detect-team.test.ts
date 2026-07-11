@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,20 +6,31 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { detectTeamStatus } from '../src/system/detect-team.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
-  // -c 必须放在子命令之前，否则 git init/remote 等会拒绝
-  await execAsync(`git -c commit.gpgsign=false ${args.join(' ')}`, {
+  await execFileAsync('git', ['-c', 'commit.gpgsign=false', ...args], {
     cwd,
-    shell: '/bin/bash',
   });
 }
 
 async function commit(cwd: string, email: string, name: string): Promise<void> {
-  await execAsync(
-    `git -c user.email=${email} -c user.name=${name} -c commit.gpgsign=false commit --allow-empty -q -m t`,
-    { cwd, shell: '/bin/bash' },
+  await execFileAsync(
+    'git',
+    [
+      '-c',
+      `user.email=${email}`,
+      '-c',
+      `user.name=${name}`,
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--allow-empty',
+      '-q',
+      '-m',
+      't',
+    ],
+    { cwd },
   );
 }
 

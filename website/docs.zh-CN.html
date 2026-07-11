@@ -23,7 +23,7 @@
     <div class="noise" aria-hidden="true"></div>
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档中心 / v0.3.1</span>
+      <span class="docs-wordmark">文档中心 / v0.3.2</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a><a href="https://github.com/whitelonng/mancode">GitHub</a>
         <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span aria-hidden="true">◐</span></button>
@@ -53,7 +53,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>安装与初始化</h2>
-          <p>先全局安装 mancode，进入一个 git 仓库或已识别的项目目录，再初始化默认适配器。mancode 支持常见 manifest，例如 <code>package.json</code>、<code>pyproject.toml</code>、<code>go.mod</code> 和 <code>Cargo.toml</code>。</p>
+          <p>先全局安装 mancode，进入一个 git 仓库或已识别的项目目录，再初始化默认适配器。需要 Node.js 20+；原生支持 Windows CMD、PowerShell 和 Git Bash。Git 是可选依赖，只用于增强团队自动检测；Claude Code hooks 直接由 Node 执行，不需要 Bash 或 jq。</p>
           <div class="docs-steps"><article class="docs-step"><b>01</b><strong>安装</strong><p>在机器上全局安装 CLI。</p></article><article class="docs-step"><b>02</b><strong>进入项目</strong><p>让 mancode 在需要理解的项目根目录运行。</p></article><article class="docs-step"><b>03</b><strong>初始化</strong><p>创建本地状态、扫描项目并安装适配器。</p></article></div>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm install -g mancode
 <span class="command-prompt">$</span> cd your-project

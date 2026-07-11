@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ensureTeamMemory } from '../system/team-memory.js';
 import { DEFAULT_CONFIG, EMPTY_STYLE_TOKENS } from '../templates/defaults.js';
@@ -59,13 +59,11 @@ export async function readTextIfExists(filePath: string): Promise<string> {
 }
 
 async function installHooks(hooksDir: string): Promise<void> {
-  const sessionStartDst = path.join(hooksDir, 'session-start.sh');
+  const sessionStartDst = path.join(hooksDir, 'session-start.mjs');
   await writeFile(sessionStartDst, SESSION_START_HOOK, 'utf-8');
-  await chmod(sessionStartDst, 0o755);
 
-  const userPromptDst = path.join(hooksDir, 'user-prompt-submit.sh');
+  const userPromptDst = path.join(hooksDir, 'user-prompt-submit.mjs');
   await writeFile(userPromptDst, USER_PROMPT_SUBMIT_HOOK, 'utf-8');
-  await chmod(userPromptDst, 0o755);
 }
 
 async function pathExists(p: string): Promise<boolean> {

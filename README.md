@@ -19,7 +19,7 @@
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.3.2-green?style=flat-square" alt="Status: stable v0.3.2" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
-  <img src="https://img.shields.io/badge/tests-377%20passed-brightgreen?style=flat-square" alt="Tests: 377 passed" />
+  <img src="https://img.shields.io/badge/tests-381%20passed-brightgreen?style=flat-square" alt="Tests: 381 passed" />
 </p>
 
 <p align="center">
@@ -92,8 +92,8 @@ These are agent skills, not deprecated custom prompts. See the official
 ├── state.json
 ├── config.json
 ├── aesthetics/style-tokens.json
-├── hooks/session-start.sh
-├── hooks/user-prompt-submit.sh
+├── hooks/session-start.mjs
+├── hooks/user-prompt-submit.mjs
 ├── logs/hooks.log
 ├── memory/
 └── workflows/
@@ -285,9 +285,14 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.1. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.2. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
+
+Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
+are supported. Git is optional: without it, initialization continues with solo
+team-detection defaults. Claude Code hooks run with Node and do not require Bash
+or jq.
 
 ```bash
 npm install -g mancode
@@ -368,7 +373,7 @@ mancode version
 Example output for a UI project (not a default stack):
 
 ```text
-mancode v0.3.1
+mancode v0.3.2
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -391,8 +396,8 @@ Platform status:
   ✓ ZCode: ready (AGENTS.md + .agents/skills/)
 
 Hooks:
-  ✓ session-start.sh
-  ✓ user-prompt-submit.sh
+  ✓ session-start.mjs
+  ✓ user-prompt-submit.mjs
   ✓ registered in .claude/settings.json
   Hook injection: ~120 tokens (cap 800)
 ```

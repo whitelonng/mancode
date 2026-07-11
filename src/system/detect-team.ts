@@ -1,14 +1,15 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { promisify } from 'node:util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * 多人协作检测结果。
  *
- * 三条件同时满足才判定为团队（docs/13-scanning.md §6）：
+ * 三条件同时满足才判定为团队：
  * 1. contributors > 1（历史多个贡献者）
  * 2. hasRemote = true（有 github/gitlab/bitbucket remote）
  * 3. recentActive > 1（最近 30 天多人活跃，避免老项目误判）
@@ -29,103 +30,65 @@ const NO_TEAM: TeamStatus = {
 
 const REMOTE_PATTERN = /github\.com|gitlab\.com|bitbucket\.org/;
 
-/**
- * 所有 exec 调用共用：禁用 pager（否则 shortlog 会拉起 less 阻塞等输入）。
- */
-const EXEC_OPTS = {
-  shell: '/bin/bash',
-  encoding: 'utf-8' as const,
-  env: {
-    ...process.env,
-    GIT_PAGER: 'cat',
-    PAGER: 'cat',
-    GIT_TERMINAL_PROMPT: '0',
-  },
+const GIT_ENV = {
+  ...process.env,
+  GIT_PAGER: 'cat',
+  PAGER: 'cat',
+  GIT_TERMINAL_PROMPT: '0',
 };
 
 /**
- * 检测多人协作状态。
- *
- * 算法来源：docs/07-hooks.md §2.3 detect_team()（已同步为 TS 实现）。
- *
- * 行为：
- * - 非 git 目录 → 返回默认单人状态
- * - git 命令失败 → 返回默认单人状态（保守降级，不抛错）
- * - 三条件全满足 → isTeam=true
- *
- * @param projectRoot 项目根目录
+ * Detect team activity with direct git process calls and Node parsing.
+ * Missing git, a non-git directory, or an unreadable history safely degrades
+ * to solo defaults.
  */
 export async function detectTeamStatus(
   projectRoot: string,
 ): Promise<TeamStatus> {
-  const gitDir = path.join(projectRoot, '.git');
   try {
-    await execAsync('git rev-parse --is-inside-work-tree', {
-      cwd: projectRoot,
-      ...EXEC_OPTS,
-    });
+    await access(path.join(projectRoot, '.git'));
+    const inside = await runGit(projectRoot, [
+      'rev-parse',
+      '--is-inside-work-tree',
+    ]);
+    if (inside.trim() !== 'true') return NO_TEAM;
+
+    const [allEmails, recentEmails, remotes] = await Promise.all([
+      runGit(projectRoot, ['log', '--all', '--format=%ae']),
+      runGit(projectRoot, ['log', '--since=30 days ago', '--format=%ae']),
+      runGit(projectRoot, ['remote', '-v']),
+    ]);
+
+    const contributors = countUniqueLines(allEmails);
+    const recentActive = countUniqueLines(recentEmails);
+    const hasRemote = REMOTE_PATTERN.test(remotes);
+
+    return {
+      isTeam: contributors > 1 && hasRemote && recentActive > 1,
+      contributors: contributors || 1,
+      recentActive: recentActive || 1,
+      hasRemote,
+    };
   } catch {
     return NO_TEAM;
   }
-
-  // 检查 .git 目录确实存在（rev-parse 在某些情况下也会成功）
-  try {
-    await execAsync(`test -d ${JSON.stringify(gitDir)}`, {
-      cwd: projectRoot,
-      ...EXEC_OPTS,
-    });
-  } catch {
-    return NO_TEAM;
-  }
-
-  const contributors = await countUniqueEmails(
-    "git log --all --format='%ae'",
-    projectRoot,
-  );
-  const recentActive = await countUniqueEmails(
-    "git log --since='30 days ago' --format='%ae'",
-    projectRoot,
-  );
-  const hasRemote = await checkRemote(projectRoot);
-
-  // 兜底：exec 输出非数字时回到 0/1
-  const safeContributors = Number.isFinite(contributors) ? contributors : 0;
-  const safeRecent = Number.isFinite(recentActive) ? recentActive : 0;
-
-  const isTeam = safeContributors > 1 && hasRemote && safeRecent > 1;
-
-  return {
-    isTeam,
-    contributors: safeContributors || 1,
-    recentActive: safeRecent || 1,
-    hasRemote,
-  };
 }
 
-async function countUniqueEmails(
-  command: string,
-  cwd: string,
-): Promise<number> {
-  try {
-    const { stdout } = await execAsync(
-      `${command} 2>/dev/null | sort -u | grep -c . || true`,
-      { cwd, ...EXEC_OPTS },
-    );
-    const n = Number.parseInt(stdout.trim(), 10);
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
+async function runGit(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd,
+    encoding: 'utf-8',
+    env: GIT_ENV,
+    windowsHide: true,
+  });
+  return stdout;
 }
 
-async function checkRemote(cwd: string): Promise<boolean> {
-  try {
-    const { stdout } = await execAsync('git remote -v 2>/dev/null || true', {
-      cwd,
-      ...EXEC_OPTS,
-    });
-    return REMOTE_PATTERN.test(stdout);
-  } catch {
-    return false;
-  }
+function countUniqueLines(output: string): number {
+  return new Set(
+    output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  ).size;
 }

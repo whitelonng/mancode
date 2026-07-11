@@ -73,13 +73,13 @@ export interface InitOptions {
  * `mancode init` 命令（完整版）。
  *
  * 职责（docs/08-cli-spec.md §2.1-2.4）：
- * 1. 检测系统依赖（bash/git/jq）
+ * 1. 检测可选系统依赖（git）
  * 2. 检测中立 project profile（类型、语言、框架与验证能力）
  * 3. 创建 8 个文件/目录（.mancode/ + .claude/）
  * 4. 支持 --force / --yes / --team / --style 参数
  *
  * MVP-1 实现范围：
- * - ✅ 系统依赖检测 + 警告
+ * - ✅ 跨平台可选依赖检测 + 安全降级
  * - ✅ 跨常见生态的保守 project profile 检测
  * - ✅ 创建 8 个文件
  * - ✅ --force / --yes 参数
@@ -153,21 +153,12 @@ export async function init(
     console.log('✓  检测系统依赖...');
     const deps = await detectSystemDeps();
 
-    if (!deps.bash || !deps.git) {
-      console.error('✗  Missing required dependencies:');
-      if (!deps.bash) console.error('   - bash (required)');
-      if (!deps.git) console.error('   - git (required)');
-      console.error('');
-      console.error('   Install them and try again.');
-      return EXIT_NOT_A_PROJECT_DIR;
-    }
-
-    if (!deps.jq) {
+    if (!deps.git) {
       console.log(
-        '⚠️  jq not found (optional). Hooks will use grep/sed fallback (slightly slower).',
+        '⚠️  Git not found (optional). Team auto-detection will use solo defaults.',
       );
     } else {
-      console.log('   bash ✓ git ✓ jq ✓');
+      console.log('   git ✓');
     }
 
     // 4. 检测项目类型

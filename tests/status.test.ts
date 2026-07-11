@@ -84,7 +84,7 @@ describe('mancode status', () => {
   it('detects missing hook files', async () => {
     await silentInit(dir);
 
-    await rm(path.join(dir, '.mancode', 'hooks', 'session-start.sh'), {
+    await rm(path.join(dir, '.mancode', 'hooks', 'session-start.mjs'), {
       force: true,
     });
 
@@ -143,8 +143,8 @@ describe('mancode status', () => {
     expect(output).toContain('Installed platforms:');
     expect(output).toContain('Claude Code');
     expect(output).toContain('Hooks:');
-    expect(output).toContain('session-start.sh');
-    expect(output).toContain('user-prompt-submit.sh');
+    expect(output).toContain('session-start.mjs');
+    expect(output).toContain('user-prompt-submit.mjs');
     expect(output).toContain('settings.json');
   });
 
@@ -384,8 +384,8 @@ describe('mancode status', () => {
   it('times out hook injection estimates instead of hanging status', async () => {
     await silentInit(dir);
     await writeFile(
-      path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
-      '#!/usr/bin/env bash\nsleep 5\n',
+      path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.mjs'),
+      'setTimeout(() => {}, 5000);\n',
       'utf-8',
     );
 

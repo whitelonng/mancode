@@ -58,8 +58,8 @@ describe('mancode init', () => {
 
     // 验证 hooks（2 个文件，可执行）
     const hooks = await readdir(path.join(dir, '.mancode', 'hooks'));
-    expect(hooks).toContain('session-start.sh');
-    expect(hooks).toContain('user-prompt-submit.sh');
+    expect(hooks).toContain('session-start.mjs');
+    expect(hooks).toContain('user-prompt-submit.mjs');
 
     // 验证 style-tokens.json
     const tokensPath = path.join(
@@ -91,11 +91,11 @@ describe('mancode init', () => {
     expect(settings.hooks.SessionStart[0].hooks).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].type).toBe('command');
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain(
-      '.mancode/hooks/session-start.sh',
+      '.mancode/hooks/session-start.mjs',
     );
     expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain(
-      '.mancode/hooks/user-prompt-submit.sh',
+      '.mancode/hooks/user-prompt-submit.mjs',
     );
     expect(settings.skills).toBeUndefined();
 
@@ -587,7 +587,7 @@ describe('mancode init', () => {
 
     expect(code).toBe(EXIT_OK);
     expect(commands).toContain('bash .mancode/hooks/custom-user-hook.sh');
-    expect(commands).toContain('bash .mancode/hooks/session-start.sh');
+    expect(commands).toContain('node ".mancode/hooks/session-start.mjs"');
   });
 
   it('migrates legacy hook settings and removes old mancode hooks on --force', async () => {
@@ -595,6 +595,17 @@ describe('mancode init', () => {
     const mancodeDir = path.join(dir, '.mancode');
     await mkdir(claudeDir, { recursive: true });
     await mkdir(mancodeDir, { recursive: true });
+    await mkdir(path.join(mancodeDir, 'hooks'), { recursive: true });
+    await writeFile(
+      path.join(mancodeDir, 'hooks', 'session-start.sh'),
+      'legacy session hook\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(mancodeDir, 'hooks', 'user-prompt-submit.sh'),
+      'legacy prompt hook\n',
+      'utf-8',
+    );
     await writeFile(
       path.join(mancodeDir, 'state.json'),
       JSON.stringify(
@@ -649,14 +660,23 @@ describe('mancode init', () => {
       'echo "legacy user hook"',
     );
     expect(settings.hooks.SessionStart[1].hooks[0].command).toBe(
-      'bash .mancode/hooks/session-start.sh',
+      'node ".mancode/hooks/session-start.mjs"',
     );
     expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toBe(
-      'bash .mancode/hooks/user-prompt-submit.sh',
+      'node ".mancode/hooks/user-prompt-submit.mjs"',
     );
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
     expect(settings.skills.mamba).toBeUndefined();
+    await expect(
+      readFile(path.join(mancodeDir, 'hooks', 'session-start.sh'), 'utf-8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(
+        path.join(mancodeDir, 'hooks', 'user-prompt-submit.sh'),
+        'utf-8',
+      ),
+    ).rejects.toThrow();
   });
 
   it('returns init failure without writing state when Claude settings are invalid', async () => {

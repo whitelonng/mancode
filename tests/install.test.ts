@@ -46,7 +46,7 @@ describe('mancode install', () => {
     await silentInit(dir);
 
     // 删掉一个 hook 文件
-    await rm(path.join(dir, '.mancode', 'hooks', 'session-start.sh'), {
+    await rm(path.join(dir, '.mancode', 'hooks', 'session-start.mjs'), {
       force: true,
     });
 
@@ -54,7 +54,7 @@ describe('mancode install', () => {
     expect(code).toBe(EXIT_OK);
 
     // hook 文件应该恢复
-    const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
+    const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.mjs');
     const content = await readFile(hookPath, 'utf-8');
     expect(content).toContain('mancode');
     await expect(
@@ -83,6 +83,37 @@ describe('mancode install', () => {
     );
     await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
       '# custom scout\n',
+    );
+  });
+
+  it('keeps working legacy hooks when a forced migration fails', async () => {
+    await silentInit(dir);
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    const legacyHook = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
+    await writeFile(legacyHook, 'legacy session hook\n', 'utf-8');
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify({
+        hooks: {
+          SessionStart: [{ command: 'bash .mancode/hooks/session-start.sh' }],
+        },
+      })}\n`,
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+      '# custom mamba\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(readFile(legacyHook, 'utf-8')).resolves.toBe(
+      'legacy session hook\n',
+    );
+    await expect(readFile(settingsPath, 'utf-8')).resolves.toContain(
+      'bash .mancode/hooks/session-start.sh',
     );
   });
 
@@ -212,9 +243,11 @@ describe('mancode install', () => {
     expect(commands).toContain('echo user legacy hook');
     expect(
       commands.filter(
-        (command: string) => command === 'bash .mancode/hooks/session-start.sh',
+        (command: string) =>
+          command === 'node ".mancode/hooks/session-start.mjs"',
       ),
     ).toHaveLength(1);
+    expect(commands).not.toContain('bash .mancode/hooks/session-start.sh');
   });
 
   it('preserves raw user hook arrays from legacy object-mapped settings', async () => {
@@ -256,9 +289,11 @@ describe('mancode install', () => {
     expect(commands).toContain('echo array user hook');
     expect(
       commands.filter(
-        (command: string) => command === 'bash .mancode/hooks/session-start.sh',
+        (command: string) =>
+          command === 'node ".mancode/hooks/session-start.mjs"',
       ),
     ).toHaveLength(1);
+    expect(commands).not.toContain('bash .mancode/hooks/session-start.sh');
   });
 
   it('removes only exact legacy mancode skill mappings from Claude settings', async () => {
@@ -554,7 +589,7 @@ describe('mancode install', () => {
     const settingsPath = path.join(dir, '.claude', 'settings.json');
     const configPath = path.join(dir, '.mancode', 'config.json');
     const logPath = path.join(dir, '.mancode', 'logs', 'hooks.log');
-    const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.sh');
+    const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.mjs');
     const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
     const invalidSettings = '{ invalid json';

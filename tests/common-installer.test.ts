@@ -39,16 +39,38 @@ describe('installMancodeCore', () => {
     expect(config).toEqual(DEFAULT_CONFIG);
 
     const sessionStart = await readFile(
-      path.join(dir, '.mancode', 'hooks', 'session-start.sh'),
+      path.join(dir, '.mancode', 'hooks', 'session-start.mjs'),
       'utf-8',
     );
     expect(sessionStart).toContain('mancode SessionStart hook');
 
     const userPromptSubmit = await readFile(
-      path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.sh'),
+      path.join(dir, '.mancode', 'hooks', 'user-prompt-submit.mjs'),
       'utf-8',
     );
     expect(userPromptSubmit).toContain('mancode UserPromptSubmit hook');
+  });
+
+  it('keeps legacy hooks until the Claude adapter migrates settings', async () => {
+    const hooksDir = path.join(dir, '.mancode', 'hooks');
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, 'session-start.sh'), 'legacy\n');
+    await writeFile(path.join(hooksDir, 'user-prompt-submit.sh'), 'legacy\n');
+
+    await installMancodeCore(dir);
+
+    await expect(
+      readFile(path.join(hooksDir, 'session-start.mjs'), 'utf-8'),
+    ).resolves.toContain('#!/usr/bin/env node');
+    await expect(
+      readFile(path.join(hooksDir, 'user-prompt-submit.mjs'), 'utf-8'),
+    ).resolves.toContain('#!/usr/bin/env node');
+    await expect(
+      readFile(path.join(hooksDir, 'session-start.sh'), 'utf-8'),
+    ).resolves.toBe('legacy\n');
+    await expect(
+      readFile(path.join(hooksDir, 'user-prompt-submit.sh'), 'utf-8'),
+    ).resolves.toBe('legacy\n');
   });
 
   it('does not wipe existing style tokens or hooks log', async () => {
