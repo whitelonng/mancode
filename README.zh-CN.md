@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="状态：稳定版 v0.3.1" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.2-green?style=flat-square" alt="状态：稳定版 v0.3.2" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-377%20passed-brightgreen?style=flat-square" alt="测试：377 通过" />
 </p>
@@ -63,15 +63,7 @@ cd your-project
 mancode init
 ```
 
----
 
-## 快速开始
-
-```bash
-npm install -g mancode
-cd your-project
-mancode init
-```
 
 初始化后，继续正常使用你的编码代理。`solo` 默认自动生效：日常训练，零仪式感。遇到需要
 计划、测试和多 agent 审查的任务时，使用 `/man`：季后赛，每球必争。
@@ -171,18 +163,6 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 ## 使用方法
 
 初始化后 `solo` 模式自动生效。需要切换模式时，在 AI 编码代理的对话中调用对应的命令：
-
-| 模式 | 命令 | 说明 |
-|---|---|---|
-| `/mamba` | `$mamba` | 诊断与真实验证 |
-| `/man` | `$man` | 完整 9 步工作流 + 风险审查 |
-| `/manps` | `$manps` | 项目健康检查 |
-| `/manteam` | `$manteam` | 团队模式与共享记忆 |
-| `/mansolo` | `$mansolo` | 回到 solo |
-
----
-
-## 模式
 
 | 模式 | 适合场景 | 做什么 |
 |---|---|---|

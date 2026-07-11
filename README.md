@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="Status: stable v0.3.1" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.2-green?style=flat-square" alt="Status: stable v0.3.2" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-377%20passed-brightgreen?style=flat-square" alt="Tests: 377 passed" />
 </p>
@@ -67,15 +67,7 @@ cd your-project
 mancode init
 ```
 
----
-
-## Quick Start
-
-```bash
-npm install -g mancode
-cd your-project
-mancode init
-```
+## 
 
 After initialization, keep using your coding agent normally. `solo` mode runs by
 default: practice day, no ceremony. Use `/man` when a task needs planning,
@@ -198,18 +190,6 @@ The default workflow asks six questions before writing code:
 
 After initialization, `solo` mode is active by default. Invoke other modes as
 slash commands in your AI coding agent's conversation:
-
-| Mode | Command | What It Does |
-|---|---|---|
-| `/mamba` | `$mamba` | Diagnose bugs and validate real user flows |
-| `/man` | `$man` | Full 9-step workflow with risk-based review |
-| `/manps` | `$manps` | Project health scan |
-| `/manteam` | `$manteam` | Team mode and shared memory |
-| `/mansolo` | `$mansolo` | Return to solo mode |
-
----
-
-## Modes
 
 | Mode | Best For | What It Does |
 |---|---|---|
