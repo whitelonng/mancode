@@ -34,6 +34,8 @@
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
 
+[安装方法](#安装方法) · [使用方法](#使用方法)
+
 mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
 GitHub Copilot 和 ZCode。Claude Code 获得完整 hooks、skills 和 subagents；其他
 平台通过持久化 rules、skills 或 instructions 文件提供降级适配。
@@ -48,6 +50,20 @@ mancode 会安装三类能力：
 
 当 AI 编码代理写太多代码、忽略已有 UI 系统、跳过计划，或者关键改动需要稳定工程流程时，
 mancode 可以作为一层本地工作流约束。
+
+<span id="安装方法"></span>
+
+## 安装方法
+
+先通过 npm 全局安装，进入你的项目目录，然后运行初始化命令：
+
+```bash
+npm install -g mancode
+cd your-project
+mancode init
+```
+
+---
 
 ## 快速开始
 
@@ -149,6 +165,22 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 4. 能否不拆新系统？
 5. 非平凡逻辑怎样做最小运行验证？
 6. 有什么没把握的（先自查，仍不确定再问用户）？
+
+<span id="使用方法"></span>
+
+## 使用方法
+
+初始化后 `solo` 模式自动生效。需要切换模式时，在 AI 编码代理的对话中调用对应的命令：
+
+| 模式 | 命令 | 说明 |
+|---|---|---|
+| `/mamba` | `$mamba` | 诊断与真实验证 |
+| `/man` | `$man` | 完整 9 步工作流 + 风险审查 |
+| `/manps` | `$manps` | 项目健康检查 |
+| `/manteam` | `$manteam` | 团队模式与共享记忆 |
+| `/mansolo` | `$mansolo` | 回到 solo |
+
+---
 
 ## 模式
 

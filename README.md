@@ -35,6 +35,8 @@ different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
 
+[Installation](#installation) · [Usage](#usage)
+
 mancode ships with adapters for Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, and ZCode. Claude Code gets the full hooks,
 skills, and subagents setup; the other adapters receive durable rules, skills,
@@ -52,6 +54,20 @@ mancode installs three things:
 Use mancode when an AI coding agent writes too much code, ignores your existing
 UI system, skips planning, or needs a repeatable engineering workflow for
 production changes.
+
+<span id="installation"></span>
+
+## Installation
+
+Install globally via npm, then `cd` into your project and run the init command:
+
+```bash
+npm install -g mancode
+cd your-project
+mancode init
+```
+
+---
 
 ## Quick Start
 
@@ -175,6 +191,23 @@ The default workflow asks six questions before writing code:
 4. Can this avoid a new subsystem?
 5. What is the smallest meaningful runtime check?
 6. What remains uncertain after checking the code and docs?
+
+<span id="usage"></span>
+
+## Usage
+
+After initialization, `solo` mode is active by default. Invoke other modes as
+slash commands in your AI coding agent's conversation:
+
+| Mode | Command | What It Does |
+|---|---|---|
+| `/mamba` | `$mamba` | Diagnose bugs and validate real user flows |
+| `/man` | `$man` | Full 9-step workflow with risk-based review |
+| `/manps` | `$manps` | Project health scan |
+| `/manteam` | `$manteam` | Team mode and shared memory |
+| `/mansolo` | `$mansolo` | Return to solo mode |
+
+---
 
 ## Modes
 
