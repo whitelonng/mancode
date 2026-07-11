@@ -70,6 +70,67 @@ describe('mancode workflow command', () => {
     });
   });
 
+  it('workflow review enforces a bounded targeted review', async () => {
+    const meta = await createWorkflow(dir, 'review login change', 'man');
+    await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], { step: '6' }),
+    );
+
+    const initialized = await captureLog(() =>
+      workflow(dir, 'review', [meta.taskId, 'init'], {
+        reviewDepth: 'targeted',
+        reviewDomain: 'quality',
+        json: true,
+      }),
+    );
+    expect(initialized.code).toBe(EXIT_OK);
+
+    await writeFile(
+      path.join(dir, '.mancode', 'workflows', meta.taskId, 'film-report-1.md'),
+      '# Film report\n',
+      'utf-8',
+    );
+
+    const completed = await captureLog(() =>
+      workflow(dir, 'review', [meta.taskId, 'complete'], {
+        reviewDomain: 'quality',
+        report: 'film-report-1.md',
+        blockers: '',
+        json: true,
+      }),
+    );
+    expect(completed.code).toBe(EXIT_OK);
+
+    const finished = await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], {
+        step: '9',
+        status: 'completed',
+      }),
+    );
+    expect(finished.code).toBe(EXIT_OK);
+  });
+
+  it('workflow completion rejects an unfinished governed review', async () => {
+    const meta = await createWorkflow(dir, 'review checkout change', 'man');
+    await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], { step: '6' }),
+    );
+    await captureLog(() =>
+      workflow(dir, 'review', [meta.taskId, 'init'], {
+        reviewDepth: 'full',
+      }),
+    );
+
+    const finished = await captureLog(() =>
+      workflow(dir, 'update', [meta.taskId], {
+        step: '9',
+        status: 'completed',
+      }),
+    );
+    expect(finished.code).toBe(EXIT_INVALID_ARG);
+    expect(finished.stderr.join('\n')).toContain('review is incomplete');
+  });
+
   it('workflow update rejects steps beyond the workflow mode max', async () => {
     const meta = await createWorkflow(dir, 'plan only', 'mamba');
 

@@ -1,5 +1,14 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  type ReviewLedger,
+  completeReviewDomain,
+  initializeReview,
+  isReviewDepth,
+  isReviewDomain,
+  readReviewLedger,
+  remediateReviewBlockers,
+} from '../system/review-ledger.js';
 import { upsertActivePlan } from '../system/team-memory.js';
 import {
   type WorkflowMeta,
@@ -30,6 +39,11 @@ export interface WorkflowOptions {
   blockingReason?: string;
   outcome?: string;
   planVersion?: string;
+  reviewDepth?: string;
+  reviewDomain?: string;
+  report?: string;
+  blockers?: string;
+  resolved?: string;
 }
 
 interface WorkflowView extends WorkflowMeta {
@@ -42,6 +56,7 @@ interface WorkflowView extends WorkflowMeta {
  * 支持：
  * - list：列出 workflow
  * - show <taskId>：显示详情
+ * - review <taskId> <action>：管理有界审查状态
  * - clean [--dry-run] [--older-than 30d]：清理 workflow
  */
 export async function workflow(
@@ -69,6 +84,8 @@ export async function workflow(
       return workflowList(rootDir, options);
     case 'show':
       return workflowShow(rootDir, args[0], options);
+    case 'review':
+      return workflowReview(rootDir, args, options);
     case 'clean':
       return workflowClean(rootDir, options);
     default:
@@ -83,11 +100,125 @@ export async function workflow(
       } else {
         console.error(`✗  Invalid workflow subcommand: ${subcommand}`);
         console.error(
-          '   Use: create <man|mamba|manteam> <task> | update <taskId> | list | show <taskId> | clean',
+          '   Use: create <man|mamba|manteam> <task> | update <taskId> | review <taskId> <init|complete|remediate|show> | list | show <taskId> | clean',
         );
       }
       return EXIT_INVALID_ARG;
   }
+}
+
+async function workflowReview(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const taskId = args[0];
+  const action = args[1];
+  if (!taskId || !isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId ?? ''}`);
+  }
+  const meta = await readWorkflow(rootDir, taskId);
+  if (!meta) return invalidArg(options, `workflow not found: ${taskId}`);
+  if (meta.mode !== 'man' && meta.mode !== 'manteam') {
+    return invalidArg(options, 'review is only valid for man or manteam');
+  }
+  if (action === 'show') {
+    const ledger = await readReviewLedger(rootDir, taskId);
+    if (!ledger)
+      return invalidArg(options, `review not initialized: ${taskId}`);
+    outputReviewLedger(ledger, options);
+    return EXIT_OK;
+  }
+  if (meta.status !== 'in_progress' || meta.currentStep < 6) {
+    return invalidArg(
+      options,
+      'review requires an in_progress workflow at step 6 or later',
+    );
+  }
+
+  try {
+    let ledger: ReviewLedger;
+    if (action === 'init') {
+      if (!isReviewDepth(options.reviewDepth)) {
+        return invalidArg(
+          options,
+          `invalid --review-depth: ${options.reviewDepth ?? ''}`,
+        );
+      }
+      if (
+        options.reviewDomain !== undefined &&
+        !isReviewDomain(options.reviewDomain)
+      ) {
+        return invalidArg(
+          options,
+          `invalid --review-domain: ${options.reviewDomain}`,
+        );
+      }
+      ledger = await initializeReview(
+        rootDir,
+        taskId,
+        options.reviewDepth,
+        isReviewDomain(options.reviewDomain) ? options.reviewDomain : undefined,
+      );
+    } else if (action === 'complete') {
+      if (!isReviewDomain(options.reviewDomain) || !options.report) {
+        return invalidArg(
+          options,
+          'review complete requires --review-domain and --report',
+        );
+      }
+      ledger = await completeReviewDomain(
+        rootDir,
+        taskId,
+        options.reviewDomain,
+        options.report,
+        parseCsv(options.blockers),
+      );
+    } else if (action === 'remediate') {
+      ledger = await remediateReviewBlockers(
+        rootDir,
+        taskId,
+        parseCsv(options.resolved),
+      );
+    } else {
+      return invalidArg(
+        options,
+        `invalid review action: ${action ?? ''}`,
+        'Use: mancode workflow review <taskId> <init|complete|remediate|show>',
+      );
+    }
+    outputReviewLedger(ledger, options);
+    return EXIT_OK;
+  } catch (error) {
+    return invalidArg(
+      options,
+      error instanceof Error ? error.message : 'unable to update review',
+    );
+  }
+}
+
+function outputReviewLedger(
+  ledger: Awaited<ReturnType<typeof readReviewLedger>>,
+  options: WorkflowOptions,
+): void {
+  if (options.json) {
+    console.log(JSON.stringify(ledger, null, 2));
+    return;
+  }
+  if (!ledger) return;
+  const openBlockers = ledger.blockers.filter(
+    (blocker) => blocker.status === 'open',
+  );
+  console.log(
+    `Review: ${ledger.depth}; domains ${ledger.completedDomains.length}/${ledger.requiredDomains.length}; open blockers ${openBlockers.length}; remediation ${ledger.remediationRounds}/1`,
+  );
+}
+
+function parseCsv(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function workflowCreate(

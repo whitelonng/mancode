@@ -16,9 +16,10 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
+  <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="状态：稳定版 v0.3.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
-  <img src="https://img.shields.io/badge/tests-370%20passed-brightgreen?style=flat-square" alt="测试：370 通过" />
+  <img src="https://img.shields.io/badge/tests-377%20passed-brightgreen?style=flat-square" alt="测试：377 通过" />
 </p>
 
 <p align="center">
@@ -97,7 +98,7 @@ AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 ins
 
 - **减少 AI 过度设计**：先复用已有代码、标准库、已安装依赖和一行修复，再考虑新增抽象。
 - **在存在 UI 时匹配现有设计系统**：检查项目 UI 依赖、Tailwind 配置、CSS 变量和已有组件，让 agent 复用现有颜色、字体和交互模式。
-- **加入结构化 AI 代码审查**：`/man` 提供 9 步流程，包括调研、计划审批、实现、测试和双重审查。
+- **加入有界 AI 代码审查**：`/man` 提供 9 步流程，包括调研、计划审批、实现、测试和按风险选择的审查，同一领域不会无限重复。
 - **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/workflows/<taskId>/`。
 - **支持团队记忆**：`/manteam` 读写 `.mancode/memory/` 下的共享项目上下文。
 - **扫描项目健康度**：`mancode manps` 检测陈旧 TODO、未使用依赖、风险依赖和硬编码设计值。
@@ -115,6 +116,17 @@ mancode 适合：
 
 mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在现有 agent
 上加的一层工作流：提供上下文、模式切换和审查纪律。
+
+### 针对最新模型审查能力的优化
+
+新的推理模型往往自带较强自审倾向，较小模型则可能在没有明确要求时很少审查。mancode
+同时考虑了这两种行为：
+
+- `solo` 保持轻量：只对本次 diff 做一次受限自检，运行最窄的有效验证，不调用额外 reviewer，也不开 review 循环。
+- `/man` 对普通治理任务执行一次定向质量审查；鉴权、支付、敏感数据、迁移、公开 API、未可信输入、并发或基础设施等硬风险才执行质量 + 安全完整审查。
+- finding 必须有改动行证据和用户影响。workflow CLI 会记录所需审查领域和 blocker，只允许一轮修复；审查未完成或 blocker 未清零时不能完成任务。
+
+这样既不会让强模型一直 review，也不会因为弱模型不主动审查而降低任务质量。
 
 ## 前后对比
 
@@ -142,9 +154,9 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 | 模式 | 适合场景 | 做什么 |
 |---|---|---|
-| `solo` | 日常编码 · 日常训练 | 轻量 hooks、风格感知、YAGNI 检查 |
+| `solo` | 日常编码 · 日常训练 | 轻量 hooks、风格感知、YAGNI 检查和一次受限 diff 自检 |
 | `/mamba` | 诊断与真实验证 · 曼巴心态 | 复现缺陷、定位根因、驱动真实用户路径并执行回归检查 |
-| `/man` | 生产级或高风险改动 · 季后赛 | 完整 9 步工作流和双重多 agent 审查 |
+| `/man` | 生产级或高风险改动 · 季后赛 | 完整 9 步工作流和定向/完整风险审查 |
 | `/manteam` | 团队项目 · 上场五人，一条心 | 共享记忆、决策记录、协作和 Conventional Commits |
 | `/manps` | 清理和维护 · 季前赛 | 输出 Markdown 和 JSON 项目健康报告 |
 | `/mansolo` | 回到默认模式 | 将当前模式重置为 `solo` |
@@ -159,10 +171,10 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 3. **计划**：Plan Coach 输出可验证的持久计划。
 4. **计划关卡**：选择只要计划、继续执行或修改计划。
 5. **实施**：Head Coach 按确认计划实现。
-6. **验证**：build、lint、test、smoke test；需要真实诊断时使用 `/mamba`。
-7. **录像分析 1**：代码质量审查与修复。
-8. **录像分析 2**：安全与边界审查。
-9. **收尾**：最终复验、summary、workflow 状态和 memory 更新。
+6. **验证与审查范围**：运行 build、lint、test、smoke test，再根据实际 diff 和硬风险选择定向或完整审查。
+7. **录像分析 1**：只对改动行为做有证据的质量审查。
+8. **录像分析 2**：仅完整审查任务执行安全与边界审查，并抑制相同根因的重复评论。
+9. **收尾**：一轮 blocker 修复、不重复 reviewer 的最终复验、summary、workflow 状态和 memory 更新。
 
 跳过的步骤会被记录。所有产物保留在本地，之后可以回看当时为什么做某个决策。
 
@@ -264,7 +276,7 @@ mancode install --minimal # 只安装 solo 必需文件
 ```bash
 # Claude Code / Cursor
 /mamba                     # 定位 bug 并验证真实用户路径
-/man                       # 完整 9 步流程和双重审查
+/man                       # 完整 9 步流程和有界风险审查
 /manps                     # 项目健康检查
 /manteam                   # 团队模式和共享记忆
 /mansolo                   # 回到 solo 模式
@@ -287,6 +299,10 @@ mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man|mamba|manteam> "<task>" [--parent-task <taskId>]
 mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
+mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
+mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
+mancode workflow review <taskId> remediate --resolved Q1,Q2
+mancode workflow review <taskId> show [--json]
 mancode workflow list [--json]
 mancode workflow show <taskId> [--json]
 mancode workflow clean [--older-than 30d] [--dry-run]
@@ -362,11 +378,14 @@ mancode status --json
 
 ### `mancode workflow`
 
-创建和管理 `/mamba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。关联 `/mamba` 子任务只能在父任务处于 Step 6 且正在进行时创建。
+创建和管理 `/mamba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。关联 `/mamba` 子任务只能在父任务处于 Step 6 且正在进行时创建；严格模式的 review 状态会记录所需领域、blocker ID 和唯一一轮修复。
 
 ```bash
 mancode workflow create man "refactor auth module"
 mancode workflow update <taskId> --step 4 --plan-version 2
+mancode workflow review <taskId> init --review-depth full
+mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
+mancode workflow review <taskId> remediate --resolved Q1
 mancode workflow create mamba "verify auth regression" --parent-task <taskId>
 mancode workflow update <mambaTaskId> --status completed --outcome verified
 mancode workflow show <taskId> --json

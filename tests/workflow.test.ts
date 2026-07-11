@@ -158,6 +158,7 @@ describe('workflow helpers', () => {
       await updateWorkflow(dir, parent.taskId, {
         currentStep: 9,
         status: 'completed',
+        skippedSteps: ['film-1', 'film-2'],
       });
       await expect(
         createWorkflow(dir, 'too late', 'mamba', {

@@ -108,6 +108,8 @@ function renderPracticeRules(): string {
     '6. Only then write the smallest new implementation.',
     '',
     'For every task, consider: why this change, what already exists, and what is the smallest useful diff?',
+    '',
+    'In solo mode, use the narrowest meaningful validation and one bounded self-check limited to the current diff. Do not start another reviewer or repeat the review. Only recommend man for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, or infrastructure risk.',
   ].join('\n');
 }
 

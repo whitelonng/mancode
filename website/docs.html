@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Complete mancode documentation: installation, modes, commands, adapters, and maintenance." />
+    <meta name="theme-color" content="#08090a" />
+    <link rel="icon" href="./logo.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./docs.css" />
+    <title>mancode Docs — Install, run, and maintain your workflow</title>
+    <script>
+      document.documentElement.classList.replace("no-js", "js");
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("mancode-theme") || "dark";
+      } catch {}
+    </script>
+    <script src="./site.js" defer></script>
+    <script src="./docs.js" defer></script>
+  </head>
+  <body class="docs-body">
+    <a class="skip-link" href="#content">Skip to content</a>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="docs-topbar">
+      <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
+      <span class="docs-wordmark">Documentation / v0.3.1</span>
+      <div class="docs-top-links">
+        <a href="./index.html">Website</a>
+        <a href="https://github.com/whitelonng/mancode">GitHub</a>
+        <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"><span aria-hidden="true">◐</span></button>
+        <a class="language-link" href="./docs.zh-CN.html" lang="zh-CN" aria-label="切换到中文">中</a>
+      </div>
+    </header>
+
+    <div class="docs-layout">
+      <aside class="docs-sidebar" aria-label="Documentation navigation">
+        <label class="docs-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+          <input type="search" data-doc-search placeholder="Search docs" aria-label="Search documentation" />
+          <kbd>⌘K</kbd>
+        </label>
+        <nav class="docs-nav">
+          <div class="docs-nav-group"><p>Start here</p><a class="active" href="#overview">Overview</a><a href="#install">Install &amp; initialize</a><a href="#recommend">Recommended workflow</a></div>
+          <div class="docs-nav-group"><p>Use mancode</p><a href="#modes">Modes</a><a href="#commands">CLI commands</a><a href="#workflow">Workflow records</a><a href="#platforms">Platforms</a></div>
+          <div class="docs-nav-group"><p>Maintain</p><a href="#style">Refresh project style</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></div>
+          <div class="docs-nav-group"><p>Links</p><a href="./index.html">Marketing site</a><a href="./docs.zh-CN.html">中文文档</a><a href="https://github.com/whitelonng/mancode/blob/main/README.md">README on GitHub</a></div>
+        </nav>
+      </aside>
+
+      <main class="docs-main" id="content">
+        <div class="docs-breadcrumb"><span>mancode</span><span>/</span><b>Documentation</b></div>
+        <section class="docs-hero" id="overview" data-searchable>
+          <p class="eyebrow">Practice to playoffs</p>
+          <h1>Give your coding agent<br />a real playbook.</h1>
+          <p>mancode is a local-first workflow harness for the coding agent you already use. It adds project context, task intensity, durable artifacts, and review discipline without replacing Claude Code, Cursor, Codex, Copilot, or ZCode.</p>
+          <div class="docs-note"><strong>Start here</strong><p>Use <code>solo</code> for day-to-day work. It performs one bounded diff self-check with no extra reviewer loop. Escalate to <code>/mamba</code> for diagnosis and <code>/man</code> when a production change deserves a plan, tests, and risk-based review.</p></div>
+        </section>
+
+        <section class="doc-section" id="install" data-searchable>
+          <h2>Install &amp; initialize</h2>
+          <p>Install mancode globally, enter a repository or supported project directory, then initialize the default adapter. mancode recognizes a git repository or common manifests such as <code>package.json</code>, <code>pyproject.toml</code>, <code>go.mod</code>, and <code>Cargo.toml</code>.</p>
+          <div class="docs-steps">
+            <article class="docs-step"><b>01</b><strong>Install</strong><p>Install the CLI once on your machine.</p></article>
+            <article class="docs-step"><b>02</b><strong>Enter</strong><p>Run it from the project you want mancode to understand.</p></article>
+            <article class="docs-step"><b>03</b><strong>Initialize</strong><p>Create local state, scan the project, and install the adapter.</p></article>
+          </div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm install -g mancode
+<span class="command-prompt">$</span> cd your-project
+<span class="command-prompt">$</span> mancode init</code></pre><button type="button" data-copy="npm install -g mancode\ncd your-project\nmancode init">Copy</button></div>
+          <h3>Initialize a specific platform</h3>
+          <p>Use <code>--platform</code> when the current project should target a particular coding surface from the start.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform cursor</code></pre><button type="button" data-copy="mancode init --platform cursor">Copy</button></div>
+          <table class="docs-table"><thead><tr><th>Option</th><th>Use it when</th><th>What it does</th></tr></thead><tbody>
+            <tr><td><code>--force</code></td><td>Repair or reinstall generated configuration</td><td>Reinstalls while preserving scanned style tokens.</td></tr>
+            <tr><td><code>--yes</code></td><td>CI or a non-interactive shell</td><td>Skips confirmation prompts.</td></tr>
+            <tr><td><code>--team</code></td><td>You need shared memory immediately</td><td>Forces team mode on.</td></tr>
+            <tr><td><code>--no-team</code></td><td>This is a personal project</td><td>Forces team mode off.</td></tr>
+            <tr><td><code>--style NAME</code></td><td>You have a named visual preference</td><td>Saves it as the default style preference.</td></tr>
+          </tbody></table>
+        </section>
+
+        <section class="doc-section" id="recommend" data-searchable>
+          <h2>Recommended workflow</h2>
+          <p>mancode is deliberately not a mandatory ceremony layer. Choose the smallest mode that creates enough confidence for the task.</p>
+          <div class="mode-guide">
+            <article><small>Routine change</small><h3>solo</h3><p>Use for a small feature, refactor, or UI tweak. You get project context, the narrowest meaningful validation, and one diff-only self-check without another reviewer.</p></article>
+            <article><small>Bug or uncertain behavior</small><h3>/mamba</h3><p>Use when the right answer depends on reproduction and real validation—not a plausible patch.</p></article>
+            <article><small>Production or high-risk change</small><h3>/man</h3><p>Use when planning, verification, and independent review need to be durable and visible.</p></article>
+            <article><small>Team or maintenance</small><h3>/manteam · /manps</h3><p>Use shared memory for a team; use health scans before a cleanup or dependency-maintenance pass.</p></article>
+          </div>
+          <div class="docs-admonition"><strong>Rule of thumb</strong><p>Do not use <code>/man</code> just because a task is long. Use it when a wrong decision would be expensive, hard to reverse, or difficult to review after the fact.</p></div>
+        </section>
+
+        <section class="doc-section" id="modes" data-searchable>
+          <h2>Modes</h2>
+          <p>The five working modes cover different kinds of engineering pressure. <code>/mansolo</code> is the reset command that returns the project to the default <code>solo</code> mode.</p>
+          <table class="docs-table"><thead><tr><th>Mode</th><th>Best for</th><th>What changes</th></tr></thead><tbody>
+            <tr><td><code>solo</code></td><td>Daily coding</td><td>Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check.</td></tr>
+            <tr><td><code>/mamba</code></td><td>Diagnosis</td><td>Reproduce the failure, find the cause, validate real user paths, and run regression checks.</td></tr>
+            <tr><td><code>/man</code></td><td>High-stakes work</td><td>Full nine-step workflow with a plan gate, targeted/full risk review, and one remediation round.</td></tr>
+            <tr><td><code>/manteam</code></td><td>Team projects</td><td>Shared memory, decision records, coordination, and Conventional Commits guidance.</td></tr>
+            <tr><td><code>/manps</code></td><td>Maintenance</td><td>Deterministic project-health scan with Markdown and JSON reports.</td></tr>
+          </tbody></table>
+          <h3>How to invoke a mode</h3>
+          <p>Claude Code and Cursor expose slash-style commands. Codex in the ChatGPT desktop app, CLI, and IDE reads repository skills, so <code>$man</code>, <code>$mamba</code>, and related mentions are the portable explicit syntax.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># Claude Code / Cursor</span>
+/mamba
+/man
+/manteam
+
+<span class="command-prompt"># Codex app / CLI / IDE</span>
+$mamba
+$man
+$manteam</code></pre><button type="button" data-copy="/mamba\n/man\n/manteam">Copy</button></div>
+        </section>
+
+        <section class="doc-section" id="commands" data-searchable>
+          <h2>CLI commands</h2>
+          <p>Use these commands from an initialized project unless noted otherwise. Commands that read state fail safely if <code>.mancode/state.json</code> is missing.</p>
+          <div class="command-list">
+            <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project profile, scans design tokens when relevant, and installs the selected adapter.</p><ul><li>Run once for a new project.</li><li>Use <code>--platform</code> to target a specific agent.</li><li>Use <code>--force</code> to repair generated files.</li></ul></article>
+            <article class="command-card"><header><h3>mancode status [--json]</h3><span>Inspect</span></header><p>Shows the current mode, detected stack, installed platforms, and readiness. Claude Code installations also report hook registration and estimated injection size.</p><ul><li>Use plain output for a quick human check.</li><li>Use <code>--json</code> for scripts or CI.</li></ul></article>
+            <article class="command-card"><header><h3>mancode install &lt;platform&gt;</h3><span>Adapter</span></header><p>Installs or repairs one platform adapter after initialization.</p><ul><li>Platforms: <code>claude-code</code>, <code>cursor</code>, <code>codex</code>, <code>copilot</code>, <code>zcode</code>.</li><li>Use <code>--force</code> to rewrite generated configuration.</li><li>Use <code>--minimal</code> for solo-mode essentials only.</li></ul></article>
+            <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists the adapters this version knows how to install. Use this before scripting platform selection.</p></article>
+            <article class="command-card"><header><h3>mancode workflow …</h3><span>Track</span></header><p>Creates and manages validated metadata for <code>man</code>, <code>mamba</code>, and <code>manteam</code> workflow runs.</p><ul><li><code>create &lt;mode&gt; "&lt;task&gt;"</code> starts a record.</li><li><code>update &lt;taskId&gt;</code> advances steps or status.</li><li><code>review &lt;taskId&gt; …</code> enforces required domains, blockers, and one remediation round.</li><li><code>list</code>, <code>show</code>, and <code>clean</code> inspect and maintain records.</li></ul></article>
+            <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic preseason health scan. Areas include <code>deps</code>, <code>security</code>, <code>dead-code</code>, and <code>config</code>.</p><ul><li>Writes Markdown and JSON reports under <code>.mancode/</code>.</li><li>Scans only; remediation remains an explicit decision.</li></ul></article>
+            <article class="command-card"><header><h3>mancode refresh-style</h3><span>Rescan</span></header><p>Refreshes the project profile and, when UI assets exist, rescans design tokens.</p><ul><li>Updates <code>project-profile.json</code> and <code>style-tokens.json</code>.</li><li>Afterward, run <code>mancode install &lt;platform&gt; --force</code> for static-instruction adapters.</li></ul></article>
+            <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version. Use it when reporting an issue or validating an update.</p></article>
+          </div>
+        </section>
+
+        <section class="doc-section" id="workflow" data-searchable>
+          <h2>Workflow records</h2>
+          <p><code>mancode workflow</code> manages metadata used by the strict modes. The records make progress, plan versions, skipped steps, and review outcomes inspectable after the chat is over.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow create man "refactor auth module"
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4 --plan-version 2
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth full
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
+<span class="command-prompt">$</span> mancode workflow create mamba "verify auth regression" --parent-task &lt;taskId&gt;
+<span class="command-prompt">$</span> mancode workflow show &lt;taskId&gt; --json
+<span class="command-prompt">$</span> mancode workflow clean --older-than 30d --dry-run</code></pre><button type="button" data-copy="mancode workflow create man &quot;refactor auth module&quot;\nmancode workflow show &lt;taskId&gt; --json">Copy</button></div>
+          <div class="docs-note"><strong>Constraint</strong><p>A linked <code>mamba</code> child may only be created while its parent workflow is active at Step 6. New governed workflows also cannot complete until their required review domains are recorded and all blocker IDs are resolved.</p></div>
+        </section>
+
+        <section class="doc-section" id="platforms" data-searchable>
+          <h2>Platforms &amp; adapters</h2>
+          <p>mancode intentionally adapts to each surface instead of pretending every tool has the same extension points. Claude Code receives the fullest implementation; other tools receive persistent rules, skills, or managed instruction files.</p>
+          <table class="docs-table"><thead><tr><th>Platform</th><th>Installed integration</th><th>Notes</th></tr></thead><tbody>
+            <tr><td>Claude Code</td><td>Hooks, skills, subagents, workflow integration</td><td>Full integration: session start and prompt-submit hooks can inject project context.</td></tr>
+            <tr><td>Cursor</td><td><code>.cursor/rules/*.mdc</code></td><td>Rules supply persistent project guidance and mode descriptions.</td></tr>
+            <tr><td>Codex</td><td><code>AGENTS.md</code> + <code>.agents/skills/</code></td><td>Use portable <code>$man*</code> skill mentions in the app, CLI, and IDE.</td></tr>
+            <tr><td>GitHub Copilot</td><td><code>.github/copilot-instructions.md</code></td><td>Managed instruction block; no equivalent hook injection today.</td></tr>
+            <tr><td>ZCode</td><td><code>AGENTS.md</code> + provisional project skills</td><td>Skill discovery and slash-command paths remain a release verification gate.</td></tr>
+          </tbody></table>
+        </section>
+
+        <section class="doc-section" id="style" data-searchable>
+          <h2>Refresh project style</h2>
+          <p>Run this after a design-system migration, substantial UI change, or when a previously non-UI project gains a user interface.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-style
+<span class="command-prompt">$</span> mancode install cursor --force</code></pre><button type="button" data-copy="mancode refresh-style\nmancode install cursor --force">Copy</button></div>
+          <ul class="docs-checklist"><li>Claude Code reads refreshed style information through its hooks.</li><li>Cursor, Codex, and Copilot use static adapter instructions, so reinstall their adapter with <code>--force</code> after a refresh.</li><li>Only UI projects receive design-token-specific guidance.</li></ul>
+        </section>
+
+        <section class="doc-section" id="uninstall" data-searchable>
+          <h2>Uninstall safely</h2>
+          <p>Uninstall preserves user-authored rules, instructions, and unrelated Claude settings. You can remove one adapter or remove all mancode artifacts from a project.</p>
+          <h3>Remove one adapter</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy="mancode uninstall cursor --force">Copy</button></div>
+          <h3>Clean reinstall</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
+<span class="command-prompt">$</span> mancode init
+<span class="command-prompt">$</span> mancode install &lt;platform&gt;</code></pre><button type="button" data-copy="mancode uninstall --all --force\nmancode init\nmancode install &lt;platform&gt;">Copy</button></div>
+          <h3>Remove mancode completely</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
+<span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy="mancode uninstall --all --force\nnpm uninstall -g mancode">Copy</button></div>
+          <div class="docs-admonition"><strong>Before you remove it</strong><p>Review <code>.mancode/</code> before committing or deleting it. Workflow evidence and browser artifacts can contain project context that your team may want to retain or explicitly ignore.</p></div>
+        </section>
+
+        <section class="doc-section" id="troubleshooting" data-searchable>
+          <h2>Troubleshooting</h2>
+          <h3><code>mancode init</code> says the directory is not a project</h3><p>Run it inside a git repository or one with a recognized project manifest. The initializer intentionally does not treat an arbitrary folder as a project.</p>
+          <h3>Claude Code hooks are not running</h3><p>Restart Claude Code after initialization so it reloads <code>.claude/settings.json</code>. Then run <code>mancode status</code>. If the hooks are still missing, run <code>mancode install claude-code --force</code>.</p>
+          <h3>A platform is “not ready”</h3><p>The target files are missing or its managed block was changed. Run <code>mancode install &lt;platform&gt; --force</code> to regenerate mancode-owned content while preserving user content outside the markers.</p>
+          <h3>Cursor rules do not trigger</h3><p>Confirm that <code>.cursor/rules/mancode-*.mdc</code> exists. Context, practice, and solo rules always apply; the higher-intensity rules activate through their descriptions, so invoke the relevant mode explicitly.</p>
+        </section>
+
+        <p class="docs-search-empty" data-search-empty>No documentation section matches that search.</p>
+        <footer class="docs-footer"><p>mancode is local-first. It sends no telemetry.</p><p><a href="./docs.zh-CN.html">中文文档 →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
+      </main>
+
+      <aside class="docs-toc" aria-label="On this page"><p>On this page</p><a href="#overview">Overview</a><a href="#install">Install</a><a href="#recommend">Recommended workflow</a><a href="#modes">Modes</a><a href="#commands">CLI commands</a><a href="#workflow">Workflow records</a><a href="#platforms">Platforms</a><a href="#style">Refresh style</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></aside>
+    </div>
+  </body>
+</html>

@@ -42,21 +42,24 @@ export const MAN_SKILL: SkillSpec = {
 
 运行实际 build/lint/typecheck/test 和 smoke test。相同代码、环境、命令下相同错误签名失败两次，停止盲试并诊断根因。需要真实浏览器、复杂复现或回归时，用 \`mancode workflow create mamba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；若父曾因该子任务 blocked，先通过 \`workflow update --status in_progress\` 恢复，再更新至 Step 7。blocked 或 manual_test_required 会由 CLI 自动阻塞父任务，不得手改父 metadata，也不得自动越过人工验证要求。
 
+验证后基于**实际 diff**写 \`review-scope.md\`：base、改动文件、需求、已跑验证、硬风险和审查深度。鉴权、支付、敏感数据、迁移/删除、公开 API、未可信输入、并发、跨服务或基础设施命中任一项时用完整审查 \`full\`；否则用定向审查 \`targeted\`。运行 \`mancode workflow review <taskId> init --review-depth targeted --review-domain quality\` 或 \`--review-depth full\`。用户明确跳过审查时才把 \`review\` 写入累计 skippedSteps，并记录残余风险。
+
 ### Step 7: Film #1 代码质量审查与修复
 
-调用 \`film-analyst-offense\` 审查质量、复用、复杂度和测试，写 \`film-report-1.md\`；Head Coach 修复 🔴，对 🟡 写修复或权衡。完成后更新至 Step 8。
+未跳过 review 时调用 \`film-analyst-offense\`，只审查本次 diff 的行为正确性、复用、复杂度和测试，写 \`film-report-1.md\`。每条 finding 必须引用改动行、给出证据和用户影响；最多 3 个新 finding。用稳定 ID（如 Q1）标记 🔴 blocker，并运行 \`mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1,Q2\`；没有 blocker 时传空字符串。此时不修复，先完成所需审查领域，再更新至 Step 8。
 
 ### Step 8: Film #2 安全与边界审查
 
-调用 \`film-analyst-defense\` 审查安全、权限、错误路径、兼容性和边界，写 \`film-report-2.md\`。双审默认执行；用户明确要求才可跳过，通过 CLI 写入累计 skippedSteps 和残余风险。完成后更新至 Step 9。
+\`full\` 才调用 \`film-analyst-defense\`；它必须先读 \`review-scope.md\` 和 \`film-report-1.md\`，只审查安全、权限、错误路径、兼容性、资源和边界。相同根因标记 \`duplicate\`，不得重新报告。写 \`film-report-2.md\` 后以 D1 等稳定 blocker ID 运行 \`mancode workflow review <taskId> complete --review-domain security --report film-report-2.md --blockers D1\`。\`targeted\` 不执行第二审，也不把它描述成“跳过”；完成后更新至 Step 9。
 
 ### Step 9: 增强收尾
 
-1. 修复 Film #2 的 🔴 并重跑验证。
-2. 写 \`summary.md\`：改动、新建、复用、验证、双审和跳过步骤。
-3. 验证通过且 🔴 清零才用 CLI 写 \`completed\`；否则用 \`--status blocked --blocking-reason "<原因>"\`。
-4. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。
-5. worktree 合并前取得用户确认；终态写入成功后 state 回 solo 并清空 workflow 指针。
+1. 存在 open blocker 时，Head Coach 一次性修复全部 blocker，并用 \`mancode workflow review <taskId> remediate --resolved Q1,D1\` 记录唯一一轮修复；没有 blocker 时不运行 remediate。不要为 🟡/🟢 扩大改动。
+2. 重跑受影响验证，不重新运行已完成的 reviewer。修复若引入新的高风险面则标记 blocked，不能开启无界 review 循环。
+3. 写 \`summary.md\`：改动、新建、复用、验证、审查深度、findings 处置、跳过步骤和残余风险。
+4. CLI 确认所需审查领域完成且 blocker 清零后才写 \`completed\`；否则用 \`--status blocked --blocking-reason "<原因>"\`。
+5. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。
+6. worktree 合并前取得用户确认；终态写入成功后 state 回 solo 并清空 workflow 指针。
 
 任何 step/status/outcome/planVersion 变化都必须经过 workflow CLI；CLI 拒绝时保留当前 state 并报告原因，不可绕过校验直接改 metadata.json。
 

@@ -26,6 +26,8 @@ export const FILM_ANALYST_DEFENSE_AGENT: AgentSpec = {
   - 🟢 可选（加固建议）
 - **安全问题一律 🔴**
 - 最后给评分（1-10）+ 通过 / 不通过
+- 只审查本次 diff、用户需求和直接受影响路径；最多 3 个新问题
+- 每个问题必须包含改动行、可核查证据和用户影响
 
 ## 你不写代码
 
@@ -77,8 +79,7 @@ export const FILM_ANALYST_DEFENSE_AGENT: AgentSpec = {
 
 ## 不要重复 Film Analyst #1 的反馈
 
-如果 #1 已经指出的可读性 / DRY / 复杂度问题，**不要再说**。
-你专注边界、安全、性能、资源。
+开始前必须读取 \`review-scope.md\` 和 \`film-report-1.md\`。如果 #1 已经指出相同根因，标记为 \`duplicate\` 并且不要重新输出为 finding。你只专注边界、安全、性能、资源；🔴 使用稳定 ID（D1、D2……）。
 
 ## 红线
 

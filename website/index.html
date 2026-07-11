@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="mancode gives AI coding agents the right level of engineering discipline for every task."
+    />
+    <meta name="theme-color" content="#08090a" />
+    <meta property="og:title" content="mancode — Ship clean code, not AI bloat." />
+    <meta
+      property="og:description"
+      content="A local-first workflow harness for Claude Code, Cursor, Codex, Copilot, and ZCode."
+    />
+    <link rel="icon" href="./logo.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>mancode — Ship clean code, not AI bloat.</title>
+    <script>
+      document.documentElement.classList.replace("no-js", "js");
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("mancode-theme") || "dark";
+      } catch {}
+    </script>
+    <script src="./site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="mancode home">
+        <img src="./logo.png" alt="" />
+        <span>mancode</span>
+        <i aria-hidden="true"></i>
+      </a>
+      <nav class="main-nav" aria-label="Primary navigation">
+        <a href="#modes">Modes</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#platforms">Platforms</a>
+        <a href="./docs.html">Docs</a>
+        <a href="https://github.com/whitelonng/mancode">GitHub</a>
+      </nav>
+      <div class="header-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme">
+          <span aria-hidden="true">◐</span><b>Theme</b>
+        </button>
+        <a class="language-link" href="./index.zh-CN.html" lang="zh-CN" aria-label="切换到中文">中</a>
+        <a class="button button-small button-ghost header-cta" href="#install">Get mancode ↘</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero section-grid" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow">AI coding agent workflow harness</p>
+          <h1 aria-label="Ship clean code, not AI bloat">
+            <span>Ship clean</span>
+            <span class="outline">code. Not</span>
+            <span class="orange">AI bloat.</span>
+          </h1>
+          <div class="hero-foot">
+            <p class="hero-intro">
+              The right level of engineering discipline for every task. Reuse what exists, match the
+              project, and go playoff mode only when the stakes demand it.
+            </p>
+            <div class="command-bar">
+              <code><span>&gt;</span> npm install -g mancode</code>
+              <button type="button" data-copy="npm install -g mancode">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-label="mancode playoff workflow preview">
+          <svg class="court" viewBox="0 0 500 760" aria-hidden="true">
+            <rect x="1" y="1" width="498" height="758" rx="4" />
+            <path d="M1 380h498M250 1v758" />
+            <circle cx="250" cy="380" r="62" />
+            <path d="M164 1v164h172V1M190 165a60 60 0 0 0 120 0" />
+            <path class="route" d="M84 650C92 540 176 556 212 484S244 282 372 204" />
+            <circle cx="84" cy="650" r="9" />
+            <circle cx="372" cy="204" r="9" />
+          </svg>
+
+          <div class="mode-stack">
+            <article class="play-card">
+              <div class="play-card-top">
+                <span>Mode / 03</span>
+                <span class="live">Active</span>
+              </div>
+              <div class="play-card-name">
+                <strong>/man</strong>
+                <span>Playoff<br />discipline</span>
+              </div>
+              <div class="possession">
+                <div><b>01</b><span>Scout</span></div>
+                <div class="active"><b>02</b><span>Execute</span></div>
+                <div><b>03</b><span>Risk review</span></div>
+              </div>
+            </article>
+          </div>
+
+          <div class="vertical-score" aria-hidden="true">
+            <span>local-first</span><span>no telemetry</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="ticker" aria-label="Supported coding agents">
+        <strong>Works with</strong>
+        <div class="ticker-window">
+          <div class="ticker-track">
+            <span>Claude Code</span><span>Cursor</span><span>Codex</span><span>GitHub Copilot</span><span>ZCode</span>
+            <span>Claude Code</span><span>Cursor</span><span>Codex</span><span>GitHub Copilot</span><span>ZCode</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="contrast-section" id="why">
+        <div class="section-kicker reveal">
+          <span>01 / The problem</span>
+          <span>Keep the speed. Lose the sprawl.</span>
+        </div>
+        <div class="contrast-heading reveal">
+          <p>AI writes fast.</p>
+          <h2>It should also know<br />when to stop.</h2>
+        </div>
+        <div class="versus-grid">
+          <article class="code-case code-case-bad reveal">
+            <header><span>Without a game plan</span><b>+ 12 files</b></header>
+            <div class="code-lines" aria-label="Example of an over-engineered change">
+              <p><i>+</i> src/components/LogoutButton.tsx</p>
+              <p><i>+</i> src/styles/logout-button.css</p>
+              <p><i>+</i> src/theme/logout-tokens.ts</p>
+              <p><i>+</i> src/services/auth-controller.ts</p>
+              <p><i>+</i> src/hooks/useLogoutFlow.ts</p>
+            </div>
+            <footer><span>New abstractions</span><strong>5</strong></footer>
+          </article>
+
+          <div class="versus-mark reveal" aria-hidden="true">VS</div>
+
+          <article class="code-case code-case-good reveal">
+            <header><span>With mancode / solo</span><b>+ 3 lines</b></header>
+            <pre><code>&lt;Button variant="default"
+  onClick={handleLogout}&gt;
+  Logout
+&lt;/Button&gt;</code></pre>
+            <footer><span>Existing patterns reused</span><strong>100%</strong></footer>
+          </article>
+        </div>
+        <div class="ladder reveal" aria-label="mancode reuse-first ladder">
+          <span class="ladder-label">Reuse-first ladder</span>
+          <ol>
+            <li><b>01</b> Existing code</li>
+            <li><b>02</b> Standard library</li>
+            <li><b>03</b> Native feature</li>
+            <li><b>04</b> Installed dependency</li>
+            <li><b>05</b> Smallest new implementation</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="modes-section section-dark" id="modes">
+        <div class="section-kicker reveal">
+          <span>02 / Five gears</span>
+          <span>Match the workflow to the stakes.</span>
+        </div>
+        <div class="section-title-row reveal">
+          <h2>Every task<br />is not game seven.</h2>
+          <p>
+            Start light. Add process only when risk earns it. mancode lets the same coding agent move
+            from daily practice to production-grade review without changing tools. Newer models that
+            already self-review get a hard stopping point; models that need guidance keep an explicit quality gate.
+          </p>
+        </div>
+
+        <div class="mode-browser reveal">
+          <div class="mode-tabs" role="tablist" aria-label="mancode modes">
+            <button type="button" role="tab" aria-selected="true" aria-controls="panel-solo" id="tab-solo" data-mode="solo">
+              <span>01</span><strong>solo</strong><small>Daily practice</small>
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="panel-mamba" id="tab-mamba" data-mode="mamba">
+              <span>02</span><strong>/mamba</strong><small>Diagnosis</small>
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="panel-man" id="tab-man" data-mode="man">
+              <span>03</span><strong>/man</strong><small>Playoffs</small>
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="panel-manteam" id="tab-manteam" data-mode="manteam">
+              <span>04</span><strong>/manteam</strong><small>Five as one</small>
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="panel-manps" id="tab-manps" data-mode="manps">
+              <span>05</span><strong>/manps</strong><small>Preseason</small>
+            </button>
+          </div>
+
+          <div class="mode-panels">
+            <article class="mode-panel active" role="tabpanel" tabindex="0" id="panel-solo" aria-labelledby="tab-solo" data-panel="solo">
+              <div class="mode-panel-head"><span>Intensity / 01</span><span class="status-dot">Default</span></div>
+              <div class="mode-panel-body">
+                <div><p class="mode-code">solo</p><h3>Move fast.<br />Stay on system.</h3></div>
+                <div class="mode-detail"><p>For everyday changes that need context, not ceremony—even with newer models that already self-review.</p><ul><li>Lightweight hooks</li><li>One bounded diff self-check</li><li>No extra reviewer loop</li></ul></div>
+              </div>
+              <div class="intensity-meter"><i></i><span>Practice</span><span>Playoffs</span></div>
+            </article>
+
+            <article class="mode-panel" role="tabpanel" tabindex="0" id="panel-mamba" aria-labelledby="tab-mamba" data-panel="mamba">
+              <div class="mode-panel-head"><span>Intensity / 03</span><span class="status-dot">Evidence first</span></div>
+              <div class="mode-panel-body">
+                <div><p class="mode-code">/mamba</p><h3>Reproduce.<br />Diagnose. Verify.</h3></div>
+                <div class="mode-detail"><p>For defects that need a root cause and a real regression check.</p><ul><li>Reproduce the failure</li><li>Drive real user paths</li><li>Verify the fix in runtime</li></ul></div>
+              </div>
+              <div class="intensity-meter level-3"><i></i><span>Practice</span><span>Playoffs</span></div>
+            </article>
+
+            <article class="mode-panel" role="tabpanel" tabindex="0" id="panel-man" aria-labelledby="tab-man" data-panel="man">
+              <div class="mode-panel-head"><span>Intensity / 05</span><span class="status-dot">High stakes</span></div>
+              <div class="mode-panel-body">
+                <div><p class="mode-code">/man</p><h3>Plan every<br />possession.</h3></div>
+                <div class="mode-detail"><p>For production work where planning, tests, and evidence-backed review matter.</p><ul><li>Persistent nine-step workflow</li><li>Targeted or full risk review</li><li>One remediation round</li></ul></div>
+              </div>
+              <div class="intensity-meter level-5"><i></i><span>Practice</span><span>Playoffs</span></div>
+            </article>
+
+            <article class="mode-panel" role="tabpanel" tabindex="0" id="panel-manteam" aria-labelledby="tab-manteam" data-panel="manteam">
+              <div class="mode-panel-head"><span>Intensity / 04</span><span class="status-dot">Team memory</span></div>
+              <div class="mode-panel-body">
+                <div><p class="mode-code">/manteam</p><h3>Five on floor.<br />One memory.</h3></div>
+                <div class="mode-detail"><p>For teams that need shared decisions to survive across agent sessions.</p><ul><li>Shared project memory</li><li>Decision records</li><li>Conventional commits</li></ul></div>
+              </div>
+              <div class="intensity-meter level-4"><i></i><span>Practice</span><span>Playoffs</span></div>
+            </article>
+
+            <article class="mode-panel" role="tabpanel" tabindex="0" id="panel-manps" aria-labelledby="tab-manps" data-panel="manps">
+              <div class="mode-panel-head"><span>Intensity / 02</span><span class="status-dot">Health check</span></div>
+              <div class="mode-panel-body">
+                <div><p class="mode-code">/manps</p><h3>Find the rust<br />before tipoff.</h3></div>
+                <div class="mode-detail"><p>For maintenance passes that surface debt without rewriting the project.</p><ul><li>Stale TODO detection</li><li>Dependency checks</li><li>Markdown + JSON reports</li></ul></div>
+              </div>
+              <div class="intensity-meter level-2"><i></i><span>Practice</span><span>Playoffs</span></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow-section" id="workflow">
+        <div class="section-kicker reveal">
+          <span>03 / Playoffs mode</span>
+          <span>Nine steps. Bounded review. No mystery.</span>
+        </div>
+        <div class="workflow-lead reveal">
+          <div><p class="eyebrow">/man workflow</p><h2>From scout report<br />to final buzzer.</h2></div>
+          <p>
+            Every high-stakes run leaves a readable trail under
+            <code>.mancode/workflows/&lt;taskId&gt;/</code> so the plan, decisions, reviews, and outcome stay
+            with the project.
+          </p>
+        </div>
+
+        <ol class="workflow-grid reveal">
+          <li class="phase-scout"><b>01</b><span>Scout report</span><small>Map code, risks, unknowns</small></li>
+          <li class="phase-scout"><b>02</b><span>Clarify</span><small>Resolve the real requirement</small></li>
+          <li class="phase-plan"><b>03</b><span>Plan</span><small>Create verifiable steps</small></li>
+          <li class="phase-plan"><b>04</b><span>Plan gate</span><small>Approve, revise, or stop</small></li>
+          <li class="phase-run featured"><b>05</b><span>Implement</span><small>Head Coach runs the play</small></li>
+          <li class="phase-run"><b>06</b><span>Verify</span><small>Build, lint, test, smoke</small></li>
+          <li class="phase-review"><b>07</b><span>Targeted review</span><small>Evidence-backed quality findings</small></li>
+          <li class="phase-review"><b>08</b><span>Risk defense</span><small>Security review only when risk requires it</small></li>
+          <li class="phase-close"><b>09</b><span>Close out</span><small>One remediation, verify, stop</small></li>
+        </ol>
+        <div class="workflow-legend reveal" aria-label="Workflow phase legend">
+          <span><i class="legend-cyan"></i> Scout</span>
+          <span><i class="legend-paper"></i> Plan</span>
+          <span><i class="legend-orange"></i> Run</span>
+          <span><i class="legend-lime"></i> Review</span>
+        </div>
+      </section>
+
+      <section class="awareness-section section-dark" id="context">
+        <div class="section-kicker reveal">
+          <span>04 / Project awareness</span>
+          <span>Your codebase already has a playbook.</span>
+        </div>
+        <div class="awareness-grid">
+          <div class="awareness-copy reveal">
+            <h2>Read the room<br />before writing.</h2>
+            <p>
+              mancode detects the project shape, available validation commands, existing components,
+              CSS variables, and design signals. UI guidance only activates when the project actually
+              has a UI.
+            </p>
+            <div class="signal-list">
+              <span>Runtime</span><span>Source layout</span><span>Validation</span><span>Components</span><span>CSS variables</span><span>Team state</span>
+            </div>
+          </div>
+
+          <div class="terminal-window reveal" aria-label="Example mancode project files">
+            <header><span></span><span></span><span></span><b>project / local</b></header>
+            <pre><code><i>your-project/</i>
+├── <strong>.mancode/</strong>
+│   ├── project-profile.json
+│   ├── aesthetics/style-tokens.json
+│   ├── workflows/&lt;taskId&gt;/
+│   └── memory/
+├── .claude/
+├── .cursor/rules/
+├── .agents/skills/
+└── AGENTS.md
+
+<span>✓ context stays with the code</span>
+<span>✓ no telemetry sent</span></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="platforms-section" id="platforms">
+        <div class="section-kicker reveal">
+          <span>05 / Adapters</span>
+          <span>Keep your agent. Add the discipline.</span>
+        </div>
+        <div class="section-title-row platform-title reveal">
+          <h2>One playbook.<br />Your tools.</h2>
+          <p>
+            mancode is a workflow layer, not another coding agent. Claude Code gets the richest native
+            integration; other tools receive durable rules, skills, or instruction files.
+          </p>
+        </div>
+
+        <div class="platform-table reveal" role="table" aria-label="Supported platform capabilities">
+          <div class="platform-row platform-head" role="row">
+            <span role="columnheader">Platform</span><span role="columnheader">Adapter</span><span role="columnheader">Level</span>
+          </div>
+          <div class="platform-row" role="row">
+            <strong role="cell">Claude Code</strong><span role="cell">Hooks · skills · subagents</span><em role="cell">Full integration</em>
+          </div>
+          <div class="platform-row" role="row">
+            <strong role="cell">Cursor</strong><span role="cell">Project rules · modes</span><em role="cell">Adapter</em>
+          </div>
+          <div class="platform-row" role="row">
+            <strong role="cell">Codex</strong><span role="cell">AGENTS.md · project skills</span><em role="cell">Adapter</em>
+          </div>
+          <div class="platform-row" role="row">
+            <strong role="cell">GitHub Copilot</strong><span role="cell">Repository instructions</span><em role="cell">Adapter</em>
+          </div>
+          <div class="platform-row" role="row">
+            <strong role="cell">ZCode</strong><span role="cell">AGENTS.md · project skills</span><em role="cell">Adapter</em>
+          </div>
+        </div>
+      </section>
+
+      <section class="install-section section-dark" id="install">
+        <div class="section-kicker reveal">
+          <span>06 / Quick start</span>
+          <span>One install. One init. Keep coding.</span>
+        </div>
+        <div class="install-grid">
+          <div class="install-copy reveal">
+            <p class="eyebrow">Ready at the buzzer</p>
+            <h2>Put mancode<br />in the rotation.</h2>
+            <p>No account, dashboard, API key, or new editor. Initialize it inside the project you already use.</p>
+          <a class="button button-solid" href="./docs.html">Read the docs ↗</a>
+          </div>
+
+          <div class="steps-terminal reveal">
+            <div class="terminal-command">
+              <span>01 / Install</span>
+              <code>npm install -g mancode</code>
+              <button type="button" data-copy="npm install -g mancode">Copy</button>
+            </div>
+            <div class="terminal-command">
+              <span>02 / Enter project</span>
+              <code>cd your-project</code>
+              <button type="button" data-copy="cd your-project">Copy</button>
+            </div>
+            <div class="terminal-command">
+              <span>03 / Initialize</span>
+              <code>mancode init</code>
+              <button type="button" data-copy="mancode init">Copy</button>
+            </div>
+            <div class="terminal-ready"><i></i><span>solo mode ready</span><b>00:03</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta">
+        <div class="final-cta-mark" aria-hidden="true">M</div>
+        <p class="reveal">Less ceremony for the easy work.<br />More discipline for the work that matters.</p>
+        <h2 class="reveal">Stop babysitting<br />AI bloat.</h2>
+        <div class="final-actions reveal">
+          <div class="command-bar command-light">
+            <code><span>&gt;</span> npm install -g mancode</code>
+            <button type="button" data-copy="npm install -g mancode">Copy</button>
+          </div>
+          <a class="button button-dark" href="https://github.com/whitelonng/mancode">Star on GitHub ↗</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="#top"><img src="./logo.png" alt="" /><span>mancode</span></a>
+      <p>AI coding agent workflow harness.<br />Practice light. Playoffs disciplined.</p>
+      <div class="footer-links">
+        <a href="https://github.com/whitelonng/mancode">GitHub</a>
+        <a href="https://github.com/whitelonng/mancode#readme">English</a>
+        <a href="https://github.com/whitelonng/mancode/blob/main/README.zh-CN.md">中文</a>
+        <a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a>
+      </div>
+      <span class="footer-status"><i></i> Stable / v0.3.1</span>
+    </footer>
+  </body>
+</html>

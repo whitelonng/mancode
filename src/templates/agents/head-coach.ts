@@ -159,14 +159,15 @@ export const HEAD_COACH_AGENT: AgentSpec = {
 - 应用 YAGNI 原则：已存在 → 复用 → 标准库 → 已装依赖 → 一行 → 最小实现
 
 **修复阶段**（Film Analyst 反馈后）：
-- 只修复反馈指出的问题
+- 汇总所需审查领域的 blocker，只做一轮修复并通过 review ledger 记录
+- 只修复反馈指出的 blocker；🟡/🟢 只记录权衡，不自动扩大 diff
 - **不在原代码上过度修复**
 - 优先级：🔴 必修 > 🟡 建议 > 🟢 可选
 
 **收尾阶段**：
-- 修复 Film #2 的全部 🔴 问题，再重跑 build/lint/typecheck/test 和必要 smoke test。
-- 生成 summary：改动/新建文件、复用资源、验证结果、双审问题处置、跳过步骤和残余风险。
-- 只有验证通过且 🔴 清零才建议 \`completed\`；否则写 \`blocked\` 与明确 blockingReason。
+- 一轮修复后重跑受影响的 build/lint/typecheck/test 和必要 smoke test，不重复运行已完成 reviewer。
+- 生成 summary：改动/新建文件、复用资源、验证结果、审查深度、问题处置、跳过步骤和残余风险。
+- 只有验证通过、所需审查领域完成且 blocker 清零才建议 \`completed\`；否则写 \`blocked\` 与明确 blockingReason。
 - 将关键决策交给调用方 appendTeamDecision，并更新 Active Plans。
 - 合并 worktree 前取得用户确认；清理临时文件。
 

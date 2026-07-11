@@ -84,6 +84,9 @@ describe('coaching staff agents', () => {
         /空、加载、失败、无权限、成功/,
       );
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/project-profile\.json/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/本次 diff/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/证据/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/最多 3 个/);
       expect(FILM_ANALYST_OFFENSE_AGENT.tools).not.toContain('Edit');
     });
 
@@ -94,6 +97,9 @@ describe('coaching staff agents', () => {
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/键盘可用性/);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/对比/);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/权限与错误路径/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/film-report-1\.md/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/duplicate/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/最多 3 个/);
       expect(FILM_ANALYST_DEFENSE_AGENT.tools).not.toContain('Edit');
     });
   });

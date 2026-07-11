@@ -90,6 +90,17 @@ program
   .option('--outcome <outcome>', 'Set mamba outcome')
   .option('--plan-version <n>', 'Set the next man/manteam plan revision')
   .option('--skipped <steps>', 'Update skipped steps as comma-separated values')
+  .option('--review-depth <depth>', 'Review depth: targeted or full')
+  .option('--review-domain <domain>', 'Review domain: quality or security')
+  .option(
+    '--report <path>',
+    'Relative Markdown report path for a review domain',
+  )
+  .option('--blockers <ids>', 'Comma-separated blocker ids found by a review')
+  .option(
+    '--resolved <ids>',
+    'Comma-separated blocker ids resolved in remediation',
+  )
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (subcommand, args, options) => {
     const code = await workflow(process.cwd(), subcommand, args ?? [], options);

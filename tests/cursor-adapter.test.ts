@@ -64,12 +64,15 @@ describe('Cursor adapter', () => {
     expect(solo).toContain('globs: "**/*"');
     expect(solo).toContain('# mancode solo');
     expect(solo).toContain('read `.mancode/aesthetics/style-tokens.json`');
+    expect(solo).toContain('one bounded self-check');
+    expect(solo).toContain('Do not start another reviewer');
 
     const man = await readRule('mancode-man.mdc');
     expect(man).toContain('alwaysApply: false');
     expect(man).toContain('Mode Persistence');
     expect(man).toContain('/mansolo');
-    expect(man).toContain('two review passes');
+    expect(man).toContain('targeted review');
+    expect(man).toContain('one remediation round');
   });
 
   it('preserves user rules on repeat install', async () => {

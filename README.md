@@ -16,9 +16,10 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
+  <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.3.1-green?style=flat-square" alt="Status: stable v0.3.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
-  <img src="https://img.shields.io/badge/tests-370%20passed-brightgreen?style=flat-square" alt="Tests: 370 passed" />
+  <img src="https://img.shields.io/badge/tests-377%20passed-brightgreen?style=flat-square" alt="Tests: 377 passed" />
 </p>
 
 <p align="center">
@@ -108,8 +109,9 @@ coding agent reads.
 - **Match an existing UI system when present**: inspect project UI dependencies,
   Tailwind configuration, CSS variables, and components so the agent reuses
   established colors, fonts, and interaction patterns.
-- **Add structured AI code review**: use `/man` for a 9-step workflow with
-  research, plan approval, implementation, tests, and dual review.
+- **Add bounded AI code review**: use `/man` for a 9-step workflow with
+  research, plan approval, implementation, tests, and risk-based review that
+  cannot repeat the same review domain indefinitely.
 - **Keep workflow artifacts on disk**: save research, plans, review reports,
   and summaries under `.mancode/workflows/<taskId>/`.
 - **Support team memory**: use `/manteam` to read and update shared project
@@ -132,6 +134,24 @@ mancode is useful for:
 mancode is not a replacement for your coding agent. It is a workflow layer that
 adds context, mode switching, and review discipline on top of the agent you
 already use.
+
+### Review-aware for the latest coding models
+
+Newer reasoning models often review their own work, while smaller models may do
+little review unless instructed. mancode now accounts for both behaviors:
+
+- `solo` stays lightweight: one self-check limited to the current diff, the
+  narrowest meaningful validation, no extra reviewer, and no review loop.
+- `/man` chooses one targeted quality review for routine governed work, or a
+  full quality + security review for hard-risk changes such as auth, payment,
+  sensitive data, migrations, public APIs, untrusted input, concurrency, or
+  infrastructure.
+- Review findings need changed-line evidence and user impact. The workflow CLI
+  records required domains and blockers, permits one remediation round, and
+  refuses completion while required review work remains open.
+
+This keeps modern self-reviewing models from auditing forever without lowering
+the quality gate for models that need explicit review structure.
 
 ## Example: Before and After
 
@@ -160,9 +180,9 @@ The default workflow asks six questions before writing code:
 
 | Mode | Best For | What It Does |
 |---|---|---|
-| `solo` | Daily coding · practice day | Lightweight hooks, style awareness, and YAGNI checks |
+| `solo` | Daily coding · practice day | Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check |
 | `/mamba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
-| `/man` | Production or high-risk changes · playoffs | Full 9-step workflow with dual multi-agent review |
+| `/man` | Production or high-risk changes · playoffs | Full 9-step workflow with targeted or full risk-based review |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
 | `/mansolo` | Returning to default mode | Resets current mode back to `solo` |
@@ -177,10 +197,10 @@ The default workflow asks six questions before writing code:
 3. **Plan**: Plan Coach creates a durable, verifiable plan.
 4. **Plan gate**: choose plan-only, execution, or plan revision.
 5. **Implementation**: Head Coach applies the confirmed plan.
-6. **Validation**: build, lint, tests, smoke checks, and `/mamba` when real diagnosis is needed.
-7. **Film session 1**: code quality review and fixes.
-8. **Film session 2**: security and boundary review.
-9. **Wrap-up**: final verification, summary, workflow status, and memory updates.
+6. **Validation and review scope**: run build, lint, tests, smoke checks, then select targeted or full review from the actual diff and hard-risk triggers.
+7. **Film session 1**: evidence-backed quality review, limited to the changed behavior.
+8. **Film session 2**: security and boundary review for full-review tasks only; duplicate root causes are suppressed.
+9. **Wrap-up**: one blocker remediation round, final verification without re-running completed reviewers, summary, workflow status, and memory updates.
 
 Skipped steps are recorded. Artifacts remain on disk so you can inspect why a
 decision was made later.
@@ -293,7 +313,7 @@ mancode install --minimal # Install only solo-mode essentials
 ```bash
 # Claude Code / Cursor
 /mamba                     # Diagnose bugs and validate real user flows
-/man                       # Full 9-step workflow with dual review
+/man                       # Full 9-step workflow with bounded risk-based review
 /manps                     # Project health check
 /manteam                   # Team mode and shared memory
 /mansolo                   # Return to solo mode
@@ -316,6 +336,10 @@ mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man|mamba|manteam> "<task>" [--parent-task <taskId>]
 mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
+mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
+mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
+mancode workflow review <taskId> remediate --resolved Q1,Q2
+mancode workflow review <taskId> show [--json]
 mancode workflow list [--json]
 mancode workflow show <taskId> [--json]
 mancode workflow clean [--older-than 30d] [--dry-run]
@@ -395,11 +419,15 @@ mancode status --json
 
 Creates and manages validated workflow metadata used by `/mamba`, `/man`, and
 `/manteam`. A linked `/mamba` child can only be created while its parent is
-active at Step 6.
+active at Step 6. Governed review state records required domains, blocker IDs,
+and the single remediation round.
 
 ```bash
 mancode workflow create man "refactor auth module"
 mancode workflow update <taskId> --step 4 --plan-version 2
+mancode workflow review <taskId> init --review-depth full
+mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
+mancode workflow review <taskId> remediate --resolved Q1
 mancode workflow create mamba "verify auth regression" --parent-task <taskId>
 mancode workflow update <mambaTaskId> --status completed --outcome verified
 mancode workflow show <taskId> --json

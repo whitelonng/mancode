@@ -7,6 +7,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import { reviewCanComplete } from './review-ledger.js';
 import { upsertActivePlan } from './team-memory.js';
 
 /**
@@ -40,6 +41,8 @@ export interface WorkflowMeta {
   outcome?: WorkflowOutcome;
   /** Monotonically increasing plan revision for /man workflows. */
   planVersion?: number;
+  /** Enables the bounded review completion gate for newly created governed workflows. */
+  reviewPolicyVersion?: 1;
 }
 
 export type WorkflowStatus =
@@ -122,7 +125,9 @@ export async function createWorkflow(
     updatedAt: now,
     status: 'in_progress',
     ...(options.parentTaskId ? { parentTaskId: options.parentTaskId } : {}),
-    ...(mode === 'man' || mode === 'manteam' ? { planVersion: 1 } : {}),
+    ...(mode === 'man' || mode === 'manteam'
+      ? { planVersion: 1, reviewPolicyVersion: 1 as const }
+      : {}),
   };
 
   await writeMetadata(dir, meta);
@@ -359,6 +364,9 @@ async function validateWorkflowMeta(
   if (updated.parentTaskId !== existing.parentTaskId) {
     throw new Error('workflow parent task cannot be changed');
   }
+  if (updated.reviewPolicyVersion !== existing.reviewPolicyVersion) {
+    throw new Error('workflow review policy version cannot be changed');
+  }
   if (
     !Number.isInteger(updated.currentStep) ||
     updated.currentStep < 1 ||
@@ -427,6 +435,15 @@ async function validateWorkflowMeta(
     throw new Error('mamba workflows cannot have a plan version');
   }
   if (
+    updated.reviewPolicyVersion !== undefined &&
+    updated.reviewPolicyVersion !== 1
+  ) {
+    throw new Error('invalid workflow review policy version');
+  }
+  if (updated.mode === 'mamba' && updated.reviewPolicyVersion !== undefined) {
+    throw new Error('mamba workflows cannot have a review policy version');
+  }
+  if (
     updated.planVersion !== undefined &&
     (!Number.isInteger(updated.planVersion) || updated.planVersion < 1)
   ) {
@@ -452,6 +469,14 @@ async function validateWorkflowMeta(
     (await listActiveMambaChildren(projectRoot, updated.taskId)).length > 0
   ) {
     throw new Error('cannot finish workflow with an active mamba child');
+  }
+  if (
+    updated.status === 'completed' &&
+    updated.reviewPolicyVersion === 1 &&
+    !reviewWasExplicitlySkipped(updated) &&
+    !(await reviewCanComplete(projectRoot, updated.taskId))
+  ) {
+    throw new Error('workflow review is incomplete or still has open blockers');
   }
 }
 
@@ -495,13 +520,20 @@ function isWorkflowShape(obj: Partial<WorkflowMeta>): boolean {
     (!Number.isInteger(obj.planVersion) || obj.planVersion < 1)
   )
     return false;
+  if (obj.reviewPolicyVersion !== undefined && obj.reviewPolicyVersion !== 1)
+    return false;
   if (status === 'blocked') {
     if (!obj.blockingReason?.trim()) return false;
   } else if (obj.blockingReason !== undefined) {
     return false;
   }
   if (mode === 'mamba') {
-    if (status === 'planned' || obj.planVersion !== undefined) return false;
+    if (
+      status === 'planned' ||
+      obj.planVersion !== undefined ||
+      obj.reviewPolicyVersion !== undefined
+    )
+      return false;
     if (
       obj.parentTaskId !== undefined &&
       !isValidWorkflowTaskId(obj.parentTaskId)
@@ -513,6 +545,14 @@ function isWorkflowShape(obj: Partial<WorkflowMeta>): boolean {
     return false;
   }
   return true;
+}
+
+function reviewWasExplicitlySkipped(meta: WorkflowMeta): boolean {
+  return (
+    meta.skippedSteps.includes('review') ||
+    (meta.skippedSteps.includes('film-1') &&
+      meta.skippedSteps.includes('film-2'))
+  );
 }
 
 export async function listActiveMambaChildren(

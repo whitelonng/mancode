@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { installClaudeCode } from '../src/installers/claude-code.js';
 import { renderModeSkill } from '../src/installers/mode-skills.js';
+import { SOLO_SKILL } from '../src/templates/inline.js';
 import {
   MAMBA_SKILL,
   MANPS_SKILL,
@@ -47,6 +48,18 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/workflow update <taskId> --step 4/);
     expect(MAN_SKILL.body).toMatch(/Plan Coach 只返回计划文本/);
     expect(MAN_SKILL.body).toMatch(/不得直接.*metadata\.json/);
+    expect(MAN_SKILL.body).toMatch(/review-scope\.md/);
+    expect(MAN_SKILL.body).toMatch(/定向审查/);
+    expect(MAN_SKILL.body).toMatch(/一轮修复/);
+    expect(MAN_SKILL.body).toMatch(/workflow review/);
+  });
+
+  it('keeps solo review bounded and lightweight', () => {
+    expect(SOLO_SKILL).toMatch(/只做一次/);
+    expect(SOLO_SKILL).toMatch(/本次 diff/);
+    expect(SOLO_SKILL).toMatch(/不调用.*reviewer/);
+    expect(SOLO_SKILL).toMatch(/最窄/);
+    expect(SOLO_SKILL).not.toMatch(/自审发现 3 个以上问题/);
   });
 
   it('defines mamba diagnosis and real browser validation boundaries', () => {
@@ -88,7 +101,10 @@ describe('mvp-2 skills', () => {
     expect(man).toMatch(/Step 9/);
     expect(man).toMatch(/--plan-version/);
     expect(man).toMatch(/Never edit metadata\.json directly/);
-    expect(man).toMatch(/two review passes/);
+    expect(man).toMatch(/review-scope\.md/);
+    expect(man).toMatch(/targeted review/);
+    expect(man).toMatch(/one remediation round/);
+    expect(man).toMatch(/workflow review/);
 
     const mamba = renderModeSkill('mamba', '/');
     expect(mamba).toMatch(/workflow create mamba/);

@@ -29,6 +29,8 @@ describe('GitHub Copilot adapter', () => {
     expect(instructions).toContain('# mancode for GitHub Copilot');
     expect(instructions).toContain('Platform adapter: GitHub Copilot');
     expect(instructions).toContain('mancode Prompt Conventions');
+    expect(instructions).toContain('one bounded self-check');
+    expect(instructions).toContain('bounded risk-based review');
 
     const config = JSON.parse(
       await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),

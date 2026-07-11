@@ -262,6 +262,8 @@ function renderSoloRule(): string {
     '- Reuse existing functions, components, styles, and dependencies.',
     '- Read `.mancode/project-profile.json` before choosing tools or validation. For detected UI assets and UI work, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles.',
     '- Verify with the narrowest meaningful test, lint, build, or smoke check.',
+    '- Perform one bounded self-check limited to the current diff. Do not start another reviewer, create a review artifact, or repeat the review.',
+    '- Recommend /man only for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, or infrastructure risk.',
   ].join('\n');
 }
 

@@ -80,6 +80,8 @@ coverage/
 *.tmp
 *.temp
 .cache/
+.playwright-cli/
+output/
 
 # Environment files
 .env

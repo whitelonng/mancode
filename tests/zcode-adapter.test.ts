@@ -34,6 +34,8 @@ describe('ZCode adapter', () => {
     expect(agents).toContain('# mancode Configuration');
     expect(agents).toContain('Platform adapter: ZCode');
     expect(agents).toContain('$mamba');
+    expect(agents).toContain('one bounded self-check');
+    expect(agents).toContain('Do not start another reviewer');
 
     const config = JSON.parse(
       await readFile(path.join(dir, '.mancode', 'config.json'), 'utf-8'),
