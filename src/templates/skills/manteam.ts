@@ -55,12 +55,12 @@ export const MANTEAM_SKILL: SkillSpec = {
 3. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式；Plan Coach 只返回计划文本，禁止提前修改业务文件或团队 memory。
 4. 计划关卡：用户可只保留计划、继续执行或重写计划；Active Plans 按 taskId 更新。
 5. 实施：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
-6. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。需要真实验证时创建带 parentTaskId 的 /mamba 子任务。子任务修复后若父任务曾因此 blocked，先用 workflow CLI 恢复父任务为 in_progress；manual_test_required 不得自动恢复。
+6. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。需要真实验证时创建带 parentTaskId 的 /manba 子任务。子任务修复后若父任务曾因此 blocked，先用 workflow CLI 恢复父任务为 in_progress；manual_test_required 不得自动恢复。
 7. Review scope + Film #1：基于实际 diff 写 \`review-scope.md\`，用 \`workflow review ... init\` 选择 targeted 或 full；重点审查行为、可维护性、团队风格与测试，finding 必须有证据和稳定 ID。
 8. Film #2：仅 full 执行，先读 Film #1 报告并去重，只审查边界、安全、性能、并发和兼容性。用户明确要求才可跳过全部 review，并写入 \`skippedSteps\` 和残余风险。
 9. Post-game：汇总 blocker，只做一轮修复并用 \`workflow review ... remediate\` 记录；复验后写 summary 与 hand-off。验证失败、审查不完整或仍有 blocker 时标记 blocked，不得标 completed。
 
-如果用户在确认阶段选择"退出"或放弃团队 workflow：用 \`mancode workflow update <taskId> --status abandoned\` 更新并清理 Active Plans；若有活跃 mamba 子任务，先取得确认并逐个 abandoned。成功后再用 Edit 更新 state 回 solo。不要直接改 metadata，也不要把 abandoned workflow 留在 active state。
+如果用户在确认阶段选择"退出"或放弃团队 workflow：用 \`mancode workflow update <taskId> --status abandoned\` 更新并清理 Active Plans；若有活跃 manba 子任务，先取得确认并逐个 abandoned。成功后再用 Edit 更新 state 回 solo。不要直接改 metadata，也不要把 abandoned workflow 留在 active state。
 
 ## Team Hand-off Summary
 

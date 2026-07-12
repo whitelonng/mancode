@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.5-green?style=flat-square" alt="Status: stable v0.3.5" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.6-green?style=flat-square" alt="Status: stable v0.3.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-381%20passed-brightgreen?style=flat-square" alt="Tests: 381 passed" />
 </p>
@@ -46,7 +46,7 @@ mancode installs three things:
 
 1. **Hooks** that inject project context, design tokens, and YAGNI checks into
    agent prompts.
-2. **Skills / modes** for `solo`, `/mamba`, `/man`, `/manteam`, `/manps`, and
+2. **Skills / modes** for `solo`, `/manba`, `/man`, `/manteam`, `/manps`, and
    `/mansolo`.
 3. **Coaching-staff subagents**: Scout, Plan Coach, Head Coach, Film Analyst
    (Offense), and Film Analyst (Defense).
@@ -80,15 +80,16 @@ After initialization, keep using your coding agent normally. `solo` mode runs by
 default: practice day, no ceremony. Use `/man` when a task needs planning,
 testing, and multi-agent review: playoffs, every possession counts.
 
-Invocation is surface-specific. Claude Code and Cursor use `/man`, `/mamba`,
+Invocation is surface-specific. Claude Code and Cursor use `/man`, `/manba`,
 and the other slash-style mode names. Codex in the ChatGPT desktop app, CLI, or
-IDE extension loads repo skills from `.agents/skills/`; `$man`, `$mamba`, and
+IDE extension loads repo skills from `.agents/skills/`; `$man`, `$manba`, and
 the other `$` mentions are the portable explicit syntax. In the ChatGPT desktop
 app, enabled skills also appear in the slash-command list, so a discovered
 `man` skill can be selected there as `/man`. In CLI/IDE, use `$man` or `/skills`.
 These are agent skills, not deprecated custom prompts. See the official
 [skills](https://learn.chatgpt.com/docs/build-skills) and
 [slash-command](https://learn.chatgpt.com/docs/reference/slash-commands) docs.
+Existing workflow metadata remains compatible and does not need migration.
 
 ## What Gets Installed
 
@@ -201,7 +202,7 @@ slash commands in your AI coding agent's conversation:
 | Mode | Best For | What It Does |
 |---|---|---|
 | `solo` | Daily coding · practice day | Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check |
-| `/mamba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
+| `/manba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
 | `/man` | Production or high-risk changes · playoffs | Full 9-step workflow with targeted or full risk-based review |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
@@ -292,7 +293,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.5. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.6. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
 
@@ -342,14 +343,14 @@ mancode install --minimal # Install only solo-mode essentials
 
 ```bash
 # Claude Code / Cursor
-/mamba                     # Diagnose bugs and validate real user flows
+/manba                     # Diagnose bugs and validate real user flows
 /man                       # Full 9-step workflow with bounded risk-based review
 /manps                     # Project health check
 /manteam                   # Team mode and shared memory
 /mansolo                   # Return to solo mode
 
 # Codex in ChatGPT desktop / CLI / IDE
-$mamba
+$manba
 $man
 $manps
 $manteam
@@ -364,7 +365,7 @@ mancode status
 mancode status --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
-mancode workflow create <man|mamba|manteam> "<task>" [--parent-task <taskId>]
+mancode workflow create <man|manba|manteam> "<task>" [--parent-task <taskId>]
 mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
 mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
 mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
@@ -385,7 +386,7 @@ mancode version
 Example output for a UI project (not a default stack):
 
 ```text
-mancode v0.3.5
+mancode v0.3.6
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -447,8 +448,8 @@ mancode status --json
 
 ### `mancode workflow`
 
-Creates and manages validated workflow metadata used by `/mamba`, `/man`, and
-`/manteam`. A linked `/mamba` child can only be created while its parent is
+Creates and manages validated workflow metadata used by `/manba`, `/man`, and
+`/manteam`. A linked `/manba` child can only be created while its parent is
 active at Step 6. Governed review state records required domains, blocker IDs,
 and the single remediation round.
 
@@ -458,8 +459,8 @@ mancode workflow update <taskId> --step 4 --plan-version 2
 mancode workflow review <taskId> init --review-depth full
 mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
 mancode workflow review <taskId> remediate --resolved Q1
-mancode workflow create mamba "verify auth regression" --parent-task <taskId>
-mancode workflow update <mambaTaskId> --status completed --outcome verified
+mancode workflow create manba "verify auth regression" --parent-task <taskId>
+mancode workflow update <manbaTaskId> --status completed --outcome verified
 mancode workflow show <taskId> --json
 mancode workflow clean --older-than 30d --dry-run
 ```
@@ -514,7 +515,7 @@ mancode/
 │
 ├── Skills
 │   ├── solo/SKILL.md
-│   ├── mamba/SKILL.md
+│   ├── manba/SKILL.md
 │   ├── man/SKILL.md
 │   ├── manteam/SKILL.md
 │   ├── manps/SKILL.md
@@ -546,7 +547,7 @@ mancode/
 | Phase | Focus |
 |---|---|
 | MVP-1 | solo mode, aesthetics, and Claude Code hooks |
-| MVP-2 | `/mamba`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
+| MVP-2 | `/manba`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
 | MVP-3 | Cursor, Codex (ChatGPT desktop/CLI), and GitHub Copilot adapters |
 | Public Release | stable npm release, marketplace distribution, docs, and demos |
 
@@ -581,7 +582,7 @@ markers is preserved.
 
 ### ZCode skills not appearing
 
-Ensure `.agents/skills/mamba/SKILL.md` through `.agents/skills/mansolo/SKILL.md`
+Ensure `.agents/skills/manba/SKILL.md` through `.agents/skills/mansolo/SKILL.md`
 exist, then restart or refresh ZCode. ZCode slash commands are not generated
 yet because the workspace command file path still needs explicit verification.
 
@@ -589,8 +590,8 @@ yet because the workspace command file path still needs explicit verification.
 
 Ensure the `.cursor/rules/mancode-*.mdc` files exist. Rules with
 `alwaysApply: true` (context, practice, solo) load on every conversation.
-Mode-specific rules (mamba, man, manteam, manps) trigger based on the
-description field — invoke them by asking for `/mamba` or similar.
+Mode-specific rules (manba, man, manteam, manps) trigger based on the
+description field — invoke them by asking for `/manba` or similar.
 
 ### How to do a clean reinstall
 

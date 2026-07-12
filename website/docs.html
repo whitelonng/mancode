@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.3.5</span>
+      <span class="docs-wordmark">Documentation / v0.3.6</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -54,7 +54,7 @@
           <p class="eyebrow">Practice to playoffs</p>
           <h1>Give your coding agent<br />a real playbook.</h1>
           <p>mancode is a local-first workflow harness for the coding agent you already use. It adds project context, task intensity, durable artifacts, and review discipline without replacing Claude Code, Cursor, Codex, Copilot, or ZCode.</p>
-          <div class="docs-note"><strong>Start here</strong><p>Use <code>solo</code> for day-to-day work. It performs one bounded diff self-check with no extra reviewer loop. Escalate to <code>/mamba</code> for diagnosis and <code>/man</code> when a production change deserves a plan, tests, and risk-based review.</p></div>
+          <div class="docs-note"><strong>Start here</strong><p>Use <code>solo</code> for day-to-day work. It performs one bounded diff self-check with no extra reviewer loop. Escalate to <code>/manba</code> for diagnosis and <code>/man</code> when a production change deserves a plan, tests, and risk-based review.</p></div>
         </section>
 
         <section class="doc-section" id="install" data-searchable>
@@ -86,7 +86,7 @@
           <p>mancode is deliberately not a mandatory ceremony layer. Choose the smallest mode that creates enough confidence for the task.</p>
           <div class="mode-guide">
             <article><small>Routine change</small><h3>solo</h3><p>Use for a small feature, refactor, or UI tweak. You get project context, the narrowest meaningful validation, and one diff-only self-check without another reviewer.</p></article>
-            <article><small>Bug or uncertain behavior</small><h3>/mamba</h3><p>Use when the right answer depends on reproduction and real validation—not a plausible patch.</p></article>
+            <article><small>Bug or uncertain behavior</small><h3>/manba</h3><p>Use when the right answer depends on reproduction and real validation—not a plausible patch.</p></article>
             <article><small>Production or high-risk change</small><h3>/man</h3><p>Use when planning, verification, and independent review need to be durable and visible.</p></article>
             <article><small>Team or maintenance</small><h3>/manteam · /manps</h3><p>Use shared memory for a team; use health scans before a cleanup or dependency-maintenance pass.</p></article>
           </div>
@@ -98,22 +98,22 @@
           <p>The five working modes cover different kinds of engineering pressure. <code>/mansolo</code> is the reset command that returns the project to the default <code>solo</code> mode.</p>
           <table class="docs-table"><thead><tr><th>Mode</th><th>Best for</th><th>What changes</th></tr></thead><tbody>
             <tr><td><code>solo</code></td><td>Daily coding</td><td>Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check.</td></tr>
-            <tr><td><code>/mamba</code></td><td>Diagnosis</td><td>Reproduce the failure, find the cause, validate real user paths, and run regression checks.</td></tr>
+            <tr><td><code>/manba</code></td><td>Diagnosis</td><td>Reproduce the failure, find the cause, validate real user paths, and run regression checks.</td></tr>
             <tr><td><code>/man</code></td><td>High-stakes work</td><td>Full nine-step workflow with a plan gate, targeted/full risk review, and one remediation round.</td></tr>
             <tr><td><code>/manteam</code></td><td>Team projects</td><td>Shared memory, decision records, coordination, and Conventional Commits guidance.</td></tr>
             <tr><td><code>/manps</code></td><td>Maintenance</td><td>Deterministic project-health scan with Markdown and JSON reports.</td></tr>
           </tbody></table>
           <h3>How to invoke a mode</h3>
-          <p>Claude Code and Cursor expose slash-style commands. Codex in the ChatGPT desktop app, CLI, and IDE reads repository skills, so <code>$man</code>, <code>$mamba</code>, and related mentions are the portable explicit syntax.</p>
+          <p>Claude Code and Cursor expose slash-style commands. Codex in the ChatGPT desktop app, CLI, and IDE reads repository skills, so <code>$man</code>, <code>$manba</code>, and related mentions are the portable explicit syntax.</p>
           <div class="code-wrap"><pre><code><span class="command-prompt"># Claude Code / Cursor</span>
-/mamba
+/manba
 /man
 /manteam
 
 <span class="command-prompt"># Codex app / CLI / IDE</span>
-$mamba
+$manba
 $man
-$manteam</code></pre><button type="button" data-copy="/mamba\n/man\n/manteam">Copy</button></div>
+$manteam</code></pre><button type="button" data-copy="/manba\n/man\n/manteam">Copy</button></div>
         </section>
 
         <section class="doc-section" id="commands" data-searchable>
@@ -124,7 +124,7 @@ $manteam</code></pre><button type="button" data-copy="/mamba\n/man\n/manteam">Co
             <article class="command-card"><header><h3>mancode status [--json]</h3><span>Inspect</span></header><p>Shows the current mode, detected stack, installed platforms, and readiness. Claude Code installations also report hook registration and estimated injection size.</p><ul><li>Use plain output for a quick human check.</li><li>Use <code>--json</code> for scripts or CI.</li></ul></article>
             <article class="command-card"><header><h3>mancode install &lt;platform&gt;</h3><span>Adapter</span></header><p>Installs or repairs one platform adapter after initialization.</p><ul><li>Platforms: <code>claude-code</code>, <code>cursor</code>, <code>codex</code>, <code>copilot</code>, <code>zcode</code>.</li><li>Use <code>--force</code> to rewrite generated configuration.</li><li>Use <code>--minimal</code> for solo-mode essentials only.</li></ul></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists the adapters this version knows how to install. Use this before scripting platform selection.</p></article>
-            <article class="command-card"><header><h3>mancode workflow …</h3><span>Track</span></header><p>Creates and manages validated metadata for <code>man</code>, <code>mamba</code>, and <code>manteam</code> workflow runs.</p><ul><li><code>create &lt;mode&gt; "&lt;task&gt;"</code> starts a record.</li><li><code>update &lt;taskId&gt;</code> advances steps or status.</li><li><code>review &lt;taskId&gt; …</code> enforces required domains, blockers, and one remediation round.</li><li><code>list</code>, <code>show</code>, and <code>clean</code> inspect and maintain records.</li></ul></article>
+            <article class="command-card"><header><h3>mancode workflow …</h3><span>Track</span></header><p>Creates and manages validated metadata for <code>man</code>, <code>manba</code>, and <code>manteam</code> workflow runs.</p><ul><li><code>create &lt;mode&gt; "&lt;task&gt;"</code> starts a record.</li><li><code>update &lt;taskId&gt;</code> advances steps or status.</li><li><code>review &lt;taskId&gt; …</code> enforces required domains, blockers, and one remediation round.</li><li><code>list</code>, <code>show</code>, and <code>clean</code> inspect and maintain records.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic preseason health scan. Areas include <code>deps</code>, <code>security</code>, <code>dead-code</code>, and <code>config</code>.</p><ul><li>Writes Markdown and JSON reports under <code>.mancode/</code>.</li><li>Scans only; remediation remains an explicit decision.</li></ul></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>Rescan</span></header><p>Refreshes the project profile and, when UI assets exist, rescans design tokens.</p><ul><li>Updates <code>project-profile.json</code> and <code>style-tokens.json</code>.</li><li>Afterward, run <code>mancode install &lt;platform&gt; --force</code> for static-instruction adapters.</li></ul></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version. Use it when reporting an issue or validating an update.</p></article>
@@ -139,10 +139,10 @@ $manteam</code></pre><button type="button" data-copy="/mamba\n/man\n/manteam">Co
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth full
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
-<span class="command-prompt">$</span> mancode workflow create mamba "verify auth regression" --parent-task &lt;taskId&gt;
+<span class="command-prompt">$</span> mancode workflow create manba "verify auth regression" --parent-task &lt;taskId&gt;
 <span class="command-prompt">$</span> mancode workflow show &lt;taskId&gt; --json
 <span class="command-prompt">$</span> mancode workflow clean --older-than 30d --dry-run</code></pre><button type="button" data-copy="mancode workflow create man &quot;refactor auth module&quot;\nmancode workflow show &lt;taskId&gt; --json">Copy</button></div>
-          <div class="docs-note"><strong>Constraint</strong><p>A linked <code>mamba</code> child may only be created while its parent workflow is active at Step 6. New governed workflows also cannot complete until their required review domains are recorded and all blocker IDs are resolved.</p></div>
+          <div class="docs-note"><strong>Constraint</strong><p>A linked <code>manba</code> child may only be created while its parent workflow is active at Step 6. New governed workflows also cannot complete until their required review domains are recorded and all blocker IDs are resolved.</p></div>
         </section>
 
         <section class="doc-section" id="platforms" data-searchable>

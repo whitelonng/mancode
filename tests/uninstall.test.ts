@@ -133,7 +133,7 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
 
     await expect(
-      readFile(path.join(dir, '.cursor', 'commands', 'mamba.md'), 'utf-8'),
+      readFile(path.join(dir, '.cursor', 'commands', 'manba.md'), 'utf-8'),
     ).rejects.toThrow();
     await expect(
       readFile(path.join(dir, '.cursor', 'commands', 'mansolo.md'), 'utf-8'),
@@ -149,7 +149,7 @@ describe('mancode uninstall', () => {
 
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -165,8 +165,8 @@ describe('mancode uninstall', () => {
     await silentInit(dir);
     await install(dir, 'codex');
     await writeFile(
-      path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
-      '# custom mamba\n',
+      path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
+      '# custom manba\n',
       'utf-8',
     );
 
@@ -175,10 +175,10 @@ describe('mancode uninstall', () => {
     expect(code).toBe(EXIT_OK);
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toBe('# custom mamba\n');
+    ).resolves.toBe('# custom manba\n');
   });
 
   it('also removes legacy .codex/skills/ managed files from pre-fix versions', async () => {
@@ -226,7 +226,7 @@ describe('mancode uninstall', () => {
         dir,
         '.agents',
         'skills',
-        'mamba',
+        'manba',
         'SKILL.md',
       );
 
@@ -247,7 +247,7 @@ describe('mancode uninstall', () => {
 
     await install(dir, 'zcode', { force: true, minimal: true });
 
-    const skillPath = path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md');
+    const skillPath = path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md');
     await expect(readFile(skillPath, 'utf-8')).resolves.toContain(
       'Managed by mancode:zcode-skill',
     );
@@ -265,7 +265,7 @@ describe('mancode uninstall', () => {
 
     await expect(
       readFile(
-        path.join(dir, '.github', 'prompts', 'mamba.prompt.md'),
+        path.join(dir, '.github', 'prompts', 'manba.prompt.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -316,7 +316,7 @@ describe('mancode uninstall', () => {
     expect(await readFile(customAgentPath, 'utf-8')).toBe('# custom agent\n');
     await expect(
       readFile(
-        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -324,16 +324,16 @@ describe('mancode uninstall', () => {
 
   it('preserves user-authored same-name Claude skills and agents', async () => {
     await silentInit(dir);
-    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
-    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(skillPath, '# custom manba\n', 'utf-8');
     await writeFile(agentPath, '# custom scout\n', 'utf-8');
 
     const code = await uninstall(dir, 'claude-code', { force: true });
 
     expect(code).toBe(EXIT_OK);
     await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
-      '# custom mamba\n',
+      '# custom manba\n',
     );
     await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
       '# custom scout\n',
@@ -536,7 +536,7 @@ describe('mancode uninstall', () => {
     ).toBe(false);
     expect(
       await pathExists(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
       ),
     ).toBe(false);
   });

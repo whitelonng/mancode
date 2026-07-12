@@ -12,13 +12,16 @@ export const MANCODE_CURSOR_CORE_RULE_FILES = [
 ] as const;
 
 export const MANCODE_CURSOR_ADVANCED_RULE_FILES = [
-  'mancode-mamba.mdc',
+  'mancode-manba.mdc',
   'mancode-man.mdc',
   'mancode-manteam.mdc',
   'mancode-manps.mdc',
 ] as const;
 
-export const MANCODE_CURSOR_LEGACY_RULE_FILES = ['mancode-man8.mdc'] as const;
+export const MANCODE_CURSOR_LEGACY_RULE_FILES = [
+  'mancode-mamba.mdc',
+  'mancode-man8.mdc',
+] as const;
 
 export const CURSOR_RULE_MANAGED_MARKER =
   '<!-- Managed by mancode:cursor-rule. Do not edit this marker. -->';
@@ -82,13 +85,12 @@ export async function installCursor(
     return;
   }
 
-  await removeLegacyCursorRules(projectRoot);
   await writeRule(
     rulesDir,
-    'mancode-mamba.mdc',
+    'mancode-manba.mdc',
     'Use for bug diagnosis and real regression testing',
     false,
-    renderMambaRule(),
+    renderManbaRule(),
   );
   await writeRule(
     rulesDir,
@@ -111,6 +113,7 @@ export async function installCursor(
     false,
     renderManpsRule(),
   );
+  await removeLegacyCursorRules(projectRoot);
 
   await installCursorCommands(projectRoot, options.minimal ?? false);
 }
@@ -165,32 +168,21 @@ export async function removeCursorGeneratedRules(
   await removeLegacyCursorRules(projectRoot);
 }
 
-/** Remove the old man8 rule only when it matches mancode's generated body. */
+/** Remove old public mode rules only when they are mancode-generated. */
 export async function removeLegacyCursorRules(
   projectRoot: string,
 ): Promise<void> {
-  const legacyPath = path.join(
-    projectRoot,
-    '.cursor',
-    'rules',
-    'mancode-man8.mdc',
-  );
-  try {
-    const content = await readFile(legacyPath, 'utf-8');
-    if (
-      content.includes('# mancode man8 — Investigate and Plan') &&
-      content.includes('## Mode Persistence')
-    ) {
-      await rm(legacyPath, { force: true });
-    }
-  } catch {
-    // Missing or unreadable legacy rule: preserve it and continue installation.
+  const rulesDir = path.join(projectRoot, '.cursor', 'rules');
+  for (const fileName of MANCODE_CURSOR_LEGACY_RULE_FILES) {
+    await removeGeneratedCursorRule(rulesDir, fileName);
   }
 }
 
 async function removeGeneratedCursorRule(
   rulesDir: string,
-  fileName: (typeof MANCODE_CURSOR_RULE_FILES)[number],
+  fileName:
+    | (typeof MANCODE_CURSOR_RULE_FILES)[number]
+    | (typeof MANCODE_CURSOR_LEGACY_RULE_FILES)[number],
 ): Promise<void> {
   const rulePath = path.join(rulesDir, fileName);
   const content = await readTextIfExists(rulePath);
@@ -201,7 +193,9 @@ async function removeGeneratedCursorRule(
 
 function isGeneratedCursorRule(
   content: string,
-  fileName: (typeof MANCODE_CURSOR_RULE_FILES)[number],
+  fileName:
+    | (typeof MANCODE_CURSOR_RULE_FILES)[number]
+    | (typeof MANCODE_CURSOR_LEGACY_RULE_FILES)[number],
 ): boolean {
   if (content.includes(CURSOR_RULE_MANAGED_MARKER)) return true;
   if (fileName === 'mancode-context.mdc') {
@@ -230,9 +224,14 @@ function isGeneratedCursorRule(
 async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, 'utf-8');
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
   }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 function renderPracticeRule(): string {
@@ -267,8 +266,8 @@ function renderSoloRule(): string {
   ].join('\n');
 }
 
-function renderMambaRule(): string {
-  return renderModeSkill('mamba', '/');
+function renderManbaRule(): string {
+  return renderModeSkill('manba', '/');
 }
 
 function renderManRule(): string {

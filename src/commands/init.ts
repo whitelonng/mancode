@@ -48,7 +48,7 @@ const DEFAULT_INIT_PLATFORM: PlatformName = 'claude-code';
  * 的 SessionStart hook 读取逻辑（json_get "currentMode"）保持一致。
  *
  * MVP-2 新增字段（currentTask / currentWorkflowMode / skippedSteps /
- * teamModeAutoDetected / contributors）支持 /man /mamba 流程和团队检测。
+ * teamModeAutoDetected / contributors）支持 /man /manba 流程和团队检测。
  */
 export interface MancodeState {
   version: string;
@@ -836,7 +836,9 @@ function getInitManagedFilePaths(
       '.mancode/hooks/user-prompt-submit.sh',
       '.claude/settings.json',
       '.claude/skills/man8/SKILL.md',
+      '.claude/skills/mamba/SKILL.md',
       '.claude/skills/solo/SKILL.md',
+      '.claude/skills/mancode-mamba.md',
       '.claude/skills/mancode-solo.md',
       '.claude/skills/mancode-man8.md',
     );
@@ -851,7 +853,12 @@ function getInitManagedFilePaths(
     }
   }
   if (platforms.includes('cursor')) {
-    files.push('.cursor/rules/mancode-man8.mdc', '.cursor/commands/man8.md');
+    files.push(
+      '.cursor/rules/mancode-mamba.mdc',
+      '.cursor/rules/mancode-man8.mdc',
+      '.cursor/commands/mamba.md',
+      '.cursor/commands/man8.md',
+    );
     for (const fileName of MANCODE_CURSOR_RULE_FILES) {
       files.push(`.cursor/rules/${fileName}`);
     }
@@ -860,19 +867,23 @@ function getInitManagedFilePaths(
     }
   }
   if (platforms.includes('codex') || platforms.includes('zcode')) {
-    files.push('AGENTS.md', '.agents/skills/man8/SKILL.md');
+    files.push(
+      'AGENTS.md',
+      '.agents/skills/mamba/SKILL.md',
+      '.agents/skills/man8/SKILL.md',
+    );
     for (const mode of MODE_NAMES) {
       files.push(`.agents/skills/${mode}/SKILL.md`);
     }
   }
   if (platforms.includes('codex')) {
-    files.push('.codex/skills/man8/SKILL.md');
+    files.push('.codex/skills/mamba/SKILL.md', '.codex/skills/man8/SKILL.md');
     for (const mode of MODE_NAMES) {
       files.push(`.codex/skills/${mode}/SKILL.md`);
     }
   }
   if (platforms.includes('zcode')) {
-    files.push('.zcode/skills/man8/SKILL.md');
+    files.push('.zcode/skills/mamba/SKILL.md', '.zcode/skills/man8/SKILL.md');
     for (const mode of MODE_NAMES) {
       files.push(`.zcode/skills/${mode}/SKILL.md`);
     }
@@ -880,6 +891,7 @@ function getInitManagedFilePaths(
   if (platforms.includes('copilot')) {
     files.push(
       '.github/copilot-instructions.md',
+      '.github/prompts/mamba.prompt.md',
       '.github/prompts/man8.prompt.md',
     );
     for (const mode of MODE_NAMES) {

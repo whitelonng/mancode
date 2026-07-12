@@ -6,13 +6,13 @@ import path from 'node:path';
  * .cursor/commands/, .github/prompts/
  */
 export const MODE_NAMES = [
-  'mamba',
+  'manba',
   'man',
   'manteam',
   'manps',
   'mansolo',
 ] as const;
-const LEGACY_MODE_NAMES = ['man8'] as const;
+const LEGACY_MODE_NAMES = ['mamba', 'man8'] as const;
 export type ModeName = (typeof MODE_NAMES)[number];
 
 export const CODEX_SKILL_MANAGED_MARKER =
@@ -44,8 +44,8 @@ export const MANCODE_AGENT_SKILL_MARKERS = [
  * the coaching staff in sequence within a single conversation.
  *
  * @param commandPrefix Platform-specific invocation prefix:
- *   - Codex uses `$` (e.g. `$mamba`)
- *   - Cursor uses `/` (e.g. `/mamba`)
+ *   - Codex uses `$` (e.g. `$manba`)
+ *   - Cursor uses `/` (e.g. `/manba`)
  *   - Copilot uses `''` (prompt-file selection, no prefix)
  */
 export function renderModeSkill(
@@ -54,7 +54,8 @@ export function renderModeSkill(
 ): string {
   const meta = MODE_META[mode];
   // mansolo maps to "solo" in state.json — "mansolo" is not a valid currentMode value.
-  const stateMode = mode === 'mansolo' ? 'solo' : mode;
+  const stateMode =
+    mode === 'mansolo' ? 'solo' : mode === 'manba' ? 'mamba' : mode;
   const modesList = MODE_NAMES.map((m) => `${commandPrefix}${m}`).join(', ');
   return [
     meta.intro,
@@ -103,7 +104,6 @@ export async function installCodexSkills(
     return;
   }
   const skillsDir = path.join(projectRoot, '.agents', 'skills');
-  await removeLegacyManagedSkills(skillsDir, MANCODE_AGENT_SKILL_MARKERS);
   for (const mode of MODE_NAMES) {
     const modeDir = path.join(skillsDir, mode);
     await mkdir(modeDir, { recursive: true });
@@ -127,6 +127,7 @@ export async function installCodexSkills(
       MANCODE_AGENT_SKILL_MARKERS,
     );
   }
+  await removeLegacyManagedSkills(skillsDir, MANCODE_AGENT_SKILL_MARKERS);
 }
 
 /**
@@ -144,7 +145,6 @@ export async function installZcodeSkills(
     return;
   }
   const skillsDir = path.join(projectRoot, '.agents', 'skills');
-  await removeLegacyManagedSkills(skillsDir, MANCODE_AGENT_SKILL_MARKERS);
   for (const mode of MODE_NAMES) {
     const modeDir = path.join(skillsDir, mode);
     await mkdir(modeDir, { recursive: true });
@@ -168,6 +168,7 @@ export async function installZcodeSkills(
       MANCODE_AGENT_SKILL_MARKERS,
     );
   }
+  await removeLegacyManagedSkills(skillsDir, MANCODE_AGENT_SKILL_MARKERS);
 }
 
 /**
@@ -183,7 +184,6 @@ export async function installCursorCommands(
   }
   const commandsDir = path.join(projectRoot, '.cursor', 'commands');
   await mkdir(commandsDir, { recursive: true });
-  await removeLegacyGeneratedModeFile(path.join(commandsDir, 'man8.md'));
   for (const mode of MODE_NAMES) {
     const meta = MODE_META[mode];
     const content = [
@@ -203,6 +203,8 @@ export async function installCursorCommands(
       'Cursor',
     );
   }
+  await removeManagedModeFile(path.join(commandsDir, 'mamba.md'), 'mamba');
+  await removeLegacyGeneratedModeFile(path.join(commandsDir, 'man8.md'));
 }
 
 /**
@@ -218,7 +220,6 @@ export async function installCopilotPrompts(
   }
   const promptsDir = path.join(projectRoot, '.github', 'prompts');
   await mkdir(promptsDir, { recursive: true });
-  await removeLegacyGeneratedModeFile(path.join(promptsDir, 'man8.prompt.md'));
   for (const mode of MODE_NAMES) {
     const meta = MODE_META[mode];
     const content = [
@@ -239,6 +240,11 @@ export async function installCopilotPrompts(
       'GitHub Copilot',
     );
   }
+  await removeManagedModeFile(
+    path.join(promptsDir, 'mamba.prompt.md'),
+    'mamba',
+  );
+  await removeLegacyGeneratedModeFile(path.join(promptsDir, 'man8.prompt.md'));
 }
 
 export async function removeCodexSkills(projectRoot: string): Promise<void> {
@@ -333,7 +339,7 @@ async function writeManagedModeFile(
 
 async function removeManagedModeFile(
   filePath: string,
-  mode: ModeName,
+  mode: string,
 ): Promise<void> {
   const content = await readTextIfExists(filePath);
   if (content && isGeneratedModeFile(content, mode)) {
@@ -351,7 +357,7 @@ async function removeLegacyGeneratedModeFile(filePath: string): Promise<void> {
   }
 }
 
-function isGeneratedModeFile(content: string, mode: ModeName): boolean {
+function isGeneratedModeFile(content: string, mode: string): boolean {
   return (
     content.includes(MODE_FILE_MANAGED_MARKER) ||
     (content.includes(`# mancode ${mode}`) &&
@@ -446,9 +452,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, 'utf-8');
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
   }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 interface ModeMeta {
@@ -458,14 +469,14 @@ interface ModeMeta {
 }
 
 const MODE_META: Record<ModeName, ModeMeta> = {
-  mamba: {
+  manba: {
     description:
       'Diagnose bugs and validate real user flows with targeted regression checks.',
-    intro: '# mancode mamba — Diagnosis and Real Validation',
+    intro: '# mancode manba — Diagnosis and Real Validation',
     workflow: [
       '## Five-step workflow (simulate roles in one conversation)',
       '',
-      'Use `mancode workflow create mamba "<task>" --json`; when called from',
+      'Use `mancode workflow create manba "<task>" --json`; when called from',
       'a /man or /manteam Step 6 workflow, add `--parent-task <taskId>`. Persist the returned',
       'taskId in `.mancode/state.json` as currentTask; set currentMode and',
       'currentWorkflowMode to mamba. Never edit metadata.json directly; use',
@@ -502,7 +513,7 @@ const MODE_META: Record<ModeName, ModeMeta> = {
       'Step 3 — Plan: write `plan.md` with scope, reuse, exclusions, risks, completion criteria, and real validation. First plan is v1; revisions use `--plan-version <current+1>` and Active Plans is updated by the CLI.',
       'Step 4 — Plan gate: the user chooses plan-only (`status planned`), continue to execution, or revise the plan. Do not implement before this choice.',
       'Step 5 — Implement the confirmed minimum change.',
-      'Step 6 — Run detected build/lint/typecheck/test and smoke checks. A real or complex diagnosis creates a linked mamba child while the parent remains at Step 6. After a resolved child, restore a parent blocked by that child with `workflow update --status in_progress` before Step 7; never auto-resume manual_test_required. Then write `review-scope.md` from the actual diff, verification evidence, and hard-risk triggers. Initialize a targeted review for routine governed changes or a full review for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, cross-service, or infrastructure changes using `mancode workflow review <taskId> init ...`.',
+      'Step 6 — Run detected build/lint/typecheck/test and smoke checks. A real or complex diagnosis creates a linked manba child while the parent remains at Step 6. After a resolved child, restore a parent blocked by that child with `workflow update --status in_progress` before Step 7; never auto-resume manual_test_required. Then write `review-scope.md` from the actual diff, verification evidence, and hard-risk triggers. Initialize a targeted review for routine governed changes or a full review for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, cross-service, or infrastructure changes using `mancode workflow review <taskId> init ...`.',
       'Step 7 — Run one quality review limited to the changed diff and direct impact. Findings require changed-line evidence and user impact, with at most three new findings. Record stable blocker IDs through `workflow review ... complete`; do not fix yet.',
       'Step 8 — Only full review runs the security/boundary reviewer. It must read Film #1, mark the same root cause duplicate, and stay within security, permissions, recovery, resources, and boundaries. A targeted review ends after Film #1.',
       'Step 9 — If open blockers exist, fix them in one remediation round and record resolved IDs through `workflow review ... remediate`; with no blockers, do not create a remediation round. Re-run affected verification without re-running completed reviewers. Write `summary.md` and set completed only when required domains are complete and blockers are zero; otherwise set blocked+blockingReason.',
@@ -524,9 +535,9 @@ const MODE_META: Record<ModeName, ModeMeta> = {
       '',
       'Then execute every /man Step 1 through Step 9, including clarification,',
       'plan gate, validation, bounded risk-based review, conditional completion, planVersion,',
-      'Active Plans, and linked mamba child behavior. Add compatibility, rollback,',
+      'Active Plans, and linked manba child behavior. Add compatibility, rollback,',
       'ownership, conflict, and handoff notes at each relevant step.',
-      'When a resolved mamba child had blocked the parent, restore the parent through',
+      'When a resolved manba child had blocked the parent, restore the parent through',
       '`workflow update --status in_progress`; never auto-resume manual_test_required.',
       '',
       'Read `.mancode/memory/prd.md`, `spec.md`, and `decisions.md`; append durable',

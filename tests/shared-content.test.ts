@@ -48,10 +48,30 @@ describe('generateSharedContent', () => {
     expect(content).toContain('read `.mancode/state.json`');
     expect(content).toContain('read `.mancode/aesthetics/style-tokens.json`');
     expect(content).toContain('YAGNI ladder');
-    expect(content).toContain('mamba: diagnose bugs');
+    expect(content).toContain('manba: diagnose bugs');
     expect(content).toContain('Platform Downgrade');
     expect(content).toContain('Simulate the coaching staff');
     expect(content).toContain('Scout, Plan Coach, Head Coach');
+  });
+
+  it('renders the public manba name for legacy workflow state', async () => {
+    await writeState({ currentMode: 'mamba' });
+
+    const content = await generateSharedContent(dir, {
+      platform: 'codex',
+      displayName: 'Codex (ChatGPT desktop/CLI)',
+      capabilities: {
+        slashCommands: 'partial',
+        subagents: false,
+        hooks: false,
+        skills: 'agents-skills',
+      },
+      techStack: [],
+      uiLibrary: null,
+    });
+
+    expect(content).toContain('Current mode: manba');
+    expect(content).not.toContain('Current mode: mamba');
   });
 
   it('uses the live install profile instead of stale persisted context', async () => {

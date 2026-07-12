@@ -158,6 +158,18 @@ describe('mancode workflow command', () => {
     });
   });
 
+  it('workflow create reports the original invalid mode', async () => {
+    const logs = await captureLog(() =>
+      workflow(dir, 'create', ['unknown-mode', 'task']),
+    );
+
+    expect(logs.code).toBe(EXIT_INVALID_ARG);
+    expect(logs.stderr.join('\n')).toContain(
+      'invalid workflow mode: unknown-mode',
+    );
+    expect(logs.stderr.join('\n')).toContain('<man|manba|manteam>');
+  });
+
   it('workflow update rejects a blocking reason for a non-blocked status', async () => {
     const meta = await createWorkflow(dir, 'invalid blocking reason', 'man');
 
@@ -265,7 +277,7 @@ describe('mancode workflow command', () => {
     const output = logs.stdout.join('\n');
     expect(output).toContain(`Workflow:    ${meta.taskId}`);
     expect(output).toContain('Task:        fix login bug');
-    expect(output).toContain('Mode:        mamba');
+    expect(output).toContain('Mode:        manba');
   });
 
   it('workflow show displays the current plan version for governed workflows', async () => {
@@ -293,7 +305,7 @@ describe('mancode workflow command', () => {
     expect(shown.activeChildren[0].taskId).toBe(child.taskId);
   });
 
-  it('creates and completes linked mamba workflows through the CLI contract', async () => {
+  it('creates and completes linked manba workflows through the CLI contract', async () => {
     const parentLogs = await captureLog(() =>
       workflow(dir, 'create', ['man', 'parent', 'implementation'], {
         json: true,
@@ -305,7 +317,7 @@ describe('mancode workflow command', () => {
     );
 
     const childLogs = await captureLog(() =>
-      workflow(dir, 'create', ['mamba', 'verify', 'regression'], {
+      workflow(dir, 'create', ['manba', 'verify', 'regression'], {
         parentTask: parent.taskId,
         json: true,
       }),
@@ -322,6 +334,7 @@ describe('mancode workflow command', () => {
     const completed = JSON.parse(completedLogs.stdout.join('\n'));
 
     expect(childLogs.code).toBe(EXIT_OK);
+    expect(child.mode).toBe('mamba');
     expect(child.parentTaskId).toBe(parent.taskId);
     expect(completedLogs.code).toBe(EXIT_OK);
     expect(completed).toMatchObject({
@@ -331,7 +344,7 @@ describe('mancode workflow command', () => {
     });
   });
 
-  it('accepts every documented standalone mamba outcome through the CLI', async () => {
+  it('accepts every documented standalone manba outcome through the CLI', async () => {
     for (const outcome of [
       'fixed',
       'verified',
@@ -339,7 +352,7 @@ describe('mancode workflow command', () => {
       'manual_test_required',
     ]) {
       const createdLogs = await captureLog(() =>
-        workflow(dir, 'create', ['mamba', `outcome-${outcome}`], {
+        workflow(dir, 'create', ['manba', `outcome-${outcome}`], {
           json: true,
         }),
       );
@@ -359,13 +372,29 @@ describe('mancode workflow command', () => {
     }
   });
 
-  it('propagates a CLI-blocked mamba child to its parent', async () => {
+  it('accepts the legacy mamba spelling without exposing it in text output', async () => {
+    const createdLogs = await captureLog(() =>
+      workflow(dir, 'create', ['mamba', 'legacy', 'spelling'], { json: true }),
+    );
+    const created = JSON.parse(createdLogs.stdout.join('\n'));
+
+    const shownLogs = await captureLog(() =>
+      workflow(dir, 'show', [created.taskId]),
+    );
+
+    expect(createdLogs.code).toBe(EXIT_OK);
+    expect(created.mode).toBe('mamba');
+    expect(shownLogs.stdout.join('\n')).toContain('Mode:        manba');
+    expect(shownLogs.stdout.join('\n')).not.toContain('Mode:        mamba');
+  });
+
+  it('propagates a CLI-blocked manba child to its parent', async () => {
     const parent = await createWorkflow(dir, 'parent for blocked child', 'man');
     await captureLog(() =>
       workflow(dir, 'update', [parent.taskId], { step: '6' }),
     );
     const childLogs = await captureLog(() =>
-      workflow(dir, 'create', ['mamba', 'blocked-child'], {
+      workflow(dir, 'create', ['manba', 'blocked-child'], {
         parentTask: parent.taskId,
         json: true,
       }),

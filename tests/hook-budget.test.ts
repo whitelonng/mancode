@@ -222,6 +222,20 @@ describe('SessionStart hook team reminder', () => {
     expect(output).not.toContain('### 团队协作提醒');
     expect(output).not.toContain('/manteam <task>');
   });
+
+  it('renders the public manba name for legacy workflow state', async () => {
+    await writeState(dir, {
+      currentMode: 'mamba',
+      teamModeAutoDetected: false,
+      contributors: 1,
+    });
+
+    const output = await runSessionStartHook(dir);
+
+    expect(output).toContain('mancode_mode: manba');
+    expect(output).toContain('manba mode');
+    expect(output).not.toContain('mamba mode');
+  });
 });
 
 describe('aesthetic scan hook injection inputs', () => {

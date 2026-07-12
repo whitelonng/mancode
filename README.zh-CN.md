@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.5-green?style=flat-square" alt="状态：稳定版 v0.3.5" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.6-green?style=flat-square" alt="状态：稳定版 v0.3.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-381%20passed-brightgreen?style=flat-square" alt="测试：381 通过" />
 </p>
@@ -43,7 +43,7 @@ GitHub Copilot 和 ZCode。Claude Code 获得完整 hooks、skills 和 subagents
 mancode 会安装三类能力：
 
 1. **Hooks**：在 agent 提示词中注入项目上下文、设计 token 和 YAGNI 检查。
-2. **Skills / modes**：提供 `solo`、`/mamba`、`/man`、`/manteam`、`/manps`、
+2. **Skills / modes**：提供 `solo`、`/manba`、`/man`、`/manteam`、`/manps`、
    `/mansolo` 工作流模式。
 3. **教练组 subagents**：Scout、Plan Coach、Head Coach、Film Analyst
    (Offense) 和 Film Analyst (Defense)。
@@ -73,13 +73,14 @@ mancode init
 初始化后，继续正常使用你的编码代理。`solo` 默认自动生效：日常训练，零仪式感。遇到需要
 计划、测试和多 agent 审查的任务时，使用 `/man`：季后赛，每球必争。
 
-不同界面的调用方式不同：Claude Code 和 Cursor 使用 `/man`、`/mamba` 等命令；
+不同界面的调用方式不同：Claude Code 和 Cursor 使用 `/man`、`/manba` 等命令；
 ChatGPT 桌面端、Codex CLI 和 Codex IDE 扩展会从 `.agents/skills/` 读取项目 skill，
-其中 `$man`、`$mamba` 等 `$` mention 是跨界面稳定的显式调用方式。ChatGPT 桌面端
+其中 `$man`、`$manba` 等 `$` mention 是跨界面稳定的显式调用方式。ChatGPT 桌面端
 还会把已启用的 skill 显示在 slash command 列表，因此发现并启用 `man` 后可从列表中
 选择 `/man`；CLI/IDE 则使用 `$man` 或 `/skills`。这些属于 agent skills，而不是已弃用
 的 custom prompts。参见官方 [skills 文档](https://learn.chatgpt.com/docs/build-skills)
 和 [slash command 文档](https://learn.chatgpt.com/docs/reference/slash-commands)。
+已有 workflow 元数据继续兼容，不需要迁移。
 
 ## 安装后创建哪些文件？
 
@@ -172,7 +173,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 | 模式 | 适合场景 | 做什么 |
 |---|---|---|
 | `solo` | 日常编码 · 日常训练 | 轻量 hooks、风格感知、YAGNI 检查和一次受限 diff 自检 |
-| `/mamba` | 诊断与真实验证 · 曼巴心态 | 复现缺陷、定位根因、驱动真实用户路径并执行回归检查 |
+| `/manba` | 诊断与真实验证 · 曼巴心态 | 复现缺陷、定位根因、驱动真实用户路径并执行回归检查 |
 | `/man` | 生产级或高风险改动 · 季后赛 | 完整 9 步工作流和定向/完整风险审查 |
 | `/manteam` | 团队项目 · 上场五人，一条心 | 共享记忆、决策记录、协作和 Conventional Commits |
 | `/manps` | 清理和维护 · 季前赛 | 输出 Markdown 和 JSON 项目健康报告 |
@@ -253,7 +254,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.5。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：稳定版 v0.3.6。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
 发现路径在发布前仍作为验证门禁。
 
@@ -301,14 +302,14 @@ mancode install --minimal # 只安装 solo 必需文件
 
 ```bash
 # Claude Code / Cursor
-/mamba                     # 定位 bug 并验证真实用户路径
+/manba                     # 定位 bug 并验证真实用户路径
 /man                       # 完整 9 步流程和有界风险审查
 /manps                     # 项目健康检查
 /manteam                   # 团队模式和共享记忆
 /mansolo                   # 回到 solo 模式
 
 # ChatGPT 桌面端 Codex / Codex CLI / IDE
-$mamba
+$manba
 $man
 $manps
 $manteam
@@ -323,7 +324,7 @@ mancode status
 mancode status --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
-mancode workflow create <man|mamba|manteam> "<task>" [--parent-task <taskId>]
+mancode workflow create <man|manba|manteam> "<task>" [--parent-task <taskId>]
 mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
 mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
 mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
@@ -344,7 +345,7 @@ mancode version
 以下是 UI 项目的输出示例，并非默认技术栈：
 
 ```text
-mancode v0.3.5
+mancode v0.3.6
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -404,7 +405,7 @@ mancode status --json
 
 ### `mancode workflow`
 
-创建和管理 `/mamba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。关联 `/mamba` 子任务只能在父任务处于 Step 6 且正在进行时创建；严格模式的 review 状态会记录所需领域、blocker ID 和唯一一轮修复。
+创建和管理 `/manba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。关联 `/manba` 子任务只能在父任务处于 Step 6 且正在进行时创建；严格模式的 review 状态会记录所需领域、blocker ID 和唯一一轮修复。
 
 ```bash
 mancode workflow create man "refactor auth module"
@@ -412,8 +413,8 @@ mancode workflow update <taskId> --step 4 --plan-version 2
 mancode workflow review <taskId> init --review-depth full
 mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
 mancode workflow review <taskId> remediate --resolved Q1
-mancode workflow create mamba "verify auth regression" --parent-task <taskId>
-mancode workflow update <mambaTaskId> --status completed --outcome verified
+mancode workflow create manba "verify auth regression" --parent-task <taskId>
+mancode workflow update <manbaTaskId> --status completed --outcome verified
 mancode workflow show <taskId> --json
 mancode workflow clean --older-than 30d --dry-run
 ```
@@ -466,7 +467,7 @@ mancode/
 │
 ├── Skills
 │   ├── solo/SKILL.md
-│   ├── mamba/SKILL.md
+│   ├── manba/SKILL.md
 │   ├── man/SKILL.md
 │   ├── manteam/SKILL.md
 │   ├── manps/SKILL.md
@@ -494,7 +495,7 @@ mancode/
 | 阶段 | 重点 |
 |---|---|
 | MVP-1 | solo 模式、审美扫描、Claude Code hooks |
-| MVP-2 | `/mamba`、`/man`、`/manteam`、`/manps` 和教练组 subagents |
+| MVP-2 | `/manba`、`/man`、`/manteam`、`/manps` 和教练组 subagents |
 | MVP-3 | Cursor、Codex（ChatGPT 桌面端/CLI）、GitHub Copilot 适配 |
 | 公开发布 | npm 稳定版、marketplace 分发、文档和演示 |
 
@@ -525,15 +526,15 @@ mancode/
 
 ### ZCode skills 未出现
 
-确认 `.agents/skills/mamba/SKILL.md` 到 `.agents/skills/mansolo/SKILL.md`
+确认 `.agents/skills/manba/SKILL.md` 到 `.agents/skills/mansolo/SKILL.md`
 都存在，然后重启或刷新 ZCode。当前尚不生成 ZCode `/man*` slash commands，
 因为 workspace command 的文件路径仍需显式验证。
 
 ### Cursor rules 不触发
 
 确认 `.cursor/rules/mancode-*.mdc` 文件存在。`alwaysApply: true` 的规则
-（context、practice、solo）在每次对话加载。模式规则（mamba、man、manteam、
-manps）按 description 触发——输入 `/mamba` 等关键词即可激活。
+（context、practice、solo）在每次对话加载。模式规则（manba、man、manteam、
+manps）按 description 触发——输入 `/manba` 等关键词即可激活。
 
 ### 如何完全重装
 

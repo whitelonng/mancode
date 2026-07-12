@@ -143,7 +143,7 @@ describe('workflow helpers', () => {
         createWorkflow(dir, 'invalid child', 'man', {
           parentTaskId: parent.taskId,
         }),
-      ).rejects.toThrow(/only mamba/);
+      ).rejects.toThrow(/only manba/);
     });
 
     it('rejects a mamba child unless its parent is active at step 6', async () => {
@@ -305,7 +305,7 @@ describe('workflow helpers', () => {
           currentStep: 9,
           status: 'completed',
         }),
-      ).rejects.toThrow(/active mamba child/);
+      ).rejects.toThrow(/active manba child/);
     });
 
     it('rejects lifecycle states before their required workflow step', async () => {

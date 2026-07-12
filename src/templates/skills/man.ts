@@ -40,7 +40,7 @@ export const MAN_SKILL: SkillSpec = {
 
 ### Step 6: 自测、诊断与回归
 
-运行实际 build/lint/typecheck/test 和 smoke test。相同代码、环境、命令下相同错误签名失败两次，停止盲试并诊断根因。需要真实浏览器、复杂复现或回归时，用 \`mancode workflow create mamba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；若父曾因该子任务 blocked，先通过 \`workflow update --status in_progress\` 恢复，再更新至 Step 7。blocked 或 manual_test_required 会由 CLI 自动阻塞父任务，不得手改父 metadata，也不得自动越过人工验证要求。
+运行实际 build/lint/typecheck/test 和 smoke test。相同代码、环境、命令下相同错误签名失败两次，停止盲试并诊断根因。需要真实浏览器、复杂复现或回归时，用 \`mancode workflow create manba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；若父曾因该子任务 blocked，先通过 \`workflow update --status in_progress\` 恢复，再更新至 Step 7。blocked 或 manual_test_required 会由 CLI 自动阻塞父任务，不得手改父 metadata，也不得自动越过人工验证要求。
 
 验证后基于**实际 diff**写 \`review-scope.md\`：base、改动文件、需求、已跑验证、硬风险和审查深度。鉴权、支付、敏感数据、迁移/删除、公开 API、未可信输入、并发、跨服务或基础设施命中任一项时用完整审查 \`full\`；否则用定向审查 \`targeted\`。运行 \`mancode workflow review <taskId> init --review-depth targeted --review-domain quality\` 或 \`--review-depth full\`。用户明确跳过审查时才把 \`review\` 写入累计 skippedSteps，并记录残余风险。
 

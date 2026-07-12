@@ -79,7 +79,8 @@ function renderProjectContext(
   const uiLibrary = options.projectProfile
     ? options.uiLibrary || 'None'
     : state?.uiLibrary || tokens?.uiLibrary || options.uiLibrary || 'None';
-  const mode = state?.currentMode || 'solo';
+  const mode =
+    state?.currentMode === 'mamba' ? 'manba' : state?.currentMode || 'solo';
 
   return [
     '## mancode Project Context',
@@ -155,7 +156,7 @@ function renderModes(options: SharedContentOptions): string {
   let commandLabel: string;
   if (options.capabilities.skills === 'agents-skills') {
     commandLabel =
-      'Invoke mode skills with `$man`, `$mamba`, `$manteam`, `$manps`, `$mansolo`.';
+      'Invoke mode skills with `$man`, `$manba`, `$manteam`, `$manps`, `$mansolo`.';
   } else if (options.capabilities.slashCommands === 'native') {
     commandLabel = 'Use the named commands directly when available.';
   } else {
@@ -168,7 +169,7 @@ function renderModes(options: SharedContentOptions): string {
     '',
     `- solo: default lightweight mode. ${commandLabel}`,
     '- man: progressive governance workflow with planning and optional full execution.',
-    '- mamba: diagnose bugs and validate real user flows or regressions.',
+    '- manba: diagnose bugs and validate real user flows or regressions.',
     '- manteam: use team memory and leave handoff-friendly summaries.',
     '- manps: run project health and cleanup scans before remediation.',
     '- mansolo: return to solo mode.',

@@ -107,16 +107,16 @@ describe('mancode init', () => {
     expect(skillContent).toContain('YAGNI');
 
     // 验证 MVP-2 slash skills 使用 Claude Code 官方目录结构
-    const mambaSkill = await readFile(
-      path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+    const manbaSkill = await readFile(
+      path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
       'utf-8',
     );
-    expect(mambaSkill).toContain('name: mamba');
+    expect(manbaSkill).toContain('name: manba');
 
     const skillNames = await readdir(path.join(dir, '.claude', 'skills'));
     expect(skillNames.sort()).toEqual([
-      'mamba',
       'man',
+      'manba',
       'manps',
       'mansolo',
       'manteam',
@@ -263,7 +263,7 @@ describe('mancode init', () => {
     expect(agents).not.toContain('mancode Modes');
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
     ).rejects.toThrow();
@@ -287,10 +287,10 @@ describe('mancode init', () => {
     ).resolves.toContain('Platform adapter: ZCode');
     await expect(
       readFile(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
-    ).resolves.toContain('name: mamba');
+    ).resolves.toContain('name: manba');
     await expect(
       readFile(path.join(dir, '.claude', 'settings.json'), 'utf-8'),
     ).rejects.toThrow();
@@ -462,10 +462,10 @@ describe('mancode init', () => {
       dir,
       '.claude',
       'skills',
-      'mamba',
+      'manba',
       'SKILL.md',
     );
-    await writeFile(customSkill, '# user mamba\n', 'utf-8');
+    await writeFile(customSkill, '# user manba\n', 'utf-8');
 
     const code = await init(dir, { force: true });
     const after = await Promise.all(
@@ -475,7 +475,7 @@ describe('mancode init', () => {
     expect(code).toBe(EXIT_INIT_FAILED);
     expect(after).toEqual(before);
     await expect(readFile(customSkill, 'utf-8')).resolves.toBe(
-      '# user mamba\n',
+      '# user manba\n',
     );
   });
 
@@ -667,7 +667,7 @@ describe('mancode init', () => {
       'node ".mancode/hooks/user-prompt-submit.mjs"',
     );
     expect(settings.skills.custom).toBe('.claude/skills/custom.md');
-    expect(settings.skills.mamba).toBeUndefined();
+    expect(settings.skills.manba).toBeUndefined();
     await expect(
       readFile(path.join(mancodeDir, 'hooks', 'session-start.sh'), 'utf-8'),
     ).rejects.toThrow();

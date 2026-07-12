@@ -17,7 +17,7 @@ The page should feel like a live engineering broadcast: industrial, restrained, 
 
 Only claims already documented in the repository will appear on the page:
 
-- Five working modes: `solo`, `/mamba`, `/man`, `/manteam`, and `/manps`.
+- Five working modes: `solo`, `/manba`, `/man`, `/manteam`, and `/manps`.
 - `/man` uses a nine-step workflow with targeted or full risk-based review and one remediation round.
 - mancode detects project context and UI design signals when relevant.
 - Workflow artifacts and team memory stay in the repository.

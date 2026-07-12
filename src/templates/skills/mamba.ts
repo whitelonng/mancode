@@ -2,16 +2,16 @@ import type { SkillSpec } from './index.js';
 import { CORE_CODING_PRINCIPLES } from './principles.js';
 
 export const MAMBA_SKILL: SkillSpec = {
-  name: 'mamba',
+  name: 'manba',
   description:
     'Diagnose bugs and validate real user flows. Reproduce, find the root cause, run targeted regression checks, and use browser automation when the platform supports it.',
-  body: `# mancode · /mamba (Diagnosis & Real Validation)
+  body: `# mancode · /manba (Diagnosis & Real Validation)
 
-用户用 \`/mamba <问题或模块>\` 触发你。目标是用证据回答：能否复现、根因在哪里、修复是否有效、关键路径是否回归。
+用户用 \`/manba <问题或模块>\` 触发你。目标是用证据回答：能否复现、根因在哪里、修复是否有效、关键路径是否回归。对外模式名是 manba；持久化 workflow/state 为兼容历史数据继续使用内部值 mamba。
 
 ## 1. 建立任务
 
-先读 state。若 \`currentTask\` 指向 unrelated active workflow，停止并让用户选择恢复该流程或先用 /mansolo 放弃；不得覆盖旧指针。独立任务运行 \`mancode workflow create mamba "<问题或模块>" --json\`；由 /man 或 /manteam Step 6 转入时运行 \`mancode workflow create mamba "<问题或模块>" --parent-task <父taskId> --json\`。读取返回 taskId 后，将 state 的 currentMode/currentTask/currentWorkflowMode 指向 mamba。不得直接创建或改写 metadata.json。
+先读 state。若 \`currentTask\` 指向 unrelated active workflow，停止并让用户选择恢复该流程或先用 /mansolo 放弃；不得覆盖旧指针。独立任务运行 \`mancode workflow create manba "<问题或模块>" --json\`；由 /man 或 /manteam Step 6 转入时运行 \`mancode workflow create manba "<问题或模块>" --parent-task <父taskId> --json\`。读取返回 taskId 后，将 state 的 currentMode/currentTask/currentWorkflowMode 指向内部兼容值 mamba。不得直接创建或改写 metadata.json。
 
 记录现象、环境、复现条件、预期与实际结果、不可触碰的数据。先检查已有测试、路由、模块入口和 README；仍无法确定最小路径时只问关键路径问题。完成后用 CLI 更新至 Step 2。
 
@@ -26,7 +26,7 @@ export const MAMBA_SKILL: SkillSpec = {
 
 仅当 profile 确认 Web UI 且浏览器能力可用时，检查 \`npx\` 并使用项目的 Playwright CLI wrapper。其他项目类型使用已检测到的 API、模拟器、设备、命令或契约验证方式。浏览器验证时先 snapshot 再使用元素引用；导航、弹窗或 UI 大变化后重新 snapshot。截图、trace 和浏览器日志写入 \`.mancode/workflows/<taskId>/artifacts/playwright/\`，报告只写相对路径，并脱敏 Token、Cookie、个人或业务敏感数据。
 
-环境就绪后用 CLI 更新至 Step 3；缺少环境、权限或数据则直接写 blocked + blockingReason，并保留 state 指向当前 mamba 以便恢复。
+环境就绪后用 CLI 更新至 Step 3；缺少环境、权限或数据则直接写 blocked + blockingReason，并保留 state 指向当前 manba 以便恢复。
 
 ## 3. 复现与诊断
 
@@ -46,7 +46,7 @@ export const MAMBA_SKILL: SkillSpec = {
 - 缺少环境、权限或数据，或修复仍失败：\`status: "blocked"\` + \`blockingReason\`
 - 受限平台只能生成手测方案：\`status: "completed", outcome: "manual_test_required"\`；必须明确没有执行真实测试
 
-用 \`mancode workflow update <taskId> --status <status> [--outcome <outcome>] [--blocking-reason <原因>]\` 写结论。父子任务的 blocked/manual_test_required 传播由 CLI 负责。关联子任务以 fixed/verified/no_repro 完成后，先读取父 workflow；若父仍因本子任务 blocked，运行 \`mancode workflow update <parentTaskId> --status in_progress\` 清除阻塞，再把 state 恢复到父 workflow 的 Step 6。manual_test_required 不得自动恢复父任务。独立任务完成后回 solo；blocked 的独立任务继续保持 mamba state。任何情况下都不得直接编辑 metadata 绕过 CLI。
+用 \`mancode workflow update <taskId> --status <status> [--outcome <outcome>] [--blocking-reason <原因>]\` 写结论。父子任务的 blocked/manual_test_required 传播由 CLI 负责。关联子任务以 fixed/verified/no_repro 完成后，先读取父 workflow；若父仍因本子任务 blocked，运行 \`mancode workflow update <parentTaskId> --status in_progress\` 清除阻塞，再把 state 恢复到父 workflow 的 Step 6。manual_test_required 不得自动恢复父任务。独立任务完成后回 solo；blocked 的独立任务继续保持 manba 模式（state 内部值为 mamba）。任何情况下都不得直接编辑 metadata 绕过 CLI。
 
 ${CORE_CODING_PRINCIPLES}
 `,

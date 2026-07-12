@@ -12,6 +12,7 @@ import {
 import { upsertActivePlan } from '../system/team-memory.js';
 import {
   type WorkflowMeta,
+  type WorkflowMode,
   createWorkflow,
   deleteWorkflow,
   isTerminalWorkflowStatus,
@@ -100,7 +101,7 @@ export async function workflow(
       } else {
         console.error(`✗  Invalid workflow subcommand: ${subcommand}`);
         console.error(
-          '   Use: create <man|mamba|manteam> <task> | update <taskId> | review <taskId> <init|complete|remediate|show> | list | show <taskId> | clean',
+          '   Use: create <man|manba|manteam> <task> | update <taskId> | review <taskId> <init|complete|remediate|show> | list | show <taskId> | clean',
         );
       }
       return EXIT_INVALID_ARG;
@@ -226,20 +227,21 @@ async function workflowCreate(
   args: string[],
   options: WorkflowOptions,
 ): Promise<number> {
-  const mode = args[0];
+  const requestedMode = args[0];
+  const mode = parsePublicWorkflowMode(requestedMode);
   const task = args.slice(1).join(' ').trim();
-  if (mode !== 'man' && mode !== 'mamba' && mode !== 'manteam') {
+  if (!mode) {
     return invalidArg(
       options,
-      `invalid workflow mode: ${mode ?? ''}`,
-      'Use: mancode workflow create <man|mamba|manteam> <task> [--parent-task <taskId>]',
+      `invalid workflow mode: ${requestedMode ?? ''}`,
+      'Use: mancode workflow create <man|manba|manteam> <task> [--parent-task <taskId>]',
     );
   }
   if (!task) {
     return invalidArg(
       options,
       'missing workflow task',
-      'Use: mancode workflow create <man|mamba|manteam> <task> [--parent-task <taskId>]',
+      'Use: mancode workflow create <man|manba|manteam> <task> [--parent-task <taskId>]',
     );
   }
 
@@ -322,7 +324,7 @@ async function workflowUpdate(
     if (existing.mode !== 'mamba' || nextStatus !== 'completed') {
       return invalidArg(
         options,
-        '--outcome is only valid when completing a mamba workflow',
+        '--outcome is only valid when completing a manba workflow',
       );
     }
     patch.outcome = options.outcome;
@@ -462,7 +464,7 @@ async function workflowShow(
 
   console.log(`Workflow:    ${meta.taskId}`);
   console.log(`Task:        ${meta.task}`);
-  console.log(`Mode:        ${meta.mode}`);
+  console.log(`Mode:        ${formatPublicWorkflowMode(meta.mode)}`);
   console.log(`Status:      ${meta.status}`);
   console.log(`Current step:${meta.currentStep}/${maxWorkflowStep(meta.mode)}`);
   console.log(
@@ -476,10 +478,10 @@ async function workflowShow(
   if (meta.outcome) console.log(`Outcome:     ${meta.outcome}`);
   if (meta.blockingReason) console.log(`Blocked:     ${meta.blockingReason}`);
 
-  // Show active mamba children for man/manteam workflows (plan §7).
+  // Show active diagnostic children for man/manteam workflows (plan §7).
   if (children !== undefined) {
     if (children.length > 0) {
-      console.log(`Children:    ${children.length} active mamba workflow(s)`);
+      console.log(`Children:    ${children.length} active manba workflow(s)`);
       for (const child of children) {
         console.log(
           `  - ${child.taskId} (Step ${child.currentStep}/5, ${child.status})`,
@@ -586,7 +588,19 @@ function formatWorkflowRow(meta: WorkflowView): string {
       ? `children=${meta.activeChildren.map((child) => child.taskId).join(',')}`
       : '',
   ].filter(Boolean);
-  return `${meta.taskId.padEnd(42)} ${meta.mode.padEnd(7)} ${meta.status.padEnd(11)} ${step}${details.length > 0 ? ` | ${details.join(' | ')}` : ''}`;
+  return `${meta.taskId.padEnd(42)} ${formatPublicWorkflowMode(meta.mode).padEnd(7)} ${meta.status.padEnd(11)} ${step}${details.length > 0 ? ` | ${details.join(' | ')}` : ''}`;
+}
+
+function parsePublicWorkflowMode(
+  value: string | undefined,
+): WorkflowMode | null {
+  if (value === 'manba' || value === 'mamba') return 'mamba';
+  if (value === 'man' || value === 'manteam') return value;
+  return null;
+}
+
+function formatPublicWorkflowMode(mode: WorkflowMode): string {
+  return mode === 'mamba' ? 'manba' : mode;
 }
 
 function attachActiveChildren(workflows: WorkflowMeta[]): WorkflowView[] {

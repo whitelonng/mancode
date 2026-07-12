@@ -67,7 +67,7 @@ function renderCopilotPromptConventions(): string {
     'GitHub Copilot does not provide native mancode slash commands, hooks, or isolated subagents. Treat these names as user prompt conventions:',
     '',
     '- man: use progressive research, planning, implementation, verification, and bounded risk-based review.',
-    '- mamba: diagnose bugs and validate real user flows or regressions.',
+    '- manba: diagnose bugs and validate real user flows or regressions.',
     '- manteam: read team memory and write handoff-friendly summaries.',
     '- manps: prefer `mancode manps [area]` before cleanup.',
     '- mansolo: exit any active mode and return to default solo behavior.',
