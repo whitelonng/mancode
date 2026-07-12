@@ -47,6 +47,13 @@ export async function checkPlatformStatus(
   };
 }
 
+export async function isPlatformPresent(
+  rootDir: string,
+  platform: string,
+): Promise<boolean> {
+  return (await checkPlatformReadiness(rootDir, platform)).present;
+}
+
 async function checkPlatformReadiness(
   rootDir: string,
   platform: string,

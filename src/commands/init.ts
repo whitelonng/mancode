@@ -6,9 +6,11 @@ import { validateClaudeCodeSettings } from '../installers/claude-code.js';
 import { installMancodeCore } from '../installers/common.js';
 import { MANCODE_CURSOR_RULE_FILES } from '../installers/cursor.js';
 import { MODE_NAMES } from '../installers/mode-skills.js';
+import { isPlatformPresent } from '../installers/platform-status.js';
 import {
   type PlatformName,
   getPlatformInstaller,
+  getPlatformInstallers,
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
@@ -177,28 +179,33 @@ export async function init(
 
   if (!isGitRepo && !hasManifest) {
     const genericSafety = await canInitializeGenericProject(rootDir);
-    if (!genericSafety.ok) {
+    if (
+      !genericSafety.ok &&
+      !(wasInitialized && genericSafety.reason === 'nonempty')
+    ) {
       printNotProjectDirectory(rootDir, locale, genericSafety.reason);
       return EXIT_NOT_A_PROJECT_DIR;
     }
-    const prompter =
-      options.prompter ??
-      (options.interactive ? createTerminalPrompter() : null);
-    const confirmed =
-      options.empty || options.yes
-        ? true
-        : prompter
-          ? await prompter.confirmGenericProject({ rootDir, locale })
-          : false;
-    if (!confirmed) {
-      if (options.interactive) {
-        console.log(
-          locale === 'zh-CN' ? '已取消初始化。' : 'Initialization cancelled.',
-        );
-        return EXIT_USER_CANCEL;
+    if (!wasInitialized) {
+      const prompter =
+        options.prompter ??
+        (options.interactive ? createTerminalPrompter() : null);
+      const confirmed =
+        options.empty || options.yes
+          ? true
+          : prompter
+            ? await prompter.confirmGenericProject({ rootDir, locale })
+            : false;
+      if (!confirmed) {
+        if (options.interactive) {
+          console.log(
+            locale === 'zh-CN' ? '已取消初始化。' : 'Initialization cancelled.',
+          );
+          return EXIT_USER_CANCEL;
+        }
+        printNotProjectDirectory(rootDir, locale, 'empty');
+        return EXIT_NOT_A_PROJECT_DIR;
       }
-      printNotProjectDirectory(rootDir, locale, 'empty');
-      return EXIT_NOT_A_PROJECT_DIR;
     }
     isGenericProject = true;
   }
@@ -262,9 +269,26 @@ export async function init(
     const existingPlatform = wasInitialized
       ? await readExistingInitPlatform(stateFile)
       : null;
+    const existingConfig = wasInitialized
+      ? await readExistingInitPreferences(mancodeDir)
+      : { platforms: [], minimalByPlatform: {} };
+    const recoverablePlatforms =
+      wasInitialized && existingConfig.platforms.length === 0
+        ? await detectManagedInitPlatforms(rootDir)
+        : [];
+    const forceReinstallPlatforms =
+      options.force && options.platform === undefined
+        ? existingConfig.platforms.length > 0
+          ? existingConfig.platforms
+          : recoverablePlatforms
+        : [];
     const platformHints = await detectPlatformHints(rootDir);
     const selectedPlatforms = await selectInitPlatforms({
-      option: options.platform,
+      option:
+        options.platform ??
+        (forceReinstallPlatforms.length > 0
+          ? forceReinstallPlatforms.join(',')
+          : undefined),
       existingPlatform,
       hints: platformHints,
       interactive: options.interactive,
@@ -318,14 +342,16 @@ export async function init(
 
     // 4.1 检测多人协作（MVP-2）
     const team = await detectTeamStatus(rootDir);
-    const existingPreferences = wasInitialized
-      ? await readExistingInitPreferences(mancodeDir, primaryPlatform)
-      : {};
-    const initialMinimal = existingPreferences.minimal ?? false;
+    const platformMinimal = Object.fromEntries(
+      selectedPlatforms.map((platform) => [
+        platform,
+        existingConfig.minimalByPlatform[platform] ?? false,
+      ]),
+    ) as Partial<Record<PlatformName, boolean>>;
     const existingTeamMode =
-      existingPreferences.forceTeamMode === true
+      existingConfig.forceTeamMode === true
         ? 'on'
-        : (existingPreferences.teamMode ?? 'auto');
+        : (existingConfig.teamMode ?? 'auto');
     const teamModeEnabled =
       options.team ??
       (existingTeamMode === 'on'
@@ -417,7 +443,7 @@ export async function init(
           ...Object.fromEntries(
             selectedPlatforms.map((platform) => [
               platform,
-              { minimal: initialMinimal },
+              { minimal: platformMinimal[platform] ?? false },
             ]),
           ),
         },
@@ -508,7 +534,7 @@ export async function init(
         techStack: profileStack,
         uiLibrary,
         projectProfile: profile,
-        minimal: initialMinimal,
+        minimal: platformMinimal[installer.name] ?? false,
         force: options.force,
       });
     }
@@ -647,23 +673,31 @@ async function updateConfigOptions(
   );
 }
 
-async function readExistingInitPreferences(
-  mancodeDir: string,
-  platform: PlatformName,
-): Promise<{
+async function readExistingInitPreferences(mancodeDir: string): Promise<{
+  platforms: PlatformName[];
   forceTeamMode?: boolean;
   teamMode?: 'auto' | 'on' | 'off';
-  minimal?: boolean;
+  minimalByPlatform: Partial<Record<PlatformName, boolean>>;
 }> {
   try {
     const config = JSON.parse(
       await fs.readFile(path.join(mancodeDir, 'config.json'), 'utf-8'),
     ) as Record<string, unknown>;
     const preferences: {
+      platforms: PlatformName[];
       forceTeamMode?: boolean;
       teamMode?: 'auto' | 'on' | 'off';
-      minimal?: boolean;
-    } = {};
+      minimalByPlatform: Partial<Record<PlatformName, boolean>>;
+    } = {
+      platforms: Array.isArray(config.platforms)
+        ? config.platforms.filter(
+            (platform): platform is PlatformName =>
+              typeof platform === 'string' &&
+              getPlatformInstaller(platform) !== null,
+          )
+        : [],
+      minimalByPlatform: {},
+    };
     if (typeof config.forceTeamMode === 'boolean') {
       preferences.forceTeamMode = config.forceTeamMode;
     }
@@ -674,19 +708,17 @@ async function readExistingInitPreferences(
     ) {
       preferences.teamMode = config.teamMode;
     }
-    if (
-      Array.isArray(config.platforms) &&
-      config.platforms.includes(platform) &&
-      isRecord(config.platformOptions)
-    ) {
-      const platformOptions = config.platformOptions[platform];
-      if (isRecord(platformOptions) && platformOptions.minimal === true) {
-        preferences.minimal = true;
+    if (isRecord(config.platformOptions)) {
+      for (const platform of preferences.platforms) {
+        const platformOptions = config.platformOptions[platform];
+        if (isRecord(platformOptions) && platformOptions.minimal === true) {
+          preferences.minimalByPlatform[platform] = true;
+        }
       }
     }
     return preferences;
   } catch {
-    return {};
+    return { platforms: [], minimalByPlatform: {} };
   }
 }
 
@@ -704,6 +736,20 @@ async function readExistingInitPlatform(
   } catch {
     return null;
   }
+}
+
+async function detectManagedInitPlatforms(
+  rootDir: string,
+): Promise<PlatformName[]> {
+  const detected = await Promise.all(
+    getPlatformInstallers().map(async (platform) => ({
+      name: platform.name,
+      present: await isPlatformPresent(rootDir, platform.name),
+    })),
+  );
+  return detected
+    .filter((platform) => platform.present)
+    .map(({ name }) => name);
 }
 
 async function selectInitPlatforms(input: {

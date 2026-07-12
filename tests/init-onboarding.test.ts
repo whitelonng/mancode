@@ -6,9 +6,9 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   EXIT_INIT_FAILED,
   EXIT_NOT_A_PROJECT_DIR,
@@ -163,6 +163,42 @@ describe('init onboarding', () => {
     expect(state.projectMode).toBe('generic');
     expect(state.platform).toBe('codex');
     expect(config.platforms).toEqual(['codex', 'cursor']);
+  });
+
+  it('force reinstalls an initialized generic project without project markers', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-generic-force-'));
+    dirs.push(dir);
+    expect(await init(dir, { empty: true, platform: 'codex' })).toBe(EXIT_OK);
+    await writeFile(path.join(dir, 'notes.txt'), 'user content\n');
+
+    expect(await init(dir, { force: true })).toBe(EXIT_OK);
+    const state = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    expect(state.projectMode).toBe('generic');
+    await expect(readFile(path.join(dir, 'notes.txt'), 'utf-8')).resolves.toBe(
+      'user content\n',
+    );
+  });
+
+  it('refuses force reinstallation in home even when state.json exists', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-fake-home-'));
+    dirs.push(dir);
+    await mkdir(path.join(dir, '.mancode'));
+    await writeFile(path.join(dir, '.mancode', 'state.json'), '{}\n');
+    await writeFile(path.join(dir, 'notes.txt'), 'user content\n');
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(dir);
+
+    try {
+      expect(await init(dir, { force: true, platform: 'codex' })).toBe(
+        EXIT_NOT_A_PROJECT_DIR,
+      );
+    } finally {
+      homedir.mockRestore();
+    }
+    await expect(readFile(path.join(dir, 'notes.txt'), 'utf-8')).resolves.toBe(
+      'user content\n',
+    );
   });
 
   it('uses the single detected platform as primary when all are selected', async () => {
