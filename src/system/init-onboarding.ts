@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -22,19 +23,116 @@ export interface InitPrompter {
 }
 
 const ALL_PLATFORMS = Object.keys(PLATFORM_INSTALLERS) as PlatformName[];
+let cachedNativeSystemLocale: string | null | undefined;
 
 export function detectInitLocale(
   override?: string,
   environment: NodeJS.ProcessEnv = process.env,
   systemLocale: string = Intl.DateTimeFormat().resolvedOptions().locale,
+  nativeLocale?: string | null,
 ): InitLocale | null {
   if (override) return parseLocale(override);
-  const environmentLocale =
-    environment.LC_ALL ?? environment.LC_MESSAGES ?? environment.LANG;
-  return parseLocale(environmentLocale) ?? parseLocale(systemLocale) ?? 'en';
+  const resolvedNativeLocale =
+    nativeLocale === undefined ? getNativeSystemLocale() : nativeLocale;
+  return (
+    parseLocale(resolvedNativeLocale) ??
+    detectEnvironmentLocale(environment) ??
+    parseLocale(systemLocale) ??
+    'en'
+  );
 }
 
-function parseLocale(value?: string): InitLocale | null {
+export function detectNativeSystemLocale(
+  platform: NodeJS.Platform = process.platform,
+  runCommand: (
+    command: string,
+    args: readonly string[],
+  ) => string | null = runLocaleCommand,
+): string | null {
+  if (platform === 'darwin') {
+    const languages = runCommand('defaults', ['read', '-g', 'AppleLanguages']);
+    const primaryLanguage = parsePrimaryAppleLanguage(languages);
+    if (primaryLanguage) return primaryLanguage;
+    return cleanLocaleOutput(
+      runCommand('defaults', ['read', '-g', 'AppleLocale']),
+    );
+  }
+
+  if (platform === 'win32') {
+    return cleanLocaleOutput(
+      runCommand('powershell.exe', [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '[System.Globalization.CultureInfo]::CurrentUICulture.Name',
+      ]),
+    );
+  }
+
+  return null;
+}
+
+function getNativeSystemLocale(): string | null {
+  if (cachedNativeSystemLocale === undefined) {
+    cachedNativeSystemLocale = detectNativeSystemLocale();
+  }
+  return cachedNativeSystemLocale;
+}
+
+function detectEnvironmentLocale(
+  environment: NodeJS.ProcessEnv,
+): InitLocale | null {
+  const candidates = [
+    environment.LANGUAGE,
+    environment.LC_ALL,
+    environment.LC_MESSAGES,
+    environment.LANG,
+  ];
+  for (const candidate of candidates) {
+    for (const locale of candidate?.split(':') ?? []) {
+      const parsed = parseLocale(locale);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+function runLocaleCommand(
+  command: string,
+  args: readonly string[],
+): string | null {
+  try {
+    const output = execFileSync(command, [...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2_000,
+      windowsHide: true,
+    });
+    return cleanLocaleOutput(output);
+  } catch {
+    return null;
+  }
+}
+
+function parsePrimaryAppleLanguage(output: string | null): string | null {
+  const cleaned = cleanLocaleOutput(output);
+  if (!cleaned) return null;
+  const quoted = cleaned.match(/"([^"]+)"/)?.[1];
+  if (quoted) return quoted;
+  return (
+    cleaned
+      .split(/[\s(),]+/)
+      .find((value) => /^[a-z]{2,3}(?:[-_][a-z0-9]+)*$/i.test(value)) ?? null
+  );
+}
+
+function cleanLocaleOutput(output: string | null): string | null {
+  const cleaned = output?.replace(/^\uFEFF/, '').trim();
+  return cleaned || null;
+}
+
+function parseLocale(value?: string | null): InitLocale | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace('_', '-');
   if (normalized === 'zh' || normalized.startsWith('zh-')) return 'zh-CN';

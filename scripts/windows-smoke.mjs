@@ -55,6 +55,40 @@ try {
     'refresh-project did not regenerate static adapter context',
   );
 
+  if (process.platform === 'win32') {
+    const systemLocale = readWindowsUiCulture();
+    const normalizedSystemLocale = systemLocale.toLowerCase().replace('_', '-');
+    const isChinese =
+      normalizedSystemLocale === 'zh' || normalizedSystemLocale.startsWith('zh-');
+    const isEnglish =
+      normalizedSystemLocale === 'en' || normalizedSystemLocale.startsWith('en-');
+    if (isChinese || isEnglish) {
+      const opposingLocale = isChinese ? 'en_US.UTF-8' : 'zh_CN.UTF-8';
+      const localeProject = await createProject('locale-project');
+      const localeResult = runCli(
+        localeProject,
+        ['init', '--platform', 'codex'],
+        {
+          ...process.env,
+          LANGUAGE: opposingLocale,
+          LC_ALL: opposingLocale,
+          LC_MESSAGES: opposingLocale,
+          LANG: opposingLocale,
+        },
+      );
+      assert(
+        localeResult.stdout.includes(
+          isChinese ? '检测系统依赖' : 'Checking system dependencies',
+        ),
+        `init did not prefer Windows UI culture ${systemLocale}: ${localeResult.stdout}`,
+      );
+    } else {
+      console.log(
+        `Skipping locale priority assertion for unsupported Windows UI culture ${systemLocale}.`,
+      );
+    }
+  }
+
   const codexProject = await createProject('codex-project');
   runCli(codexProject, ['init', '--platform', 'codex']);
   const codexState = await readJson(
@@ -101,16 +135,38 @@ async function createProject(name) {
   return project;
 }
 
-function runCli(cwd, args) {
+function runCli(cwd, args, env = noToolPath) {
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd,
     encoding: 'utf8',
-    env: noToolPath,
+    env,
   });
   assert(
     result.status === 0,
     `CLI failed (${result.status}): ${result.stderr || result.stdout}`,
   );
+  return result;
+}
+
+function readWindowsUiCulture() {
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '[System.Globalization.CultureInfo]::CurrentUICulture.Name',
+    ],
+    { encoding: 'utf8' },
+  );
+  assert(
+    result.status === 0,
+    `could not read Windows UI culture: ${result.stderr || result.stdout}`,
+  );
+  const locale = result.stdout.replace(/^\uFEFF/, '').trim();
+  assert(locale, 'Windows UI culture was empty');
+  return locale;
 }
 
 function runHook(cwd, fileName, input = '') {
