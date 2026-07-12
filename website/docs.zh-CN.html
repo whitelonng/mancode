@@ -53,15 +53,16 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>安装与初始化</h2>
-          <p>先全局安装 mancode，进入一个 git 仓库或已识别的项目目录，再初始化默认适配器。需要 Node.js 20+；原生支持 Windows CMD、PowerShell 和 Git Bash。Git 是可选依赖，只用于增强团队自动检测；Claude Code hooks 直接由 Node 执行，不需要 Bash 或 jq。</p>
+          <p>先全局安装 mancode，进入项目目录或全新的空目录，再选择要初始化的一个或多个适配器。需要 Node.js 20+；原生支持 Windows CMD、PowerShell 和 Git Bash。Git 是可选依赖，只用于增强团队自动检测；Claude Code hooks 直接由 Node 执行，不需要 Bash 或 jq。</p>
           <div class="docs-steps"><article class="docs-step"><b>01</b><strong>安装</strong><p>在机器上全局安装 CLI。</p></article><article class="docs-step"><b>02</b><strong>进入项目</strong><p>让 mancode 在需要理解的项目根目录运行。</p></article><article class="docs-step"><b>03</b><strong>初始化</strong><p>创建本地状态、扫描项目并安装适配器。</p></article></div>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm install -g mancode
 <span class="command-prompt">$</span> cd your-project
 <span class="command-prompt">$</span> mancode init</code></pre><button type="button" data-copy="npm install -g mancode\ncd your-project\nmancode init">复制</button></div>
           <h3>指定平台初始化</h3><p>如果你知道当前项目要面向哪个 Agent，可在初始化时指定平台。</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform cursor</code></pre><button type="button" data-copy="mancode init --platform cursor">复制</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform codex,cursor</code></pre><button type="button" data-copy="mancode init --platform codex,cursor">复制</button></div>
+          <p><code>mancode init</code> 会引导选择一个、多个或全部 Agent 平台。空目录可初始化为通用项目，不需要先运行 <code>git init</code> 或 <code>npm init</code>；以后加入 Git 或 manifest 后执行 <code>mancode refresh-project</code>，同步项目事实和已安装的静态适配器。</p>
           <table class="docs-table"><thead><tr><th>选项</th><th>适用情况</th><th>作用</th></tr></thead><tbody>
-            <tr><td><code>--force</code></td><td>修复或重装生成的配置</td><td>重装时保留已扫描的风格 token。</td></tr><tr><td><code>--yes</code></td><td>CI 或无交互环境</td><td>跳过确认提示。</td></tr><tr><td><code>--team</code></td><td>立即需要团队记忆</td><td>强制开启团队模式。</td></tr><tr><td><code>--no-team</code></td><td>个人项目</td><td>强制关闭团队模式。</td></tr><tr><td><code>--style NAME</code></td><td>已有命名的审美偏好</td><td>保存为默认风格偏好。</td></tr>
+            <tr><td><code>--force</code></td><td>修复或重装生成的配置</td><td>重装时保留已扫描的风格 token。</td></tr><tr><td><code>--yes</code></td><td>CI 或无交互环境</td><td>跳过通用项目确认；应同时指定 <code>--platform</code>。</td></tr><tr><td><code>--team</code></td><td>立即需要团队记忆</td><td>强制开启团队模式。</td></tr><tr><td><code>--no-team</code></td><td>个人项目</td><td>强制关闭团队模式。</td></tr><tr><td><code>--style NAME</code></td><td>已有命名的审美偏好</td><td>保存为默认风格偏好。</td></tr>
           </tbody></table>
         </section>
 

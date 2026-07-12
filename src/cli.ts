@@ -4,6 +4,7 @@ import { init } from './commands/init.js';
 import { install } from './commands/install.js';
 import { listPlatforms } from './commands/list-platforms.js';
 import { manps } from './commands/manps.js';
+import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
 import { uninstall } from './commands/uninstall.js';
@@ -26,9 +27,14 @@ program
   .option('--team', 'Force enable team mode (MVP-2)')
   .option('--no-team', 'Force disable team mode (MVP-2)')
   .option('--style <name>', 'Specify aesthetic style (MVP-2)')
-  .option('--platform <platform>', 'Initial adapter platform (MVP-3)')
+  .option('--platform <platforms>', 'Adapters: comma-separated names or all')
+  .option('--empty', 'Initialize a safe empty directory as a generic project')
+  .option('--lang <locale>', 'Initialization language: zh-CN or en')
   .action(async (options) => {
-    const code = await init(process.cwd(), options);
+    const code = await init(process.cwd(), {
+      ...options,
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    });
     process.exitCode = code;
   });
 
@@ -122,6 +128,16 @@ program
   .description('Refresh project profile and rescan applicable design tokens')
   .action(async () => {
     const code = await refreshStyle(process.cwd());
+    process.exitCode = code;
+  });
+
+program
+  .command('refresh-project')
+  .description(
+    'Refresh detected project facts after adding Git or project files',
+  )
+  .action(async () => {
+    const code = await refreshProject(process.cwd());
     process.exitCode = code;
   });
 

@@ -59,7 +59,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>Install &amp; initialize</h2>
-          <p>Install mancode globally, enter a repository or supported project directory, then initialize the default adapter. Node.js 20+ is required. Windows CMD, PowerShell, and Git Bash are supported natively; Git itself is optional and only improves team auto-detection. Claude Code hooks run with Node, not Bash or jq.</p>
+          <p>Install mancode globally, enter a project directory or a new empty folder, then choose the adapter or adapters to initialize. Node.js 20+ is required. Windows CMD, PowerShell, and Git Bash are supported natively; Git itself is optional and only improves team auto-detection. Claude Code hooks run with Node, not Bash or jq.</p>
           <div class="docs-steps">
             <article class="docs-step"><b>01</b><strong>Install</strong><p>Install the CLI once on your machine.</p></article>
             <article class="docs-step"><b>02</b><strong>Enter</strong><p>Run it from the project you want mancode to understand.</p></article>
@@ -70,10 +70,11 @@
 <span class="command-prompt">$</span> mancode init</code></pre><button type="button" data-copy="npm install -g mancode\ncd your-project\nmancode init">Copy</button></div>
           <h3>Initialize a specific platform</h3>
           <p>Use <code>--platform</code> when the current project should target a particular coding surface from the start.</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform cursor</code></pre><button type="button" data-copy="mancode init --platform cursor">Copy</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform codex,cursor</code></pre><button type="button" data-copy="mancode init --platform codex,cursor">Copy</button></div>
+          <p><code>mancode init</code> guides you through one, many, or all agent platforms. In an empty folder it can initialize a generic project—no <code>git init</code> or <code>npm init</code> required. Add Git or a manifest later, then run <code>mancode refresh-project</code> to update project facts and installed static adapters.</p>
           <table class="docs-table"><thead><tr><th>Option</th><th>Use it when</th><th>What it does</th></tr></thead><tbody>
             <tr><td><code>--force</code></td><td>Repair or reinstall generated configuration</td><td>Reinstalls while preserving scanned style tokens.</td></tr>
-            <tr><td><code>--yes</code></td><td>CI or a non-interactive shell</td><td>Skips confirmation prompts.</td></tr>
+            <tr><td><code>--yes</code></td><td>CI or a non-interactive shell</td><td>Skips the generic-project confirmation; pair it with <code>--platform</code>.</td></tr>
             <tr><td><code>--team</code></td><td>You need shared memory immediately</td><td>Forces team mode on.</td></tr>
             <tr><td><code>--no-team</code></td><td>This is a personal project</td><td>Forces team mode off.</td></tr>
             <tr><td><code>--style NAME</code></td><td>You have a named visual preference</td><td>Saves it as the default style preference.</td></tr>
@@ -181,7 +182,7 @@ $manteam</code></pre><button type="button" data-copy="/mamba\n/man\n/manteam">Co
 
         <section class="doc-section" id="troubleshooting" data-searchable>
           <h2>Troubleshooting</h2>
-          <h3><code>mancode init</code> says the directory is not a project</h3><p>Run it inside a git repository or one with a recognized project manifest. The initializer intentionally does not treat an arbitrary folder as a project.</p>
+          <h3><code>mancode init</code> says the directory is not a project</h3><p>An empty folder is offered as a generic project in an interactive terminal. Non-empty unrecognized folders stay protected; enter the actual project directory. In scripts, use <code>mancode init --empty --platform &lt;platform&gt;</code> only for an intentionally empty directory.</p>
           <h3>Claude Code hooks are not running</h3><p>Restart Claude Code after initialization so it reloads <code>.claude/settings.json</code>. Then run <code>mancode status</code>. If the hooks are still missing, run <code>mancode install claude-code --force</code>.</p>
           <h3>A platform is “not ready”</h3><p>The target files are missing or its managed block was changed. Run <code>mancode install &lt;platform&gt; --force</code> to regenerate mancode-owned content while preserving user content outside the markers.</p>
           <h3>Cursor rules do not trigger</h3><p>Confirm that <code>.cursor/rules/mancode-*.mdc</code> exists. Context, practice, and solo rules always apply; the higher-intensity rules activate through their descriptions, so invoke the relevant mode explicitly.</p>
