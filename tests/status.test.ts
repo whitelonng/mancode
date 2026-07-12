@@ -98,7 +98,7 @@ describe('mancode status', () => {
 
   it('reports a full Claude adapter incomplete when a generated skill is missing', async () => {
     await silentInit(dir);
-    await rm(path.join(dir, '.claude', 'skills', 'mamba'), {
+    await rm(path.join(dir, '.claude', 'skills', 'manba'), {
       recursive: true,
       force: true,
     });
@@ -327,7 +327,7 @@ describe('mancode status', () => {
   it('reports a non-minimal Cursor adapter incomplete when a mode command is missing', async () => {
     await silentInit(dir);
     await install(dir, 'cursor');
-    await rm(path.join(dir, '.cursor', 'commands', 'mamba.md'));
+    await rm(path.join(dir, '.cursor', 'commands', 'manba.md'));
 
     const logs = await captureLog(() => status(dir, { json: true }));
     const result: StatusResult = JSON.parse(logs.join('\n'));

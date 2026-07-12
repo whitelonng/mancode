@@ -493,7 +493,9 @@ function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
  * 文本格式输出（默认），字段命名对齐 docs/08-cli-spec.md §4.3。
  */
 function printText(r: StatusResult): void {
-  const modeLabel = r.mode === 'solo' ? `${r.mode} (default)` : r.mode;
+  const publicMode = r.mode === 'mamba' ? 'manba' : r.mode;
+  const modeLabel =
+    publicMode === 'solo' ? `${publicMode} (default)` : publicMode;
 
   console.log('');
   console.log(`mancode v${r.version}`);

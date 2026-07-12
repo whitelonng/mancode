@@ -13,7 +13,7 @@ import { upsertActivePlan } from './team-memory.js';
 /**
  * Workflow 元数据。
  *
- * 每个 /man、/mamba 或 /manteam 任务在 .mancode/workflows/<taskId>/metadata.json 里
+ * 每个 /man、/manba 或 /manteam 任务在 .mancode/workflows/<taskId>/metadata.json 里
  * 存一份，记录任务进度（docs/14-orchestration.md §2.1）。
  */
 export interface WorkflowMeta {
@@ -37,7 +37,7 @@ export interface WorkflowMeta {
   blockingReason?: string;
   /** Parent /man or /manteam workflow for a diagnostic child. */
   parentTaskId?: string;
-  /** Final diagnostic result for /mamba workflows. */
+  /** Final diagnostic result for /manba workflows. */
   outcome?: WorkflowOutcome;
   /** Monotonically increasing plan revision for /man workflows. */
   planVersion?: number;
@@ -101,7 +101,7 @@ function slugify(text: string): string {
  *
  * @param projectRoot 项目根
  * @param task 任务描述
- * @param mode man / mamba / manteam
+ * @param mode Internal workflow value: man / mamba / manteam.
  */
 export async function createWorkflow(
   projectRoot: string,
@@ -333,7 +333,7 @@ async function validateParentTask(
 ): Promise<void> {
   if (!parentTaskId) return;
   if (mode !== 'mamba') {
-    throw new Error('only mamba workflows can have a parent task');
+    throw new Error('only manba workflows can have a parent task');
   }
   const parent = await readWorkflow(projectRoot, parentTaskId);
   if (!parent || (parent.mode !== 'man' && parent.mode !== 'manteam')) {
@@ -389,7 +389,7 @@ async function validateWorkflowMeta(
     );
   }
   if (updated.status === 'planned' && updated.mode === 'mamba') {
-    throw new Error('mamba workflows cannot be planned');
+    throw new Error('manba workflows cannot be planned');
   }
   if (updated.status === 'planned' && updated.currentStep !== 4) {
     throw new Error('planned workflows must be at step 4');
@@ -399,7 +399,7 @@ async function validateWorkflowMeta(
     updated.currentStep !== maxWorkflowStep(updated.mode)
   ) {
     throw new Error(
-      `completed ${updated.mode} workflows must be at step ${maxWorkflowStep(updated.mode)}`,
+      `completed ${updated.mode === 'mamba' ? 'manba' : updated.mode} workflows must be at step ${maxWorkflowStep(updated.mode)}`,
     );
   }
   if (
@@ -416,23 +416,23 @@ async function validateWorkflowMeta(
     throw new Error('only blocked workflows can have a blocking reason');
   }
   if (updated.mode !== 'mamba' && updated.outcome !== undefined) {
-    throw new Error('only mamba workflows can have an outcome');
+    throw new Error('only manba workflows can have an outcome');
   }
   if (updated.outcome !== undefined && !isWorkflowOutcome(updated.outcome)) {
     throw new Error(`invalid workflow outcome: ${updated.outcome}`);
   }
   if (updated.outcome !== undefined && updated.status !== 'completed') {
-    throw new Error('mamba outcomes can only be set on completed workflows');
+    throw new Error('manba outcomes can only be set on completed workflows');
   }
   if (
     updated.mode === 'mamba' &&
     updated.status === 'completed' &&
     !updated.outcome
   ) {
-    throw new Error('completed mamba workflows require an outcome');
+    throw new Error('completed manba workflows require an outcome');
   }
   if (updated.mode === 'mamba' && updated.planVersion !== undefined) {
-    throw new Error('mamba workflows cannot have a plan version');
+    throw new Error('manba workflows cannot have a plan version');
   }
   if (
     updated.reviewPolicyVersion !== undefined &&
@@ -441,7 +441,7 @@ async function validateWorkflowMeta(
     throw new Error('invalid workflow review policy version');
   }
   if (updated.mode === 'mamba' && updated.reviewPolicyVersion !== undefined) {
-    throw new Error('mamba workflows cannot have a review policy version');
+    throw new Error('manba workflows cannot have a review policy version');
   }
   if (
     updated.planVersion !== undefined &&
@@ -468,7 +468,7 @@ async function validateWorkflowMeta(
       updated.status === 'planned') &&
     (await listActiveMambaChildren(projectRoot, updated.taskId)).length > 0
   ) {
-    throw new Error('cannot finish workflow with an active mamba child');
+    throw new Error('cannot finish workflow with an active manba child');
   }
   if (
     updated.status === 'completed' &&
@@ -576,7 +576,7 @@ async function listMambaChildren(
 }
 
 /**
- * When a /mamba child becomes blocked or completes with manual_test_required,
+ * When a /manba child becomes blocked or completes with manual_test_required,
  * the parent /man or /manteam workflow must be synchronously marked blocked
  * (plan §3 Step 6). This is a no-op if the child is in a non-blocking state
  * or the parent is already blocked/terminal.
@@ -597,8 +597,8 @@ async function propagateChildStatus(
 
   const reason =
     child.status === 'blocked'
-      ? `mamba child ${child.taskId} is blocked: ${child.blockingReason ?? 'unknown reason'}`
-      : `mamba child ${child.taskId} requires manual testing`;
+      ? `manba child ${child.taskId} is blocked: ${child.blockingReason ?? 'unknown reason'}`
+      : `manba child ${child.taskId} requires manual testing`;
 
   await writeMetadata(workflowDir(projectRoot, parent.taskId), {
     ...parent,

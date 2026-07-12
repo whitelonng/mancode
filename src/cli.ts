@@ -15,7 +15,7 @@ import { VERSION } from './version.js';
 program
   .name('mancode')
   .description(
-    'AI coding agent harness. Modes: solo, man, mamba, manteam, manps.',
+    'AI coding agent harness. Modes: solo, man, manba, manteam, manps.',
   )
   .version(VERSION);
 
@@ -90,10 +90,10 @@ program
   .option('--status <status>', 'Update workflow status')
   .option(
     '--parent-task <taskId>',
-    'Parent /man or /manteam workflow for mamba',
+    'Parent /man or /manteam workflow for manba',
   )
   .option('--blocking-reason <reason>', 'Explain why a workflow is blocked')
-  .option('--outcome <outcome>', 'Set mamba outcome')
+  .option('--outcome <outcome>', 'Set manba outcome')
   .option('--plan-version <n>', 'Set the next man/manteam plan revision')
   .option('--skipped <steps>', 'Update skipped steps as comma-separated values')
   .option('--review-depth <depth>', 'Review depth: targeted or full')

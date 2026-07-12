@@ -25,8 +25,8 @@ describe('mvp-2 skills', () => {
 
   it('ships the redesigned command set without man8', () => {
     expect(MVP2_SKILLS.map((skill) => skill.name).sort()).toEqual([
-      'mamba',
       'man',
+      'manba',
       'manps',
       'mansolo',
       'manteam',
@@ -62,14 +62,14 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).not.toMatch(/自审发现 3 个以上问题/);
   });
 
-  it('defines mamba diagnosis and real browser validation boundaries', () => {
+  it('defines manba diagnosis and real browser validation boundaries', () => {
     expect(MAMBA_SKILL.body).toMatch(/diagnosis\.md/);
     expect(MAMBA_SKILL.body).toMatch(/mamba-report\.md/);
     expect(MAMBA_SKILL.body).toMatch(/Playwright/);
     expect(MAMBA_SKILL.body).toMatch(/snapshot/);
     expect(MAMBA_SKILL.body).toMatch(/manual_test_required/);
     expect(MAMBA_SKILL.body).toMatch(/profile 确认 Web UI/);
-    expect(MAMBA_SKILL.body).toMatch(/workflow create mamba/);
+    expect(MAMBA_SKILL.body).toMatch(/workflow create manba/);
     expect(MAMBA_SKILL.body).toMatch(/--parent-task/);
     expect(MAMBA_SKILL.body).toMatch(
       /currentMode\/currentTask\/currentWorkflowMode/,
@@ -85,7 +85,7 @@ describe('mvp-2 skills', () => {
     expect(MANTEAM_SKILL.body).toMatch(/handoff\.md/);
     expect(MANSOLO_SKILL.body).toMatch(/abandoned/);
     expect(MANPS_SKILL.body).toMatch(/Preseason/);
-    expect(MANSOLO_SKILL.body).toMatch(/mamba/);
+    expect(MANSOLO_SKILL.body).toMatch(/manba/);
     expect(MANSOLO_SKILL.body).toMatch(/workflow show/);
     expect(MANSOLO_SKILL.body).toMatch(/workflow update.*abandoned/);
     expect(MANSOLO_SKILL.body).toMatch(/completed\/abandoned/);
@@ -106,20 +106,21 @@ describe('mvp-2 skills', () => {
     expect(man).toMatch(/one remediation round/);
     expect(man).toMatch(/workflow review/);
 
-    const mamba = renderModeSkill('mamba', '/');
-    expect(mamba).toMatch(/workflow create mamba/);
-    expect(mamba).toMatch(/--parent-task/);
-    expect(mamba).toMatch(/diagnosis\.md/);
-    expect(mamba).toMatch(/mamba-report\.md/);
-    expect(mamba).toMatch(/manual_test_required/);
-    expect(mamba).toMatch(/production writes require explicit approval/);
-    expect(mamba).toMatch(/--status in_progress/);
-    expect(mamba).toMatch(/Never auto-resume manual_test_required/);
-    expect(mamba).toMatch(/unrelated active workflow/);
+    const manba = renderModeSkill('manba', '/');
+    expect(manba).toMatch(/workflow create manba/);
+    expect(manba).toMatch(/currentWorkflowMode to mamba/);
+    expect(manba).toMatch(/--parent-task/);
+    expect(manba).toMatch(/diagnosis\.md/);
+    expect(manba).toMatch(/mamba-report\.md/);
+    expect(manba).toMatch(/manual_test_required/);
+    expect(manba).toMatch(/production writes require explicit approval/);
+    expect(manba).toMatch(/--status in_progress/);
+    expect(manba).toMatch(/Never auto-resume manual_test_required/);
+    expect(manba).toMatch(/unrelated active workflow/);
 
     const manteam = renderModeSkill('manteam', '/');
     expect(manteam).toMatch(/Step 1 through Step 9/);
-    expect(manteam).toMatch(/linked mamba child/);
+    expect(manteam).toMatch(/linked manba child/);
 
     const mansolo = renderModeSkill('mansolo', '/');
     expect(mansolo).toMatch(/workflow show/);
@@ -128,8 +129,8 @@ describe('mvp-2 skills', () => {
 
   it('renders skill frontmatter', () => {
     const rendered = renderSkill(MAMBA_SKILL);
-    expect(rendered).toContain('name: mamba');
-    expect(rendered).toContain('# mancode · /mamba');
+    expect(rendered).toContain('name: manba');
+    expect(rendered).toContain('# mancode · /manba');
   });
 
   it('installs the redesigned Claude skills', async () => {

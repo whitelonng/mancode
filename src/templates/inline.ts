@@ -22,7 +22,8 @@ if (!state) {
   process.exit(0);
 }
 
-const mode = text(state.currentMode) || 'solo';
+const storedMode = text(state.currentMode) || 'solo';
+const mode = storedMode === 'mamba' ? 'manba' : storedMode;
 const techStack = sanitize(state.techStack);
 const uiLibrary = sanitize(state.uiLibrary);
 const output = [

@@ -59,7 +59,7 @@ describe('mancode install', () => {
     expect(content).toContain('mancode');
     await expect(
       readFile(
-        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
         'utf-8',
       ),
     ).resolves.toContain('Managed by mancode:claude-skill');
@@ -70,16 +70,16 @@ describe('mancode install', () => {
 
   it('force install refuses to overwrite user-authored same-name Claude files', async () => {
     await silentInit(dir);
-    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
-    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(skillPath, '# custom manba\n', 'utf-8');
     await writeFile(agentPath, '# custom scout\n', 'utf-8');
 
     const code = await install(dir, 'claude-code', { force: true });
 
     expect(code).toBe(EXIT_INSTALL_FAILED);
     await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
-      '# custom mamba\n',
+      '# custom manba\n',
     );
     await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
       '# custom scout\n',
@@ -101,8 +101,8 @@ describe('mancode install', () => {
       'utf-8',
     );
     await writeFile(
-      path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
-      '# custom mamba\n',
+      path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
+      '# custom manba\n',
       'utf-8',
     );
 
@@ -136,6 +136,126 @@ describe('mancode install', () => {
     );
   });
 
+  it('replaces a managed legacy Claude mamba skill with manba during upgrade', async () => {
+    await silentInit(dir);
+    const legacyDir = path.join(dir, '.claude', 'skills', 'mamba');
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      legacyPath,
+      '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->\n---\nname: mamba\n---\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(legacyPath, 'utf-8')).rejects.toThrow();
+    await expect(
+      readFile(
+        path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
+        'utf-8',
+      ),
+    ).resolves.toContain('name: manba');
+  });
+
+  it('keeps the managed legacy mamba skill when a forced upgrade conflicts', async () => {
+    await silentInit(dir);
+    const skillsDir = path.join(dir, '.claude', 'skills');
+    const legacyDir = path.join(skillsDir, 'mamba');
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await rm(path.join(skillsDir, 'manba'), { recursive: true, force: true });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      legacyPath,
+      '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->\n---\nname: mamba\n---\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(skillsDir, 'man', 'SKILL.md'),
+      '# user-authored man skill\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toContain(
+      'name: mamba',
+    );
+    await expect(
+      readFile(path.join(skillsDir, 'manba', 'SKILL.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('keeps the managed legacy mamba skill when a Claude agent conflicts', async () => {
+    await silentInit(dir);
+    const skillsDir = path.join(dir, '.claude', 'skills');
+    const legacyDir = path.join(skillsDir, 'mamba');
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await rm(path.join(skillsDir, 'manba'), { recursive: true, force: true });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      legacyPath,
+      '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->\n---\nname: mamba\n---\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, '.claude', 'agents', 'scout.md'),
+      '# user-authored scout\n',
+      'utf-8',
+    );
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toContain(
+      'name: mamba',
+    );
+    await expect(
+      readFile(path.join(skillsDir, 'manba', 'SKILL.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('keeps the managed legacy mamba skill when a target path is invalid', async () => {
+    await silentInit(dir);
+    const skillsDir = path.join(dir, '.claude', 'skills');
+    const legacyDir = path.join(skillsDir, 'mamba');
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await rm(path.join(skillsDir, 'manba'), { recursive: true, force: true });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      legacyPath,
+      '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->\n---\nname: mamba\n---\n',
+      'utf-8',
+    );
+    const invalidTarget = path.join(skillsDir, 'man', 'SKILL.md');
+    await rm(invalidTarget, { force: true });
+    await mkdir(invalidTarget);
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_INSTALL_FAILED);
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toContain(
+      'name: mamba',
+    );
+  });
+
+  it('preserves a user-authored legacy Claude mamba skill during upgrade', async () => {
+    await silentInit(dir);
+    const legacyDir = path.join(dir, '.claude', 'skills', 'mamba');
+    const legacyPath = path.join(legacyDir, 'SKILL.md');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(legacyPath, '# user-authored mamba skill\n', 'utf-8');
+
+    const code = await install(dir, 'claude-code', { force: true });
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readFile(legacyPath, 'utf-8')).resolves.toBe(
+      '# user-authored mamba skill\n',
+    );
+  });
+
   it('install --minimal --force keeps only solo skill and removes only mancode agents', async () => {
     await silentInit(dir);
     const customAgentPath = path.join(dir, '.claude', 'agents', 'custom.md');
@@ -143,7 +263,7 @@ describe('mancode install', () => {
 
     expect(
       await pathExists(
-        path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md'),
       ),
     ).toBe(true);
     expect(
@@ -159,7 +279,7 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
     ).toBe(true);
-    expect(await pathExists(path.join(dir, '.claude', 'skills', 'mamba'))).toBe(
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'manba'))).toBe(
       false,
     );
     expect(
@@ -180,7 +300,7 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
     ).toBe(true);
-    expect(await pathExists(path.join(dir, '.claude', 'skills', 'mamba'))).toBe(
+    expect(await pathExists(path.join(dir, '.claude', 'skills', 'manba'))).toBe(
       false,
     );
     expect(
@@ -190,16 +310,16 @@ describe('mancode install', () => {
 
   it('minimal install preserves user-authored same-name Claude files', async () => {
     await silentInit(dir);
-    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
-    await writeFile(skillPath, '# custom mamba\n', 'utf-8');
+    await writeFile(skillPath, '# custom manba\n', 'utf-8');
     await writeFile(agentPath, '# custom scout\n', 'utf-8');
 
     const code = await install(dir, 'claude-code', { minimal: true });
 
     expect(code).toBe(EXIT_OK);
     await expect(readFile(skillPath, 'utf-8')).resolves.toBe(
-      '# custom mamba\n',
+      '# custom manba\n',
     );
     await expect(readFile(agentPath, 'utf-8')).resolves.toBe(
       '# custom scout\n',
@@ -330,9 +450,9 @@ describe('mancode install', () => {
     await silentInit(dir);
 
     // User customizes a skill
-    const mambaPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
-    const customContent = '# Custom mamba skill\n\nUser customizations here.\n';
-    await writeFile(mambaPath, customContent, 'utf-8');
+    const manbaPath = path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md');
+    const customContent = '# Custom manba skill\n\nUser customizations here.\n';
+    await writeFile(manbaPath, customContent, 'utf-8');
 
     // Break readiness by deleting settings.json
     await rm(path.join(dir, '.claude', 'settings.json'), { force: true });
@@ -348,8 +468,8 @@ describe('mancode install', () => {
     expect(settings.hooks.SessionStart).toBeDefined();
 
     // User-customized skill should be preserved (not overwritten)
-    const mambaContent = await readFile(mambaPath, 'utf-8');
-    expect(mambaContent).toBe(customContent);
+    const manbaContent = await readFile(manbaPath, 'utf-8');
+    expect(manbaContent).toBe(customContent);
   });
 
   it('returns EXIT_OK when already installed (idempotent, no --force)', async () => {
@@ -494,7 +614,7 @@ describe('mancode install', () => {
     expect(config.platformOptions.codex.minimal).toBe(true);
     expect(
       await pathExists(
-        path.join(dir, '.agents', 'skills', 'mamba', 'SKILL.md'),
+        path.join(dir, '.agents', 'skills', 'manba', 'SKILL.md'),
       ),
     ).toBe(false);
   });
@@ -590,7 +710,7 @@ describe('mancode install', () => {
     const configPath = path.join(dir, '.mancode', 'config.json');
     const logPath = path.join(dir, '.mancode', 'logs', 'hooks.log');
     const hookPath = path.join(dir, '.mancode', 'hooks', 'session-start.mjs');
-    const skillPath = path.join(dir, '.claude', 'skills', 'mamba', 'SKILL.md');
+    const skillPath = path.join(dir, '.claude', 'skills', 'manba', 'SKILL.md');
     const agentPath = path.join(dir, '.claude', 'agents', 'scout.md');
     const invalidSettings = '{ invalid json';
     const existingConfig = {

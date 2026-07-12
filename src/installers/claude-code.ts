@@ -41,6 +41,8 @@ export const LEGACY_CLAUDE_SKILL_SETTINGS: Readonly<Record<string, string>> = {
   mansolo: '.claude/skills/mancode-mansolo.md',
 };
 
+const LEGACY_MVP2_SKILL_NAMES = ['mamba', 'man8'] as const;
+
 /**
  * Claude Code 平台安装器。
  *
@@ -71,6 +73,7 @@ export async function installClaudeCode(
   // When force is false (auto-repair), only write skills/agents that are
   // missing — do not overwrite user-customized files.
   const force = options.force ?? false;
+  await validateClaudeWriteTargets(claudeDir, options.minimal ?? false, force);
 
   await installMancodeCore(projectRoot);
 
@@ -94,6 +97,44 @@ export async function installClaudeCode(
   // 3. 更新 .claude/settings.json（幂等合并）
   await updateClaudeSettings(claudeDir, settings);
   await removeLegacyHookFiles(projectRoot);
+}
+
+async function validateClaudeWriteTargets(
+  claudeDir: string,
+  minimal: boolean,
+  force: boolean,
+): Promise<void> {
+  if (!force) return;
+
+  const skillsDir = path.join(claudeDir, 'skills');
+  await assertWritableClaudeSkill(skillsDir, 'solo');
+  if (minimal) return;
+
+  for (const skill of MVP2_SKILLS) {
+    await assertWritableClaudeSkill(skillsDir, skill.name);
+  }
+  for (const agent of ALL_AGENTS) {
+    const agentPath = path.join(claudeDir, 'agents', `${agent.name}.md`);
+    const existing = await readTextIfExists(agentPath);
+    if (existing !== null && !isGeneratedClaudeAgent(existing, agent.name)) {
+      throw new Error(
+        `refusing to overwrite user-authored Claude Code agent: ${agentPath}`,
+      );
+    }
+  }
+}
+
+async function assertWritableClaudeSkill(
+  skillsDir: string,
+  modeName: string,
+): Promise<void> {
+  const skillPath = path.join(skillsDir, modeName, 'SKILL.md');
+  const existing = await readTextIfExists(skillPath);
+  if (existing !== null && !isGeneratedClaudeSkill(existing, modeName)) {
+    throw new Error(
+      `refusing to overwrite user-authored Claude Code skill: ${skillPath}`,
+    );
+  }
 }
 
 async function removeLegacyHookFiles(projectRoot: string): Promise<void> {
@@ -122,7 +163,7 @@ async function installSoloSkill(
 }
 
 /**
- * 写入 MVP-2 skill 目录（/man /mamba /mansolo，docs/03）。
+ * 写入 MVP-2 skill 目录（/man /manba /mansolo，docs/03）。
  *
  * 目录：.claude/skills/<name>/SKILL.md（Claude Code 通过目录名识别命令）。
  * `--force` 重装时只覆盖可识别的 mancode 生成文件。
@@ -132,15 +173,18 @@ async function installMvp2Skills(
   skillsDir: string,
   force: boolean,
 ): Promise<void> {
-  await removeManagedLegacyMan8Skill(skillsDir);
   for (const skill of MVP2_SKILLS) {
     await installProjectSkill(skillsDir, skill, force);
     await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`, skill.name);
   }
+  await removeManagedLegacyMvp2Skills(skillsDir);
 }
 
-async function removeManagedLegacyMan8Skill(skillsDir: string): Promise<void> {
-  await removeGeneratedSkillDir(skillsDir, 'man8');
+async function removeManagedLegacyMvp2Skills(skillsDir: string): Promise<void> {
+  for (const modeName of LEGACY_MVP2_SKILL_NAMES) {
+    await removeGeneratedSkillDir(skillsDir, modeName);
+    await removeLegacyFlatSkill(skillsDir, `mancode-${modeName}`, modeName);
+  }
 }
 
 async function uninstallMvp2Skills(skillsDir: string): Promise<void> {
@@ -148,6 +192,7 @@ async function uninstallMvp2Skills(skillsDir: string): Promise<void> {
     await removeGeneratedSkillDir(skillsDir, skill.name);
     await removeLegacyFlatSkill(skillsDir, `mancode-${skill.name}`, skill.name);
   }
+  await removeManagedLegacyMvp2Skills(skillsDir);
 }
 
 async function installProjectSkill(
@@ -246,7 +291,7 @@ export async function removeClaudeGeneratedContent(
   const skillsDir = path.join(claudeDir, 'skills');
   for (const modeName of [
     'solo',
-    'man8',
+    ...LEGACY_MVP2_SKILL_NAMES,
     ...MVP2_SKILLS.map((skill) => skill.name),
   ]) {
     await removeGeneratedSkillDir(skillsDir, modeName);
@@ -296,8 +341,9 @@ function addManagedMarker(content: string, marker: string): string {
 async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, 'utf-8');
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
   }
 }
 
