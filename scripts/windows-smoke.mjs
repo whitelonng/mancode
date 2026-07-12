@@ -5,7 +5,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const cliPath = path.join(repoRoot, 'dist', 'cli.js');
 const root = await mkdtemp(path.join(tmpdir(), 'mancode-windows-smoke-'));
 const noToolPath = Object.fromEntries(
@@ -14,6 +17,44 @@ const noToolPath = Object.fromEntries(
 noToolPath.PATH = '';
 
 try {
+  const emptyProject = path.join(root, 'empty-project');
+  await mkdir(emptyProject, { recursive: true });
+  runCli(emptyProject, [
+    'init',
+    '--empty',
+    '--platform',
+    'codex,cursor',
+    '--lang',
+    'en',
+  ]);
+  const emptyConfig = await readJson(
+    path.join(emptyProject, '.mancode', 'config.json'),
+  );
+  assert(
+    JSON.stringify(emptyConfig.platforms) ===
+      JSON.stringify(['codex', 'cursor']),
+    'empty multi-platform init did not preserve adapter selection',
+  );
+  await readFile(path.join(emptyProject, 'AGENTS.md'), 'utf8');
+  await readFile(
+    path.join(emptyProject, '.cursor', 'rules', 'mancode-solo.mdc'),
+    'utf8',
+  );
+  await writeFile(
+    path.join(emptyProject, 'package.json'),
+    `${JSON.stringify({ name: 'empty-project', dependencies: { react: 'latest' } })}\n`,
+    'utf8',
+  );
+  runCli(emptyProject, ['refresh-project']);
+  const refreshedAgents = await readFile(
+    path.join(emptyProject, 'AGENTS.md'),
+    'utf8',
+  );
+  assert(
+    refreshedAgents.includes('React'),
+    'refresh-project did not regenerate static adapter context',
+  );
+
   const codexProject = await createProject('codex-project');
   runCli(codexProject, ['init', '--platform', 'codex']);
   const codexState = await readJson(

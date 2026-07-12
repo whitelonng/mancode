@@ -8,6 +8,7 @@ export const DEFAULT_CONFIG = {
   platforms: ['claude-code'],
   cliCommand: 'mancode',
   cliArgs: [],
+  teamMode: 'auto',
   forceTeamMode: false,
   defaultStyle: null,
   hooks: {

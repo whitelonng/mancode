@@ -11,6 +11,7 @@ import {
   getPlatformInstallers,
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
+import { PROJECT_MANIFESTS } from '../system/project-profile.js';
 import {
   type WorkflowMode,
   type WorkflowOutcome,
@@ -47,6 +48,7 @@ export interface StatusState {
   currentWorkflowMode?: string | null;
   teamModeAutoDetected?: boolean;
   contributors?: number;
+  projectMode?: 'generic' | 'detected';
 }
 
 export interface StatusOptions {
@@ -96,6 +98,7 @@ export interface StatusResult {
     }>;
   } | null;
   platformStatus: Record<string, PlatformStatus>;
+  projectRefreshRecommended: boolean;
 }
 
 interface DetectedTeamStatus {
@@ -108,6 +111,7 @@ interface DetectedTeamStatus {
 interface StatusConfig {
   platforms?: string[];
   forceTeamMode?: boolean;
+  teamMode?: 'auto' | 'on' | 'off';
 }
 
 /**
@@ -162,6 +166,7 @@ export async function status(
     hookInjection,
     teamStatus,
     currentWorkflow,
+    projectRefreshRecommended,
   ] = await Promise.all([
     getProjectName(rootDir),
     checkHooks(rootDir),
@@ -169,6 +174,7 @@ export async function status(
     estimateHookInjection(rootDir),
     detectTeamStatus(rootDir),
     getCurrentWorkflow(rootDir, state.currentTask ?? null),
+    shouldRefreshProject(rootDir, state),
   ]);
   const effectiveTeam = getEffectiveTeamStatus(state, config, teamStatus);
 
@@ -185,6 +191,7 @@ export async function status(
     team: effectiveTeam,
     currentWorkflow,
     platformStatus: {},
+    projectRefreshRecommended,
   };
   result.platformStatus = await checkPlatformStatus(rootDir, result.platforms);
 
@@ -196,6 +203,19 @@ export async function status(
   }
 
   return EXIT_OK;
+}
+
+async function shouldRefreshProject(
+  rootDir: string,
+  state: StatusState,
+): Promise<boolean> {
+  if (state.projectMode !== 'generic') return false;
+  const hasGit = await pathExists(path.join(rootDir, '.git'));
+  if (hasGit) return true;
+  for (const manifest of PROJECT_MANIFESTS) {
+    if (await pathExists(path.join(rootDir, manifest))) return true;
+  }
+  return false;
 }
 
 async function checkPlatformStatus(
@@ -303,16 +323,24 @@ function getEffectiveTeamStatus(
   const configuredTeam =
     config.forceTeamMode === true
       ? true
+      : config.teamMode === 'on'
+        ? true
+        : config.teamMode === 'off'
+          ? false
+          : (state.teamModeAutoDetected ?? detected.isTeam);
+  const forced = config.teamMode === 'on' || config.forceTeamMode === true;
+  const autoDetected =
+    config.forceTeamMode === true ||
+    config.teamMode === 'on' ||
+    config.teamMode === 'off'
+      ? false
       : (state.teamModeAutoDetected ?? detected.isTeam);
-  const forced = config.forceTeamMode === true;
 
   return {
     ...detected,
     isTeam: configuredTeam,
     contributors: Math.max(detected.contributors, state.contributors ?? 0, 1),
-    autoDetected: forced
-      ? false
-      : (state.teamModeAutoDetected ?? detected.isTeam),
+    autoDetected,
     forced,
   };
 }
@@ -475,6 +503,11 @@ function printText(r: StatusResult): void {
   console.log(`Style:       ${r.uiLibrary}`);
   console.log(`Initialized: ${r.initializedAt}`);
   console.log(`Team:        ${formatTeamStatus(r.team)}`);
+  if (r.projectRefreshRecommended) {
+    console.log(
+      'Project:     new Git or project files detected; run `mancode refresh-project`.',
+    );
+  }
   if (r.currentWorkflow) {
     const stepMax = workflowStepMax(r.currentWorkflow.mode);
     console.log(

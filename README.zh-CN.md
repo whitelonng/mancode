@@ -63,6 +63,11 @@ cd your-project
 mancode init
 ```
 
+`init` 会引导选择 Agent，并把检测到的 Agent 仅作为提示；不会悄悄安装全部适配器。
+可以选择一个、多个或“全部平台”。全新空目录会询问是否初始化为通用项目，因此用户不必
+先知道 `git init` 或 `npm init -y`。之后再加入 Git 或项目 manifest 也安全，执行
+`mancode refresh-project` 即可刷新项目事实和已安装的静态适配器。
+
 
 
 初始化后，继续正常使用你的编码代理。`solo` 默认自动生效：日常训练，零仪式感。遇到需要
@@ -261,6 +266,8 @@ npm install -g mancode
 cd your-project
 mancode init
 mancode init --platform cursor
+mancode init --platform codex,cursor
+mancode init --platform all
 ```
 
 平台支持：
@@ -278,11 +285,14 @@ mancode init --platform cursor
 
 ```bash
 mancode init --force      # 重装并保留已扫描 token
-mancode init --yes        # CI 场景跳过确认
+mancode init --yes        # 跳过通用项目确认（CI 中仍需 --platform）
 mancode init --team       # 强制启用团队模式
 mancode init --no-team    # 强制禁用团队模式
 mancode init --style NAME # 保存默认审美偏好
-mancode init --platform PLATFORM # 初始化 claude-code、cursor、codex、copilot 或 zcode
+mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,copilot,zcode，或 all
+mancode init --empty      # 非交互脚本中允许安全的空目录
+mancode init --lang zh-CN # 显式指定初始化语言（zh-CN 或 en）
+mancode refresh-project   # 后续加入 Git 或项目文件后刷新项目事实
 mancode install --force   # 重装适配并保留已扫描 token
 mancode install --minimal # 只安装 solo 必需文件
 ```
@@ -492,7 +502,9 @@ mancode/
 
 ### `mancode init` 提示"not a project directory"
 
-mancode 要求目标目录有 `.git` 或已识别的项目 manifest（如 `package.json`、`pyproject.toml`、`go.mod`、`Cargo.toml`、`pom.xml`、`build.gradle`、`build.gradle.kts`、`Package.swift` 或 `pubspec.yaml`）。请在 git 仓库或支持的项目目录中运行 `mancode init`。
+交互式终端中的空目录会询问是否初始化为通用项目，不需要 Git 或 npm 命令。为了保护已有
+文件，未识别且非空的目录仍会被拒绝；请进入真正的项目目录。脚本里只应针对明确为空的
+目录使用 `mancode init --empty --platform <platform>`。
 
 ### Claude Code hooks 不生效
 

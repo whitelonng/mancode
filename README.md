@@ -67,6 +67,13 @@ cd your-project
 mancode init
 ```
 
+`init` guides you through the agent choice and marks a detected agent as a hint;
+it never silently installs every adapter. Choose one or more adapters, or choose
+**All platforms**. In a brand-new empty folder it asks whether to initialize a
+generic project, so users do not need to know `git init` or `npm init -y` first.
+Adding Git or a manifest later is safe; run `mancode refresh-project` to update
+the detected project facts and installed static adapters.
+
 ## 
 
 After initialization, keep using your coding agent normally. `solo` mode runs by
@@ -299,6 +306,8 @@ npm install -g mancode
 cd your-project
 mancode init
 mancode init --platform cursor
+mancode init --platform codex,cursor
+mancode init --platform all
 ```
 
 Supported platforms:
@@ -317,11 +326,14 @@ Supported platforms:
 
 ```bash
 mancode init --force      # Reinstall while preserving scanned tokens
-mancode init --yes        # Skip confirmations for CI usage
+mancode init --yes        # Skip generic-project confirmation (use --platform in CI)
 mancode init --team       # Force-enable team mode
 mancode init --no-team    # Force-disable team mode
 mancode init --style NAME # Save a default style preference
-mancode init --platform PLATFORM # Initialize for claude-code, cursor, codex, copilot, or zcode
+mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilot,zcode, or all
+mancode init --empty      # Allow a safe empty directory in non-interactive scripts
+mancode init --lang zh-CN # Explicit initialization language (zh-CN or en)
+mancode refresh-project   # Refresh facts after Git or project files are added
 mancode install --force   # Reinstall adapter while preserving scanned tokens
 mancode install --minimal # Install only solo-mode essentials
 ```
@@ -542,10 +554,11 @@ mancode/
 
 ### `mancode init` says "not a project directory"
 
-mancode requires either a `.git` directory or a recognized project manifest
-(such as `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`,
-`build.gradle`, `build.gradle.kts`, `Package.swift`, or `pubspec.yaml`). Run `mancode init` inside
-a git repository or a supported project directory.
+In an interactive terminal, an empty directory is offered as a new generic
+project. No Git or package command is required. To protect existing files,
+non-empty unrecognized directories are rejected; enter the project directory
+instead. For scripts, use `mancode init --empty --platform <platform>` only for
+a deliberately empty directory.
 
 ### Claude Code hooks not triggering
 
