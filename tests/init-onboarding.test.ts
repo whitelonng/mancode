@@ -23,6 +23,7 @@ import {
 import type { InitPrompter } from '../src/system/init-onboarding.js';
 import {
   detectInitLocale,
+  detectNativeSystemLocale,
   parsePlatformSelection,
 } from '../src/system/init-onboarding.js';
 
@@ -35,11 +36,82 @@ describe('init onboarding', () => {
     );
   });
 
-  it('uses terminal locale with an explicit override', () => {
-    expect(detectInitLocale(undefined, { LANG: 'zh_CN.UTF-8' })).toBe('zh-CN');
-    expect(detectInitLocale('en', { LANG: 'zh_CN.UTF-8' })).toBe('en');
-    expect(detectInitLocale(undefined, {}, 'zh-CN')).toBe('zh-CN');
+  it('uses an explicit locale override before automatic detection', () => {
+    expect(
+      detectInitLocale('en', { LANG: 'zh_CN.UTF-8' }, 'zh-CN', 'zh-CN'),
+    ).toBe('en');
     expect(detectInitLocale('fr', {})).toBeNull();
+  });
+
+  it('prefers the macOS UI language when the terminal locale is C.UTF-8', () => {
+    expect(
+      detectInitLocale(
+        undefined,
+        { LC_ALL: 'C.UTF-8', LANG: 'C.UTF-8' },
+        'en-US',
+        'zh-Hans-CN',
+      ),
+    ).toBe('zh-CN');
+  });
+
+  it('uses Linux locale variables and treats C/POSIX as unknown', () => {
+    expect(
+      detectInitLocale(
+        undefined,
+        { LANGUAGE: 'zh_CN:en_US', LANG: 'en_US.UTF-8' },
+        'en-US',
+        null,
+      ),
+    ).toBe('zh-CN');
+    expect(
+      detectInitLocale(
+        undefined,
+        { LC_MESSAGES: 'zh_CN.UTF-8' },
+        'en-US',
+        null,
+      ),
+    ).toBe('zh-CN');
+    expect(
+      detectInitLocale(undefined, { LANG: 'zh_CN.UTF-8' }, 'en-US', null),
+    ).toBe('zh-CN');
+    expect(
+      detectInitLocale(
+        undefined,
+        { LC_ALL: 'POSIX', LANG: 'C.UTF-8' },
+        'zh-CN',
+        null,
+      ),
+    ).toBe('zh-CN');
+  });
+
+  it('reads the primary macOS Apple language', () => {
+    const locale = detectNativeSystemLocale('darwin', (command, args) => {
+      expect(command).toBe('defaults');
+      expect(args).toEqual(['read', '-g', 'AppleLanguages']);
+      return '(\n    "zh-Hans-CN",\n    "en-CN"\n)';
+    });
+
+    expect(locale).toBe('zh-Hans-CN');
+  });
+
+  it('falls back to the macOS Apple locale', () => {
+    const locale = detectNativeSystemLocale('darwin', (_command, args) =>
+      args.includes('AppleLanguages') ? null : 'zh_CN',
+    );
+
+    expect(locale).toBe('zh_CN');
+  });
+
+  it('reads the Windows UI culture without a shell pipeline', () => {
+    const locale = detectNativeSystemLocale('win32', (command, args) => {
+      expect(command).toBe('powershell.exe');
+      expect(args).toContain(
+        '[System.Globalization.CultureInfo]::CurrentUICulture.Name',
+      );
+      return '\uFEFFzh-CN\r\n';
+    });
+
+    expect(locale).toBe('zh-CN');
   });
 
   it('keeps English init output consistently English', async () => {
