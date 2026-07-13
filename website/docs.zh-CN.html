@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="mancode 完整文档：安装、卸载、模式、命令、平台适配与推荐工作流。" />
+    <meta name="description" content="mancode 完整文档：安装、模式、工作流闸门、验证、平台适配与维护。" />
     <meta name="theme-color" content="#08090a" />
     <link rel="icon" href="./logo.png" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./docs.css" />
-    <title>mancode 文档 — 安装、使用与维护</title>
+    <title>mancode 文档 — 安装、使用并深入理解工作流</title>
     <script>
       document.documentElement.classList.replace("no-js", "js");
       try {
@@ -21,11 +21,13 @@
   <body class="docs-body">
     <a class="skip-link" href="#content">跳到正文</a>
     <div class="noise" aria-hidden="true"></div>
+
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档中心 / v0.3.9</span>
+      <span class="docs-wordmark">文档 / v0.3.9</span>
       <div class="docs-top-links">
-        <a href="./index.zh-CN.html">官网</a><a href="https://github.com/whitelonng/mancode">GitHub</a>
+        <a href="./index.zh-CN.html">官网</a>
+        <a href="https://github.com/whitelonng/mancode">GitHub</a>
         <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span aria-hidden="true">◐</span></button>
         <a class="language-link" href="./docs.html" lang="en" aria-label="Switch to English">EN</a>
       </div>
@@ -33,104 +35,318 @@
 
     <div class="docs-layout">
       <aside class="docs-sidebar" aria-label="文档导航">
-        <label class="docs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" data-doc-search placeholder="搜索文档" aria-label="搜索文档" /><kbd>⌘K</kbd></label>
+        <label class="docs-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+          <input type="search" data-doc-search placeholder="搜索文档" aria-label="搜索文档" />
+          <kbd data-search-shortcut>⌘K</kbd>
+        </label>
+        <p class="docs-search-status" data-search-status aria-live="polite"></p>
+        <p class="docs-nav-hint" aria-hidden="true">横向滑动查看全部主题 →</p>
         <nav class="docs-nav">
-          <div class="docs-nav-group"><p>开始使用</p><a class="active" href="#overview">概览</a><a href="#install">安装与初始化</a><a href="#recommend">推荐用法</a></div>
-          <div class="docs-nav-group"><p>使用 mancode</p><a href="#modes">模式</a><a href="#commands">CLI 命令</a><a href="#workflow">工作流记录</a><a href="#platforms">平台适配</a></div>
-          <div class="docs-nav-group"><p>维护</p><a href="#style">刷新项目风格</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></div>
-          <div class="docs-nav-group"><p>链接</p><a href="./index.zh-CN.html">中文官网</a><a href="./docs.html">English Docs</a><a href="https://github.com/whitelonng/mancode/blob/main/README.md">GitHub README</a></div>
+          <div class="docs-nav-group"><p>从这里开始</p><a class="active" href="#overview">概览</a><a href="#install">安装与初始化</a><a href="#files">文件与隐私</a><a href="#recommend">选择模式</a></div>
+          <div class="docs-nav-group"><p>使用 mancode</p><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台适配</a></div>
+          <div class="docs-nav-group"><p>维护</p><a href="#style">刷新上下文</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></div>
+          <div class="docs-nav-group"><p>链接</p><a href="./index.zh-CN.html">官网首页</a><a href="./docs.html">English Docs</a><a href="https://github.com/whitelonng/mancode/blob/main/README.md">GitHub README</a></div>
         </nav>
       </aside>
 
       <main class="docs-main" id="content">
-        <div class="docs-breadcrumb"><span>mancode</span><span>/</span><b>文档中心</b></div>
+        <div class="docs-breadcrumb"><span>mancode</span><span>/</span><b>文档</b></div>
+
         <section class="docs-hero" id="overview" data-searchable>
-          <p class="eyebrow">训练到季后赛</p>
-          <h1>给你的编码 Agent<br />一套真战术。</h1>
-          <p>mancode 是加在既有编码 Agent 之上的本地优先工作流层。它不替代 Claude Code、Cursor、Codex、Copilot 或 ZCode，而是增加项目上下文、任务强度、可追溯产物和审查纪律。</p>
-          <div class="docs-note"><strong>从这里开始</strong><p>日常任务用 <code>solo</code>：只做一次 diff 自检，不启动额外 reviewer 循环；需要定位根因时切换 <code>/manba</code>；生产级或高风险改动再使用 <code>/man</code>，获得计划、验证和有界风险审查。</p></div>
+          <p class="eyebrow">从日常训练到关键比赛</p>
+          <h1>给你的编程 Agent<br />一套真正可执行的战术。</h1>
+          <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot 或 ZCode，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
+          <div class="docs-note"><strong>两个层次</strong><p>日常使用时，你在 Agent 对话中调用 <code>solo</code>、<code>/manba</code> 或 <code>/man</code>。安装好的适配器会在背后调用 <code>mancode workflow</code> 维护持久记录。后面的 CLI 参考用于解释这份记录，并不是要求你手工再做一遍流程。</p></div>
         </section>
 
         <section class="doc-section" id="install" data-searchable>
           <h2>安装与初始化</h2>
-          <p>先全局安装 mancode，进入项目目录或全新的空目录，再选择要初始化的一个或多个适配器。需要 Node.js 20+；原生支持 Windows CMD、PowerShell 和 Git Bash。Git 是可选依赖，只用于增强团队自动检测；Claude Code hooks 直接由 Node 执行，不需要 Bash 或 jq。</p>
-          <div class="docs-steps"><article class="docs-step"><b>01</b><strong>安装</strong><p>在机器上全局安装 CLI。</p></article><article class="docs-step"><b>02</b><strong>进入项目</strong><p>让 mancode 在需要理解的项目根目录运行。</p></article><article class="docs-step"><b>03</b><strong>初始化</strong><p>创建本地状态、扫描项目并安装适配器。</p></article></div>
+          <p>需要 Node.js 20 或更高版本。你可以在现有项目或安全的空目录中初始化，然后选择一个或多个 Agent 适配器。Windows CMD、PowerShell 和 Git Bash 均受支持；Git 不是必需依赖，只会帮助 mancode 更准确地判断团队模式。</p>
+          <div class="docs-steps">
+            <article class="docs-step"><b>01</b><strong>安装</strong><p>在本机全局安装一次 CLI。</p></article>
+            <article class="docs-step"><b>02</b><strong>进入项目</strong><p>进入希望 Agent 理解的项目目录。</p></article>
+            <article class="docs-step"><b>03</b><strong>初始化</strong><p>扫描项目事实并安装选定适配器。</p></article>
+          </div>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm install -g mancode
 <span class="command-prompt">$</span> cd your-project
-<span class="command-prompt">$</span> mancode init</code></pre><button type="button" data-copy="npm install -g mancode\ncd your-project\nmancode init">复制</button></div>
-          <h3>指定平台初始化</h3><p>如果你知道当前项目要面向哪个 Agent，可在初始化时指定平台。</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform codex,cursor</code></pre><button type="button" data-copy="mancode init --platform codex,cursor">复制</button></div>
-          <p><code>mancode init</code> 会引导选择一个、多个或全部 Agent 平台。空目录可初始化为通用项目，不需要先运行 <code>git init</code> 或 <code>npm init</code>；以后加入 Git 或 manifest 后执行 <code>mancode refresh-project</code>，同步项目事实和已安装的静态适配器。</p>
-          <table class="docs-table"><thead><tr><th>选项</th><th>适用情况</th><th>作用</th></tr></thead><tbody>
-            <tr><td><code>--force</code></td><td>修复或重装生成的配置</td><td>重装时保留已扫描的风格 token。</td></tr><tr><td><code>--yes</code></td><td>CI 或无交互环境</td><td>跳过通用项目确认；应同时指定 <code>--platform</code>。</td></tr><tr><td><code>--team</code></td><td>立即需要团队记忆</td><td>强制开启团队模式。</td></tr><tr><td><code>--no-team</code></td><td>个人项目</td><td>强制关闭团队模式。</td></tr><tr><td><code>--style NAME</code></td><td>已有命名的审美偏好</td><td>保存为默认风格偏好。</td></tr>
+<span class="command-prompt">$</span> mancode init</code></pre><button type="button" data-copy-code>复制</button></div>
+
+          <h3>指定平台或非交互初始化</h3>
+          <p><code>--platform</code> 接受逗号分隔的平台列表。自动化环境中应与 <code>--yes</code> 配合；只有当目录确实为空并且你明确想创建通用项目上下文时，才使用 <code>--empty</code>。</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode init --platform codex,cursor
+<span class="command-prompt">$</span> mancode init --yes --platform codex --no-team
+<span class="command-prompt">$</span> mancode init --empty --platform claude-code --lang zh-CN</code></pre><button type="button" data-copy-code>复制</button></div>
+          <table class="docs-table"><thead><tr><th>选项</th><th>适用场景</th><th>实际效果</th></tr></thead><tbody>
+            <tr><td><code>--force</code></td><td>修复生成配置</td><td>重新安装 mancode 管理的内容，同时保留已扫描的样式 token 和受控标记之外的用户内容。</td></tr>
+            <tr><td><code>--yes</code></td><td>CI 或非交互终端</td><td>接受安全默认值并跳过通用项目确认；建议同时给出 <code>--platform</code>。</td></tr>
+            <tr><td><code>--platform LIST</code></td><td>已经知道目标 Agent</td><td>安装 <code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code> 中的一个或多个。</td></tr>
+            <tr><td><code>--empty</code></td><td>目录有意保持为空</td><td>无需先执行 <code>git init</code> 或创建 manifest，也能初始化通用项目。</td></tr>
+            <tr><td><code>--team</code> / <code>--no-team</code></td><td>不采用自动判断结果</td><td>强制开启或关闭团队共享上下文。</td></tr>
+            <tr><td><code>--style NAME</code></td><td>已有明确的视觉偏好</td><td>保存为默认样式偏好。</td></tr>
+            <tr><td><code>--lang en|zh-CN</code></td><td>需要稳定的生成语言</td><td>指定生成内容的语言。</td></tr>
           </tbody></table>
+
+          <h3>验证安装结果</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status
+<span class="command-prompt">$</span> mancode status --json</code></pre><button type="button" data-copy-code>复制</button></div>
+          <p>普通输出会列出项目、当前模式、团队状态、已安装平台，以及每个平台的 <strong>ready</strong> 或 <strong>not ready</strong> 状态；脚本应使用 JSON。<em>ready</em> 表示适配器要求的生成文件已经存在，但不代表一个早已打开的 Agent 会话已经重新加载这些文件。</p>
+          <div class="docs-admonition"><strong>初始化后重载</strong><p>安装后重启或重新加载编程 Agent，再用 <code>solo</code> 完成一个小任务。如果平台仍显示 <em>not ready</em>，执行 <code>mancode install &lt;platform&gt; --force</code> 修复。</p></div>
+        </section>
+
+        <section class="doc-section" id="files" data-searchable>
+          <h2>文件与隐私</h2>
+          <p>mancode 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
+          <table class="docs-table artifact-table"><thead><tr><th>路径</th><th>包含什么</th><th>提交前怎么处理</th></tr></thead><tbody>
+            <tr><td><code>.mancode/config.json</code><br /><code>.mancode/state.json</code></td><td>所选平台、当前模式和活动工作流指针。</td><td>把它当作项目配置检查；只有团队希望共享同一套设置时才提交。</td></tr>
+            <tr><td><code>.mancode/project-profile.json</code><br /><code>style-tokens.json</code></td><td>识别出的技术栈、验证命令和 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
+            <tr><td><code>.mancode/workflows/</code></td><td>需求、计划、评审范围、验证证据、报告与总结。</td><td>重点检查。日志、截图、trace 和浏览器产物可能含敏感数据，通常应忽略、脱敏或只保留必要摘要。</td></tr>
+            <tr><td><code>.mancode/memory/</code></td><td>团队决策与长期共享上下文。</td><td>只提交有意写给团队的内容。</td></tr>
+            <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
+          </tbody></table>
+          <div class="docs-note"><strong>安全边界</strong><p><code>mancode manps</code> 默认只扫描和报告，修复必须显式进入 remediation 路径。安装 mancode 也不会赋予 Agent 发布、删除或重写无关工作的权限；不可逆操作仍需人工确认。</p></div>
         </section>
 
         <section class="doc-section" id="recommend" data-searchable>
-          <h2>推荐用法</h2><p>mancode 的目的不是让所有任务都变重，而是为不同风险选择足够的工程纪律。</p>
-          <div class="mode-guide"><article><small>日常改动</small><h3>solo</h3><p>适合小功能、重构或 UI 微调。使用最窄验证和一次 diff 自检，不调用额外 reviewer。</p></article><article><small>Bug 或不确定行为</small><h3>/manba</h3><p>当正确答案依赖复现与真实验证，而不是一个看起来合理的补丁时使用。</p></article><article><small>生产或高风险改动</small><h3>/man</h3><p>当计划、测试和有界风险审查需要被记录、复查和交接时使用。</p></article><article><small>团队或维护</small><h3>/manteam · /manps</h3><p>团队共享记忆；维护前先执行健康扫描，避免拍脑袋式清理。</p></article></div>
-          <div class="docs-admonition"><strong>判断原则</strong><p>不要因为任务很长就自动使用 <code>/man</code>。当错误代价高、难以回滚，或事后难以审查时，再升级到季后赛模式。</p></div>
+          <h2>选择最小够用的模式</h2>
+          <p>任务长短不是唯一标准。应根据错误决策的代价，选择能够留下足够证据和评审、同时又不过度增加流程负担的最轻模式。</p>
+          <div class="mode-guide">
+            <article><small>日常改动</small><h3>solo</h3><p>适合小功能、重构或 UI 微调。加载项目上下文，做最窄的有效验证，再进行一次受限 diff 自检，不引入独立评审循环。</p></article>
+            <article><small>Bug 或行为不确定</small><h3>/manba</h3><p>先复现，再定位根因，验证真实用户路径，并提供回归证据。</p></article>
+            <article><small>高风险决策</small><h3>/man</h3><p>冻结需求和版本化计划，然后由用户选择交给 solo 实施，或继续受治理的实现、验证与评审。</p></article>
+            <article><small>团队或维护</small><h3>/manteam · /manps</h3><p>增加共享记忆和交接记录，或者在维护前执行确定性的项目健康扫描。</p></article>
+          </div>
+          <div class="docs-admonition"><strong>判断原则</strong><p>不要因为任务很长就默认使用 <code>/man</code>。当错误选择代价高、难以回滚，或事后很难审查时，再升级到它。</p></div>
         </section>
 
         <section class="doc-section" id="modes" data-searchable>
-          <h2>模式</h2><p>五个工作模式对应不同工程压力。<code>/mansolo</code> 是回到默认 <code>solo</code> 模式的重置命令。</p>
-          <table class="docs-table"><thead><tr><th>模式</th><th>适合场景</th><th>会做什么</th></tr></thead><tbody>
-            <tr><td><code>solo</code></td><td>日常编码</td><td>轻量 hooks、YAGNI、最窄验证和一次受限 diff 自检。</td></tr><tr><td><code>/manba</code></td><td>诊断</td><td>复现缺陷、定位根因、驱动真实用户路径并回归验证。</td></tr><tr><td><code>/man</code></td><td>需求对齐与正式计划</td><td>调研、方案推荐和持久计划；确认后可交给 solo 轻量开发或继续完整九步治理。</td></tr><tr><td><code>/manteam</code></td><td>团队项目</td><td>共享记忆、决策记录、协作和 Conventional Commits 指导。</td></tr><tr><td><code>/manps</code></td><td>维护</td><td>输出 Markdown 与 JSON 的确定性项目健康报告。</td></tr>
+          <h2>调用模式</h2>
+          <p>模式名称是通用的，但调用方式取决于平台的扩展机制。下面这些内容应输入 Agent 对话框，而不是操作系统终端。<code>/mansolo</code> 或 <code>$mansolo</code> 会显式回到默认 <code>solo</code> 模式。</p>
+          <table class="docs-table"><thead><tr><th>模式</th><th>最适合</th><th>行为</th></tr></thead><tbody>
+            <tr><td><code>solo</code></td><td>日常开发</td><td>项目上下文、轻量规则、相关验证和一次受限 diff 自检。</td></tr>
+            <tr><td><code>manba</code></td><td>诊断问题</td><td>复现优先的调试，明确根因，验证用户路径并留下回归证据。</td></tr>
+            <tr><td><code>man</code></td><td>需求与治理式交付</td><td>调研、澄清、版本化计划闸门、验收验证和风险驱动评审。</td></tr>
+            <tr><td><code>manteam</code></td><td>共享项目</td><td>团队记忆、决策、协作和便于交接的总结。</td></tr>
+            <tr><td><code>manps</code></td><td>项目维护</td><td>确定性扫描依赖、安全、死代码和配置问题。</td></tr>
           </tbody></table>
-          <h3>怎样调用</h3><p>Claude Code 与 Cursor 使用 slash 风格命令；ChatGPT 桌面端 Codex、Codex CLI 和 IDE 从项目 skill 中读取，因此 <code>$man</code>、<code>$manba</code> 等是稳定的显式调用方式。</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt"># Claude Code / Cursor</span>
-/manba
+
+          <div class="invocation-grid">
+            <article class="command-card"><header><h3>Claude Code / Cursor</h3><span>Commands</span></header><p>在对话中使用生成的斜杠命令。</p><div class="code-wrap"><pre><code>/manba
 /man
 /manteam
-
-<span class="command-prompt"># Codex app / CLI / IDE</span>
-$manba
+/manps
+/mansolo</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>Codex</h3><span>Skills</span></header><p>在 App、CLI 或 IDE 中显式提及 skill。</p><div class="code-wrap"><pre><code>$manba
 $man
-$manteam</code></pre><button type="button" data-copy="/manba\n/man\n/manteam">复制</button></div>
-        </section>
-
-        <section class="doc-section" id="commands" data-searchable>
-          <h2>CLI 命令</h2><p>以下命令除非另有说明，都应该在已初始化的项目中运行。缺少 <code>.mancode/state.json</code> 时，依赖项目状态的命令会安全失败。</p>
-          <div class="command-list">
-            <article class="command-card"><header><h3>mancode init</h3><span>开始</span></header><p>创建 <code>.mancode/</code>，检测项目 profile，在存在 UI 时扫描设计 token，并安装所选适配器。</p><ul><li>新项目首次使用。</li><li><code>--platform</code> 指定 Agent。</li><li><code>--force</code> 修复生成文件。</li></ul></article>
-            <article class="command-card"><header><h3>mancode status [--json]</h3><span>检查</span></header><p>显示当前模式、检测到的技术栈、已安装平台和就绪状态。Claude Code 安装还会显示 hook 注册与预计注入大小。</p><ul><li>默认输出用于人工检查。</li><li><code>--json</code> 适合脚本或 CI。</li></ul></article>
-            <article class="command-card"><header><h3>mancode install &lt;platform&gt;</h3><span>适配器</span></header><p>初始化后安装或修复单个平台适配器。</p><ul><li>平台：<code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code>。</li><li><code>--force</code> 重写生成配置。</li><li><code>--minimal</code> 只安装 solo 必需项。</li></ul></article>
-            <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前版本可以安装的适配器。自动化选择平台前可以先运行它。</p></article>
-            <article class="command-card"><header><h3>mancode workflow …</h3><span>记录</span></header><p>为 <code>man</code>、<code>manba</code> 与 <code>manteam</code> 创建和维护受校验的工作流元数据。</p><ul><li><code>create &lt;mode&gt; "&lt;task&gt;"</code> 创建记录。</li><li><code>update &lt;taskId&gt;</code> 更新步骤或状态。</li><li><code>review &lt;taskId&gt; …</code> 约束审查领域、blocker 和唯一一轮修复。</li><li><code>list</code>、<code>show</code>、<code>clean</code> 用于检查和维护。</li></ul></article>
-            <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>运行确定性的季前赛健康检查。可指定 <code>deps</code>、<code>security</code>、<code>dead-code</code>、<code>config</code>。</p><ul><li>报告写入 <code>.mancode/</code>。</li><li>默认只扫描，整改仍是明确决策。</li></ul></article>
-            <article class="command-card"><header><h3>mancode refresh-style</h3><span>刷新</span></header><p>刷新项目 profile；检测到 UI 时重新扫描设计 token。</p><ul><li>更新 <code>project-profile.json</code> 与 <code>style-tokens.json</code>。</li><li>静态 instruction 适配器需要再运行 <code>mancode install &lt;platform&gt; --force</code>。</li></ul></article>
-            <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>打印当前安装的 CLI 版本。提交 issue 或确认升级时使用。</p></article>
+$manteam
+$manps
+$mansolo</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>GitHub Copilot</h3><span>Prompts</span></header><p>在支持仓库 prompt 文件的客户端中，按模式名选择或调用生成的 prompt。</p><div class="code-wrap"><pre><code>man.prompt.md
+manba.prompt.md
+manteam.prompt.md
+manps.prompt.md
+mansolo.prompt.md</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>ZCode</h3><span>预览</span></header><p>适配器会安装项目 skills，但能否发现和如何调用取决于当前 ZCode 版本，请结合 <code>mancode status</code> 实测。</p><div class="code-wrap"><pre><code>$man
+$manba
+$manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
         </section>
 
-        <section class="doc-section" id="workflow" data-searchable><h2>工作流记录</h2><p><code>mancode workflow</code> 管理严格模式使用的元数据。它让进度、计划版本、验收证据、审查领域和 blocker 状态在聊天结束后仍可检查。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow create man "refactor auth module"
+        <section class="doc-section" id="commands" data-searchable>
+          <h2>CLI 参考</h2>
+          <p>CLI 负责安装适配器和强制执行持久化工作流状态。读取状态的命令应在已初始化项目中运行；非法状态转换会安全失败，不会静默篡改元数据。</p>
+          <div class="command-list">
+            <article class="command-card"><header><h3>mancode init</h3><span>初始化</span></header><p>创建 <code>.mancode/</code>，识别项目，在适用时扫描样式 token，并安装平台适配器。</p><ul><li>选项：<code>--force</code>、<code>--yes</code>、<code>--team</code>、<code>--no-team</code>、<code>--style &lt;name&gt;</code>、<code>--platform &lt;list&gt;</code>、<code>--empty</code>、<code>--lang &lt;locale&gt;</code>。</li></ul></article>
+            <article class="command-card"><header><h3>mancode install [platform]</h3><span>适配器</span></header><p>初始化后安装或修复一个平台。省略平台名时进入交互选择。</p><ul><li><code>--force</code> 重新生成受控内容。</li><li><code>--minimal</code> 只安装 solo 的必要内容。</li></ul></article>
+            <article class="command-card"><header><h3>mancode status [--json]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。</p></article>
+            <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前 CLI 支持的平台，并标出项目中已经配置的平台。</p></article>
+            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验需求、计划、验证证据、评审、修复与完成状态。完整生命周期见下一节。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;taskId&gt; [--json]</code> 检查。</li><li>使用 <code>clean --older-than &lt;duration&gt; [--dry-run]</code> 清理较早的已完成记录。</li></ul></article>
+            <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
+            <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、框架或验证命令后刷新项目事实，并更新已安装的静态适配器。</p></article>
+            <article class="command-card"><header><h3>mancode refresh-style</h3><span>设计上下文</span></header><p>刷新项目画像和设计 token，之后可用 <code>--force</code> 重装需要更新的静态适配器。</p></article>
+            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个平台；使用 <code>--all</code> 清理项目内全部 mancode 产物，<code>--force</code> 用于非交互确认。</p></article>
+            <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>输出已安装 CLI 版本，便于升级检查和提交问题。</p></article>
+          </div>
+        </section>
+
+        <section class="doc-section" id="workflow" data-searchable>
+          <h2>深入研究 /man 工作流</h2>
+          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 <code>.mancode/workflows/&lt;taskId&gt;/</code> 下的文件支撑。</p>
+          <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 <code>man</code> skill 会创建任务、把活动指针写入 <code>.mancode/state.json</code>、生成产物，并调用 CLI。下面展示的是供研究、排错或集成使用的机器契约。单独执行一次 <code>workflow create</code> 并不会自动激活该任务指针。</p></div>
+
+          <h3>九个步骤与闸门</h3>
+          <table class="docs-table workflow-table"><thead><tr><th>步骤</th><th>Agent 工作</th><th>持久化闸门</th></tr></thead><tbody>
+            <tr><td>1 · Scout</td><td>检查项目画像、现有实现、依赖、风险和未知项。</td><td>写入 <code>scout-report.md</code>。</td></tr>
+            <tr><td>2 · Clarify</td><td>解决所有会改变决策的未知项，并区分阻塞项、可推荐项和可安全默认项。</td><td>完成结构化需求台账；<code>blockingUnknowns</code> 必须为空。</td></tr>
+            <tr><td>3 · Plan</td><td>写清范围、选择及理由、复用、排除项、行为、风险、回滚和真实验证。</td><td>写入 <code>plan.md</code>；首版为 v1，修订时递增 <code>planVersion</code>。</td></tr>
+            <tr><td>4 · Plan gate</td><td>复述计划，让用户选择交给 solo、治理式执行、只保留计划或继续修订。</td><td>没有明确选择之前，不允许进入实现。</td></tr>
+            <tr><td>5 · Implement</td><td>只实现已确认计划所需的最小改动。</td><td>保持范围；出现会改变决策的新事实时回到澄清或计划修订。</td></tr>
+            <tr><td>6 · Verify</td><td>执行识别出的 build、lint、typecheck、test、smoke 和每一条必需验收标准。</td><td>每个必需验收 ID 都有当前通过证据；手工检查必须获得用户显式确认。</td></tr>
+            <tr><td>7 · 质量评审</td><td>只检查变更 diff 和直接影响，最多记录三个有证据的新问题。</td><td>先写报告和稳定 blocker ID，再进入修复。</td></tr>
+            <tr><td>8 · 安全/边界评审</td><td>只有 full review 执行：检查安全、权限、恢复、资源与边界；targeted review 把此域标为不适用。</td><td>所需评审域全部完成，同一根因不得重复计数。</td></tr>
+            <tr><td>9 · 修复与完成</td><td>在一轮 remediation 中解决 blocker；发生改动后重新验证并写总结。</td><td>blocker 清零、验证仍然有效、存在 <code>summary.md</code>，才能设为 <code>completed</code>。</td></tr>
+          </tbody></table>
+
+          <h3>结构化需求台账</h3>
+          <p>需求台账用于防止一份看似完整的计划掩盖未解决假设。它必须包含目标、非空确认范围、七个覆盖维度和至少一条必需验收标准；技术栈适用时，<code>technicalDecisions</code> 不能为空。finalize 会生成规范化的 <code>requirements.json</code> 和 <code>requirements.md</code>。</p>
+          <div class="code-wrap"><pre><code>{
+  "version": 1,
+  "goal": "重构认证模块，同时保持登录行为不变",
+  "confirmedScope": ["把 token 校验提取到现有 auth service"],
+  "excludedScope": ["更换身份提供商", "重做登录界面"],
+  "technicalDecisions": ["保留现有 TypeScript 与 session 技术栈"],
+  "defaults": ["保持当前超时时间"],
+  "blockingUnknowns": [],
+  "coverage": [
+    { "dimension": "platform", "status": "confirmed", "rationale": "Node 服务" },
+    { "dimension": "core_scope", "status": "confirmed", "rationale": "仅重构" },
+    { "dimension": "technical_stack", "status": "confirmed", "rationale": "沿用现有技术栈" },
+    { "dimension": "data_and_persistence", "status": "not_applicable", "rationale": "无数据结构变更" },
+    { "dimension": "performance", "status": "defaulted", "rationale": "不得低于现有基线" },
+    { "dimension": "compatibility", "status": "confirmed", "rationale": "外部行为保持不变" },
+    { "dimension": "security", "status": "confirmed", "rationale": "token 校验继续 fail-closed" }
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "AC-LOGIN",
+      "description": "有效和过期 token 保持当前行为",
+      "required": true,
+      "method": "automated"
+    }
+  ]
+}</code></pre><button type="button" data-copy-code>复制</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json</code></pre><button type="button" data-copy-code>复制</button></div>
+          <p>成功结果会显示 <code>ready</code>。如果结果是 <code>needs_clarification</code>，必须停止推进，先解决 <code>blockingUnknowns</code>，重新生成输入后再次 finalize。</p>
+
+          <h3>Step 4 的三种决策</h3>
+          <div class="decision-grid">
+            <article class="command-card"><header><h3>交给 solo</h3><span>实施</span></header><p>计划已经稳定，但实现风险属于日常范围。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --to solo
+<span class="command-prompt"># solo 实现并验证后</span>
+<span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --complete</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>治理式执行</h3><span>继续</span></header><p>实现、证据和独立评审都需要保留在九步记录内。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>只保留计划</h3><span>停止</span></header><p>用户需要的交付物是计划，而不是代码。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision plan_only</code></pre><button type="button" data-copy-code>复制</button></div></article>
+          </div>
+          <p>三种选择都要求：活动中的 <code>man</code> 工作流位于 Step 4、需求已 ready，并且 <code>plan.md</code> 存在。选择修订时仍停留在计划闸门，更新文件，并用 <code>--plan-version</code> 从初始 v1 递增到 v2、v3。</p>
+
+          <h3>一条合法的治理式执行顺序</h3>
+          <p>下面是压缩后的有效顺序。注释表示由 Agent 写入的文件，不是终端命令；只有当前阶段的工作和产物都完成后，Agent 才推进编号步骤。</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># Step 1–2：创建、侦察、澄清并冻结需求</span>
+<span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --json
+<span class="command-prompt"># Agent 保存活动 taskId，并写入 scout-report.md</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 2
 <span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json
+
+<span class="command-prompt"># Step 3–4：写入 plan.md，到达用户决策闸门</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 3
+<span class="command-prompt"># Agent 写入 plan.md</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4
+<span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution
+
+<span class="command-prompt"># Step 5–6：实现、初始化验证、记录每个必需 AC</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 5
+<span class="command-prompt"># Agent 实现已确认计划</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 6
 <span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; init
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-1 --method automated --result passed --evidence "测试通过" --command "npm test" --exit-code 0
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4 --plan-version 2
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth full
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "auth tests passed" --command "npm test -- auth" --exit-code 0
+
+<span class="command-prompt"># Step 7–9：targeted review、报告、总结、完成</span>
+<span class="command-prompt"># Agent 写入 review-scope.md</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth targeted --review-domain quality
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 7
+<span class="command-prompt"># Agent 写入 film-report-1.md</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
+<span class="command-prompt"># Agent 写入 summary.md</span>
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --status completed</code></pre><button type="button" data-copy-code>复制</button></div>
+
+          <h3>自动验证、手工确认与修复后重验</h3>
+          <table class="docs-table"><thead><tr><th>场景</th><th>必须记录</th><th>闸门行为</th></tr></thead><tbody>
+            <tr><td>自动验证</td><td><code>record</code> 必须包含验收 ID、方法、结果、证据、准确命令和退出码。passed 要求退出码 0，failed 要求非 0。</td><td>所有必需验收标准通过前，Step 7 和 review 都会被阻止。</td></tr>
+            <tr><td>手工验证</td><td><code>require-manual</code> 解释自动化为何不能判断。只有用户亲自执行并确认后，Agent 才能用 <code>confirm-manual</code> 写入观察证据。</td><td>等待确认期间工作流处于 blocked。</td></tr>
+            <tr><td>评审发现</td><td><code>review complete ... --blockers Q1,Q2</code> 保存稳定 ID；用 <code>review remediate --resolved Q1,Q2</code> 进行唯一一轮修复。</td><td>任何 remediation 都会使旧验证失效，Step 9 必须重新运行并记录全部必需验收。</td></tr>
+            <tr><td>用户跳过评审</td><td>在 Step 6 完成验证后，使用 <code>review skip --reason "explicit user request"</code>。</td><td>理由会持久保存，但仍需写 <code>summary.md</code> 并到 Step 9 才能完成。</td></tr>
+          </tbody></table>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># 手工验收：require-manual 后必须暂停等待</span>
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; require-manual --acceptance AC-UI --evidence "需要前台浏览器和人工判断"
+<span class="command-prompt"># 只有用户明确确认后才能执行</span>
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; confirm-manual --acceptance AC-UI --evidence "用户确认交互符合预期"
+
+<span class="command-prompt"># 唯一一轮 blocker remediation</span>
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
+<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; skip --reason "用户明确要求"
-<span class="command-prompt">$</span> mancode workflow create manba "verify auth regression" --parent-task &lt;taskId&gt;
-<span class="command-prompt">$</span> mancode workflow show &lt;taskId&gt; --json
-<span class="command-prompt">$</span> mancode workflow clean --older-than 30d --dry-run</code></pre><button type="button" data-copy="mancode workflow create man &quot;refactor auth module&quot;\nmancode workflow show &lt;taskId&gt; --json">复制</button></div><div class="docs-note"><strong>约束</strong><p>新受管 workflow 必须覆盖平台、范围、技术栈、数据、性能、兼容性和安全。remediation 会让旧验证失效并要求 Step 9 复验；跳过 review 只能在 Step 6 使用带理由的专用命令。</p></div></section>
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "修复后测试通过" --command "npm test -- auth" --exit-code 0</code></pre><button type="button" data-copy-code>复制</button></div>
 
-        <section class="doc-section" id="platforms" data-searchable><h2>平台与适配器</h2><p>mancode 不假装所有工具都有相同扩展点。Claude Code 获得最完整的原生能力；其他平台通过持久 rules、skills 或受控 instructions 适配。</p><table class="docs-table"><thead><tr><th>平台</th><th>安装内容</th><th>说明</th></tr></thead><tbody><tr><td>Claude Code</td><td>Hooks、skills、subagents、workflow</td><td>完整集成：会话启动与提交提示时可注入项目上下文。</td></tr><tr><td>Cursor</td><td><code>.cursor/rules/*.mdc</code></td><td>通过 rules 保存项目指导与模式描述。</td></tr><tr><td>Codex</td><td><code>AGENTS.md</code> + <code>.agents/skills/</code></td><td>在 ChatGPT 桌面端、CLI 与 IDE 使用 <code>$man*</code> 触发 skill。</td></tr><tr><td>GitHub Copilot</td><td><code>.github/copilot-instructions.md</code></td><td>受控 instruction block；当前没有等价 hook 注入。</td></tr><tr><td>ZCode</td><td><code>AGENTS.md</code> + 预备项目 skills</td><td>项目 skill 发现与 slash command 路径仍是发布验证门槛。</td></tr></tbody></table></section>
+          <h3>workflow 子命令速查</h3>
+          <table class="docs-table"><thead><tr><th>命令</th><th>用途</th><th>关键选项</th></tr></thead><tbody>
+            <tr><td><code>create</code></td><td>创建 <code>man</code>、<code>manba</code> 或 <code>manteam</code> 记录。</td><td><code>--parent-task</code> 关联诊断子任务；<code>--json</code> 输出 task ID。</td></tr>
+            <tr><td><code>requirements</code></td><td>从 JSON 完成 Step 2 需求台账。</td><td><code>finalize --file</code>。</td></tr>
+            <tr><td><code>update</code></td><td>推进步骤、状态、计划版本或结果。</td><td><code>--step</code>、<code>--status</code>、<code>--plan-version</code>、<code>--blocking-reason</code>、<code>--outcome</code>。通用 <code>--skipped</code> 只允许记录 clarification。</td></tr>
+            <tr><td><code>decide</code></td><td>解决 Step 4 计划闸门。</td><td><code>--plan-decision governed_execution|plan_only</code>。</td></tr>
+            <tr><td><code>handoff</code></td><td>把已确认计划交给 solo，随后关闭该计划。</td><td><code>--to solo</code>，完成后使用 <code>--complete</code>。</td></tr>
+            <tr><td><code>verify</code></td><td>初始化并记录验收证据。</td><td><code>init</code>、<code>record</code>、<code>require-manual</code>、<code>confirm-manual</code>；证据选项包括 <code>--command</code>、<code>--exit-code</code> 和 <code>--evidence-file</code>。</td></tr>
+            <tr><td><code>review</code></td><td>初始化 targeted/full review、保存报告和 blocker、修复一次，或记录用户显式跳过。</td><td><code>--review-depth</code>、<code>--review-domain</code>、<code>--report</code>、<code>--blockers</code>、<code>--resolved</code>、<code>--reason</code>。</td></tr>
+            <tr><td><code>list / show / clean</code></td><td>检查记录或删除较早的已完成记录。</td><td><code>show --json</code>；<code>clean --older-than 30d --dry-run</code>。</td></tr>
+          </tbody></table>
+        </section>
 
-        <section class="doc-section" id="style" data-searchable><h2>刷新项目风格</h2><p>设计系统迁移、UI 大幅变更，或项目从非 UI 变成有界面时运行。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-style
-<span class="command-prompt">$</span> mancode install cursor --force</code></pre><button type="button" data-copy="mancode refresh-style\nmancode install cursor --force">复制</button></div><ul class="docs-checklist"><li>Claude Code 通过 hooks 读取刷新后的风格信息。</li><li>Cursor、Codex 与 Copilot 使用静态适配指令，因此刷新后需要 <code>--force</code> 重装适配器。</li><li>只有确认存在 UI 资产的项目才会得到设计 token 相关指导。</li></ul></section>
+        <section class="doc-section" id="platforms" data-searchable>
+          <h2>平台与适配器</h2>
+          <p>mancode 按每个平台真实拥有的扩展点进行适配。标为<strong>预览</strong>的平台可以安装，但运行时能否发现或调用，仍受该平台当前版本能力影响。</p>
+          <table class="docs-table"><thead><tr><th>平台</th><th>安装内容</th><th>使用说明</th></tr></thead><tbody>
+            <tr><td>Claude Code</td><td><code>.claude/</code> 下的 hooks、skills、subagents 和 commands。</td><td>完整适配；安装后重启，让 session 与 prompt hooks 重新加载。</td></tr>
+            <tr><td>Cursor</td><td><code>.cursor/rules/*.mdc</code> 和 <code>.cursor/commands/*.md</code>。</td><td>rules 提供持久上下文；使用生成的 slash commands 显式进入模式。</td></tr>
+            <tr><td>Codex</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code>。</td><td>在 App、CLI、IDE 中用 <code>$man*</code> 显式提及 skill。</td></tr>
+            <tr><td>GitHub Copilot</td><td><code>.github/copilot-instructions.md</code> 和 <code>.github/prompts/*.prompt.md</code>。</td><td>包含持久 instructions 与仓库 prompt 文件；不同客户端的 prompt 文件支持度可能不同。</td></tr>
+            <tr><td>ZCode（预览）</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code> 中的项目 skills。</td><td>请在已安装的 ZCode 版本中验证 skill 发现和调用。</td></tr>
+          </tbody></table>
+        </section>
 
-        <section class="doc-section" id="uninstall" data-searchable><h2>安全卸载</h2><p>卸载会保留用户编写的 rules、instructions 和无关的 Claude settings。你可以移除单个平台适配器，也可以清除项目内的全部 mancode 产物。</p><h3>移除一个适配器</h3><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy="mancode uninstall cursor --force">复制</button></div><h3>完整重装</h3><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
+        <section class="doc-section" id="style" data-searchable>
+          <h2>刷新项目上下文</h2>
+          <p>加入 Git、manifest、框架或验证命令后使用 <code>refresh-project</code>。设计系统迁移、UI 大改，或原本没有 UI 的项目新增界面时使用 <code>refresh-style</code>。</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-project
+<span class="command-prompt">$</span> mancode refresh-style
+<span class="command-prompt">$</span> mancode install cursor --force</code></pre><button type="button" data-copy-code>复制</button></div>
+          <ul class="docs-checklist"><li><code>refresh-project</code> 更新项目事实和已安装的静态适配器。</li><li>Claude Code 通过 hooks 读取刷新后的上下文。</li><li>Cursor、Codex、Copilot 和 ZCode 使用静态文件；只有需要修复或重新生成时，才用 <code>--force</code> 重装对应适配器。</li><li>只有 UI 项目会生成设计 token 相关指导。</li></ul>
+        </section>
+
+        <section class="doc-section" id="uninstall" data-searchable>
+          <h2>安全卸载</h2>
+          <p>卸载会保留用户自己编写的 rules、instructions 和无关的 Claude settings。删除前先检查工作流记录，避免丢失仍然需要的决策或证据。</p>
+          <h3>移除一个适配器</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>复制</button></div>
+          <h3>完整重装</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
 <span class="command-prompt">$</span> mancode init
-<span class="command-prompt">$</span> mancode install &lt;platform&gt;</code></pre><button type="button" data-copy="mancode uninstall --all --force\nmancode init\nmancode install &lt;platform&gt;">复制</button></div><h3>完全移除 mancode</h3><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
-<span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy="mancode uninstall --all --force\nnpm uninstall -g mancode">复制</button></div><div class="docs-admonition"><strong>删除前</strong><p>提交或删除 <code>.mancode/</code> 前请先检查。工作流证据和浏览器产物可能包含你希望保留或明确忽略的项目上下文。</p></div></section>
+<span class="command-prompt">$</span> mancode install &lt;platform&gt;</code></pre><button type="button" data-copy-code>复制</button></div>
+          <h3>完全移除 mancode</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
+<span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>复制</button></div>
+        </section>
 
-        <section class="doc-section" id="troubleshooting" data-searchable><h2>故障排查</h2><h3><code>mancode init</code> 提示目录不是项目</h3><p>请在 git 仓库或带有已识别 manifest 的目录中运行。初始化器不会把任意文件夹当成项目。</p><h3>Claude Code hooks 没有触发</h3><p>初始化后重启 Claude Code，让它重新加载 <code>.claude/settings.json</code>。再运行 <code>mancode status</code>；仍缺失时执行 <code>mancode install claude-code --force</code>。</p><h3>平台状态显示“not ready”</h3><p>目标文件缺失或受控区被编辑。运行 <code>mancode install &lt;platform&gt; --force</code> 重新生成 mancode 负责的内容，标记外的用户内容会保留。</p><h3>Cursor rules 没有触发</h3><p>确认 <code>.cursor/rules/mancode-*.mdc</code> 存在。context、practice、solo 一直生效；高强度规则按描述触发，因此请显式调用对应模式。</p></section>
+        <section class="doc-section" id="troubleshooting" data-searchable>
+          <h2>故障排查</h2>
+          <h3><code>mancode init</code> 拒绝当前目录</h3>
+          <p>安全的空目录支持交互初始化，也可以显式使用 <code>--empty</code>。非空目录仍需存在可识别的项目标记或 Git 元数据，防止 mancode 意外初始化任意文件夹。</p>
+          <h3>Agent 看不到刚安装的模式</h3>
+          <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，运行 <code>mancode install &lt;platform&gt; --force</code>。ZCode 和 Copilot 还需要确认当前客户端版本支持仓库 skills 或 prompt files。</p>
+          <h3>Claude Code hooks 没有触发</h3>
+          <p>初始化后重启 Claude Code，再用 <code>mancode status</code> 检查两个 hook 文件和 <code>.claude/settings.json</code> 注册状态。可执行 <code>mancode install claude-code --force</code> 修复。hooks 使用 Node.js，不依赖 Bash 或 jq。</p>
+          <h3>Cursor rules 没有触发</h3>
+          <p>确认 <code>.cursor/rules/mancode-*.mdc</code> 和 <code>.cursor/commands/*.md</code> 都存在。核心上下文与 solo rules 持续生效；高强度规则按描述触发，因此应显式调用生成的模式命令。</p>
+          <h3>workflow 命令被拒绝</h3>
+          <p>把拒绝当作流程闸门，而不是元数据损坏。使用 <code>mancode workflow show &lt;taskId&gt; --json</code> 检查步骤、需求就绪状态、计划决策、验证、评审域和 blocker。不要直接编辑 <code>metadata.json</code>。</p>
+          <h3>项目事实已经过期</h3>
+          <p>添加 Git、manifest、依赖或验证脚本后执行 <code>mancode refresh-project</code>；UI token 改变时执行 <code>refresh-style</code>。只有静态适配器的生成文件需要更新时，才重新安装对应平台。</p>
+        </section>
+
         <p class="docs-search-empty" data-search-empty>没有找到匹配的文档章节。</p>
         <footer class="docs-footer"><p>mancode 本地优先，不发送遥测。</p><p><a href="./docs.html">English Docs →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
       </main>
-      <aside class="docs-toc" aria-label="本页目录"><p>本页目录</p><a href="#overview">概览</a><a href="#install">安装</a><a href="#recommend">推荐用法</a><a href="#modes">模式</a><a href="#commands">CLI 命令</a><a href="#workflow">工作流记录</a><a href="#platforms">平台</a><a href="#style">刷新风格</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></aside>
+
+      <aside class="docs-toc" aria-label="本页目录"><p>本页目录</p><a href="#overview">概览</a><a href="#install">安装</a><a href="#files">文件与隐私</a><a href="#recommend">选择模式</a><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台</a><a href="#style">刷新</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></aside>
     </div>
+    <p class="sr-only" data-copy-status aria-live="polite"></p>
   </body>
 </html>

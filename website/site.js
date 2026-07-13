@@ -1,4 +1,5 @@
-const copyButtons = document.querySelectorAll("[data-copy]");
+const copyButtons = document.querySelectorAll("[data-copy], [data-copy-code]");
+const copyStatus = document.querySelector("[data-copy-status]");
 
 const themeToggle = document.querySelector("[data-theme-toggle]");
 
@@ -13,10 +14,7 @@ function updateThemeToggle(theme) {
     : isLight
       ? "Switch to dark theme"
       : "Switch to light theme";
-  themeToggle.setAttribute(
-    "aria-label",
-    label,
-  );
+  themeToggle.setAttribute("aria-label", label);
   themeToggle.title = label;
   themeToggle.querySelector("span").textContent = isLight ? "◑" : "◐";
 }
@@ -24,7 +22,8 @@ function updateThemeToggle(theme) {
 updateThemeToggle(document.documentElement.dataset.theme || "dark");
 
 themeToggle?.addEventListener("click", () => {
-  const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  const nextTheme =
+    document.documentElement.dataset.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = nextTheme;
   updateThemeToggle(nextTheme);
 
@@ -34,9 +33,13 @@ themeToggle?.addEventListener("click", () => {
 });
 
 async function copyText(text) {
-  if (navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-    return;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the selection-based copy path.
+    }
   }
 
   const field = document.createElement("textarea");
@@ -46,19 +49,57 @@ async function copyText(text) {
   field.style.opacity = "0";
   document.body.append(field);
   field.select();
-  document.execCommand("copy");
+  const copied = document.execCommand("copy");
   field.remove();
+  if (!copied) throw new Error("Copy command was rejected");
+}
+
+function getCopyText(button) {
+  if (button.hasAttribute("data-copy")) {
+    return button.dataset.copy.replace(/\\n/g, "\n");
+  }
+
+  const code = button.closest(".code-wrap")?.querySelector("pre code");
+  if (!code) return "";
+
+  const clone = code.cloneNode(true);
+  const prompts = [...clone.querySelectorAll(".command-prompt")];
+  for (const prompt of prompts) prompt.remove();
+
+  let text = clone.textContent;
+  if (prompts.length > 0) {
+    text = text
+      .split("\n")
+      .map((line) => (line.startsWith(" ") ? line.slice(1) : line))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n");
+  }
+
+  return text.trim();
 }
 
 for (const button of copyButtons) {
   button.addEventListener("click", async () => {
     const originalLabel = button.textContent;
+    const isChinese = document.documentElement.lang.startsWith("zh");
+    const text = getCopyText(button);
 
     try {
-      await copyText(button.dataset.copy);
-      button.textContent = "Copied";
+      if (!text) throw new Error("No code to copy");
+      await copyText(text);
+      button.textContent = isChinese ? "已复制" : "Copied";
+      if (copyStatus) {
+        copyStatus.textContent = isChinese
+          ? "代码已复制到剪贴板。"
+          : "Code copied to the clipboard.";
+      }
     } catch {
-      button.textContent = "Retry";
+      button.textContent = isChinese ? "重试" : "Retry";
+      if (copyStatus) {
+        copyStatus.textContent = isChinese
+          ? "复制失败，请重试。"
+          : "Copy failed. Please retry.";
+      }
     }
 
     window.setTimeout(() => {
