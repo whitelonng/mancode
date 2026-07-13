@@ -23,7 +23,9 @@
 </p>
 
 <p align="center">
-  <a href="./README.en.md">English</a>
+  <a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">English</a> ·
+  <a href="https://github.com/whitelonng/mancode#%E5%AE%89%E8%A3%85%E6%96%B9%E6%B3%95">安装方法</a> ·
+  <a href="https://github.com/whitelonng/mancode#%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95">使用方法</a>
 </p>
 
 ---
@@ -33,8 +35,6 @@
 **mancode** 是一个 AI 编码代理工作流调度工具。它给 agent 不同强度的工作模式：
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
-
-[安装方法](#安装方法) · [使用方法](#使用方法)
 
 mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
 GitHub Copilot 和 ZCode。Claude Code 获得完整 hooks、skills 和 subagents；其他
