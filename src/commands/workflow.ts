@@ -1,20 +1,42 @@
-import { access } from 'node:fs/promises';
+import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  parseRequirementsLedger,
+  readRequirementsLedger,
+  requirementsAreReady,
+  requirementsDigest,
+  writeRequirementsArtifacts,
+} from '../system/requirements-ledger.js';
 import {
   type ReviewLedger,
   completeReviewDomain,
   initializeReview,
+  initializeSkippedReview,
   isReviewDepth,
   isReviewDomain,
   readReviewLedger,
   remediateReviewBlockers,
+  reviewLedgerPath,
 } from '../system/review-ledger.js';
 import { upsertActivePlan } from '../system/team-memory.js';
+import {
+  type VerificationLedger,
+  confirmManualVerification,
+  initializeVerificationLedger,
+  readVerificationLedger,
+  recordVerification,
+  resetVerificationForRemediation,
+  verificationCanAdvance,
+  verificationLedgerPath,
+  writeVerificationLedger,
+} from '../system/verification-ledger.js';
 import {
   type WorkflowMeta,
   type WorkflowMode,
   createWorkflow,
   deleteWorkflow,
+  isPlanDecision,
+  isRequirementsStatus,
   isTerminalWorkflowStatus,
   isValidWorkflowTaskId,
   isWorkflowOutcome,
@@ -45,6 +67,19 @@ export interface WorkflowOptions {
   report?: string;
   blockers?: string;
   resolved?: string;
+  requirementsStatus?: string;
+  planDecision?: string;
+  to?: string;
+  complete?: boolean;
+  file?: string;
+  acceptance?: string;
+  method?: string;
+  result?: string;
+  evidence?: string;
+  command?: string;
+  exitCode?: string;
+  evidenceFile?: string;
+  reason?: string;
 }
 
 interface WorkflowView extends WorkflowMeta {
@@ -85,8 +120,16 @@ export async function workflow(
       return workflowList(rootDir, options);
     case 'show':
       return workflowShow(rootDir, args[0], options);
+    case 'handoff':
+      return workflowHandoff(rootDir, args[0], options);
+    case 'decide':
+      return workflowDecide(rootDir, args[0], options);
     case 'review':
       return workflowReview(rootDir, args, options);
+    case 'requirements':
+      return workflowRequirements(rootDir, args, options);
+    case 'verify':
+      return workflowVerify(rootDir, args, options);
     case 'clean':
       return workflowClean(rootDir, options);
     default:
@@ -101,11 +144,347 @@ export async function workflow(
       } else {
         console.error(`✗  Invalid workflow subcommand: ${subcommand}`);
         console.error(
-          '   Use: create <man|manba|manteam> <task> | update <taskId> | review <taskId> <init|complete|remediate|show> | list | show <taskId> | clean',
+          '   Use: create <man|manba|manteam> <task> | requirements <taskId> finalize --file <path> | verify <taskId> <init|record|require-manual|confirm-manual|show> | decide <taskId> --plan-decision <plan_only|governed_execution> | handoff <taskId> --to solo | review <taskId> <init|complete|remediate|skip|show> | list | show <taskId> | clean',
         );
       }
       return EXIT_INVALID_ARG;
   }
+}
+
+async function workflowRequirements(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const taskId = args[0];
+  const action = args[1];
+  if (!taskId || !isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId ?? ''}`);
+  }
+  if (action !== 'finalize' || !options.file) {
+    return invalidArg(options, 'requirements requires finalize --file <path>');
+  }
+  const meta = await readWorkflow(rootDir, taskId);
+  if (
+    !meta ||
+    (meta.mode !== 'man' && meta.mode !== 'manteam') ||
+    meta.status !== 'in_progress' ||
+    meta.currentStep > 2
+  ) {
+    return invalidArg(
+      options,
+      'requirements can only be finalized for an in-progress man or manteam workflow at step 1 or 2',
+    );
+  }
+
+  const workflowPath = path.join(rootDir, '.mancode', 'workflows', taskId);
+  const jsonPath = path.join(workflowPath, 'requirements.json');
+  const markdownPath = path.join(workflowPath, 'requirements.md');
+  const metadataPath = path.join(workflowPath, 'metadata.json');
+  let originalJson: string | null | undefined;
+  let originalMarkdown: string | null | undefined;
+  let originalMetadata: string | undefined;
+  try {
+    const inputPath = path.isAbsolute(options.file)
+      ? options.file
+      : path.resolve(rootDir, options.file);
+    const input = await readFile(inputPath, 'utf-8');
+    const requirements = parseRequirementsLedger(input);
+    [originalJson, originalMarkdown, originalMetadata] = await Promise.all([
+      readOptionalText(jsonPath),
+      readOptionalText(markdownPath),
+      readFile(metadataPath, 'utf-8'),
+    ]);
+    await writeRequirementsArtifacts(rootDir, taskId, requirements);
+    await updateWorkflow(rootDir, taskId, {
+      requirementsStatus: requirementsAreReady(requirements)
+        ? 'ready'
+        : 'needs_clarification',
+      requirementsDigest: requirementsDigest(requirements),
+    });
+    if (options.json) {
+      console.log(
+        JSON.stringify(
+          {
+            requirements,
+            requirementsStatus: requirementsAreReady(requirements)
+              ? 'ready'
+              : 'needs_clarification',
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      console.log(
+        `Finalized requirements: ${taskId} (${requirementsAreReady(requirements) ? 'ready' : 'needs_clarification'})`,
+      );
+    }
+    return EXIT_OK;
+  } catch (error) {
+    let rollbackIncomplete = false;
+    if (
+      originalJson !== undefined &&
+      originalMarkdown !== undefined &&
+      originalMetadata !== undefined
+    ) {
+      const rollback = await Promise.allSettled([
+        restoreOptionalText(jsonPath, originalJson),
+        restoreOptionalText(markdownPath, originalMarkdown),
+        writeFile(metadataPath, originalMetadata, 'utf-8'),
+      ]);
+      rollbackIncomplete = rollback.some(
+        (result) => result.status === 'rejected',
+      );
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'unable to finalize requirements';
+    return invalidArg(
+      options,
+      rollbackIncomplete ? `${message}; rollback was incomplete` : message,
+    );
+  }
+}
+
+async function workflowVerify(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const taskId = args[0];
+  const action = args[1];
+  if (!taskId || !isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId ?? ''}`);
+  }
+  const meta = await readWorkflow(rootDir, taskId);
+  if (!meta || (meta.mode !== 'man' && meta.mode !== 'manteam')) {
+    return invalidArg(options, `verification is not valid for: ${taskId}`);
+  }
+  if (action === 'show') {
+    const ledger = await readVerificationLedger(rootDir, taskId);
+    if (!ledger) {
+      return invalidArg(options, `verification not initialized: ${taskId}`);
+    }
+    outputVerificationLedger(ledger, options);
+    return EXIT_OK;
+  }
+  if (
+    meta.verificationPolicyVersion !== 1 ||
+    (action === 'init'
+      ? meta.currentStep !== 6
+      : meta.currentStep !== 6 && meta.currentStep !== 9) ||
+    meta.planDecision !== 'governed_execution' ||
+    (meta.status !== 'in_progress' && meta.status !== 'blocked')
+  ) {
+    return invalidArg(
+      options,
+      'verification requires a governed policy-v2 workflow at step 6, or step 9 when refreshing evidence',
+    );
+  }
+
+  try {
+    let ledger: VerificationLedger;
+    if (action === 'init') {
+      if (await readVerificationLedger(rootDir, taskId)) {
+        return invalidArg(
+          options,
+          `verification already initialized: ${taskId}`,
+        );
+      }
+      const requirements = await readRequirementsLedger(rootDir, taskId);
+      if (!requirements || !requirementsAreReady(requirements)) {
+        return invalidArg(options, 'ready requirements.json is required');
+      }
+      ledger = initializeVerificationLedger(
+        requirements,
+        meta.planVersion ?? 1,
+        0,
+      );
+    } else {
+      let existing = await readVerificationLedger(rootDir, taskId);
+      if (!existing) {
+        return invalidArg(options, `verification not initialized: ${taskId}`);
+      }
+      const review = await readReviewLedger(rootDir, taskId);
+      existing = resetVerificationForRemediation(
+        existing,
+        review?.remediationRounds ?? 0,
+      );
+      if (!options.acceptance || !options.evidence) {
+        return invalidArg(
+          options,
+          `${action ?? 'verification'} requires --acceptance and --evidence`,
+        );
+      }
+      if (action === 'record') {
+        if (
+          options.method !== 'automated' ||
+          (options.result !== 'passed' &&
+            options.result !== 'failed' &&
+            options.result !== 'blocked')
+        ) {
+          return invalidArg(
+            options,
+            'record requires --method automated and --result passed|failed|blocked',
+          );
+        }
+        let automatedDetails:
+          | { command: string; exitCode: number; evidenceFile?: string }
+          | undefined;
+        if (options.result === 'passed' || options.result === 'failed') {
+          const exitCode = parseExactInteger(options.exitCode);
+          if (!options.command?.trim() || exitCode === null) {
+            return invalidArg(
+              options,
+              'automated passed/failed verification requires --command and --exit-code',
+            );
+          }
+          if (options.evidenceFile) {
+            const evidencePath = path.isAbsolute(options.evidenceFile)
+              ? options.evidenceFile
+              : path.resolve(rootDir, options.evidenceFile);
+            if (!(await pathExists(evidencePath))) {
+              return invalidArg(
+                options,
+                `verification evidence file not found: ${options.evidenceFile}`,
+              );
+            }
+          }
+          automatedDetails = {
+            command: options.command,
+            exitCode,
+            ...(options.evidenceFile
+              ? { evidenceFile: options.evidenceFile }
+              : {}),
+          };
+        }
+        ledger = recordVerification(
+          existing,
+          options.acceptance,
+          'automated',
+          options.result,
+          options.evidence,
+          automatedDetails,
+        );
+      } else if (action === 'require-manual') {
+        ledger = recordVerification(
+          existing,
+          options.acceptance,
+          'manual',
+          'manual_required',
+          options.evidence,
+        );
+      } else if (action === 'confirm-manual') {
+        ledger = confirmManualVerification(
+          existing,
+          options.acceptance,
+          options.evidence,
+        );
+      } else {
+        return invalidArg(
+          options,
+          `invalid verification action: ${action ?? ''}`,
+        );
+      }
+    }
+
+    const transitionError = await commitVerificationTransition(
+      rootDir,
+      meta,
+      ledger,
+    );
+    if (transitionError) return invalidArg(options, transitionError);
+    outputVerificationLedger(ledger, options);
+    return EXIT_OK;
+  } catch (error) {
+    return invalidArg(
+      options,
+      error instanceof Error ? error.message : 'unable to update verification',
+    );
+  }
+}
+
+async function commitVerificationTransition(
+  rootDir: string,
+  meta: WorkflowMeta,
+  ledger: VerificationLedger,
+): Promise<string | null> {
+  const ledgerPath = verificationLedgerPath(rootDir, meta.taskId);
+  const metadataPath = path.join(
+    rootDir,
+    '.mancode',
+    'workflows',
+    meta.taskId,
+    'metadata.json',
+  );
+  const specPath = path.join(rootDir, '.mancode', 'memory', 'spec.md');
+  const [originalLedger, originalMetadata, originalSpec] = await Promise.all([
+    readOptionalText(ledgerPath),
+    readFile(metadataPath, 'utf-8'),
+    readOptionalText(specPath),
+  ]);
+  const wasVerificationBlocked =
+    meta.status === 'blocked' &&
+    meta.blockingReason?.startsWith('[verification]');
+  const shouldBlock =
+    ledger.status === 'manual_required' || ledger.status === 'blocked';
+  const workflowPatch: Partial<WorkflowMeta> = {
+    verificationStatus: ledger.status,
+    ...(shouldBlock
+      ? {
+          status: 'blocked',
+          blockingReason: `[verification] ${ledger.status === 'manual_required' ? 'manual confirmation required' : 'verification blocked'}`,
+        }
+      : wasVerificationBlocked
+        ? { status: 'in_progress', blockingReason: undefined }
+        : {}),
+  };
+  try {
+    await writeVerificationLedger(rootDir, meta.taskId, ledger);
+    await updateWorkflow(rootDir, meta.taskId, workflowPatch, {
+      allowIncompleteVerification: true,
+    });
+    const updated = await readWorkflow(rootDir, meta.taskId);
+    if (updated) {
+      await upsertActivePlan(rootDir, {
+        taskId: updated.taskId,
+        status: updated.status,
+        planVersion: updated.planVersion ?? 1,
+      });
+    }
+    return null;
+  } catch (error) {
+    const rollback = await Promise.allSettled([
+      restoreOptionalText(ledgerPath, originalLedger),
+      writeFile(metadataPath, originalMetadata, 'utf-8'),
+      restoreOptionalText(specPath, originalSpec),
+    ]);
+    const message =
+      error instanceof Error ? error.message : 'verification transition failed';
+    return rollback.some((result) => result.status === 'rejected')
+      ? `${message}; rollback was incomplete`
+      : message;
+  }
+}
+
+function outputVerificationLedger(
+  ledger: VerificationLedger,
+  options: WorkflowOptions,
+): void {
+  if (options.json) {
+    console.log(JSON.stringify(ledger, null, 2));
+    return;
+  }
+  const passed = ledger.checks.filter((check) =>
+    [check.automated, check.manual]
+      .filter(Boolean)
+      .every((component) => component?.status === 'passed'),
+  ).length;
+  console.log(
+    `Verification: ${ledger.status}; criteria ${passed}/${ledger.checks.length}; plan v${ledger.planVersion}`,
+  );
 }
 
 async function workflowReview(
@@ -135,6 +514,46 @@ async function workflowReview(
       options,
       'review requires an in_progress workflow at step 6 or later',
     );
+  }
+  if (
+    (action === 'init' || action === 'skip') &&
+    meta.verificationPolicyVersion === 1 &&
+    !(await verificationCanAdvance(rootDir, taskId, meta.planVersion ?? 1))
+  ) {
+    return invalidArg(
+      options,
+      'workflow verification must pass before review can start',
+    );
+  }
+
+  if (action === 'skip') {
+    if (
+      meta.reviewPolicyVersion !== 2 ||
+      meta.currentStep !== 6 ||
+      meta.planDecision !== 'governed_execution' ||
+      !options.reason?.trim()
+    ) {
+      return invalidArg(
+        options,
+        'review skip requires a governed policy-v2 workflow at step 6 and --reason',
+      );
+    }
+    try {
+      const error = await commitReviewSkip(
+        rootDir,
+        meta,
+        options.reason.trim(),
+      );
+      if (error) return invalidArg(options, error);
+      const ledger = await readReviewLedger(rootDir, taskId);
+      outputReviewLedger(ledger, options);
+      return EXIT_OK;
+    } catch (error) {
+      return invalidArg(
+        options,
+        error instanceof Error ? error.message : 'unable to skip review',
+      );
+    }
   }
 
   try {
@@ -185,7 +604,7 @@ async function workflowReview(
       return invalidArg(
         options,
         `invalid review action: ${action ?? ''}`,
-        'Use: mancode workflow review <taskId> <init|complete|remediate|show>',
+        'Use: mancode workflow review <taskId> <init|complete|remediate|skip|show>',
       );
     }
     outputReviewLedger(ledger, options);
@@ -198,6 +617,42 @@ async function workflowReview(
   }
 }
 
+async function commitReviewSkip(
+  rootDir: string,
+  meta: WorkflowMeta,
+  reason: string,
+): Promise<string | null> {
+  const ledgerPath = reviewLedgerPath(rootDir, meta.taskId);
+  const metadataPath = path.join(
+    rootDir,
+    '.mancode',
+    'workflows',
+    meta.taskId,
+    'metadata.json',
+  );
+  const [originalLedger, originalMetadata] = await Promise.all([
+    readOptionalText(ledgerPath),
+    readFile(metadataPath, 'utf-8'),
+  ]);
+  try {
+    await initializeSkippedReview(rootDir, meta.taskId, reason);
+    await updateWorkflow(rootDir, meta.taskId, {
+      skippedSteps: [...new Set([...meta.skippedSteps, 'review'])],
+    });
+    return null;
+  } catch (error) {
+    const rollback = await Promise.allSettled([
+      restoreOptionalText(ledgerPath, originalLedger),
+      writeFile(metadataPath, originalMetadata, 'utf-8'),
+    ]);
+    const message =
+      error instanceof Error ? error.message : 'review skip failed';
+    return rollback.some((result) => result.status === 'rejected')
+      ? `${message}; rollback was incomplete`
+      : message;
+  }
+}
+
 function outputReviewLedger(
   ledger: Awaited<ReturnType<typeof readReviewLedger>>,
   options: WorkflowOptions,
@@ -207,6 +662,10 @@ function outputReviewLedger(
     return;
   }
   if (!ledger) return;
+  if (ledger.skipped) {
+    console.log(`Review: skipped; reason ${ledger.skipped.reason}`);
+    return;
+  }
   const openBlockers = ledger.blockers.filter(
     (blocker) => blocker.status === 'open',
   );
@@ -248,6 +707,8 @@ async function workflowCreate(
   try {
     const meta = await createWorkflow(rootDir, task, mode, {
       parentTaskId: options.parentTask,
+      planningPolicyVersion:
+        mode === 'man' || mode === 'manteam' ? 2 : undefined,
     });
     if (options.json) {
       console.log(JSON.stringify(meta, null, 2));
@@ -272,7 +733,7 @@ async function workflowUpdate(
     return invalidArg(
       options,
       'missing taskId',
-      'Use: mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason <reason>] [--outcome <outcome>] [--plan-version N] [--skipped a,b]',
+      'Use: mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--requirements-status ready|needs_clarification] [--blocking-reason <reason>] [--outcome <outcome>] [--plan-version N] [--skipped clarification]',
     );
   }
   if (!isValidWorkflowTaskId(taskId)) {
@@ -347,11 +808,59 @@ async function workflowUpdate(
     patch.planVersion = planVersion;
   }
 
+  if (options.requirementsStatus !== undefined) {
+    if (
+      !isRequirementsStatus(options.requirementsStatus) ||
+      (existing.mode !== 'man' && existing.mode !== 'manteam')
+    ) {
+      return invalidArg(
+        options,
+        `invalid --requirements-status: ${options.requirementsStatus}`,
+      );
+    }
+    patch.requirementsStatus = options.requirementsStatus;
+  }
+
+  if (options.planDecision !== undefined) {
+    if (
+      options.planDecision !== 'governed_execution' ||
+      (existing.mode !== 'man' && existing.mode !== 'manteam')
+    ) {
+      return invalidArg(
+        options,
+        `invalid --plan-decision: ${options.planDecision}`,
+      );
+    }
+    patch.planDecision = options.planDecision;
+  }
+
   if (options.skipped !== undefined) {
-    patch.skippedSteps = options.skipped
+    const requestedSkipped = options.skipped
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+    if (existing.reviewPolicyVersion === 2) {
+      if (requestedSkipped.includes('review')) {
+        return invalidArg(
+          options,
+          'policy-v2 review skips require workflow review <taskId> skip --reason <reason>',
+        );
+      }
+      if (
+        existing.currentStep > 2 ||
+        requestedSkipped.some((item) => item !== 'clarification')
+      ) {
+        return invalidArg(
+          options,
+          'policy-v2 clarification can only be skipped at step 1 or 2',
+        );
+      }
+      patch.skippedSteps = [
+        ...new Set([...existing.skippedSteps, ...requestedSkipped]),
+      ];
+    } else {
+      patch.skippedSteps = requestedSkipped;
+    }
   }
 
   if (Object.keys(patch).length === 0) {
@@ -385,6 +894,389 @@ async function workflowUpdate(
     console.log(`Updated workflow: ${taskId}`);
   }
   return EXIT_OK;
+}
+
+async function workflowHandoff(
+  rootDir: string,
+  taskId: string | undefined,
+  options: WorkflowOptions,
+): Promise<number> {
+  if (!taskId || !isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId ?? ''}`);
+  }
+  if (options.complete) {
+    if (options.to !== undefined) {
+      return invalidArg(options, '--complete cannot be combined with --to');
+    }
+    return workflowCompleteHandoff(rootDir, taskId, options);
+  }
+  if (options.to !== 'solo') {
+    return invalidArg(options, 'handoff requires --to solo');
+  }
+
+  const meta = await readWorkflow(rootDir, taskId);
+  if (!meta || (meta.mode !== 'man' && meta.mode !== 'manteam')) {
+    return invalidArg(options, `workflow cannot be handed off: ${taskId}`);
+  }
+  if (
+    meta.status !== 'in_progress' ||
+    meta.currentStep !== 4 ||
+    meta.requirementsStatus !== 'ready' ||
+    meta.planDecision !== undefined
+  ) {
+    return invalidArg(
+      options,
+      'solo handoff requires an undecided in-progress workflow at step 4 with ready requirements',
+    );
+  }
+  const workflowPath = path.join(rootDir, '.mancode', 'workflows', taskId);
+  if (
+    !(await pathExists(path.join(workflowPath, 'requirements.md'))) ||
+    !(await pathExists(path.join(workflowPath, 'plan.md')))
+  ) {
+    return invalidArg(
+      options,
+      'solo handoff requires requirements.md and plan.md',
+    );
+  }
+
+  const statePath = path.join(rootDir, '.mancode', 'state.json');
+  let originalState: string;
+  let state: Record<string, unknown>;
+  try {
+    originalState = await readFile(statePath, 'utf-8');
+    state = JSON.parse(originalState) as Record<string, unknown>;
+  } catch {
+    return invalidArg(
+      options,
+      'unable to read .mancode/state.json for handoff',
+    );
+  }
+  if (state.currentTask !== taskId) {
+    return invalidArg(
+      options,
+      'current workflow state does not match the handoff task',
+    );
+  }
+  const activeSoloPlan = readActiveSoloPlan(state.activeSoloPlan);
+  if (activeSoloPlan && activeSoloPlan.taskId !== taskId) {
+    return invalidArg(
+      options,
+      `another solo plan is active: ${activeSoloPlan.taskId}; complete or abandon it before handoff`,
+    );
+  }
+
+  const nextState = {
+    ...state,
+    currentMode: 'solo',
+    lastMode:
+      typeof state.currentMode === 'string' ? state.currentMode : meta.mode,
+    currentTask: null,
+    currentWorkflowMode: null,
+    skippedSteps: [],
+    activeSoloPlan: {
+      taskId,
+      planVersion: meta.planVersion ?? 1,
+    },
+  };
+
+  const transitionError = await commitPlanningTransition({
+    rootDir,
+    taskId,
+    statePath,
+    originalState,
+    nextState,
+    workflowPatch: {
+      status: 'planned',
+      planDecision: 'solo_handoff',
+    },
+    activePlanStatus: 'planned',
+    planVersion: meta.planVersion ?? 1,
+  });
+  if (transitionError) {
+    return invalidArg(options, transitionError);
+  }
+
+  const result = await readWorkflow(rootDir, taskId);
+  if (options.json) {
+    console.log(
+      JSON.stringify(
+        { workflow: result, activeSoloPlan: nextState.activeSoloPlan },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log(`Handed off plan to solo: ${taskId}`);
+  }
+  return EXIT_OK;
+}
+
+async function workflowCompleteHandoff(
+  rootDir: string,
+  taskId: string,
+  options: WorkflowOptions,
+): Promise<number> {
+  const meta = await readWorkflow(rootDir, taskId);
+  if (
+    !meta ||
+    (meta.mode !== 'man' && meta.mode !== 'manteam') ||
+    meta.status !== 'planned' ||
+    meta.currentStep !== 4 ||
+    meta.planDecision !== 'solo_handoff'
+  ) {
+    return invalidArg(
+      options,
+      `workflow is not an active solo handoff: ${taskId}`,
+    );
+  }
+
+  const statePath = path.join(rootDir, '.mancode', 'state.json');
+  let originalState: string;
+  let state: Record<string, unknown>;
+  try {
+    originalState = await readFile(statePath, 'utf-8');
+    state = JSON.parse(originalState) as Record<string, unknown>;
+  } catch {
+    return invalidArg(
+      options,
+      'unable to read .mancode/state.json for handoff completion',
+    );
+  }
+  const activeSoloPlan = readActiveSoloPlan(state.activeSoloPlan);
+  if (activeSoloPlan?.taskId !== taskId) {
+    return invalidArg(
+      options,
+      'active solo plan does not match the handoff task',
+    );
+  }
+
+  const nextState = {
+    ...state,
+    activeSoloPlan: null,
+  };
+  const transitionError = await commitPlanningTransition({
+    rootDir,
+    taskId,
+    statePath,
+    originalState,
+    nextState,
+    workflowPatch: { status: 'completed' },
+    activePlanStatus: 'completed',
+    planVersion: meta.planVersion ?? 1,
+  });
+  if (transitionError) return invalidArg(options, transitionError);
+
+  const result = await readWorkflow(rootDir, taskId);
+  if (options.json) {
+    console.log(
+      JSON.stringify({ workflow: result, activeSoloPlan: null }, null, 2),
+    );
+  } else {
+    console.log(`Completed solo handoff: ${taskId}`);
+  }
+  return EXIT_OK;
+}
+
+async function workflowDecide(
+  rootDir: string,
+  taskId: string | undefined,
+  options: WorkflowOptions,
+): Promise<number> {
+  if (!taskId || !isValidWorkflowTaskId(taskId)) {
+    return invalidArg(options, `invalid taskId: ${taskId ?? ''}`);
+  }
+  if (
+    !isPlanDecision(options.planDecision) ||
+    options.planDecision === 'solo_handoff'
+  ) {
+    return invalidArg(
+      options,
+      'decide requires --plan-decision plan_only or governed_execution',
+    );
+  }
+  if (options.planDecision === 'governed_execution') {
+    return workflowUpdate(rootDir, taskId, {
+      ...options,
+      planDecision: 'governed_execution',
+    });
+  }
+
+  const meta = await readWorkflow(rootDir, taskId);
+  if (
+    !meta ||
+    (meta.mode !== 'man' && meta.mode !== 'manteam') ||
+    meta.status !== 'in_progress' ||
+    meta.currentStep !== 4 ||
+    meta.requirementsStatus !== 'ready' ||
+    meta.planDecision !== undefined
+  ) {
+    return invalidArg(
+      options,
+      `workflow is not ready for a plan-only decision: ${taskId}`,
+    );
+  }
+  const workflowPath = path.join(rootDir, '.mancode', 'workflows', taskId);
+  if (
+    !(await pathExists(path.join(workflowPath, 'requirements.md'))) ||
+    !(await pathExists(path.join(workflowPath, 'plan.md')))
+  ) {
+    return invalidArg(
+      options,
+      'plan-only requires requirements.md and plan.md',
+    );
+  }
+
+  const statePath = path.join(rootDir, '.mancode', 'state.json');
+  let originalState: string;
+  let state: Record<string, unknown>;
+  try {
+    originalState = await readFile(statePath, 'utf-8');
+    state = JSON.parse(originalState) as Record<string, unknown>;
+  } catch {
+    return invalidArg(
+      options,
+      'unable to read .mancode/state.json for decision',
+    );
+  }
+  if (state.currentTask !== taskId) {
+    return invalidArg(
+      options,
+      'current workflow state does not match the decision task',
+    );
+  }
+  const activeSoloPlan = readActiveSoloPlan(state.activeSoloPlan);
+  if (activeSoloPlan) {
+    return invalidArg(
+      options,
+      `another solo plan is active: ${activeSoloPlan.taskId}; resolve it before plan-only`,
+    );
+  }
+
+  const nextState = {
+    ...state,
+    currentMode: 'solo',
+    lastMode:
+      typeof state.currentMode === 'string' ? state.currentMode : meta.mode,
+    currentTask: null,
+    currentWorkflowMode: null,
+    skippedSteps: [],
+    activeSoloPlan: null,
+  };
+  const transitionError = await commitPlanningTransition({
+    rootDir,
+    taskId,
+    statePath,
+    originalState,
+    nextState,
+    workflowPatch: { status: 'planned', planDecision: 'plan_only' },
+    activePlanStatus: 'planned',
+    planVersion: meta.planVersion ?? 1,
+  });
+  if (transitionError) return invalidArg(options, transitionError);
+
+  const result = await readWorkflow(rootDir, taskId);
+  if (options.json) {
+    console.log(
+      JSON.stringify({ workflow: result, state: nextState }, null, 2),
+    );
+  } else {
+    console.log(`Saved plan without execution: ${taskId}`);
+  }
+  return EXIT_OK;
+}
+
+async function commitPlanningTransition(args: {
+  rootDir: string;
+  taskId: string;
+  statePath: string;
+  originalState: string;
+  nextState: Record<string, unknown>;
+  workflowPatch: Partial<WorkflowMeta>;
+  activePlanStatus: string;
+  planVersion: number;
+}): Promise<string | null> {
+  const metadataPath = path.join(
+    args.rootDir,
+    '.mancode',
+    'workflows',
+    args.taskId,
+    'metadata.json',
+  );
+  const specPath = path.join(args.rootDir, '.mancode', 'memory', 'spec.md');
+  let originalMetadata: string;
+  let originalSpec: string | null;
+  try {
+    originalMetadata = await readFile(metadataPath, 'utf-8');
+    originalSpec = await readOptionalText(specPath);
+  } catch (error) {
+    return error instanceof Error
+      ? `unable to prepare planning transition: ${error.message}`
+      : 'unable to prepare planning transition';
+  }
+
+  try {
+    await updateWorkflow(args.rootDir, args.taskId, args.workflowPatch);
+    await writeFile(
+      args.statePath,
+      `${JSON.stringify(args.nextState, null, 2)}\n`,
+      'utf-8',
+    );
+    await upsertActivePlan(args.rootDir, {
+      taskId: args.taskId,
+      status: args.activePlanStatus,
+      planVersion: args.planVersion,
+    });
+    return null;
+  } catch (error) {
+    const rollback = await Promise.allSettled([
+      writeFile(metadataPath, originalMetadata, 'utf-8'),
+      writeFile(args.statePath, args.originalState, 'utf-8'),
+      originalSpec === null
+        ? rm(specPath, { force: true })
+        : writeFile(specPath, originalSpec, 'utf-8'),
+    ]);
+    const message =
+      error instanceof Error ? error.message : 'planning transition failed';
+    return rollback.some((result) => result.status === 'rejected')
+      ? `${message}; rollback was incomplete`
+      : message;
+  }
+}
+
+async function readOptionalText(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, 'utf-8');
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function restoreOptionalText(
+  filePath: string,
+  content: string | null,
+): Promise<void> {
+  if (content === null) {
+    await rm(filePath, { force: true });
+    return;
+  }
+  await writeFile(filePath, content, 'utf-8');
+}
+
+function readActiveSoloPlan(
+  value: unknown,
+): { taskId: string; planVersion: number } | null {
+  if (!value || typeof value !== 'object') return null;
+  const plan = value as Record<string, unknown>;
+  if (typeof plan.taskId !== 'string' || !Number.isInteger(plan.planVersion)) {
+    return null;
+  }
+  return { taskId: plan.taskId, planVersion: plan.planVersion as number };
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 async function workflowList(
@@ -475,6 +1367,11 @@ async function workflowShow(
   if (meta.parentTaskId) console.log(`Parent:      ${meta.parentTaskId}`);
   if (meta.planVersion !== undefined)
     console.log(`Plan version: ${meta.planVersion}`);
+  if (meta.requirementsStatus)
+    console.log(`Requirements: ${meta.requirementsStatus}`);
+  if (meta.verificationStatus)
+    console.log(`Verification: ${meta.verificationStatus}`);
+  if (meta.planDecision) console.log(`Plan choice: ${meta.planDecision}`);
   if (meta.outcome) console.log(`Outcome:     ${meta.outcome}`);
   if (meta.blockingReason) console.log(`Blocked:     ${meta.blockingReason}`);
 
@@ -623,6 +1520,12 @@ function parseExactPositiveInteger(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseExactInteger(value: string | undefined): number | null {
+  if (!value || !/^-?\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function parseOlderThan(value: string | undefined): Date | undefined | null {

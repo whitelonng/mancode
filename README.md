@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.7-green?style=flat-square" alt="Status: stable v0.3.7" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.8-green?style=flat-square" alt="Status: stable v0.3.8" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-381%20passed-brightgreen?style=flat-square" alt="Tests: 381 passed" />
 </p>
@@ -125,9 +125,12 @@ coding agent reads.
 - **Match an existing UI system when present**: inspect project UI dependencies,
   Tailwind configuration, CSS variables, and components so the agent reuses
   established colors, fonts, and interaction patterns.
-- **Add bounded AI code review**: use `/man` for a 9-step workflow with
-  research, plan approval, implementation, tests, and risk-based review that
-  cannot repeat the same review domain indefinitely.
+- **Align requirements before planning**: `/man` investigates the project,
+  clarifies decisions that would change the solution, recommends viable
+  options, and produces a durable plan without automatically starting full execution.
+- **Choose the delivery depth**: after plan approval, keep the plan, hand it to
+  default `solo` for lightweight implementation, or continue the full `/man`
+  validation and bounded risk-review workflow.
 - **Keep workflow artifacts on disk**: save research, plans, review reports,
   and summaries under `.mancode/workflows/<taskId>/`.
 - **Support team memory**: use `/manteam` to read and update shared project
@@ -203,20 +206,28 @@ slash commands in your AI coding agent's conversation:
 |---|---|---|
 | `solo` | Daily coding · practice day | Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check |
 | `/manba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
-| `/man` | Production or high-risk changes · playoffs | Full 9-step workflow with targeted or full risk-based review |
+| `/man` | Work needing requirement alignment or a formal plan · playoffs | Research, recommendations, and a durable plan; then choose lightweight solo delivery or the full 9-step workflow |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
 | `/mansolo` | Returning to default mode | Resets current mode back to `solo` |
 
 ## How `/man` Works: Playoffs Mode
 
-`/man` is playoffs mode for production work. It creates a durable workflow under
-`.mancode/workflows/<taskId>/` and moves through nine steps:
+`/man` is both the formal planning entry point and playoffs mode for production
+work. A planning or research request made from default `solo` routes into `/man`.
+It inspects the project, asks only questions that can change scope, architecture,
+cost, or acceptance, and recommends 2–3 options when a decision benefits from
+guidance. It writes `plan.md` only after the requirements are ready.
+
+Finishing the plan does not automatically start the full workflow. At the plan
+gate, choose lightweight `solo` implementation, full `/man` execution, plan-only,
+or plan revision. Only full execution continues through implementation, validation,
+and risk review:
 
 1. **Scout report**: maps existing code, risks, and unknowns.
-2. **Clarification**: resolves requirements in up to two rounds.
-3. **Plan**: Plan Coach creates a durable, verifiable plan.
-4. **Plan gate**: choose plan-only, execution, or plan revision.
+2. **Clarification**: asks every unresolved decision-changing question, across as many batches as needed, without repeating confirmed answers; it makes a clear recommendation when a suitable approach exists.
+3. **Plan**: Plan Coach checks input readiness, then creates a durable plan with technical choices, boundaries, and acceptance criteria.
+4. **Plan gate**: choose lightweight solo delivery, full `/man`, plan-only, or plan revision.
 5. **Implementation**: Head Coach applies the confirmed plan.
 6. **Validation and review scope**: run build, lint, tests, smoke checks, then select targeted or full review from the actual diff and hard-risk triggers.
 7. **Film session 1**: evidence-backed quality review, limited to the changed behavior.
@@ -293,7 +304,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.7. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.8. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
 
@@ -366,10 +377,20 @@ mancode status --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man|manba|manteam> "<task>" [--parent-task <taskId>]
-mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
+mancode workflow requirements <taskId> finalize --file <requirements-input.json>
+mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--requirements-status ready|needs_clarification] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped clarification]
+mancode workflow decide <taskId> --plan-decision plan_only|governed_execution
+mancode workflow handoff <taskId> --to solo
+mancode workflow handoff <taskId> --complete
+mancode workflow verify <taskId> init
+mancode workflow verify <taskId> record --acceptance AC-1 --method automated --result passed|failed --evidence "<summary>" --command "<command>" --exit-code <code> [--evidence-file <path>]
+mancode workflow verify <taskId> require-manual --acceptance AC-1 --evidence "<reason>"
+mancode workflow verify <taskId> confirm-manual --acceptance AC-1 --evidence "<user confirmation>"
+mancode workflow verify <taskId> show [--json]
 mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
 mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
 mancode workflow review <taskId> remediate --resolved Q1,Q2
+mancode workflow review <taskId> skip --reason "<explicit user reason>"
 mancode workflow review <taskId> show [--json]
 mancode workflow list [--json]
 mancode workflow show <taskId> [--json]
@@ -386,7 +407,7 @@ mancode version
 Example output for a UI project (not a default stack):
 
 ```text
-mancode v0.3.7
+mancode v0.3.8
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -449,13 +470,20 @@ mancode status --json
 ### `mancode workflow`
 
 Creates and manages validated workflow metadata used by `/manba`, `/man`, and
-`/manteam`. A linked `/manba` child can only be created while its parent is
-active at Step 6. Governed review state records required domains, blocker IDs,
-and the single remediation round.
+`/manteam`. New governed workflows finalize seven explicit coverage dimensions,
+structured requirements, and stable acceptance IDs. Automated verification
+records the command and exit code. Remediation invalidates earlier evidence, so
+all required checks must be re-recorded at Step 9. Manual checks block until
+explicit user confirmation is recorded. Review can only be skipped through the
+Step 6 review skip command with a reason; targeted review treats its second
+domain as not applicable.
 
 ```bash
 mancode workflow create man "refactor auth module"
+mancode workflow requirements <taskId> finalize --file requirements-input.json
 mancode workflow update <taskId> --step 4 --plan-version 2
+mancode workflow verify <taskId> init
+mancode workflow verify <taskId> record --acceptance AC-1 --method automated --result passed --evidence "tests passed" --command "npm test" --exit-code 0
 mancode workflow review <taskId> init --review-depth full
 mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
 mancode workflow review <taskId> remediate --resolved Q1

@@ -7,8 +7,17 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  requirementsDigest as calculateRequirementsDigest,
+  readRequirementsLedger,
+  requirementsAreReady,
+} from './requirements-ledger.js';
 import { reviewCanComplete } from './review-ledger.js';
 import { upsertActivePlan } from './team-memory.js';
+import {
+  type VerificationOverallStatus,
+  verificationCanAdvance,
+} from './verification-ledger.js';
 
 /**
  * Workflow 元数据。
@@ -25,7 +34,7 @@ export interface WorkflowMeta {
   mode: WorkflowMode;
   /** 当前进行到第几步（mode-dependent）*/
   currentStep: number;
-  /** 被跳过的步骤名（如 ['warmup-drill', 'film-1']）*/
+  /** Policy v2 only allows clarification or the whole review. */
   skippedSteps: string[];
   /** ISO timestamp */
   startedAt: string;
@@ -42,7 +51,19 @@ export interface WorkflowMeta {
   /** Monotonically increasing plan revision for /man workflows. */
   planVersion?: number;
   /** Enables the bounded review completion gate for newly created governed workflows. */
-  reviewPolicyVersion?: 1;
+  reviewPolicyVersion?: 1 | 2;
+  /** Enables requirements and plan gates for newly created governed workflows. */
+  planningPolicyVersion?: 1 | 2;
+  /** Enables acceptance-linked verification gates for governed execution. */
+  verificationPolicyVersion?: 1;
+  /** Whether clarification has resolved every implementation-blocking unknown. */
+  requirementsStatus?: RequirementsStatus;
+  /** Digest of the structured requirements accepted before planning. */
+  requirementsDigest?: string;
+  /** User choice made at the plan gate. */
+  planDecision?: PlanDecision;
+  /** Cached verification state for status display and guarded unblock transitions. */
+  verificationStatus?: VerificationOverallStatus;
 }
 
 export type WorkflowStatus =
@@ -57,9 +78,17 @@ export type WorkflowOutcome =
   | 'verified'
   | 'no_repro'
   | 'manual_test_required';
+export type RequirementsStatus = 'ready' | 'needs_clarification';
+export type PlanDecision = 'plan_only' | 'solo_handoff' | 'governed_execution';
 
 export interface CreateWorkflowOptions {
   parentTaskId?: string;
+  planningPolicyVersion?: 1 | 2;
+}
+
+export interface UpdateWorkflowOptions {
+  /** Internal verification recording at Step 6/9 may be incomplete between checks. */
+  allowIncompleteVerification?: boolean;
 }
 
 const METADATA_FILE = 'metadata.json';
@@ -126,7 +155,16 @@ export async function createWorkflow(
     status: 'in_progress',
     ...(options.parentTaskId ? { parentTaskId: options.parentTaskId } : {}),
     ...(mode === 'man' || mode === 'manteam'
-      ? { planVersion: 1, reviewPolicyVersion: 1 as const }
+      ? {
+          planVersion: 1,
+          reviewPolicyVersion: options.planningPolicyVersion === 2 ? 2 : 1,
+          ...(options.planningPolicyVersion === 2
+            ? { verificationPolicyVersion: 1 as const }
+            : {}),
+          ...(options.planningPolicyVersion
+            ? { planningPolicyVersion: options.planningPolicyVersion }
+            : {}),
+        }
       : {}),
   };
 
@@ -179,6 +217,7 @@ export async function updateWorkflow(
   projectRoot: string,
   taskId: string,
   patch: Partial<WorkflowMeta>,
+  options: UpdateWorkflowOptions = {},
 ): Promise<void> {
   assertValidTaskId(taskId);
   const existing = await readWorkflow(projectRoot, taskId);
@@ -200,7 +239,7 @@ export async function updateWorkflow(
   if (updated.status !== 'blocked' && !explicitlyPatchedBlockingReason) {
     updated.blockingReason = undefined;
   }
-  await validateWorkflowMeta(projectRoot, updated, existing);
+  await validateWorkflowMeta(projectRoot, updated, existing, options);
   await writeMetadata(workflowDir(projectRoot, taskId), updated);
 
   // Propagate blocked / manual_test_required to parent workflow.
@@ -325,6 +364,20 @@ export function isWorkflowOutcome(value: unknown): value is WorkflowOutcome {
   );
 }
 
+export function isRequirementsStatus(
+  value: unknown,
+): value is RequirementsStatus {
+  return value === 'ready' || value === 'needs_clarification';
+}
+
+export function isPlanDecision(value: unknown): value is PlanDecision {
+  return (
+    value === 'plan_only' ||
+    value === 'solo_handoff' ||
+    value === 'governed_execution'
+  );
+}
+
 async function validateParentTask(
   projectRoot: string,
   mode: WorkflowMode,
@@ -354,6 +407,7 @@ async function validateWorkflowMeta(
   projectRoot: string,
   updated: WorkflowMeta,
   existing: WorkflowMeta,
+  options: UpdateWorkflowOptions,
 ): Promise<void> {
   if (updated.mode !== existing.mode) {
     throw new Error('workflow mode cannot be changed');
@@ -366,6 +420,22 @@ async function validateWorkflowMeta(
   }
   if (updated.reviewPolicyVersion !== existing.reviewPolicyVersion) {
     throw new Error('workflow review policy version cannot be changed');
+  }
+  if (updated.planningPolicyVersion !== existing.planningPolicyVersion) {
+    throw new Error('workflow planning policy version cannot be changed');
+  }
+  if (
+    updated.requirementsDigest !== existing.requirementsDigest &&
+    existing.currentStep > 2
+  ) {
+    throw new Error(
+      'workflow requirements cannot change after planning starts',
+    );
+  }
+  if (
+    updated.verificationPolicyVersion !== existing.verificationPolicyVersion
+  ) {
+    throw new Error('workflow verification policy version cannot be changed');
   }
   if (
     !Number.isInteger(updated.currentStep) ||
@@ -383,6 +453,16 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('workflow skipped steps must be strings');
   }
+  if (
+    updated.reviewPolicyVersion === 2 &&
+    updated.skippedSteps.some(
+      (step) => step !== 'clarification' && step !== 'review',
+    )
+  ) {
+    throw new Error(
+      'workflow policy v2 only allows skipping clarification or review',
+    );
+  }
   if (!canTransition(existing.status, updated.status)) {
     throw new Error(
       `invalid workflow status transition: ${existing.status} -> ${updated.status}`,
@@ -396,7 +476,8 @@ async function validateWorkflowMeta(
   }
   if (
     updated.status === 'completed' &&
-    updated.currentStep !== maxWorkflowStep(updated.mode)
+    updated.currentStep !== maxWorkflowStep(updated.mode) &&
+    !(updated.currentStep === 4 && updated.planDecision === 'solo_handoff')
   ) {
     throw new Error(
       `completed ${updated.mode === 'mamba' ? 'manba' : updated.mode} workflows must be at step ${maxWorkflowStep(updated.mode)}`,
@@ -436,12 +517,168 @@ async function validateWorkflowMeta(
   }
   if (
     updated.reviewPolicyVersion !== undefined &&
-    updated.reviewPolicyVersion !== 1
+    updated.reviewPolicyVersion !== 1 &&
+    updated.reviewPolicyVersion !== 2
   ) {
     throw new Error('invalid workflow review policy version');
   }
   if (updated.mode === 'mamba' && updated.reviewPolicyVersion !== undefined) {
     throw new Error('manba workflows cannot have a review policy version');
+  }
+  if (
+    updated.planningPolicyVersion !== undefined &&
+    updated.planningPolicyVersion !== 1 &&
+    updated.planningPolicyVersion !== 2
+  ) {
+    throw new Error('invalid workflow planning policy version');
+  }
+  if (updated.mode === 'mamba' && updated.planningPolicyVersion !== undefined) {
+    throw new Error('manba workflows cannot have a planning policy version');
+  }
+  if (
+    updated.verificationPolicyVersion !== undefined &&
+    updated.verificationPolicyVersion !== 1
+  ) {
+    throw new Error('invalid workflow verification policy version');
+  }
+  if (
+    updated.mode === 'mamba' &&
+    updated.verificationPolicyVersion !== undefined
+  ) {
+    throw new Error(
+      'manba workflows cannot have a verification policy version',
+    );
+  }
+  if (
+    updated.verificationStatus !== undefined &&
+    !isVerificationStatus(updated.verificationStatus)
+  ) {
+    throw new Error('invalid workflow verification status');
+  }
+  if (updated.mode === 'mamba' && updated.verificationStatus !== undefined) {
+    throw new Error('manba workflows cannot have a verification status');
+  }
+  if (
+    updated.requirementsStatus !== undefined &&
+    !isRequirementsStatus(updated.requirementsStatus)
+  ) {
+    throw new Error('invalid workflow requirements status');
+  }
+  if (updated.mode === 'mamba' && updated.requirementsStatus !== undefined) {
+    throw new Error('manba workflows cannot have a requirements status');
+  }
+  if (
+    updated.requirementsDigest !== undefined &&
+    typeof updated.requirementsDigest !== 'string'
+  ) {
+    throw new Error('workflow requirements digest must be a string');
+  }
+  if (updated.mode === 'mamba' && updated.requirementsDigest !== undefined) {
+    throw new Error('manba workflows cannot have a requirements digest');
+  }
+  if (
+    updated.planDecision !== undefined &&
+    !isPlanDecision(updated.planDecision)
+  ) {
+    throw new Error('invalid workflow plan decision');
+  }
+  if (updated.mode === 'mamba' && updated.planDecision !== undefined) {
+    throw new Error('manba workflows cannot have a plan decision');
+  }
+  if (
+    updated.planDecision !== existing.planDecision &&
+    existing.planDecision !== undefined
+  ) {
+    throw new Error('workflow plan decision cannot be changed');
+  }
+  if (
+    updated.planDecision !== existing.planDecision &&
+    existing.currentStep !== 4
+  ) {
+    throw new Error('workflow plan decision can only be set at step 4');
+  }
+  if (
+    updated.planningPolicyVersion === 1 ||
+    updated.planningPolicyVersion === 2
+  ) {
+    if (updated.currentStep >= 3) {
+      if (updated.requirementsStatus !== 'ready') {
+        throw new Error('requirements must be ready before planning');
+      }
+      if (
+        !(await workflowArtifactExists(
+          projectRoot,
+          updated.taskId,
+          'requirements.md',
+        ))
+      ) {
+        throw new Error('requirements.md is required before planning');
+      }
+      if (updated.planningPolicyVersion === 2) {
+        const requirements = await readRequirementsLedger(
+          projectRoot,
+          updated.taskId,
+        );
+        if (
+          !requirements ||
+          !requirementsAreReady(requirements) ||
+          updated.requirementsDigest !==
+            calculateRequirementsDigest(requirements)
+        ) {
+          throw new Error(
+            'finalized requirements.json with no blocking unknowns is required before planning',
+          );
+        }
+      }
+    }
+    if (
+      updated.currentStep >= 4 &&
+      !(await workflowArtifactExists(projectRoot, updated.taskId, 'plan.md'))
+    ) {
+      throw new Error('plan.md is required before the plan gate');
+    }
+    if (
+      updated.status === 'planned' &&
+      updated.planDecision !== 'plan_only' &&
+      updated.planDecision !== 'solo_handoff'
+    ) {
+      throw new Error(
+        'planned workflows require a plan-only or solo-handoff decision',
+      );
+    }
+    if (
+      updated.currentStep >= 5 &&
+      updated.status === 'in_progress' &&
+      updated.planDecision !== 'governed_execution'
+    ) {
+      throw new Error('governed execution must be confirmed before step 5');
+    }
+  }
+  if (
+    updated.verificationPolicyVersion === 1 &&
+    updated.currentStep >= 7 &&
+    updated.planDecision !== 'solo_handoff' &&
+    !options.allowIncompleteVerification &&
+    !(await verificationCanAdvance(
+      projectRoot,
+      updated.taskId,
+      updated.planVersion ?? 1,
+    ))
+  ) {
+    throw new Error(
+      'workflow verification is incomplete, stale, or requires manual confirmation',
+    );
+  }
+  if (
+    existing.status === 'blocked' &&
+    existing.blockingReason?.startsWith('[verification]') &&
+    updated.status === 'in_progress' &&
+    (updated.verificationStatus === 'manual_required' ||
+      updated.verificationStatus === 'blocked')
+  ) {
+    throw new Error(
+      'verification-blocked workflows must resume through verify',
+    );
   }
   if (
     updated.planVersion !== undefined &&
@@ -473,19 +710,36 @@ async function validateWorkflowMeta(
   if (
     updated.status === 'completed' &&
     updated.reviewPolicyVersion === 1 &&
+    updated.planDecision !== 'solo_handoff' &&
     !reviewWasExplicitlySkipped(updated) &&
     !(await reviewCanComplete(projectRoot, updated.taskId))
   ) {
     throw new Error('workflow review is incomplete or still has open blockers');
+  }
+  if (
+    updated.status === 'completed' &&
+    updated.reviewPolicyVersion === 2 &&
+    updated.planDecision !== 'solo_handoff' &&
+    !(await reviewCanComplete(projectRoot, updated.taskId))
+  ) {
+    throw new Error('workflow review is incomplete or still has open blockers');
+  }
+  if (
+    updated.status === 'completed' &&
+    updated.verificationPolicyVersion === 1 &&
+    updated.planDecision !== 'solo_handoff' &&
+    !(await workflowArtifactExists(projectRoot, updated.taskId, 'summary.md'))
+  ) {
+    throw new Error('summary.md is required before workflow completion');
   }
 }
 
 function canTransition(from: WorkflowStatus, to: WorkflowStatus): boolean {
   if (from === to) return true;
   if (from === 'in_progress') return true;
-  if (from === 'planned' || from === 'blocked') {
-    return to === 'in_progress' || to === 'abandoned';
-  }
+  if (from === 'planned')
+    return to === 'in_progress' || to === 'completed' || to === 'abandoned';
+  if (from === 'blocked') return to === 'in_progress' || to === 'abandoned';
   return false;
 }
 
@@ -520,7 +774,39 @@ function isWorkflowShape(obj: Partial<WorkflowMeta>): boolean {
     (!Number.isInteger(obj.planVersion) || obj.planVersion < 1)
   )
     return false;
-  if (obj.reviewPolicyVersion !== undefined && obj.reviewPolicyVersion !== 1)
+  if (
+    obj.reviewPolicyVersion !== undefined &&
+    obj.reviewPolicyVersion !== 1 &&
+    obj.reviewPolicyVersion !== 2
+  )
+    return false;
+  if (
+    obj.planningPolicyVersion !== undefined &&
+    obj.planningPolicyVersion !== 1 &&
+    obj.planningPolicyVersion !== 2
+  )
+    return false;
+  if (
+    obj.verificationPolicyVersion !== undefined &&
+    obj.verificationPolicyVersion !== 1
+  )
+    return false;
+  if (
+    obj.requirementsStatus !== undefined &&
+    !isRequirementsStatus(obj.requirementsStatus)
+  )
+    return false;
+  if (
+    obj.requirementsDigest !== undefined &&
+    typeof obj.requirementsDigest !== 'string'
+  )
+    return false;
+  if (obj.planDecision !== undefined && !isPlanDecision(obj.planDecision))
+    return false;
+  if (
+    obj.verificationStatus !== undefined &&
+    !isVerificationStatus(obj.verificationStatus)
+  )
     return false;
   if (status === 'blocked') {
     if (!obj.blockingReason?.trim()) return false;
@@ -531,7 +817,13 @@ function isWorkflowShape(obj: Partial<WorkflowMeta>): boolean {
     if (
       status === 'planned' ||
       obj.planVersion !== undefined ||
-      obj.reviewPolicyVersion !== undefined
+      obj.reviewPolicyVersion !== undefined ||
+      obj.planningPolicyVersion !== undefined ||
+      obj.verificationPolicyVersion !== undefined ||
+      obj.requirementsStatus !== undefined ||
+      obj.requirementsDigest !== undefined ||
+      obj.planDecision !== undefined ||
+      obj.verificationStatus !== undefined
     )
       return false;
     if (
@@ -547,11 +839,36 @@ function isWorkflowShape(obj: Partial<WorkflowMeta>): boolean {
   return true;
 }
 
+async function workflowArtifactExists(
+  projectRoot: string,
+  taskId: string,
+  filename: string,
+): Promise<boolean> {
+  try {
+    await stat(path.join(workflowDir(projectRoot, taskId), filename));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function reviewWasExplicitlySkipped(meta: WorkflowMeta): boolean {
   return (
     meta.skippedSteps.includes('review') ||
     (meta.skippedSteps.includes('film-1') &&
       meta.skippedSteps.includes('film-2'))
+  );
+}
+
+function isVerificationStatus(
+  value: unknown,
+): value is VerificationOverallStatus {
+  return (
+    value === 'pending' ||
+    value === 'passed' ||
+    value === 'failed' ||
+    value === 'manual_required' ||
+    value === 'blocked'
   );
 }
 

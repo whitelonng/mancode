@@ -51,13 +51,13 @@ export const MANTEAM_SKILL: SkillSpec = {
 按 \`/man\` 的 9 步流程执行（含澄清、计划关卡和增强收尾），但每一步增加团队约束：
 
 1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件。
-2. 澄清：最多两轮；把已确认约束和保守默认值写入 requirements.md。
-3. Game Plan：计划里必须包含变更边界、兼容性风险、回滚方式；Plan Coach 只返回计划文本，禁止提前修改业务文件或团队 memory。
-4. 计划关卡：用户可只保留计划、继续执行或重写计划；Active Plans 按 taskId 更新。
+2. 澄清：沿用 /man 的需求就绪门槛，不设固定轮数或每批问题数量；问出所有会改变决策且无法从项目事实查清的疑问，不重复已确认内容。有合适方案时直接给出选项、优缺点和明确推荐。通过 \`workflow requirements ... finalize\` 固化七个 coverage 维度、结构化需求和带验证方式的验收 ID，只有 CLI 判定 ready 才进入计划。
+3. Game Plan：Plan Coach 先做输入就绪检查；计划里必须包含变更边界、技术选择理由、兼容性风险、回滚方式，禁止提前修改业务文件或团队 memory。
+4. 计划关卡：用户可只保留计划、继续完整团队执行、明确交给 solo 轻量执行或重写计划；Active Plans 按 taskId 更新。团队共享文件或交接风险存在时推荐完整团队执行。
 5. 实施：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
-6. Self-test：优先跑项目已有验证命令；失败两次停下诊断根因。需要真实验证时创建带 parentTaskId 的 /manba 子任务。子任务修复后若父任务曾因此 blocked，先用 workflow CLI 恢复父任务为 in_progress；manual_test_required 不得自动恢复。
+6. Self-test：在 Step 6 初始化 verification ledger，把每个 required 验收 ID 的自动、人工或 hybrid 结果和证据通过 CLI 记录；自动结果包含命令与退出码，未全部通过不得进入 review。优先跑项目已有验证命令；失败两次停下诊断根因。需要人工验证时标记 require-manual 并等待用户明确确认，不得自动恢复。remediation 后在 Step 9 重新登记全部验收。
 7. Review scope + Film #1：基于实际 diff 写 \`review-scope.md\`，用 \`workflow review ... init\` 选择 targeted 或 full；重点审查行为、可维护性、团队风格与测试，finding 必须有证据和稳定 ID。
-8. Film #2：仅 full 执行，先读 Film #1 报告并去重，只审查边界、安全、性能、并发和兼容性。用户明确要求才可跳过全部 review，并写入 \`skippedSteps\` 和残余风险。
+8. Film #2：仅 full 执行，先读 Film #1 报告并去重，只审查边界、安全、性能、并发和兼容性。targeted 的第二审是不适用，不能记为 skipped；只有用户明确要求才可跳过全部 review，并写入 \`review\` 和残余风险。
 9. Post-game：汇总 blocker，只做一轮修复并用 \`workflow review ... remediate\` 记录；复验后写 summary 与 hand-off。验证失败、审查不完整或仍有 blocker 时标记 blocked，不得标 completed。
 
 如果用户在确认阶段选择"退出"或放弃团队 workflow：用 \`mancode workflow update <taskId> --status abandoned\` 更新并清理 Active Plans；若有活跃 manba 子任务，先取得确认并逐个 abandoned。成功后再用 Edit 更新 state 回 solo。不要直接改 metadata，也不要把 abandoned workflow 留在 active state。

@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.3.7</span>
+      <span class="docs-wordmark">Documentation / v0.3.8</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -99,7 +99,7 @@
           <table class="docs-table"><thead><tr><th>Mode</th><th>Best for</th><th>What changes</th></tr></thead><tbody>
             <tr><td><code>solo</code></td><td>Daily coding</td><td>Lightweight hooks, style awareness, YAGNI checks, and one bounded diff self-check.</td></tr>
             <tr><td><code>/manba</code></td><td>Diagnosis</td><td>Reproduce the failure, find the cause, validate real user paths, and run regression checks.</td></tr>
-            <tr><td><code>/man</code></td><td>High-stakes work</td><td>Full nine-step workflow with a plan gate, targeted/full risk review, and one remediation round.</td></tr>
+            <tr><td><code>/man</code></td><td>Requirement alignment and formal planning</td><td>Research, recommendations, and a durable plan; then hand off to lightweight solo delivery or continue the full nine-step workflow.</td></tr>
             <tr><td><code>/manteam</code></td><td>Team projects</td><td>Shared memory, decision records, coordination, and Conventional Commits guidance.</td></tr>
             <tr><td><code>/manps</code></td><td>Maintenance</td><td>Deterministic project-health scan with Markdown and JSON reports.</td></tr>
           </tbody></table>
@@ -135,14 +135,18 @@ $manteam</code></pre><button type="button" data-copy="/manba\n/man\n/manteam">Co
           <h2>Workflow records</h2>
           <p><code>mancode workflow</code> manages metadata used by the strict modes. The records make progress, plan versions, skipped steps, and review outcomes inspectable after the chat is over.</p>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow create man "refactor auth module"
+<span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; init
+<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-1 --method automated --result passed --evidence "tests passed" --command "npm test" --exit-code 0
 <span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4 --plan-version 2
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth full
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
 <span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
+<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; skip --reason "explicit user request"
 <span class="command-prompt">$</span> mancode workflow create manba "verify auth regression" --parent-task &lt;taskId&gt;
 <span class="command-prompt">$</span> mancode workflow show &lt;taskId&gt; --json
 <span class="command-prompt">$</span> mancode workflow clean --older-than 30d --dry-run</code></pre><button type="button" data-copy="mancode workflow create man &quot;refactor auth module&quot;\nmancode workflow show &lt;taskId&gt; --json">Copy</button></div>
-          <div class="docs-note"><strong>Constraint</strong><p>A linked <code>manba</code> child may only be created while its parent workflow is active at Step 6. New governed workflows also cannot complete until their required review domains are recorded and all blocker IDs are resolved.</p></div>
+          <div class="docs-note"><strong>Constraint</strong><p>New governed workflows require explicit coverage for platform, scope, stack, data, performance, compatibility, and security. Remediation invalidates old verification and requires Step 9 re-verification. Review skips are only recorded through the Step 6 skip command with a reason.</p></div>
         </section>
 
         <section class="doc-section" id="platforms" data-searchable>

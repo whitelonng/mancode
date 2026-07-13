@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   completeReviewDomain,
   initializeReview,
+  initializeSkippedReview,
   readReviewLedger,
   remediateReviewBlockers,
   reviewCanComplete,
@@ -47,6 +48,17 @@ describe('review ledger', () => {
     await expect(reviewCanComplete(dir, taskId)).resolves.toBe(false);
 
     await completeReviewDomain(dir, taskId, 'security', 'film-report-2.md', []);
+    await expect(reviewCanComplete(dir, taskId)).resolves.toBe(true);
+  });
+
+  it('records an explicit review skip as a completed review decision', async () => {
+    const ledger = await initializeSkippedReview(
+      dir,
+      taskId,
+      '用户明确要求跳过独立审查',
+    );
+
+    expect(ledger.skipped?.reason).toContain('用户明确要求');
     await expect(reviewCanComplete(dir, taskId)).resolves.toBe(true);
   });
 

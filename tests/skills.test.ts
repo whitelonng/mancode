@@ -44,14 +44,28 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/workflow create man/);
     expect(MAN_SKILL.body).toMatch(/workflow update/);
     expect(MAN_SKILL.body).toMatch(/--plan-version/);
-    expect(MAN_SKILL.body).toMatch(/--status in_progress/);
+    expect(MAN_SKILL.body).toMatch(/confirm-manual/);
     expect(MAN_SKILL.body).toMatch(/workflow update <taskId> --step 4/);
-    expect(MAN_SKILL.body).toMatch(/Plan Coach 只返回计划文本/);
+    expect(MAN_SKILL.body).toMatch(/Plan Coach 先返回/);
     expect(MAN_SKILL.body).toMatch(/不得直接.*metadata\.json/);
     expect(MAN_SKILL.body).toMatch(/review-scope\.md/);
     expect(MAN_SKILL.body).toMatch(/定向审查/);
     expect(MAN_SKILL.body).toMatch(/一轮修复/);
     expect(MAN_SKILL.body).toMatch(/workflow review/);
+    expect(MAN_SKILL.body).toMatch(/不用固定轮数/);
+    expect(MAN_SKILL.body).toMatch(/不限制每批数量/);
+    expect(MAN_SKILL.body).not.toMatch(/最多询问 4 个/);
+    expect(MAN_SKILL.body).toMatch(/workflow requirements/);
+    expect(MAN_SKILL.body).toMatch(/requirements\.json/);
+    expect(MAN_SKILL.body).toMatch(/hybrid/);
+    expect(MAN_SKILL.body).toMatch(/coverage/);
+    expect(MAN_SKILL.body).toMatch(/--exit-code/);
+    expect(MAN_SKILL.body).toMatch(/review <taskId> skip --reason/);
+    expect(MAN_SKILL.body).toMatch(/Step 9 重跑全部 required/);
+    expect(MAN_SKILL.body).toMatch(/workflow handoff/);
+    expect(MAN_SKILL.body).toMatch(/workflow decide/);
+    expect(MAN_SKILL.body).toMatch(/solo 轻量执行/);
+    expect(MAN_SKILL.body).toMatch(/开工回执/);
   });
 
   it('keeps solo review bounded and lightweight', () => {
@@ -60,6 +74,9 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).toMatch(/不调用.*reviewer/);
     expect(SOLO_SKILL).toMatch(/最窄/);
     expect(SOLO_SKILL).not.toMatch(/自审发现 3 个以上问题/);
+    expect(SOLO_SKILL).toMatch(/activeSoloPlan/);
+    expect(SOLO_SKILL).toMatch(/不重新规划/);
+    expect(SOLO_SKILL).toMatch(/handoff <taskId> --complete/);
   });
 
   it('defines manba diagnosis and real browser validation boundaries', () => {

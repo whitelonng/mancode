@@ -75,6 +75,21 @@ if (state.teamModeAutoDetected === true && mode === 'solo') {
   );
 }
 
+if (
+  mode === 'solo' &&
+  state.activeSoloPlan &&
+  typeof state.activeSoloPlan.taskId === 'string'
+) {
+  output.push(
+    '',
+    '### 已确认的 solo 实施计划',
+    'Task: ' + sanitize(state.activeSoloPlan.taskId),
+    'Plan version: ' + sanitize(state.activeSoloPlan.planVersion || 1),
+    '- 收到继续实施指令时，先读对应 workflow 的 requirements.md 和 plan.md。',
+    '- 按已确认范围轻量开发，不重新进入 /man，不运行独立 reviewer。',
+  );
+}
+
 console.log(output.join('\n'));
 
 function readJson(filePath) {
@@ -138,8 +153,31 @@ if (mode === 'solo') {
 const rawInput = readFileSync(0, 'utf8');
 const userPrompt = readPrompt(rawInput);
 const planningPattern = /先(?:别|不要|看|看看|调研|分析|评估)|给.*方案|给.*计划|怎么.*做|如何.*做|怎么.*实现|如何.*实现|应该怎么|怎么.*拆|拆分|只给.*计划|不要.*改代码|别.*改代码|不要.*动代码|别.*动代码|评估.*风险|风险.*评估|设计.*方案|架构|迁移|集成|\b(?:plan|planning|research|investigate|approach|proposal|architecture|risk|migration|integration)\b|how (?:should|would|to)|do not (?:edit|modify|change)|don.t (?:edit|modify|change)|no code changes|without changing code/iu;
+const approvedPlanExecutionPattern = /按.*计划|继续.*计划|执行.*计划|实现.*计划|(?:implement|execute|continue|resume).*(?:approved )?plan/iu;
+const hasActiveSoloPlan =
+  mode === 'solo' &&
+  state.activeSoloPlan &&
+  typeof state.activeSoloPlan.taskId === 'string';
 
-if (mode === 'solo' && planningPattern.test(userPrompt)) {
+if (hasActiveSoloPlan) {
+  output.push(
+    '## mancode 已确认计划',
+    '',
+    '当前 solo 计划：.mancode/workflows/' +
+      sanitize(state.activeSoloPlan.taskId) +
+      '/plan.md（v' +
+      sanitize(state.activeSoloPlan.planVersion || 1) +
+      '）。',
+    '实施前同时读取 requirements.md；只执行确认范围，完成后运行 workflow handoff <taskId> --complete。',
+    '',
+  );
+}
+
+if (
+  mode === 'solo' &&
+  planningPattern.test(userPrompt) &&
+  !(hasActiveSoloPlan && approvedPlanExecutionPattern.test(userPrompt))
+) {
   output.push(
     '## mancode 自动路由',
     '',
@@ -263,6 +301,14 @@ export const SOLO_SKILL = `# mancode · solo mode
 2. 读取 \`.mancode/project-profile.json\`（了解检测到的源码目录、能力和验证方式）
 3. 搜索相似实现（"这个项目里有没有？"）
 4. 检查可复用资源
+
+### 执行已确认的 /man 计划
+当 \`.mancode/state.json\` 的 \`activeSoloPlan\` 非空且用户要求继续该计划时：
+1. 读取对应 workflow 的 \`requirements.md\` 和 \`plan.md\`，确认 taskId 与 planVersion。
+2. 开工前回执目标、技术方案、包含范围、排除范围、验证方式和残余假设。
+3. 只按计划轻量实施；不重新规划、不调用 Film Reviewer、不创建新的 /man workflow。
+4. 发现会改变架构、范围或验收的缺口时暂停并询问，不自行扩大计划。
+5. 完成最窄有效验证和一次受限 diff 自检后，运行 \`mancode workflow handoff <taskId> --complete\`；由 CLI 原子清理 \`activeSoloPlan\`、把 workflow 标记 completed 并移出 Active Plans，保留计划文件。
 
 ### UI 任务（条件执行）
 仅当 project-profile 确认有 UI 资产且任务确实涉及界面时：

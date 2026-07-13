@@ -46,6 +46,7 @@ export interface StatusState {
   uiLibrary: string;
   currentTask?: string | null;
   currentWorkflowMode?: string | null;
+  activeSoloPlan?: { taskId: string; planVersion: number } | null;
   teamModeAutoDetected?: boolean;
   contributors?: number;
   projectMode?: 'generic' | 'detected';
@@ -97,6 +98,7 @@ export interface StatusResult {
       status: WorkflowStatus;
     }>;
   } | null;
+  activeSoloPlan: { taskId: string; planVersion: number } | null;
   platformStatus: Record<string, PlatformStatus>;
   projectRefreshRecommended: boolean;
 }
@@ -190,6 +192,7 @@ export async function status(
     hookInjection,
     team: effectiveTeam,
     currentWorkflow,
+    activeSoloPlan: state.activeSoloPlan ?? null,
     platformStatus: {},
     projectRefreshRecommended,
   };
@@ -532,6 +535,11 @@ function printText(r: StatusResult): void {
         `Children:    ${r.currentWorkflow.activeChildren.map((child) => `${child.taskId} (${child.status})`).join(', ')}`,
       );
     }
+  }
+  if (r.activeSoloPlan) {
+    console.log(
+      `Solo plan:   ${r.activeSoloPlan.taskId} (plan v${r.activeSoloPlan.planVersion})`,
+    );
   }
   console.log('');
   console.log('Installed platforms:');
