@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">English</a> ·
+  <a href="https://whitelonng.github.io/mancode/">官网</a> ·
   <a href="https://github.com/whitelonng/mancode#%E5%AE%89%E8%A3%85%E6%96%B9%E6%B3%95">安装方法</a> ·
   <a href="https://github.com/whitelonng/mancode#%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95">使用方法</a>
 </p>
