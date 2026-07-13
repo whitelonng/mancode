@@ -284,6 +284,10 @@ h3 {
   text-transform: uppercase;
 }
 
+code {
+  text-transform: none;
+}
+
 h1 {
   max-width: 820px;
   margin-bottom: 0;
@@ -483,7 +487,7 @@ h1 .orange {
   font-size: clamp(64px, 6.2vw, 94px);
   line-height: 0.8;
   letter-spacing: -0.035em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .play-card-name span {
@@ -1379,7 +1383,11 @@ h1 .orange {
   color: var(--lime);
   font-size: 8px;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
+  text-transform: none;
+}
+
+.workflow-lead .eyebrow {
+  text-transform: none;
 }
 
 .terminal-ready i {
