@@ -411,6 +411,7 @@
 
 .docs-table td code {
   white-space: nowrap;
+  text-transform: none;
 }
 
 .command-list {
@@ -438,6 +439,7 @@
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.35;
+  text-transform: none;
 }
 
 .command-card header span {
