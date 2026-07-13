@@ -886,7 +886,7 @@ h1 .orange {
   font-size: 27px;
   line-height: 0.9;
   letter-spacing: -0.02em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .mode-tabs small {
@@ -937,7 +937,7 @@ h1 .orange {
   color: var(--orange);
   font-size: 10px;
   letter-spacing: 0.18em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .mode-panel h3 {
@@ -2222,6 +2222,7 @@ html[data-theme="light"] .site-footer p {
   margin: 48px 0 14px;
   font-size: 34px;
   line-height: 0.9;
+  text-transform: none;
 }
 
 .mode-guide-home p {

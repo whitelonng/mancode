@@ -501,6 +501,7 @@
   margin: 12px 0 11px;
   color: var(--docs-text);
   font-size: 32px;
+  text-transform: none;
 }
 
 .mode-guide p {
