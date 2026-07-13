@@ -14,7 +14,7 @@ describe('version', () => {
 
   it('keeps README release metadata aligned', async () => {
     const readmes = await Promise.all(
-      ['../README.md', '../README.zh-CN.md'].map((file) =>
+      ['../README.md', '../README.en.md'].map((file) =>
         readFile(new URL(file, import.meta.url), 'utf-8'),
       ),
     );
