@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.7-green?style=flat-square" alt="状态：稳定版 v0.3.7" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.8-green?style=flat-square" alt="状态：稳定版 v0.3.8" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-381%20passed-brightgreen?style=flat-square" alt="测试：381 通过" />
 </p>
@@ -112,7 +112,8 @@ AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 ins
 
 - **减少 AI 过度设计**：先复用已有代码、标准库、已安装依赖和一行修复，再考虑新增抽象。
 - **在存在 UI 时匹配现有设计系统**：检查项目 UI 依赖、Tailwind 配置、CSS 变量和已有组件，让 agent 复用现有颜色、字体和交互模式。
-- **加入有界 AI 代码审查**：`/man` 提供 9 步流程，包括调研、计划审批、实现、测试和按风险选择的审查，同一领域不会无限重复。
+- **先把需求和计划对齐**：`/man` 会调研项目、引导澄清会改变方案的需求、推荐可行选项并生成可确认的持久计划；计划完成后不会自动进入完整实施。
+- **自由选择执行强度**：计划确认后，可只保留计划、交给默认 `solo` 轻量开发，或继续完整 `/man` 的验证与有界风险审查。
 - **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/workflows/<taskId>/`。
 - **支持团队记忆**：`/manteam` 读写 `.mancode/memory/` 下的共享项目上下文。
 - **扫描项目健康度**：`mancode manps` 检测陈旧 TODO、未使用依赖、风险依赖和硬编码设计值。
@@ -174,20 +175,27 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 |---|---|---|
 | `solo` | 日常编码 · 日常训练 | 轻量 hooks、风格感知、YAGNI 检查和一次受限 diff 自检 |
 | `/manba` | 诊断与真实验证 · 曼巴心态 | 复现缺陷、定位根因、驱动真实用户路径并执行回归检查 |
-| `/man` | 生产级或高风险改动 · 季后赛 | 完整 9 步工作流和定向/完整风险审查 |
+| `/man` | 需要需求对齐或正式计划的改动 · 季后赛 | 调研、方案推荐和持久计划；确认后选择 solo 轻量开发或完整 9 步治理 |
 | `/manteam` | 团队项目 · 上场五人，一条心 | 共享记忆、决策记录、协作和 Conventional Commits |
 | `/manps` | 清理和维护 · 季前赛 | 输出 Markdown 和 JSON 项目健康报告 |
 | `/mansolo` | 回到默认模式 | 将当前模式重置为 `solo` |
 
 ## `/man` 如何工作：季后赛模式
 
-`/man` 是面向关键任务的季后赛模式。它会在 `.mancode/workflows/<taskId>/`
-下创建可追溯工作流，并推进九个步骤：
+`/man` 既是正式计划入口，也是面向关键任务的季后赛模式。即使当前处于默认
+`solo`，当用户要求先调研、给方案或出计划时，也会进入 `/man`。它会先了解项目，
+只追问会改变范围、架构、成本或验收的问题；适合由系统推荐的决策会给出 2–3 个
+方案、优缺点和明确建议。需求足够清楚后，计划才会写入
+`.mancode/workflows/<taskId>/plan.md`。
+
+计划完成不会自动开始完整开发。用户在计划关卡选择：交给 `solo` 按已确认计划
+轻量开发、继续完整 `/man`、只保留计划，或修改计划。只有选择完整 `/man` 才继续
+后续实施、验证和风险审查：
 
 1. **球探报告**：梳理既有代码、风险和未知项。
-2. **需求澄清**：最多两轮确认需求。
-3. **计划**：Plan Coach 输出可验证的持久计划。
-4. **计划关卡**：选择只要计划、继续执行或修改计划。
+2. **需求澄清**：按需求就绪程度引导对齐；问出所有会改变方案且无法从项目查清的疑问，可按需分多批，不限制数量、不重复已确认内容，有合适方案时直接给出推荐。
+3. **计划**：Plan Coach 先检查输入是否完整，再输出包含技术选择、边界和验收标准的持久计划。
+4. **计划关卡**：选择 solo 轻量执行、完整 `/man`、只保留计划或修改计划。
 5. **实施**：Head Coach 按确认计划实现。
 6. **验证与审查范围**：运行 build、lint、test、smoke test，再根据实际 diff 和硬风险选择定向或完整审查。
 7. **录像分析 1**：只对改动行为做有证据的质量审查。
@@ -254,7 +262,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.7。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：稳定版 v0.3.8。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
 发现路径在发布前仍作为验证门禁。
 
@@ -325,10 +333,20 @@ mancode status --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode workflow create <man|manba|manteam> "<task>" [--parent-task <taskId>]
-mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped a,b]
+mancode workflow requirements <taskId> finalize --file <requirements-input.json>
+mancode workflow update <taskId> [--step N] [--status in_progress|planned|completed|blocked|abandoned] [--requirements-status ready|needs_clarification] [--blocking-reason "<reason>"] [--outcome fixed|verified|no_repro|manual_test_required] [--plan-version N] [--skipped clarification]
+mancode workflow decide <taskId> --plan-decision plan_only|governed_execution
+mancode workflow handoff <taskId> --to solo
+mancode workflow handoff <taskId> --complete
+mancode workflow verify <taskId> init
+mancode workflow verify <taskId> record --acceptance AC-1 --method automated --result passed|failed --evidence "<summary>" --command "<command>" --exit-code <code> [--evidence-file <path>]
+mancode workflow verify <taskId> require-manual --acceptance AC-1 --evidence "<reason>"
+mancode workflow verify <taskId> confirm-manual --acceptance AC-1 --evidence "<user confirmation>"
+mancode workflow verify <taskId> show [--json]
 mancode workflow review <taskId> init --review-depth <targeted|full> [--review-domain <quality|security>]
 mancode workflow review <taskId> complete --review-domain <quality|security> --report <path> [--blockers Q1,Q2]
 mancode workflow review <taskId> remediate --resolved Q1,Q2
+mancode workflow review <taskId> skip --reason "<用户明确理由>"
 mancode workflow review <taskId> show [--json]
 mancode workflow list [--json]
 mancode workflow show <taskId> [--json]
@@ -345,7 +363,7 @@ mancode version
 以下是 UI 项目的输出示例，并非默认技术栈：
 
 ```text
-mancode v0.3.7
+mancode v0.3.8
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)
@@ -405,11 +423,14 @@ mancode status --json
 
 ### `mancode workflow`
 
-创建和管理 `/manba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。关联 `/manba` 子任务只能在父任务处于 Step 6 且正在进行时创建；严格模式的 review 状态会记录所需领域、blocker ID 和唯一一轮修复。
+创建和管理 `/manba`、`/man` 和 `/manteam` 使用的受校验 workflow 元数据。新 `/man`/`/manteam` 任务通过七项 coverage、结构化需求和验收 ID 固化范围；自动验证记录命令与退出码。remediation 会让旧证据失效，必须在 Step 9 重新登记全部 required 验收。人工验收会阻塞流程，直到记录用户明确确认。跳过 review 只能在 Step 6 使用专用 skip 命令并记录理由；targeted 的第二领域是不适用。
 
 ```bash
 mancode workflow create man "refactor auth module"
+mancode workflow requirements <taskId> finalize --file requirements-input.json
 mancode workflow update <taskId> --step 4 --plan-version 2
+mancode workflow verify <taskId> init
+mancode workflow verify <taskId> record --acceptance AC-1 --method automated --result passed --evidence "tests passed" --command "npm test" --exit-code 0
 mancode workflow review <taskId> init --review-depth full
 mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1
 mancode workflow review <taskId> remediate --resolved Q1

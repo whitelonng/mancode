@@ -14,6 +14,7 @@ export interface SharedContentOptions {
 
 interface MancodeStateOnDisk {
   currentMode?: string;
+  activeSoloPlan?: { taskId?: string; planVersion?: number } | null;
   techStack?: string;
   uiLibrary?: string;
 }
@@ -91,6 +92,11 @@ function renderProjectContext(
     `- UI library: ${uiLibrary}`,
     `- Project profile: ${currentProfile?.projectKind || 'unknown'}; validation: ${currentProfile?.availableValidation?.join(', ') || 'inspect project'}`,
     '- At the start of each session, read `.mancode/state.json` to check the current mode and project context.',
+    ...(state?.activeSoloPlan?.taskId
+      ? [
+          `- Active solo plan: ${state.activeSoloPlan.taskId} (plan v${state.activeSoloPlan.planVersion ?? 1}); read its requirements.md and plan.md before implementation.`,
+        ]
+      : []),
     '- Read `.mancode/project-profile.json` before choosing tools or validation. Only for a UI task in a profile with detected UI assets, read `.mancode/aesthetics/style-tokens.json`.',
   ].join('\n');
 }

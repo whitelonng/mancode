@@ -18,6 +18,10 @@ export interface ReviewLedger {
   reports: Partial<Record<ReviewDomain, string>>;
   blockers: ReviewBlocker[];
   remediationRounds: number;
+  skipped?: {
+    reason: string;
+    recordedAt: string;
+  };
 }
 
 const REVIEW_FILE = 'review-ledger.json';
@@ -56,6 +60,32 @@ export async function initializeReview(
     reports: {},
     blockers: [],
     remediationRounds: 0,
+  };
+  await writeReviewLedger(projectRoot, taskId, ledger);
+  return ledger;
+}
+
+export async function initializeSkippedReview(
+  projectRoot: string,
+  taskId: string,
+  reason: string,
+): Promise<ReviewLedger> {
+  assertValidTaskId(taskId);
+  if (!reason.trim()) throw new Error('review skip reason is required');
+  const existing = await readReviewLedger(projectRoot, taskId);
+  if (existing) throw new Error(`review already initialized: ${taskId}`);
+  const ledger: ReviewLedger = {
+    version: '1.0',
+    depth: 'targeted',
+    requiredDomains: [],
+    completedDomains: [],
+    reports: {},
+    blockers: [],
+    remediationRounds: 0,
+    skipped: {
+      reason: reason.trim(),
+      recordedAt: new Date().toISOString(),
+    },
   };
   await writeReviewLedger(projectRoot, taskId, ledger);
   return ledger;
@@ -150,6 +180,7 @@ export async function reviewCanComplete(
 ): Promise<boolean> {
   const ledger = await readReviewLedger(projectRoot, taskId);
   if (!ledger) return false;
+  if (ledger.skipped) return true;
   return (
     ledger.requiredDomains.every((domain) =>
       ledger.completedDomains.includes(domain),
@@ -190,6 +221,19 @@ function isReviewLedger(value: unknown): value is ReviewLedger {
   const blockers = value.blockers as unknown[];
   const expectedDomains: ReviewDomain[] =
     value.depth === 'full' ? ['quality', 'security'] : requiredDomains;
+  if (value.skipped !== undefined) {
+    return (
+      isRecord(value.skipped) &&
+      typeof value.skipped.reason === 'string' &&
+      value.skipped.reason.trim().length > 0 &&
+      typeof value.skipped.recordedAt === 'string' &&
+      requiredDomains.length === 0 &&
+      completedDomains.length === 0 &&
+      Object.keys(reports).length === 0 &&
+      blockers.length === 0 &&
+      value.remediationRounds === 0
+    );
+  }
   if (
     (value.depth === 'targeted' && requiredDomains.length !== 1) ||
     requiredDomains.length !== expectedDomains.length ||
@@ -247,6 +291,11 @@ async function writeReviewLedger(
     `${JSON.stringify(ledger, null, 2)}\n`,
     'utf-8',
   );
+}
+
+export function reviewLedgerPath(projectRoot: string, taskId: string): string {
+  assertValidTaskId(taskId);
+  return reviewPath(projectRoot, taskId);
 }
 
 function reviewPath(projectRoot: string, taskId: string): string {

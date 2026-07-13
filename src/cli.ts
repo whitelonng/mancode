@@ -95,7 +95,20 @@ program
   .option('--blocking-reason <reason>', 'Explain why a workflow is blocked')
   .option('--outcome <outcome>', 'Set manba outcome')
   .option('--plan-version <n>', 'Set the next man/manteam plan revision')
-  .option('--skipped <steps>', 'Update skipped steps as comma-separated values')
+  .option(
+    '--requirements-status <status>',
+    'Planning readiness: ready or needs_clarification',
+  )
+  .option(
+    '--plan-decision <decision>',
+    'Plan gate choice: plan_only or governed_execution',
+  )
+  .option('--to <mode>', 'Workflow handoff target (solo)')
+  .option('--complete', 'Complete an active solo handoff')
+  .option(
+    '--skipped <steps>',
+    'Policy v2: clarification only; use workflow review skip for review',
+  )
   .option('--review-depth <depth>', 'Review depth: targeted or full')
   .option('--review-domain <domain>', 'Review domain: quality or security')
   .option(
@@ -107,6 +120,15 @@ program
     '--resolved <ids>',
     'Comma-separated blocker ids resolved in remediation',
   )
+  .option('--file <path>', 'Structured requirements JSON input file')
+  .option('--acceptance <id>', 'Acceptance criterion id (for example AC-1)')
+  .option('--method <method>', 'Verification method: automated or manual')
+  .option('--result <result>', 'Verification result')
+  .option('--evidence <text>', 'Verification evidence or user confirmation')
+  .option('--command <command>', 'Command used for automated verification')
+  .option('--exit-code <code>', 'Exit code from automated verification')
+  .option('--evidence-file <path>', 'Existing verification report or artifact')
+  .option('--reason <reason>', 'Reason for an explicit review skip')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (subcommand, args, options) => {
     const code = await workflow(process.cwd(), subcommand, args ?? [], options);

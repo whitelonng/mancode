@@ -58,6 +58,27 @@ describe('mancode status', () => {
     expect(result.team.isTeam).toBe(false);
     expect(result.team.contributors).toBeGreaterThanOrEqual(1);
     expect(result.currentWorkflow).toBeNull();
+    expect(result.activeSoloPlan).toBeNull();
+  });
+
+  it('shows a confirmed plan handed to solo', async () => {
+    await silentInit(dir);
+    const statePath = path.join(dir, '.mancode', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+    state.activeSoloPlan = {
+      taskId: '20260713-040000-prototype',
+      planVersion: 2,
+    };
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+
+    const jsonLogs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(jsonLogs.join('\n'));
+    expect(result.activeSoloPlan).toEqual(state.activeSoloPlan);
+
+    const textLogs = await captureLog(() => status(dir));
+    expect(textLogs.join('\n')).toContain(
+      'Solo plan:   20260713-040000-prototype (plan v2)',
+    );
   });
 
   it('project name comes from package.json name field', async () => {

@@ -52,6 +52,9 @@ describe('coaching staff agents', () => {
     it('plan coach is read-only and owns pre-confirmation plans', () => {
       expect(PLAN_COACH_AGENT.body).toMatch(/只读/);
       expect(PLAN_COACH_AGENT.body).toMatch(/plan\.md/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/READY_FOR_PLAN/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/NEEDS_CLARIFICATION/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/blocking/);
       expect(PLAN_COACH_AGENT.tools).toEqual(['Read', 'Grep', 'Glob']);
       expect(PLAN_COACH_AGENT.tools).not.toContain('Edit');
       expect(PLAN_COACH_AGENT.tools).not.toContain('Write');

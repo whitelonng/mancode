@@ -65,6 +65,8 @@ export interface MancodeState {
   currentTask: string | null;
   currentWorkflowMode: 'man' | 'mamba' | 'manteam' | null;
   skippedSteps: string[];
+  /** Confirmed /man plan currently being implemented in lightweight solo mode. */
+  activeSoloPlan: { taskId: string; planVersion: number } | null;
   // MVP-2: 团队检测
   teamModeAutoDetected: boolean;
   contributors: number;
@@ -396,6 +398,7 @@ export async function init(
       currentTask: null,
       currentWorkflowMode: null,
       skippedSteps: [],
+      activeSoloPlan: null,
       teamModeAutoDetected: teamModeEnabled,
       contributors: team.contributors,
       projectMode: isGenericProject ? 'generic' : 'detected',

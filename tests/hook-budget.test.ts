@@ -164,6 +164,28 @@ describe('UserPromptSubmit hook context budget', () => {
     expect(output).toContain("skill='man'");
   });
 
+  it('keeps approved-plan execution in solo instead of routing back to man', async () => {
+    await writeState(dir, {
+      currentMode: 'solo',
+      teamModeAutoDetected: false,
+      contributors: 1,
+      activeSoloPlan: {
+        taskId: '20260713-040000-prototype',
+        planVersion: 2,
+      },
+    });
+
+    const output = await runHook(
+      dir,
+      {},
+      { prompt: 'Implement the approved plan now' },
+    );
+
+    expect(output).toContain('## mancode 已确认计划');
+    expect(output).toContain('20260713-040000-prototype');
+    expect(output).not.toContain('## mancode 自动路由');
+  });
+
   it('does not route small direct edits to man', async () => {
     await writeState(dir, {
       currentMode: 'solo',
@@ -409,6 +431,7 @@ async function writeState(
     currentMode: string;
     teamModeAutoDetected: boolean;
     contributors: number;
+    activeSoloPlan?: { taskId: string; planVersion: number };
   },
 ): Promise<void> {
   await writeFile(
@@ -425,6 +448,7 @@ async function writeState(
         currentTask: null,
         currentWorkflowMode: null,
         skippedSteps: [],
+        activeSoloPlan: patch.activeSoloPlan ?? null,
         teamModeAutoDetected: patch.teamModeAutoDetected,
         contributors: patch.contributors,
       },
