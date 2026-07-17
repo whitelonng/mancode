@@ -2,6 +2,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
+  createProjectFacts,
+  writeProjectFacts as writeV3ProjectFacts,
+} from '../context/project-facts.js';
+import { V3ContextStore } from '../context/store.js';
+import {
   detectProjectProfile,
   primaryUiLibrary,
 } from '../system/project-profile.js';
@@ -12,6 +17,7 @@ import { scanAesthetics } from '../system/scan-aesthetics.js';
  */
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
+export const EXIT_V3_REFRESH_FAILED = 2;
 
 /**
  * `mancode refresh-style` 命令。
@@ -34,6 +40,9 @@ export async function refreshStyle(
   rootDir: string = process.cwd(),
 ): Promise<number> {
   const stateFile = path.join(rootDir, '.mancode', 'state.json');
+  if (await pathExists(path.join(rootDir, '.mancode', 'schema.json'))) {
+    return refreshV3Style(rootDir);
+  }
 
   // 1. 检查是否已初始化
   if (!(await pathExists(stateFile))) {
@@ -86,6 +95,19 @@ export async function refreshStyle(
   );
 
   // 6. 输出摘要
+  printAestheticsSummary(tokens);
+
+  console.log('');
+  console.log(
+    '已更新 .mancode/project-profile.json 和 .mancode/aesthetics/style-tokens.json',
+  );
+  await printStaticPlatformRefreshHint(rootDir);
+  return EXIT_OK;
+}
+
+function printAestheticsSummary(
+  tokens: Awaited<ReturnType<typeof scanAesthetics>>,
+): void {
   console.log('');
   if (tokens.matchLevel === 'none') {
     console.log('未检测到设计 token。');
@@ -126,13 +148,63 @@ export async function refreshStyle(
 
     console.log(`  匹配度:   ${tokens.matchLevel}`);
   }
+}
 
-  console.log('');
-  console.log(
-    '已更新 .mancode/project-profile.json 和 .mancode/aesthetics/style-tokens.json',
-  );
-  await printStaticPlatformRefreshHint(rootDir);
-  return EXIT_OK;
+/** V3 keeps detected facts shared and rebuildable style scans checkout-local. */
+async function refreshV3Style(rootDir: string): Promise<number> {
+  try {
+    const project = await new V3ContextStore(rootDir).readProjectSnapshot();
+    if (project.manifest.activationState !== 'v3_active') {
+      throw new Error('MANCODE_V3_REFRESH_REQUIRES_ACTIVE');
+    }
+    console.log('✓  刷新 V3 项目 profile...');
+    const profile = await detectProjectProfile(rootDir);
+    const uiLibraryHint = primaryUiLibrary(profile);
+    await writeV3ProjectFacts(
+      rootDir,
+      createProjectFacts(profile, {
+        revision: (project.projectFacts?.revision ?? 0) + 1,
+      }),
+    );
+    console.log(
+      `   类型: ${profile.projectKind} | UI: ${profile.uiAssets} | 浏览器: ${profile.browserAutomation}`,
+    );
+
+    const tokensPath = path.join(
+      rootDir,
+      '.mancode',
+      'local',
+      'cache',
+      'style-tokens.json',
+    );
+    if (profile.uiAssets !== 'detected') {
+      await fs.rm(tokensPath, { force: true });
+      console.log(
+        'ℹ️  No UI assets detected in project profile. Skipping style scan.',
+      );
+      console.log('   Updated V3 project facts.');
+      return EXIT_OK;
+    }
+
+    console.log('✓  扫描项目设计 token...');
+    const tokens = await scanAesthetics(rootDir, uiLibraryHint);
+    await fs.mkdir(path.dirname(tokensPath), { recursive: true });
+    await fs.writeFile(
+      tokensPath,
+      `${JSON.stringify(tokens, null, 2)}\n`,
+      'utf-8',
+    );
+    printAestheticsSummary(tokens);
+    console.log('');
+    console.log(
+      '已更新 .mancode/shared/context/project.json 和 .mancode/local/cache/style-tokens.json',
+    );
+    return EXIT_OK;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`✗  V3 style refresh failed: ${message}`);
+    return EXIT_V3_REFRESH_FAILED;
+  }
 }
 
 async function printStaticPlatformRefreshHint(rootDir: string): Promise<void> {

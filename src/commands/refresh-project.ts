@@ -3,6 +3,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
+  createProjectFacts,
+  writeProjectFacts as writeV3ProjectFacts,
+} from '../context/project-facts.js';
+import { V3ContextStore } from '../context/store.js';
+import {
   type PlatformName,
   getPlatformInstaller,
 } from '../installers/registry.js';
@@ -24,6 +29,9 @@ export async function refreshProject(
 ): Promise<number> {
   const mancodeDir = path.join(rootDir, '.mancode');
   const statePath = path.join(mancodeDir, 'state.json');
+  if (await pathExists(path.join(mancodeDir, 'schema.json'))) {
+    return refreshV3Project(rootDir);
+  }
   if (!(await pathExists(statePath))) {
     console.error('✗  mancode not initialized.');
     console.error('   Run `mancode init` first.');
@@ -102,6 +110,32 @@ export async function refreshProject(
         '   Project facts were saved, but one or more static adapters remain stale.',
       );
     }
+    return EXIT_REFRESH_FAILED;
+  }
+}
+
+async function refreshV3Project(rootDir: string): Promise<number> {
+  try {
+    const project = await new V3ContextStore(rootDir).readProjectSnapshot();
+    if (project.manifest.activationState !== 'v3_active') {
+      throw new Error('MANCODE_V3_REFRESH_REQUIRES_ACTIVE');
+    }
+    const profile = await detectProjectProfile(rootDir);
+    const facts = createProjectFacts(profile, {
+      revision: (project.projectFacts?.revision ?? 0) + 1,
+    });
+    await writeV3ProjectFacts(rootDir, facts);
+    console.log('✓  V3 project facts refreshed.');
+    console.log(
+      `   Kind: ${facts.profile.projectKind} | Stack: ${[...facts.profile.languages, ...facts.profile.frameworks].join(' + ') || 'unknown'}`,
+    );
+    console.log(
+      '   V3 adapters remain unchanged because their bootstrap is static.',
+    );
+    return EXIT_OK;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`✗  V3 project facts refresh failed: ${message}`);
     return EXIT_REFRESH_FAILED;
   }
 }

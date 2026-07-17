@@ -229,6 +229,41 @@ describe('mancode refresh-style', () => {
     expect(tokens.uiLibrary).toBeNull();
     expect(tokens.cssVariables.surface).toBe('#ffffff');
   });
+
+  it('refreshes V3 project facts and keeps V3 style tokens checkout-local', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'test-v3-frontend',
+        dependencies: { react: '^18.0.0', tailwindcss: '^3.4.0' },
+      }),
+      'utf-8',
+    );
+    await writeFile(path.join(dir, 'tailwind.config.js'), TAILWIND_CONFIG);
+    await silentV3Init(dir);
+
+    expect(await refreshStyle(dir)).toBe(EXIT_OK);
+    const facts = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'shared', 'context', 'project.json'),
+        'utf8',
+      ),
+    );
+    const tokens = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'local', 'cache', 'style-tokens.json'),
+        'utf8',
+      ),
+    );
+    expect(facts).toMatchObject({
+      revision: 2,
+      profile: { frameworks: ['React', 'Tailwind CSS'] },
+    });
+    expect(tokens.colors).toHaveProperty('primary', '#3b82f6');
+    await expect(
+      readFile(path.join(dir, '.mancode', 'state.json'), 'utf8'),
+    ).rejects.toThrow();
+  });
 });
 
 const TAILWIND_CONFIG = `module.exports = {
@@ -275,6 +310,22 @@ async function silentInit(dir: string): Promise<void> {
     const code = await init(dir);
     if (code !== 0) {
       throw new Error(`silentInit failed: init exited with ${code}`);
+    }
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+}
+
+async function silentV3Init(dir: string): Promise<void> {
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    const code = await init(dir, { v3: true });
+    if (code !== 0) {
+      throw new Error(`silentV3Init failed: init exited with ${code}`);
     }
   } finally {
     console.log = originalLog;

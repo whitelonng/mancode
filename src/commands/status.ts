@@ -2,14 +2,28 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evaluateCompatibilityGate } from '../context/compatibility.js';
+import { scanLegacyAuthority } from '../context/layout.js';
+import { V3ContextStore } from '../context/store.js';
 import {
   type PlatformStatus,
   checkPlatformStatus as checkOnePlatformStatus,
 } from '../installers/platform-status.js';
 import {
+  type PlatformName,
   formatPlatformName,
   getPlatformInstallers,
 } from '../installers/registry.js';
+import {
+  type V3PlatformAdapterStatus,
+  inspectV3Adapter,
+} from '../installers/v3-adapter.js';
+import { listPlatformSessionSpikes } from '../runtime/platform-spike-store.js';
+import {
+  type SessionSpikePlatform,
+  platformSpikeFreezeStatus,
+} from '../runtime/platform-spike.js';
+import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { PROJECT_MANIFESTS } from '../system/project-profile.js';
 import {
@@ -20,6 +34,7 @@ import {
   maxWorkflowStep,
   readWorkflow,
 } from '../system/workflow.js';
+import { readLocalActor } from '../team/actor.js';
 import { VERSION } from '../version.js';
 
 const HOOK_ESTIMATE_TIMEOUT_MS = 2000;
@@ -103,6 +118,53 @@ export interface StatusResult {
   projectRefreshRecommended: boolean;
 }
 
+/** V3 status never derives state from legacy hooks or adapter copies. */
+export interface V3StatusResult {
+  schemaVersion: 1;
+  authority: 'v3';
+  version: string;
+  project: string;
+  activation: {
+    state: string;
+    epoch: string;
+    activatedAt: string | null;
+    managedAdapters: Record<PlatformName, string>;
+  };
+  compatibility: {
+    readAllowed: boolean;
+    writeAllowed: boolean;
+    failures: string[];
+  };
+  runtime: {
+    binding: 'ready' | 'registration_required';
+    workspaceId: string | null;
+    checkoutId: string | null;
+    repositoryBindingId: string | null;
+    gitCommonDir: string | null;
+    error: string | null;
+  };
+  transport: {
+    mode: 'local' | 'git-ref';
+    remote: string | null;
+  };
+  policy: {
+    revision: number;
+    mode: string;
+    defaultVisibility: string;
+  };
+  localIdentity: {
+    actorId: string | null;
+    displayName: string | null;
+  };
+  sessionEvidence: {
+    ready: boolean;
+    missingPlatforms: SessionSpikePlatform[];
+    explicitRequiredPlatforms: SessionSpikePlatform[];
+  };
+  adapters: Record<PlatformName, V3PlatformAdapterStatus>;
+  legacyAuthorityPresent: boolean;
+}
+
 interface DetectedTeamStatus {
   isTeam: boolean;
   contributors: number;
@@ -135,6 +197,11 @@ export async function status(
   options: StatusOptions = {},
 ): Promise<number> {
   const stateFile = path.join(rootDir, '.mancode', 'state.json');
+  const v3SchemaFile = path.join(rootDir, '.mancode', 'schema.json');
+
+  if (await pathExists(v3SchemaFile)) {
+    return statusV3(rootDir, options);
+  }
 
   // 1. 检查是否已初始化
   if (!(await pathExists(stateFile))) {
@@ -206,6 +273,108 @@ export async function status(
   }
 
   return EXIT_OK;
+}
+
+async function statusV3(
+  rootDir: string,
+  options: StatusOptions,
+): Promise<number> {
+  try {
+    const store = new V3ContextStore(rootDir);
+    const [snapshot, project, legacy, actor, adapterEntries, sessionSpikes] =
+      await Promise.all([
+        store.readProjectSnapshot(),
+        getProjectName(rootDir),
+        scanLegacyAuthority(rootDir),
+        readLocalActor(rootDir).catch(() => null),
+        Promise.all(
+          getPlatformInstallers().map(async (platform) =>
+            Promise.all([
+              platform.name,
+              inspectV3Adapter(rootDir, platform.name),
+            ]),
+          ),
+        ),
+        listPlatformSessionSpikes(rootDir),
+      ]);
+    const compatibility = evaluateCompatibilityGate({
+      manifest: snapshot.manifest,
+      expectedSchemaEpoch: snapshot.manifest.epoch,
+      readerVersion: VERSION,
+      writerVersion: VERSION,
+      adapterVersions: snapshot.manifest.managedAdapters,
+      currentLegacyBaseline: legacy.baseline,
+      legacyAuthorityPresent: legacy.authorityPresent,
+      operation: 'read',
+    });
+    const adapters = Object.fromEntries(adapterEntries) as Record<
+      PlatformName,
+      V3PlatformAdapterStatus
+    >;
+    let runtime: V3StatusResult['runtime'];
+    try {
+      const context = await readProjectRuntimeContext(rootDir);
+      runtime = {
+        binding: 'ready',
+        workspaceId: context.workspaceId,
+        checkoutId: context.checkoutId,
+        repositoryBindingId: context.repositoryBindingId,
+        gitCommonDir: context.gitCommonDir,
+        error: null,
+      };
+    } catch (error) {
+      runtime = {
+        binding: 'registration_required',
+        workspaceId: snapshot.config.workspaceId,
+        checkoutId: null,
+        repositoryBindingId: null,
+        gitCommonDir: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const result: V3StatusResult = {
+      schemaVersion: 1,
+      authority: 'v3',
+      version: VERSION,
+      project,
+      activation: {
+        state: snapshot.manifest.activationState,
+        epoch: snapshot.manifest.epoch,
+        activatedAt: snapshot.manifest.activatedAt,
+        managedAdapters: snapshot.manifest.managedAdapters,
+      },
+      compatibility: {
+        readAllowed: compatibility.readAllowed,
+        writeAllowed: compatibility.writeAllowed,
+        failures: compatibility.failures,
+      },
+      runtime,
+      transport: snapshot.config.transport,
+      policy: {
+        revision: snapshot.policy.revision,
+        mode: snapshot.policy.policy,
+        defaultVisibility: snapshot.policy.defaultVisibility,
+      },
+      localIdentity: {
+        actorId: actor?.actorId ?? null,
+        displayName: actor?.displayName ?? null,
+      },
+      sessionEvidence: platformSpikeFreezeStatus(sessionSpikes),
+      adapters,
+      legacyAuthorityPresent: legacy.authorityPresent,
+    };
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      printV3Text(result);
+    }
+    return EXIT_OK;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('✗  .mancode/schema.json is corrupt or incomplete.');
+    console.error(`   ${message}`);
+    return EXIT_CORRUPT_STATE;
+  }
 }
 
 async function shouldRefreshProject(
@@ -572,6 +741,53 @@ function printText(r: StatusResult): void {
     );
     console.log('');
   }
+}
+
+function printV3Text(result: V3StatusResult): void {
+  console.log('');
+  console.log(`mancode v${result.version} (V3 authority)`);
+  console.log('');
+  console.log(`Project:     ${result.project}`);
+  console.log(
+    `Activation:  ${result.activation.state} (epoch ${result.activation.epoch})`,
+  );
+  console.log(
+    `Runtime:     ${result.runtime.binding}${result.runtime.error ? ` (${result.runtime.error})` : ''}`,
+  );
+  console.log(
+    `Transport:   ${result.transport.mode}${result.transport.remote ? ` (${result.transport.remote})` : ''}`,
+  );
+  console.log(
+    `Identity:    ${result.localIdentity.displayName ?? 'not configured'}`,
+  );
+  console.log(
+    `Session evidence: ${result.sessionEvidence.ready ? 'ready' : `explicit required (${result.sessionEvidence.explicitRequiredPlatforms.join(', ')})`}`,
+  );
+  if (result.compatibility.failures.length > 0) {
+    console.log(`Compatibility: ${result.compatibility.failures.join(', ')}`);
+  }
+  if (result.legacyAuthorityPresent) {
+    console.log(
+      'Legacy:      legacy authority detected; V3 writes may be blocked.',
+    );
+  }
+  console.log('');
+  console.log('V3 adapter status:');
+  for (const platform of getPlatformInstallers()) {
+    const adapter = result.adapters[platform.name];
+    const marker = adapter.installed ? '✓' : '○';
+    const readiness = adapter.ready ? 'ready' : 'not installed';
+    console.log(
+      `  ${marker} ${platform.displayName}: ${readiness} (${adapter.target}; session=${adapter.capabilities.sessionIdentity})`,
+    );
+  }
+  if (result.runtime.binding !== 'ready') {
+    console.log('');
+    console.log(
+      'Run `mancode context worktree register` in this checkout before V3 mutations.',
+    );
+  }
+  console.log('');
 }
 
 function formatTeamStatus(team: StatusResult['team']): string {

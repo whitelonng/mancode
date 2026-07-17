@@ -1,4 +1,4 @@
-name: Windows smoke
+name: Windows beta gate
 
 on:
   push:

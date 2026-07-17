@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -119,6 +119,8 @@ try {
     JSON.stringify({ prompt: 'update README' }),
   );
 
+  await assertV3SessionEvidenceRenameUnderOpenWindowsHandle();
+
   console.log('Windows shell smoke passed.');
 } finally {
   await rm(root, { recursive: true, force: true });
@@ -181,6 +183,150 @@ function runHook(cwd, fileName, input = '') {
     result.status === 0,
     `hook failed (${result.status}): ${result.stderr || result.stdout}`,
   );
+}
+
+async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
+  if (process.platform !== 'win32') {
+    console.log('Skipping Windows open-file rename assertion outside Windows.');
+    return;
+  }
+  const project = await createProject('v3-open-file-rename-project');
+  const spikeEnv = {
+    ...noToolPath,
+    MANCODE_SPIKE_HOST_SESSION_KEY: 'windows-smoke-host-a',
+    MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY: 'windows-smoke-host-b',
+  };
+  runCli(project, ['init', '--v3'], spikeEnv);
+  const spikeArgs = [
+    'context',
+    'session',
+    'spike',
+    '--platform',
+    'codex',
+    '--host-session-source',
+    'api',
+  ];
+  runCli(project, spikeArgs, spikeEnv);
+  const evidenceTarget = path.join(
+    project,
+    '.mancode',
+    'local',
+    'evidence',
+    'platform-session',
+    'codex.json',
+  );
+  await assertReplaceAfterOpenWindowsHandle(evidenceTarget, () =>
+    runCli(project, spikeArgs, spikeEnv),
+  );
+  const evidence = await readFile(evidenceTarget, 'utf8');
+  assert(
+    evidence.includes('"platform": "codex"'),
+    'V3 session evidence was not atomically replaced after the Windows handle closed',
+  );
+
+  runCli(project, ['team', 'identity', 'create', '--name', 'Windows Smoke']);
+  const sessionResult = runCli(project, [
+    'context',
+    'session',
+    'new',
+    '--client',
+    'windows-smoke',
+  ]);
+  const sessionId = JSON.parse(sessionResult.stdout).session.sessionId;
+  const workflowResult = runCli(project, [
+    'workflow',
+    'create',
+    'man',
+    'Exercise a locked Windows session authority replacement.',
+    '--session',
+    sessionId,
+    '--client',
+    'windows-smoke',
+  ]);
+  const taskRef = JSON.parse(workflowResult.stdout).taskRef;
+  const sessionTarget = path.join(
+    project,
+    '.mancode',
+    'local',
+    'sessions',
+    `${sessionId}.json`,
+  );
+  await assertReplaceAfterOpenWindowsHandle(sessionTarget, () =>
+    runCli(project, [
+      'context',
+      'resume',
+      `${taskRef.namespace}:${taskRef.taskId}`,
+      '--session',
+      sessionId,
+      '--client',
+      'windows-smoke',
+    ]),
+  );
+  const session = await readJson(sessionTarget);
+  assert(
+    session.activeTaskRef?.taskId === taskRef.taskId,
+    'V3 session authority was not atomically replaced after the Windows handle closed',
+  );
+}
+
+async function assertReplaceAfterOpenWindowsHandle(target, replace) {
+  const lock = spawn(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '$path = [Environment]::GetEnvironmentVariable("MANCODE_RENAME_TARGET"); $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read); Write-Output "locked"; Start-Sleep -Milliseconds 500; $stream.Dispose()',
+    ],
+    {
+      env: { ...process.env, MANCODE_RENAME_TARGET: target },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const lockExit = waitForExit(lock);
+  try {
+    await waitForLock(lock);
+    replace();
+  } finally {
+    await lockExit;
+  }
+}
+
+function waitForLock(child) {
+  return new Promise((resolve, reject) => {
+    let stderr = '';
+    const timer = setTimeout(() => {
+      reject(new Error(`timed out waiting for Windows file lock: ${stderr}`));
+    }, 5_000);
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.stdout.on('data', (chunk) => {
+      if (String(chunk).includes('locked')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      reject(new Error(`Windows file lock exited early (${code}): ${stderr}`));
+    });
+  });
+}
+
+function waitForExit(child) {
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Windows file lock failed with exit code ${code}`));
+    });
+  });
 }
 
 async function readJson(filePath) {

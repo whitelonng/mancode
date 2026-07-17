@@ -1,12 +1,14 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { V3ContextStore } from '../context/store.js';
 import { checkPlatformStatus } from '../installers/platform-status.js';
 import {
   formatPlatformName,
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
+import { installV3Adapter, stageV3Adapter } from '../installers/v3-adapter.js';
 import {
   detectProjectProfile,
   primaryUiLibrary,
@@ -31,6 +33,8 @@ export interface InstallOptions {
   force?: boolean;
   /** --minimal: 最小安装（MVP-2 预留） */
   minimal?: boolean;
+  /** Render a V3 adapter candidate under staging without changing live files. */
+  shadow?: boolean;
 }
 
 /**
@@ -54,6 +58,18 @@ export async function install(
   options: InstallOptions = {},
 ): Promise<number> {
   const stateFile = path.join(rootDir, '.mancode', 'state.json');
+  const v3SchemaFile = path.join(rootDir, '.mancode', 'schema.json');
+
+  // V3 authority is physically separate from legacy state. Never fall
+  // through to installMancodeCore when a V3 manifest is present.
+  if (await pathExists(v3SchemaFile)) {
+    return installV3(rootDir, platform, options);
+  }
+  if (options.shadow) {
+    console.error('✗  MANCODE_V3_ADAPTER_SHADOW_REQUIRES_V3');
+    console.error('   Adapter shadow staging requires a V3 dual-read project.');
+    return EXIT_INSTALL_FAILED;
+  }
 
   // 1. 检查是否已初始化
   if (!(await pathExists(stateFile))) {
@@ -65,11 +81,7 @@ export async function install(
   // 2. 验证平台名
   const installer = getPlatformInstaller(platform);
   if (!installer) {
-    console.error(`✗  Unsupported platform: ${platform}`);
-    console.error('   Supported platforms:');
-    for (const item of getPlatformInstallers()) {
-      console.error(`     ${item.name.padEnd(20)} ${item.displayName}`);
-    }
+    printUnsupportedPlatform(platform);
     return EXIT_UNSUPPORTED_PLATFORM;
   }
 
@@ -155,6 +167,58 @@ export async function install(
   // 6. 完成
   console.log(`✓  ${formatPlatformName(platform)} adapter installed.`);
   return EXIT_OK;
+}
+
+async function installV3(
+  rootDir: string,
+  platform: string,
+  options: InstallOptions,
+): Promise<number> {
+  const installer = getPlatformInstaller(platform);
+  if (installer === null) {
+    printUnsupportedPlatform(platform);
+    return EXIT_UNSUPPORTED_PLATFORM;
+  }
+  try {
+    const project = await new V3ContextStore(rootDir).readProjectSnapshot();
+    if (options.shadow) {
+      if (project.manifest.activationState !== 'dual_read') {
+        throw new Error('MANCODE_V3_ADAPTER_SHADOW_REQUIRES_DUAL_READ');
+      }
+      const staged = await stageV3Adapter(rootDir, installer.name);
+      console.log(
+        `✓  ${formatPlatformName(platform)} V3 bootstrap staged for shadow comparison.`,
+      );
+      console.log(`   ${staged.stagingTarget}`);
+      return EXIT_OK;
+    }
+    if (project.manifest.activationState !== 'v3_active') {
+      throw new Error('MANCODE_V3_ADAPTER_INSTALL_REQUIRES_ACTIVE');
+    }
+    if (options.minimal) {
+      console.log(
+        'ℹ️  V3 adapters are already bootstrap-only; --minimal has no additional effect.',
+      );
+    }
+    const installed = await installV3Adapter(rootDir, installer.name);
+    console.log(`✓  ${formatPlatformName(platform)} V3 bootstrap installed.`);
+    console.log(`   ${installed.target}`);
+    return EXIT_OK;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `✗  ${formatPlatformName(platform)} V3 adapter install failed: ${message}`,
+    );
+    return EXIT_INSTALL_FAILED;
+  }
+}
+
+function printUnsupportedPlatform(platform: string): void {
+  console.error(`✗  Unsupported platform: ${platform}`);
+  console.error('   Supported platforms:');
+  for (const item of getPlatformInstallers()) {
+    console.error(`     ${item.name.padEnd(20)} ${item.displayName}`);
+  }
 }
 
 /**

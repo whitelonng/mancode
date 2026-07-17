@@ -1,5 +1,24 @@
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { mergeV3ChildResult } from '../context/child-result-merge.js';
+import { type Ulid, assertUlid } from '../context/ids.js';
+import { parseSchemaManifest } from '../context/manifest.js';
+import { reviseV3Plan } from '../context/plan-revision.js';
+import {
+  previewV3TaskPromotion,
+  promoteV3Task,
+} from '../context/publish-promote.js';
+import { finalizeV3Requirements } from '../context/requirements-finalize.js';
+import { applyV3ReviewLedger } from '../context/review-remediation.js';
+import { changeV3WorkflowScope } from '../context/scope-change.js';
+import {
+  completeV3SoloHandoff,
+  startV3SoloHandoff,
+} from '../context/solo-handoff.js';
+import { completeV3Task } from '../context/task-complete.js';
+import { parseTaskRef } from '../context/task-ref.js';
+import { recordV3Verification } from '../context/verification-record.js';
+import { createV3Workflow } from '../context/workflow-create.js';
 import {
   parseRequirementsLedger,
   readRequirementsLedger,
@@ -46,6 +65,14 @@ import {
   readWorkflow,
   updateWorkflow,
 } from '../system/workflow.js';
+import {
+  commandClient,
+  printV3Error,
+  printV3Result,
+  readV3CommandProject,
+  resolveV3CommandSession,
+  v3ErrorCode,
+} from './v3-support.js';
 
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -59,6 +86,18 @@ export interface WorkflowOptions {
   status?: string;
   skipped?: string;
   parentTask?: string;
+  parent?: string;
+  participants?: string[];
+  visibility?: string;
+  coordination?: string;
+  session?: string;
+  client?: string;
+  sync?: boolean;
+  confirmShared?: boolean;
+  expectedRevision?: string;
+  childRevision?: string;
+  summary?: string;
+  nextAction?: string;
   blockingReason?: string;
   outcome?: string;
   planVersion?: string;
@@ -101,7 +140,18 @@ export async function workflow(
   args: string[] = [],
   options: WorkflowOptions = {},
 ): Promise<number> {
+  const v3Activation = await readV3ActivationState(rootDir);
+  if (v3Activation === 'v3_active') {
+    return workflowV3(rootDir, subcommand, args, options);
+  }
   if (!(await pathExists(path.join(rootDir, '.mancode', 'state.json')))) {
+    if (v3Activation !== null) {
+      return printV3Error(
+        options.json,
+        'MANCODE_V3_WRITE_REQUIRES_ACTIVATION',
+        'This project has staged V3 context but remains in dual-read migration. Use legacy workflows until activation.',
+      );
+    }
     if (options.json) {
       console.log(JSON.stringify({ error: 'not initialized' }, null, 2));
     } else {
@@ -149,6 +199,809 @@ export async function workflow(
       }
       return EXIT_INVALID_ARG;
   }
+}
+
+async function workflowV3(
+  rootDir: string,
+  subcommand: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  if (subcommand === 'create') {
+    return workflowCreateV3(rootDir, args, options);
+  }
+  if (subcommand === 'requirements') {
+    return workflowRequirementsV3(rootDir, args, options);
+  }
+  if (subcommand === 'plan') {
+    return workflowPlanV3(rootDir, args, options);
+  }
+  if (subcommand === 'review') {
+    return workflowReviewV3(rootDir, args, options);
+  }
+  if (subcommand === 'verify') {
+    return workflowVerifyV3(rootDir, args, options);
+  }
+  if (subcommand === 'complete') {
+    return workflowCompleteV3(rootDir, args, options);
+  }
+  if (subcommand === 'scope') {
+    return workflowScopeChangeV3(rootDir, args, options);
+  }
+  if (subcommand === 'child') {
+    return workflowChildResultMergeV3(rootDir, args, options);
+  }
+  if (subcommand === 'promote') {
+    return workflowPromoteV3(rootDir, args, options);
+  }
+  if (subcommand === 'handoff') {
+    return workflowSoloHandoffV3(rootDir, args, options);
+  }
+  return printV3Error(
+    options.json,
+    'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
+    `workflow ${subcommand} is not yet implemented for V3 authority.`,
+  );
+}
+
+async function workflowChildResultMergeV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const action = args[0];
+  const parentTask = args[1];
+  const childTask = args[2];
+  if (
+    action !== 'merge' ||
+    !parentTask ||
+    !childTask ||
+    args.length !== 3 ||
+    options.summary === undefined ||
+    options.nextAction === undefined
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_CHILD_RESULT_MERGE_ARGUMENT_INVALID',
+      'Use: workflow child merge <parent-namespace:ULID> <child-namespace:ULID> --expected-revision <parent-revision> --child-revision <child-revision> --summary <text> --next-action <text>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedParentRevision = parseExpectedTaskRevision(options);
+  const expectedChildRevision =
+    options.childRevision === undefined
+      ? null
+      : parseExactPositiveInteger(options.childRevision);
+  if (expectedParentRevision === null || expectedChildRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Child result merge requires positive --expected-revision and --child-revision values.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await mergeV3ChildResult({
+      projectRoot: project.projectRoot,
+      parentTaskRef: parseTaskRef(parentTask),
+      childTaskRef: parseTaskRef(childTask),
+      sessionId: session.sessionId,
+      expectedParentRevision,
+      expectedChildRevision,
+      summary: options.summary,
+      nextAction: options.nextAction,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      checkpoint: result.checkpoint,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_CHILD_RESULT_MERGE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to merge the V3 child diagnostic result.',
+    );
+  }
+}
+
+async function workflowSoloHandoffV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (
+    !task ||
+    args.length !== 1 ||
+    (options.complete !== true && options.to !== 'solo')
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SOLO_HANDOFF_ARGUMENT_INVALID',
+      'Use: workflow handoff <local:ULID> --to solo --expected-revision <n>, or workflow handoff <local:ULID> --complete --expected-revision <n>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (options.complete === true && options.to !== undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SOLO_HANDOFF_ARGUMENT_INVALID',
+      '--complete and --to cannot be combined.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Solo handoff requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result =
+      options.complete === true
+        ? await completeV3SoloHandoff({
+            projectRoot: project.projectRoot,
+            taskRef: parseTaskRef(task),
+            sessionId: session.sessionId,
+            expectedTaskRevision,
+          })
+        : await startV3SoloHandoff({
+            projectRoot: project.projectRoot,
+            taskRef: parseTaskRef(task),
+            sessionId: session.sessionId,
+            expectedTaskRevision,
+          });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      aggregate: result.aggregate,
+      operation: result.operation,
+      sessionPointerUpdated: result.sessionPointerUpdated,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_SOLO_HANDOFF_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to run the V3 solo handoff.',
+    );
+  }
+}
+
+async function workflowPromoteV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (!task || args.length !== 1 || options.to !== 'manteam') {
+    return printV3Error(
+      options.json,
+      'MANCODE_PROMOTION_ARGUMENT_INVALID',
+      'Use: workflow promote <local:ULID> --to manteam --expected-revision <n> --confirm-shared.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedSourceRevision = parseExpectedTaskRevision(options);
+  if (expectedSourceRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Workflow promote requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (options.confirmShared !== true) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PRIVACY_CONFIRMATION_REQUIRED',
+      'Workflow promote requires --confirm-shared before authority enters shared storage.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (options.sync === true) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GIT_REF_TRANSPORT_NOT_IMPLEMENTED',
+      'Git-ref transport is not implemented for workflow promote.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (options.dryRun === true) {
+    try {
+      const project = await readV3CommandProject(rootDir);
+      const session = await resolveV3CommandSession(project, options);
+      const preview = await previewV3TaskPromotion({
+        projectRoot: project.projectRoot,
+        sourceTaskRef: parseTaskRef(task),
+        sessionActorId: session.actorId,
+        expectedSourceRevision,
+        destinationWorkflowMode: 'manteam',
+        client: commandClient(options.client),
+      });
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        dryRun: true,
+        ...preview,
+      });
+    } catch (error) {
+      return printV3Error(
+        options.json,
+        v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_PROMOTE_FAILED'),
+        error instanceof Error
+          ? error.message
+          : 'Unable to preview the V3 workflow promotion.',
+      );
+    }
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await promoteV3Task({
+      projectRoot: project.projectRoot,
+      sourceTaskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedSourceRevision,
+      destinationWorkflowMode: 'manteam',
+      sharedPrivacyConfirmed: true,
+      client: commandClient(options.client),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      sourceMetadata: result.sourceMetadata,
+      taskRef: result.destinationMetadata.taskRef,
+      metadata: result.destinationMetadata,
+      aggregate: result.destinationAggregate,
+      taskHeadFence: result.destinationTaskHead,
+      quarantine: result.quarantine,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_PROMOTE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to promote the local V3 workflow.',
+    );
+  }
+}
+
+async function workflowScopeChangeV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const action = args[0];
+  const task = args[1];
+  if (action !== 'change' || !task || args.length !== 2 || !options.file) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SCOPE_CHANGE_ARGUMENT_INVALID',
+      'Use: workflow scope change <shared:ULID> --expected-revision <n> --file <scope.json>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Workflow scope change requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    if (options.sync === true) {
+      throw new Error('MANCODE_GIT_REF_TRANSPORT_NOT_IMPLEMENTED');
+    }
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await changeV3WorkflowScope({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      scope: await readWorkflowJsonInputFile(project.projectRoot, options.file),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      checkpoint: result.checkpoint,
+      terminatedClaims: result.terminatedClaims,
+      successorClaims: result.successorClaims,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_SCOPE_CHANGE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to change the V3 workflow scope.',
+    );
+  }
+}
+
+async function workflowCompleteV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (!task || args.length !== 1) {
+    return printV3Error(
+      options.json,
+      'MANCODE_COMPLETE_ARGUMENT_INVALID',
+      'Use: workflow complete <namespace:ULID> --expected-revision <n> [--outcome <manba-outcome>].',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Task completion requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await completeV3Task({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      outcome: parseV3Outcome(options.outcome),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      releasedClaims: result.releasedClaims,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_TASK_COMPLETE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to complete the V3 task.',
+    );
+  }
+}
+
+async function workflowVerifyV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  const action = args[1];
+  if (!task || action !== 'apply' || !options.file) {
+    return printV3Error(
+      options.json,
+      'MANCODE_VERIFICATION_ARGUMENT_INVALID',
+      'Use: workflow verify <namespace:ULID> apply --expected-revision <n> --file <verification-ledger.json>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Verification mutation requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await recordV3Verification({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      verification: await readWorkflowJsonInputFile(
+        project.projectRoot,
+        options.file,
+      ),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      verification: result.verification,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_VERIFICATION_RECORD_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to record V3 verification.',
+    );
+  }
+}
+
+async function workflowReviewV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  const action = args[1];
+  if (!task || action !== 'apply' || !options.file) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REVIEW_ARGUMENT_INVALID',
+      'Use: workflow review <namespace:ULID> apply --expected-revision <n> --file <review-ledger.json>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Review mutation requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await applyV3ReviewLedger({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      review: await readWorkflowJsonInputFile(
+        project.projectRoot,
+        options.file,
+      ),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      review: result.review,
+      verification: result.verification,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_REVIEW_APPLY_FAILED'),
+      error instanceof Error ? error.message : 'Unable to apply the V3 review.',
+    );
+  }
+}
+
+async function workflowPlanV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  const action = args[1];
+  if (!task || (action !== 'revise' && action !== 'confirm')) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_ARGUMENT_INVALID',
+      'Use: workflow plan <namespace:ULID> revise --expected-revision <n> --file <path>, or confirm --expected-revision <n> --plan-decision <plan_only|governed_execution>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Plan mutation requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (action === 'revise' && !options.file) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_FILE_REQUIRED',
+      'workflow plan revise requires --file <path>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (action === 'confirm' && options.planDecision === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_DECISION_REQUIRED',
+      'workflow plan confirm requires --plan-decision plan_only or governed_execution.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const taskRef = parseTaskRef(task);
+    const plan =
+      action === 'revise'
+        ? await readWorkflowInputFile(
+            project.projectRoot,
+            options.file as string,
+          )
+        : (await project.store.readTaskSnapshot(taskRef)).plan?.content;
+    if (plan === undefined || plan === null) {
+      throw new Error('MANCODE_PLAN_FILE_REQUIRED');
+    }
+    const result = await reviseV3Plan({
+      projectRoot: project.projectRoot,
+      taskRef,
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      plan,
+      planDecision: parseV3PlanDecision(options.planDecision),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      planDigest: result.planDigest,
+      review: result.review,
+      verification: result.verification,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_PLAN_REVISION_FAILED'),
+      error instanceof Error ? error.message : 'Unable to revise the V3 plan.',
+    );
+  }
+}
+
+async function workflowRequirementsV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  const action = args[1];
+  if (!task || action !== 'finalize' || !options.file) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REQUIREMENTS_ARGUMENT_INVALID',
+      'Use: workflow requirements <namespace:ULID> finalize --expected-revision <n> --file <path>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Requirements finalization requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const requirements = await readWorkflowJsonInputFile(
+      project.projectRoot,
+      options.file,
+    );
+    const result = await finalizeV3Requirements({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      requirements,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      requirements: result.requirements,
+      review: result.review,
+      verification: result.verification,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_REQUIREMENTS_FINALIZE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to finalize V3 requirements.',
+    );
+  }
+}
+
+function parseExpectedTaskRevision(options: WorkflowOptions): number | null {
+  return options.expectedRevision === undefined
+    ? null
+    : parseExactPositiveInteger(options.expectedRevision);
+}
+
+function parseV3PlanDecision(
+  value: string | undefined,
+): 'plan_only' | 'governed_execution' | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'plan_only' || value === 'governed_execution') return value;
+  throw new Error('MANCODE_PLAN_DECISION_INVALID');
+}
+
+function parseV3Outcome(
+  value: string | undefined,
+): 'fixed' | 'verified' | 'no_repro' | 'manual_test_required' | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === 'fixed' ||
+    value === 'verified' ||
+    value === 'no_repro' ||
+    value === 'manual_test_required'
+  ) {
+    return value;
+  }
+  throw new Error('MANCODE_WORKFLOW_OUTCOME_INVALID');
+}
+
+function parseV3ParticipantActorIds(
+  values: string[] | undefined,
+): Ulid[] | undefined {
+  if (values === undefined) return undefined;
+  for (const value of values) {
+    assertUlid(value, 'workflow participant actorId');
+  }
+  return values;
+}
+
+async function readWorkflowInputFile(
+  projectRoot: string,
+  value: string,
+): Promise<string> {
+  const inputPath = path.isAbsolute(value)
+    ? value
+    : path.resolve(projectRoot, value);
+  return readFile(inputPath, 'utf8');
+}
+
+async function readWorkflowJsonInputFile(
+  projectRoot: string,
+  value: string,
+): Promise<unknown> {
+  return JSON.parse(await readWorkflowInputFile(projectRoot, value));
+}
+
+async function workflowCreateV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const workflowMode = args[0];
+  const task = args.slice(1).join(' ').trim();
+  if (!task || workflowMode === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_WORKFLOW_CREATE_ARGUMENT_INVALID',
+      'Use: workflow create <man|manba|manteam> <task>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const parentOption = options.parent ?? options.parentTask;
+    if (options.parentTask !== undefined && options.parent === undefined) {
+      throw new Error(
+        'MANCODE_TASK_REF_REQUIRED: use --parent local:<ULID> or shared:<ULID>',
+      );
+    }
+    const result = await createV3Workflow({
+      projectRoot: project.projectRoot,
+      task,
+      workflowMode: parseV3WorkflowMode(workflowMode),
+      sessionId: session.sessionId,
+      client: commandClient(options.client),
+      parentTaskRef:
+        parentOption === undefined ? null : parseTaskRef(parentOption),
+      visibility: parseV3Visibility(options.visibility),
+      coordination: parseV3Coordination(options.coordination),
+      participantActorIds: parseV3ParticipantActorIds(options.participants),
+      sharedPrivacyConfirmed: options.confirmShared === true,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.taskRef,
+      metadata: result.metadata,
+      operation: result.operation,
+      dimensions: result.resolution.dimensions,
+      assessment: result.resolution.assessment,
+      sessionResumed: result.sessionResumed,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_CREATE_FAILED'),
+      error instanceof Error ? error.message : 'Unable to create V3 workflow.',
+    );
+  }
+}
+
+async function readV3ActivationState(
+  rootDir: string,
+): Promise<'v3_active' | 'other' | null> {
+  try {
+    const manifest = parseSchemaManifest(
+      JSON.parse(
+        await readFile(path.join(rootDir, '.mancode', 'schema.json'), 'utf8'),
+      ),
+    );
+    return manifest.activationState === 'v3_active' ? 'v3_active' : 'other';
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function parseV3WorkflowMode(value: string): 'man' | 'manba' | 'manteam' {
+  if (value !== 'man' && value !== 'manba' && value !== 'manteam') {
+    throw new Error('MANCODE_WORKFLOW_MODE_INVALID');
+  }
+  return value;
+}
+
+function parseV3Visibility(
+  value: string | undefined,
+): 'local' | 'shared' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'local' && value !== 'shared') {
+    throw new Error('MANCODE_WORKFLOW_VISIBILITY_INVALID');
+  }
+  return value;
+}
+
+function parseV3Coordination(
+  value: string | undefined,
+): 'single' | 'team' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'single' && value !== 'team') {
+    throw new Error('MANCODE_WORKFLOW_COORDINATION_INVALID');
+  }
+  return value;
 }
 
 async function workflowRequirements(
