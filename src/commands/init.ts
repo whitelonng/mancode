@@ -12,6 +12,7 @@ import {
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
+import { installV3Adapter } from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
 import {
@@ -30,6 +31,7 @@ import {
 import { scanAesthetics } from '../system/scan-aesthetics.js';
 import { ALL_AGENTS } from '../templates/agents/index.js';
 import { VERSION } from '../version.js';
+import { initializeV3Project } from './v3-init.js';
 
 /**
  * 退出码契约 — 见 docs/08-cli-spec.md §2.5
@@ -89,6 +91,8 @@ export interface InitOptions {
   empty?: boolean;
   /** --lang <locale>: onboarding language (zh-CN or en). */
   lang?: string;
+  /** Explicitly use the greenfield V3 initialization journal. */
+  v3?: boolean;
   /** Internal CLI flag. Undefined preserves the programmatic API's legacy default. */
   interactive?: boolean;
   /** Injectable prompt adapter for terminal and tests. */
@@ -133,7 +137,7 @@ export async function init(
   }
 
   // 1. 幂等检查
-  if (wasInitialized) {
+  if (wasInitialized && !options.v3) {
     if (!options.force) {
       console.log(
         localize(
@@ -172,6 +176,10 @@ export async function init(
       ),
     );
     return EXIT_NOT_A_PROJECT_DIR;
+  }
+
+  if (options.v3) {
+    return initializeV3(rootDir, options);
   }
 
   // 2.1 校验是项目目录（git 或任一常见项目 manifest）。空目录可明确作为通用项目初始化。
@@ -621,6 +629,52 @@ export async function init(
         `✗  mancode init failed: ${msg}`,
       ),
     );
+    return EXIT_INIT_FAILED;
+  }
+}
+
+async function initializeV3(
+  rootDir: string,
+  options: InitOptions,
+): Promise<number> {
+  if (options.force) {
+    console.error(
+      '✗  --force is not supported for journaled V3 initialization.',
+    );
+    return EXIT_INIT_FAILED;
+  }
+  const selectedPlatforms =
+    options.platform === undefined
+      ? []
+      : parsePlatformSelection(options.platform);
+  if (selectedPlatforms === null) {
+    console.error(`✗  Unsupported platform selection: ${options.platform}`);
+    console.error('   Use one or more supported platform names, or all.');
+    return EXIT_INIT_FAILED;
+  }
+  try {
+    const result = await initializeV3Project({ projectRoot: rootDir });
+    for (const platform of selectedPlatforms) {
+      await installV3Adapter(rootDir, platform);
+    }
+    console.log('✓  Initialized mancode V3 greenfield project.');
+    console.log(`   workspace: ${result.runtime.workspaceId}`);
+    console.log(`   operation: ${result.journal.operationId}`);
+    if (selectedPlatforms.length === 0) {
+      console.log(
+        '   No platform bootstrap selected. Run `mancode install <platform>`.',
+      );
+    } else {
+      console.log(`   V3 bootstrap: ${selectedPlatforms.join(', ')}`);
+    }
+    return EXIT_OK;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'V3 initialization failed';
+    console.error(`✗  ${message}`);
+    if (message === 'MANCODE_LEGACY_AUTHORITY_PRESENT') {
+      console.error('   Run `mancode migrate context --dry-run` instead.');
+    }
     return EXIT_INIT_FAILED;
   }
 }

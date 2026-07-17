@@ -1,0 +1,561 @@
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseSchemaManifest } from '../src/context/manifest.js';
+import {
+  activateLegacyMigration,
+  dryRunLegacyMigration,
+  migrationStagePath,
+  resolveLegacyMigration,
+  rollbackLegacyMigration,
+  stageLegacyMigration,
+} from '../src/context/migrate.js';
+import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
+import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
+import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
+import { createSession } from '../src/runtime/session.js';
+import {
+  createLocalActor,
+  createSharedActorProfile,
+  publishSharedActorProfile,
+} from '../src/team/actor.js';
+
+const OWNER_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7J';
+const LEGACY_TASK_ID = '20260717-120000-login-rate-limit';
+const ACTIVATION_OPERATION_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7N';
+
+describe('legacy migration stage contract', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = path.join(
+      tmpdir(),
+      `mancode-migrate-contract-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await mkdir(root, { recursive: true });
+    await writeLegacyFixture(root);
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('dry-runs without creating V3 paths and makes missing active ownership explicit', async () => {
+    const before = await readLegacyAuthorityBytes(root);
+
+    const report = await dryRunLegacyMigration(root);
+
+    expect(report.tasks).toHaveLength(1);
+    expect(report.tasks[0]).toMatchObject({
+      legacyTaskId: LEGACY_TASK_ID,
+      state: 'blocked',
+      blockers: ['MANCODE_MIGRATION_OWNER_REQUIRED'],
+    });
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json')),
+    ).rejects.toThrow();
+    expect(await readLegacyAuthorityBytes(root)).toEqual(before);
+  });
+
+  it('writes only a dual-read shell and local quarantine, then rebuilds a candidate after explicit resolution', async () => {
+    const before = await readLegacyAuthorityBytes(root);
+    const staged = await stageLegacyMigration({
+      projectRoot: root,
+      now: new Date('2026-07-17T12:00:00.000Z'),
+    });
+    const blocked = staged.tasks[0];
+    expect(blocked).toMatchObject({
+      legacyTaskId: LEGACY_TASK_ID,
+      state: 'blocked',
+      blockers: ['MANCODE_MIGRATION_OWNER_REQUIRED'],
+    });
+    expect(await readLegacyAuthorityBytes(root)).toEqual(before);
+    expect(
+      parseSchemaManifest(
+        JSON.parse(
+          await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+        ),
+      ).activationState,
+    ).toBe('dual_read');
+    await expect(
+      readFile(migrationStagePath(root, staged.stageId), 'utf8'),
+    ).resolves.toContain(LEGACY_TASK_ID);
+    await expect(
+      readFile(
+        path.join(
+          root,
+          '.mancode',
+          'local',
+          'quarantine',
+          blocked?.quarantineId ?? '',
+          'candidate.json',
+        ),
+        'utf8',
+      ),
+    ).resolves.toContain('legacy_migration');
+
+    const resolved = await resolveLegacyMigration({
+      projectRoot: root,
+      stageId: staged.stageId,
+      legacyTaskId: LEGACY_TASK_ID,
+      expectedStageRevision: staged.revision,
+      ownerActorId: OWNER_ID,
+      now: new Date('2026-07-17T12:01:00.000Z'),
+    });
+
+    expect(resolved.revision).toBe(staged.revision + 1);
+    expect(resolved.tasks[0]).toMatchObject({
+      legacyTaskId: LEGACY_TASK_ID,
+      state: 'ready',
+      blockers: [],
+      privacyStatus: 'passed',
+    });
+    expect(await readLegacyAuthorityBytes(root)).toEqual(before);
+  });
+
+  it('activates a clean local stage through a durable operation without changing legacy authority', async () => {
+    const before = await readLegacyAuthorityBytes(root);
+    const staged = await stageLegacyMigration({ projectRoot: root });
+    const resolved = await resolveLegacyMigration({
+      projectRoot: root,
+      stageId: staged.stageId,
+      legacyTaskId: LEGACY_TASK_ID,
+      expectedStageRevision: staged.revision,
+      ownerActorId: OWNER_ID,
+    });
+    const actor = await createLocalActor(root, {
+      actorId: OWNER_ID,
+      displayName: 'Migration owner',
+    });
+    await publishSharedActorProfile(root, createSharedActorProfile(actor));
+    const session = await createSession(root, {
+      actorId: actor.actorId,
+      client: 'test',
+      identitySource: 'explicit',
+    });
+
+    const activated = await activateLegacyMigration({
+      projectRoot: root,
+      stageId: resolved.stageId,
+      expectedStageRevision: resolved.revision,
+      sessionId: session.sessionId,
+      explicitConfirmation: true,
+      sharedPrivacyConfirmed: false,
+    });
+
+    expect(activated.manifest.activationState).toBe('v3_active');
+    expect(activated.stage.state).toBe('activated');
+    expect(activated.operation.state).toBe('committed');
+    await expect(
+      readFile(
+        path.join(
+          root,
+          '.mancode',
+          'local',
+          'workflows',
+          resolved.tasks[0]?.taskRef.taskId ?? '',
+          'metadata.json',
+        ),
+        'utf8',
+      ),
+    ).resolves.toContain('legacy_migration');
+    expect(await readLegacyAuthorityBytes(root)).toEqual(before);
+  });
+
+  it('rolls back only an untouched activation', async () => {
+    const staged = await stageLegacyMigration({ projectRoot: root });
+    const resolved = await resolveLegacyMigration({
+      projectRoot: root,
+      stageId: staged.stageId,
+      legacyTaskId: LEGACY_TASK_ID,
+      expectedStageRevision: staged.revision,
+      ownerActorId: OWNER_ID,
+    });
+    const actor = await createLocalActor(root, {
+      actorId: OWNER_ID,
+      displayName: 'Migration owner',
+    });
+    await publishSharedActorProfile(root, createSharedActorProfile(actor));
+    const session = await createSession(root, {
+      actorId: actor.actorId,
+      client: 'test',
+      identitySource: 'explicit',
+    });
+    const activated = await activateLegacyMigration({
+      projectRoot: root,
+      stageId: resolved.stageId,
+      expectedStageRevision: resolved.revision,
+      sessionId: session.sessionId,
+      explicitConfirmation: true,
+      sharedPrivacyConfirmed: false,
+    });
+
+    const rolledBack = await rollbackLegacyMigration({
+      projectRoot: root,
+      operationId: activated.operation.operationId,
+      sessionId: session.sessionId,
+      explicitConfirmation: true,
+    });
+
+    expect(rolledBack.manifest.activationState).toBe('dual_read');
+    expect(rolledBack.stage.state).toBe('rolled_back');
+    await expect(
+      readFile(
+        path.join(
+          root,
+          '.mancode',
+          'local',
+          'workflows',
+          resolved.tasks[0]?.taskRef.taskId ?? '',
+          'metadata.json',
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('refuses rollback after any migrated authority drift', async () => {
+    const staged = await stageLegacyMigration({ projectRoot: root });
+    const resolved = await resolveLegacyMigration({
+      projectRoot: root,
+      stageId: staged.stageId,
+      legacyTaskId: LEGACY_TASK_ID,
+      expectedStageRevision: staged.revision,
+      ownerActorId: OWNER_ID,
+    });
+    const actor = await createLocalActor(root, {
+      actorId: OWNER_ID,
+      displayName: 'Migration owner',
+    });
+    await publishSharedActorProfile(root, createSharedActorProfile(actor));
+    const session = await createSession(root, {
+      actorId: actor.actorId,
+      client: 'test',
+      identitySource: 'explicit',
+    });
+    const activated = await activateLegacyMigration({
+      projectRoot: root,
+      stageId: resolved.stageId,
+      expectedStageRevision: resolved.revision,
+      sessionId: session.sessionId,
+      explicitConfirmation: true,
+      sharedPrivacyConfirmed: false,
+    });
+    await writeFile(
+      path.join(
+        root,
+        '.mancode',
+        'local',
+        'workflows',
+        resolved.tasks[0]?.taskRef.taskId ?? '',
+        'plan.md',
+      ),
+      'unexpected V3 write\n',
+      { encoding: 'utf8', flag: 'w' },
+    );
+
+    await expect(
+      rollbackLegacyMigration({
+        projectRoot: root,
+        operationId: activated.operation.operationId,
+        sessionId: session.sessionId,
+        explicitConfirmation: true,
+      }),
+    ).rejects.toThrow('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
+  });
+
+  it('runs the real V3 activation and recovery at every declared crash point', async () => {
+    for (const [
+      index,
+      fixture,
+    ] of OPERATION_CRASH_FIXTURES.v3_activate.entries()) {
+      const caseRoot = path.join(root, `activation-case-${index}`);
+      const prepared = await prepareActivationCase(caseRoot);
+
+      await expect(
+        withOperationCrashInjectionForTesting(fixture, () =>
+          activateLegacyMigration({
+            projectRoot: caseRoot,
+            stageId: prepared.stageId,
+            expectedStageRevision: prepared.stageRevision,
+            sessionId: prepared.sessionId,
+            explicitConfirmation: true,
+            sharedPrivacyConfirmed: false,
+            operationId: ACTIVATION_OPERATION_ID,
+          }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+      const recovered = await executeOperationRecovery({
+        projectRoot: caseRoot,
+        operationId: ACTIVATION_OPERATION_ID,
+        actorId: OWNER_ID,
+        sessionId: prepared.sessionId,
+        mode: fixture.expectedRecovery === 'safe_abort' ? 'abort' : 'repair',
+      });
+      if (fixture.expectedRecovery === 'safe_abort') {
+        expect(recovered).toMatchObject({
+          state: 'aborted',
+          journal: { state: 'aborted' },
+        });
+      } else if (fixture.crashAfter === 'commit') {
+        expect(recovered).toMatchObject({
+          state: 'already_terminal',
+          journal: { state: 'committed' },
+        });
+      } else {
+        expect(recovered).toMatchObject({
+          state: 'repaired',
+          journal: { state: 'committed' },
+        });
+      }
+
+      const terminal = await executeOperationRecovery({
+        projectRoot: caseRoot,
+        operationId: ACTIVATION_OPERATION_ID,
+        actorId: OWNER_ID,
+        sessionId: prepared.sessionId,
+      });
+      expect(terminal).toMatchObject({
+        state: 'already_terminal',
+        journal: {
+          state:
+            fixture.expectedRecovery === 'safe_abort' ? 'aborted' : 'committed',
+        },
+      });
+      expect(
+        parseSchemaManifest(
+          JSON.parse(
+            await readFile(
+              path.join(caseRoot, '.mancode', 'schema.json'),
+              'utf8',
+            ),
+          ),
+        ).activationState,
+      ).toBe(
+        fixture.expectedRecovery === 'safe_abort' ? 'dual_read' : 'v3_active',
+      );
+      expect(
+        JSON.parse(
+          await readFile(
+            migrationStagePath(caseRoot, prepared.stageId),
+            'utf8',
+          ),
+        ).state,
+      ).toBe(
+        fixture.expectedRecovery === 'safe_abort' ? 'staged' : 'activated',
+      );
+    }
+  }, 20_000);
+});
+
+async function prepareActivationCase(projectRoot: string): Promise<{
+  stageId: string;
+  stageRevision: number;
+  sessionId: string;
+}> {
+  await mkdir(projectRoot, { recursive: true });
+  await writeLegacyFixture(projectRoot);
+  const staged = await stageLegacyMigration({ projectRoot });
+  const resolved = await resolveLegacyMigration({
+    projectRoot,
+    stageId: staged.stageId,
+    legacyTaskId: LEGACY_TASK_ID,
+    expectedStageRevision: staged.revision,
+    ownerActorId: OWNER_ID,
+  });
+  const actor = await createLocalActor(projectRoot, {
+    actorId: OWNER_ID,
+    displayName: 'Migration crash owner',
+  });
+  await publishSharedActorProfile(projectRoot, createSharedActorProfile(actor));
+  const session = await createSession(projectRoot, {
+    actorId: actor.actorId,
+    client: 'crash-test',
+    identitySource: 'explicit',
+  });
+  return {
+    stageId: resolved.stageId,
+    stageRevision: resolved.revision,
+    sessionId: session.sessionId,
+  };
+}
+
+async function writeLegacyFixture(root: string): Promise<void> {
+  const workflowRoot = path.join(root, '.mancode', 'workflows', LEGACY_TASK_ID);
+  await mkdir(path.join(workflowRoot, 'reports'), { recursive: true });
+  await writeFile(
+    path.join(root, '.mancode', 'state.json'),
+    `${JSON.stringify(
+      {
+        version: '0.3.9',
+        currentMode: 'man',
+        lastMode: 'solo',
+        platform: 'claude-code',
+        initializedAt: '2026-07-17T09:00:00.000Z',
+        techStack: 'TypeScript',
+        uiLibrary: 'None',
+        currentTask: LEGACY_TASK_ID,
+        currentWorkflowMode: 'man',
+        skippedSteps: [],
+        activeSoloPlan: null,
+        teamModeAutoDetected: false,
+        contributors: 1,
+        projectMode: 'detected',
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(workflowRoot, 'metadata.json'),
+    `${JSON.stringify(
+      {
+        taskId: LEGACY_TASK_ID,
+        task: 'Add login rate limits.',
+        mode: 'man',
+        currentStep: 9,
+        skippedSteps: [],
+        startedAt: '2026-07-17T10:00:00.000Z',
+        updatedAt: '2026-07-17T11:00:00.000Z',
+        status: 'in_progress',
+        planVersion: 2,
+        planningPolicyVersion: 2,
+        reviewPolicyVersion: 2,
+        verificationPolicyVersion: 1,
+        requirementsStatus: 'ready',
+        requirementsDigest:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        planDecision: 'governed_execution',
+        verificationStatus: 'passed',
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(workflowRoot, 'requirements.json'),
+    `${JSON.stringify(
+      {
+        version: 1,
+        goal: 'Protect the login endpoint from repeated failed attempts.',
+        confirmedScope: ['Protect the login endpoint.'],
+        excludedScope: ['Change account recovery.'],
+        technicalDecisions: ['Use the existing Redis client.'],
+        defaults: ['Use the project test runner.'],
+        blockingUnknowns: [],
+        coverage: [
+          'platform',
+          'core_scope',
+          'technical_stack',
+          'data_and_persistence',
+          'performance',
+          'compatibility',
+          'security',
+        ].map((dimension) => ({
+          dimension,
+          status: 'confirmed',
+          rationale: `${dimension} is covered.`,
+        })),
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            description: 'Repeated failures receive a rate-limit response.',
+            required: true,
+            method: 'hybrid',
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(workflowRoot, 'review-ledger.json'),
+    `${JSON.stringify(
+      {
+        version: '1.0',
+        depth: 'full',
+        requiredDomains: ['quality', 'security'],
+        completedDomains: ['quality', 'security'],
+        reports: {
+          quality: 'reports/quality.md',
+          security: 'reports/security.md',
+        },
+        blockers: [],
+        remediationRounds: 0,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(workflowRoot, 'reports', 'quality.md'),
+    '# Quality\n',
+  );
+  await writeFile(
+    path.join(workflowRoot, 'reports', 'security.md'),
+    '# Security\n',
+  );
+  await writeFile(
+    path.join(workflowRoot, 'reports', 'evidence.md'),
+    '# Evidence\n',
+  );
+  await writeFile(
+    path.join(workflowRoot, 'verification-ledger.json'),
+    `${JSON.stringify(
+      {
+        version: 1,
+        planVersion: 2,
+        requirementsDigest:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        remediationRound: 0,
+        status: 'passed',
+        checks: [
+          {
+            acceptanceId: 'AC-1',
+            required: true,
+            automated: {
+              status: 'passed',
+              evidence: 'Automated checks passed.',
+              updatedAt: '2026-07-17T11:00:00.000Z',
+              command: 'npm test',
+              exitCode: 0,
+              evidenceFile: 'reports/evidence.md',
+            },
+            manual: {
+              status: 'passed',
+              evidence: 'A legacy reviewer confirmed the behavior.',
+              updatedAt: '2026-07-17T11:00:00.000Z',
+            },
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function readLegacyAuthorityBytes(
+  root: string,
+): Promise<Record<string, string>> {
+  const taskRoot = path.join(root, '.mancode', 'workflows', LEGACY_TASK_ID);
+  const files = [
+    path.join(root, '.mancode', 'state.json'),
+    path.join(taskRoot, 'metadata.json'),
+    path.join(taskRoot, 'requirements.json'),
+    path.join(taskRoot, 'review-ledger.json'),
+    path.join(taskRoot, 'verification-ledger.json'),
+    path.join(taskRoot, 'reports', 'quality.md'),
+    path.join(taskRoot, 'reports', 'security.md'),
+    path.join(taskRoot, 'reports', 'evidence.md'),
+  ];
+  const entries = await Promise.all(
+    files.map(
+      async (file) =>
+        [path.relative(root, file), await readFile(file, 'utf8')] as const,
+    ),
+  );
+  return Object.fromEntries(entries);
+}

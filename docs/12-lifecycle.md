@@ -214,7 +214,15 @@ review policy v2 只允许 `clarification` 和用户明确要求跳过的整个 
 
 Windows CI 会在同一个 `windows-latest` runner 上分别从 CMD、PowerShell 和 Git
 Bash 执行 smoke test。测试清空子进程 PATH 来模拟 Git/Bash 不可用，验证 Codex
-初始化、solo 降级、Claude Code 初始化和两个 Node hooks 均能完成。
+初始化、solo 降级、Claude Code 初始化和两个 Node hooks 均能完成。它还会让
+PowerShell 以不允许删除的共享模式实际打开 V3 session evidence 文件，再运行一次
+`context session spike`；原子替换必须在句柄释放后自行重试并成功。该 job 名为
+`Windows beta gate`，应作为 Beta 发布的必需 CI 检查。
+
+V3 Beta 还必须在目标项目执行 `mancode context beta --json`。该命令会拒绝
+未激活或不兼容的 V3 authority、未安装的 V3 bootstrap、未完成的 repair journal、
+缺失 checkout binding，以及没有五个平台真实双窗口与子进程传播证据的项目。session
+evidence 文件不保存宿主 session key；只有在每个平台宿主中完成 spike 后才能通过。
 
 ---
 

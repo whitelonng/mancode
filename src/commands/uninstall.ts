@@ -19,6 +19,7 @@ import {
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
+import { removeV3Adapter } from '../installers/v3-adapter.js';
 import {
   ZCODE_MANCODE_END_MARKER,
   ZCODE_MANCODE_START_MARKER,
@@ -27,6 +28,7 @@ import {
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_UNSUPPORTED_PLATFORM = 2;
+export const EXIT_V3_AUTHORITY_PROTECTED = 3;
 
 export interface UninstallOptions {
   /** --force: skip confirmation */
@@ -50,6 +52,10 @@ export async function uninstall(
   options: UninstallOptions = {},
 ): Promise<number> {
   const stateFile = path.join(rootDir, '.mancode', 'state.json');
+  const v3SchemaFile = path.join(rootDir, '.mancode', 'schema.json');
+  if (await pathExists(v3SchemaFile)) {
+    return uninstallV3(rootDir, platform, options);
+  }
   if (!(await pathExists(stateFile))) {
     console.error('✗  mancode not initialized.');
     console.error('   Run `mancode init` first.');
@@ -88,6 +94,45 @@ export async function uninstall(
 
   console.log('✓  Uninstall complete.');
   return EXIT_OK;
+}
+
+async function uninstallV3(
+  rootDir: string,
+  platform: string | undefined,
+  options: UninstallOptions,
+): Promise<number> {
+  if (!platform || options.all) {
+    console.error('✗  V3 authority is protected from bulk uninstall.');
+    console.error(
+      '   Remove a single bootstrap with `mancode uninstall <platform>`, or complete an explicit V3 archive/migration workflow first.',
+    );
+    return EXIT_V3_AUTHORITY_PROTECTED;
+  }
+  const installer = getPlatformInstaller(platform);
+  if (!installer) {
+    console.error(`✗  Unsupported platform: ${platform}`);
+    console.error(
+      `   Supported platforms: ${getPlatformInstallers()
+        .map((item) => item.name)
+        .join(', ')}`,
+    );
+    return EXIT_UNSUPPORTED_PLATFORM;
+  }
+  if (!options.force) {
+    console.log(
+      `ℹ️  This will remove only the ${formatPlatformName(platform)} V3 bootstrap.`,
+    );
+    console.log('   V3 task, session, and shared authority are preserved.');
+  }
+  try {
+    await removeV3Adapter(rootDir, installer.name);
+    console.log(`✓  Removed ${formatPlatformName(platform)} V3 bootstrap.`);
+    return EXIT_OK;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`✗  V3 bootstrap removal failed: ${message}`);
+    return EXIT_V3_AUTHORITY_PROTECTED;
+  }
 }
 
 async function uninstallPlatform(
