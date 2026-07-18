@@ -1,6 +1,7 @@
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { parseSchemaManifest } from '../context/manifest.js';
 import {
   type PreseasonRemediationResult,
   type PreseasonReport,
@@ -24,7 +25,27 @@ export async function manps(
   area = 'all',
   options: ManpsOptions = {},
 ): Promise<number> {
-  if (!(await pathExists(path.join(rootDir, '.mancode', 'state.json')))) {
+  const v3SchemaPath = path.join(rootDir, '.mancode', 'schema.json');
+  const v3Activation = await readV3ActivationState(v3SchemaPath);
+  if (
+    v3Activation !== null &&
+    v3Activation !== 'v3_active' &&
+    v3Activation !== 'dual_read'
+  ) {
+    const message = `manps is unavailable while V3 activation is ${v3Activation}`;
+    if (options.json) {
+      console.log(JSON.stringify({ error: 'scan failed', message }, null, 2));
+    } else {
+      console.error('✗  mancode preseason scan is temporarily unavailable.');
+      console.error(`   ${message}`);
+    }
+    return EXIT_SCAN_FAILED;
+  }
+  const v3Initialized = v3Activation === 'v3_active';
+  const initialized =
+    v3Initialized ||
+    (await pathExists(path.join(rootDir, '.mancode', 'state.json')));
+  if (!initialized) {
     if (options.json) {
       console.log(JSON.stringify({ error: 'not initialized' }, null, 2));
     } else {
@@ -36,7 +57,11 @@ export async function manps(
 
   let report: PreseasonReport;
   try {
-    report = await runPreseasonScan(rootDir, area);
+    report = await runPreseasonScan(rootDir, area, {
+      storageRoot: v3Initialized
+        ? path.join(rootDir, '.mancode', 'local')
+        : undefined,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const invalidArg = message.startsWith('invalid area:');
@@ -143,6 +168,7 @@ async function runRemediation(
     return runPreseasonRemediation(rootDir, report.issues, {
       answers: options.answers,
       write,
+      issueDbPath: report.issueDbPath,
     });
   }
 
@@ -156,6 +182,7 @@ async function runRemediation(
     return runPreseasonRemediation(rootDir, report.issues, {
       answers,
       write,
+      issueDbPath: report.issueDbPath,
     });
   }
 
@@ -167,6 +194,7 @@ async function runRemediation(
     return await runPreseasonRemediation(rootDir, report.issues, {
       ask: (question) => rl.question(question),
       write,
+      issueDbPath: report.issueDbPath,
     });
   } finally {
     rl.close();
@@ -190,5 +218,19 @@ async function pathExists(p: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function readV3ActivationState(
+  schemaPath: string,
+): Promise<string | null> {
+  if (!(await pathExists(schemaPath))) return null;
+  try {
+    const manifest = parseSchemaManifest(
+      JSON.parse(await readFile(schemaPath, 'utf8')),
+    );
+    return manifest.activationState;
+  } catch {
+    return 'invalid';
   }
 }

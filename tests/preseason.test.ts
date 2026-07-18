@@ -16,8 +16,10 @@ import {
   EXIT_INVALID_ARG,
   EXIT_NOT_INITIALIZED,
   EXIT_OK,
+  EXIT_SCAN_FAILED,
   manps,
 } from '../src/commands/manps.js';
+import { initializeV3Project } from '../src/commands/v3-init.js';
 import { runPreseasonScan } from '../src/system/preseason.js';
 
 describe('preseason scan', () => {
@@ -532,6 +534,49 @@ process.exit(1);
     await expect(
       readFile(path.join(dir, '.mancode', 'preseason-report.md'), 'utf-8'),
     ).resolves.toContain('Area: deps');
+  });
+
+  it('manps command runs through the same entry in a V3 project', async () => {
+    await rm(path.join(dir, '.mancode'), { recursive: true, force: true });
+    await initializeV3Project({ projectRoot: dir });
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ scripts: { test: 'vitest', lint: 'biome check' } }),
+      'utf-8',
+    );
+
+    const code = await manps(dir, 'deps');
+
+    expect(code).toBe(EXIT_OK);
+    await expect(
+      readFile(
+        path.join(dir, '.mancode', 'local', 'preseason-report.md'),
+        'utf-8',
+      ),
+    ).resolves.toContain('Area: deps');
+    await expect(
+      readFile(path.join(dir, '.mancode', 'preseason-report.md'), 'utf-8'),
+    ).rejects.toThrow();
+  });
+
+  it('blocks manps writes while V3 authority requires repair', async () => {
+    await rm(path.join(dir, '.mancode'), { recursive: true, force: true });
+    await initializeV3Project({ projectRoot: dir });
+    const schemaPath = path.join(dir, '.mancode', 'schema.json');
+    const manifest = JSON.parse(await readFile(schemaPath, 'utf8'));
+    await writeFile(
+      schemaPath,
+      `${JSON.stringify({ ...manifest, activationState: 'repair_required' }, null, 2)}\n`,
+      'utf8',
+    );
+
+    expect(await manps(dir, 'deps')).toBe(EXIT_SCAN_FAILED);
+    await expect(
+      readFile(
+        path.join(dir, '.mancode', 'local', 'preseason-report.md'),
+        'utf8',
+      ),
+    ).rejects.toThrow();
   });
 
   it('records accepted remediation decisions after showing issue files', async () => {

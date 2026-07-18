@@ -187,9 +187,12 @@ async function installV3(
       }
       const staged = await stageV3Adapter(rootDir, installer.name);
       console.log(
-        `✓  ${formatPlatformName(platform)} V3 bootstrap staged for shadow comparison.`,
+        `✓  ${formatPlatformName(platform)} V3 bootstrap and original mode entries staged for shadow comparison.`,
       );
       console.log(`   ${staged.stagingTarget}`);
+      for (const entry of staged.modeEntries) {
+        console.log(`   ${entry.stagingTarget}`);
+      }
       return EXIT_OK;
     }
     if (project.manifest.activationState !== 'v3_active') {

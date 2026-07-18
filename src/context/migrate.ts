@@ -14,6 +14,7 @@ import type { MancodeState } from '../commands/init.js';
 import {
   V3_ADAPTER_VERSION,
   applyV3AdapterFilePlan,
+  assertV3AdapterTargetSafe,
   planV3AdapterFiles,
   v3AdapterTargetPath,
 } from '../installers/v3-adapter.js';
@@ -981,6 +982,7 @@ export async function rollbackLegacyMigration(
       );
       await rm(target, { force: false });
     } else if (action.kind === 'v3_adapter_file') {
+      await assertV3AdapterTargetSafe(root, action.target);
       const target = v3AdapterTargetPath(root, action.target);
       if (action.beforeContent === null) {
         await rm(target, { force: false });
@@ -1385,6 +1387,7 @@ async function assertActivationRollbackProof(
         throw new Error('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
       }
     } else if (action.kind === 'v3_adapter_file') {
+      await assertV3AdapterTargetSafe(projectRoot, action.target);
       const current = await readTextOrNull(
         v3AdapterTargetPath(projectRoot, action.target),
       );

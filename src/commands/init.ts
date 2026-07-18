@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { scanLegacyAuthority } from '../context/layout.js';
+import { parseSchemaManifest } from '../context/manifest.js';
 import { validateClaudeCodeSettings } from '../installers/claude-code.js';
 import { installMancodeCore } from '../installers/common.js';
 import { MANCODE_CURSOR_RULE_FILES } from '../installers/cursor.js';
@@ -12,7 +14,10 @@ import {
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
-import { installV3Adapter } from '../installers/v3-adapter.js';
+import {
+  assertV3AdapterInstallable,
+  installV3Adapter,
+} from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
 import {
@@ -93,10 +98,26 @@ export interface InitOptions {
   lang?: string;
   /** Explicitly use the greenfield V3 initialization journal. */
   v3?: boolean;
+  /** Explicit compatibility escape hatch for the legacy initializer. */
+  legacy?: boolean;
+  /** Internal marker for the public CLI entry point. */
+  fromCli?: boolean;
   /** Internal CLI flag. Undefined preserves the programmatic API's legacy default. */
   interactive?: boolean;
   /** Injectable prompt adapter for terminal and tests. */
   prompter?: InitPrompter;
+}
+
+/**
+ * The public CLI now enters V3 by default. Keeping the programmatic API's
+ * historical default avoids silently changing embedders and gives them time
+ * to opt in explicitly. `--legacy` is deliberately stronger than the CLI
+ * default, while an explicit V3 request still works outside the CLI.
+ */
+export function resolveInitAuthority(options: InitOptions): 'legacy' | 'v3' {
+  if (options.legacy) return 'legacy';
+  if (options.v3 || options.fromCli) return 'v3';
+  return 'legacy';
 }
 
 /**
@@ -124,8 +145,14 @@ export async function init(
   rootDir: string = process.cwd(),
   options: InitOptions = {},
 ): Promise<number> {
+  if (options.v3 && options.legacy) {
+    console.error('✗  --v3 and --legacy cannot be used together.');
+    return EXIT_INIT_FAILED;
+  }
+  const authority = resolveInitAuthority(options);
   const mancodeDir = path.join(rootDir, '.mancode');
   const stateFile = path.join(mancodeDir, 'state.json');
+  const v3SchemaFile = path.join(mancodeDir, 'schema.json');
   const wasInitialized = await pathExists(stateFile);
   let mutationSnapshots: FileSnapshot[] = [];
   let directorySnapshots: DirectorySnapshot[] = [];
@@ -136,8 +163,18 @@ export async function init(
     return EXIT_INIT_FAILED;
   }
 
+  if (authority === 'legacy' && (await pathExists(v3SchemaFile))) {
+    console.error(
+      '✗  V3 authority is already present; refusing to create legacy state.json.',
+    );
+    console.error(
+      '   Use `mancode status` or `mancode install <platform>` to inspect or repair this project.',
+    );
+    return EXIT_INIT_FAILED;
+  }
+
   // 1. 幂等检查
-  if (wasInitialized && !options.v3) {
+  if (wasInitialized && authority === 'legacy') {
     if (!options.force) {
       console.log(
         localize(
@@ -178,7 +215,16 @@ export async function init(
     return EXIT_NOT_A_PROJECT_DIR;
   }
 
-  if (options.v3) {
+  if (authority === 'v3') {
+    if (options.fromCli) {
+      const projectBoundaryExit = await validateV3CliProjectBoundary(
+        rootDir,
+        options,
+        locale,
+        wasInitialized,
+      );
+      if (projectBoundaryExit !== null) return projectBoundaryExit;
+    }
     return initializeV3(rootDir, options);
   }
 
@@ -643,16 +689,76 @@ async function initializeV3(
     );
     return EXIT_INIT_FAILED;
   }
+  if (options.style !== undefined) {
+    console.error('✗  --style is only supported by `mancode init --legacy`.');
+    console.error(
+      '   V3 detects project facts; run `mancode refresh-style` after initialization to refresh local style tokens.',
+    );
+    return EXIT_INIT_FAILED;
+  }
+  const schemaPath = path.join(rootDir, '.mancode', 'schema.json');
+  let existingV3 = false;
+  if (await pathExists(schemaPath)) {
+    try {
+      const manifest = parseSchemaManifest(
+        JSON.parse(await fs.readFile(schemaPath, 'utf8')),
+      );
+      if (manifest.activationState !== 'v3_active') {
+        throw new Error(
+          `MANCODE_V3_INIT_UNAVAILABLE_DURING_${manifest.activationState.toUpperCase()}`,
+        );
+      }
+      existingV3 = true;
+      if (options.platform === undefined) {
+        console.log('ℹ️  mancode V3 is already initialized.');
+        return EXIT_ALREADY_INITIALIZED;
+      }
+    } catch (error) {
+      printV3InitError(error);
+      return EXIT_INIT_FAILED;
+    }
+  } else if ((await scanLegacyAuthority(rootDir)).authorityPresent) {
+    printV3InitError(new Error('MANCODE_LEGACY_AUTHORITY_PRESENT'));
+    return EXIT_INIT_FAILED;
+  }
   const selectedPlatforms =
-    options.platform === undefined
-      ? []
-      : parsePlatformSelection(options.platform);
+    options.platform !== undefined
+      ? parsePlatformSelection(options.platform)
+      : options.fromCli
+        ? await selectInitPlatforms({
+            existingPlatform: null,
+            hints: await detectPlatformHints(rootDir),
+            interactive: options.interactive,
+            prompter: options.prompter,
+            locale: detectInitLocale(options.lang) ?? 'en',
+            yes: options.yes,
+          })
+        : [];
   if (selectedPlatforms === null) {
-    console.error(`✗  Unsupported platform selection: ${options.platform}`);
+    console.error(
+      options.platform === undefined
+        ? '✗  No platform selected. Choose one interactively or pass --platform <name>.'
+        : `✗  Unsupported platform selection: ${options.platform}`,
+    );
     console.error('   Use one or more supported platform names, or all.');
     return EXIT_INIT_FAILED;
   }
   try {
+    for (const platform of selectedPlatforms) {
+      await assertV3AdapterInstallable(rootDir, platform);
+    }
+    if (existingV3) {
+      for (const platform of selectedPlatforms) {
+        await installV3Adapter(rootDir, platform);
+      }
+      console.log('ℹ️  mancode V3 is already initialized.');
+      if (selectedPlatforms.length > 0) {
+        console.log(
+          `   V3 bootstrap repaired: ${selectedPlatforms.join(', ')}`,
+        );
+      }
+      return EXIT_ALREADY_INITIALIZED;
+    }
     const result = await initializeV3Project({
       projectRoot: rootDir,
       teamPolicy:
@@ -678,13 +784,17 @@ async function initializeV3(
     }
     return EXIT_OK;
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'V3 initialization failed';
-    console.error(`✗  ${message}`);
-    if (message === 'MANCODE_LEGACY_AUTHORITY_PRESENT') {
-      console.error('   Run `mancode migrate context --dry-run` instead.');
-    }
+    printV3InitError(error);
     return EXIT_INIT_FAILED;
+  }
+}
+
+function printV3InitError(error: unknown): void {
+  const message =
+    error instanceof Error ? error.message : 'V3 initialization failed';
+  console.error(`✗  ${message}`);
+  if (message === 'MANCODE_LEGACY_AUTHORITY_PRESENT') {
+    console.error('   Run `mancode migrate context --dry-run` instead.');
   }
 }
 
@@ -878,6 +988,50 @@ async function canInitializeGenericProject(
   } catch {
     return { ok: false, reason: 'unsafe' };
   }
+}
+
+/** Preserve the original CLI's project-boundary and empty-directory consent. */
+async function validateV3CliProjectBoundary(
+  rootDir: string,
+  options: InitOptions,
+  locale: InitLocale,
+  legacyInitialized: boolean,
+): Promise<number | null> {
+  const isGitRepo = await pathExists(path.join(rootDir, '.git'));
+  const hasManifest = await hasProjectManifest(rootDir);
+  if (isGitRepo || hasManifest) return null;
+
+  const v3Initialized = await pathExists(
+    path.join(rootDir, '.mancode', 'schema.json'),
+  );
+  const legacyAuthorityPresent =
+    legacyInitialized || (await scanLegacyAuthority(rootDir)).authorityPresent;
+  const genericSafety = await canInitializeGenericProject(rootDir);
+  if (
+    !genericSafety.ok &&
+    !(
+      (legacyAuthorityPresent || v3Initialized) &&
+      genericSafety.reason === 'nonempty'
+    )
+  ) {
+    printNotProjectDirectory(rootDir, locale, genericSafety.reason);
+    return EXIT_NOT_A_PROJECT_DIR;
+  }
+  if (legacyAuthorityPresent || v3Initialized) return null;
+
+  const prompter =
+    options.prompter ?? (options.interactive ? createTerminalPrompter() : null);
+  const confirmed =
+    options.empty || options.yes
+      ? true
+      : prompter
+        ? await prompter.confirmGenericProject({ rootDir, locale })
+        : false;
+  if (!confirmed) {
+    printNotProjectDirectory(rootDir, locale, 'empty');
+    return EXIT_NOT_A_PROJECT_DIR;
+  }
+  return null;
 }
 
 function printNotProjectDirectory(

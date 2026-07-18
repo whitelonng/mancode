@@ -21,6 +21,7 @@ import { taskRootPath } from '../context/task-locator.js';
 import { type TaskRef, sameTaskRef } from '../context/task-ref.js';
 import {
   applyV3AdapterFilePlan,
+  assertV3AdapterTargetSafe,
   v3AdapterTargetPath,
 } from '../installers/v3-adapter.js';
 import {
@@ -1006,6 +1007,7 @@ async function readAdapterFile(
     { kind: 'v3_adapter_file' }
   >['target'],
 ): Promise<string | null> {
+  await assertV3AdapterTargetSafe(projectRoot, target);
   const filePath = v3AdapterTargetPath(projectRoot, target);
   try {
     const entry = await lstat(filePath);

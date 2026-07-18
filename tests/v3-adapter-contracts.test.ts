@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,9 +13,12 @@ import {
 } from '../src/commands/uninstall.js';
 import type { PlatformName } from '../src/installers/registry.js';
 import {
+  V3_MODE_NAMES,
   inspectV3Adapter,
   installV3Adapter,
   removeV3Adapter,
+  stageV3Adapter,
+  v3ModeEntryPath,
 } from '../src/installers/v3-adapter.js';
 
 describe('V3 adapter bootstrap integration', () => {
@@ -107,6 +110,7 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain('mancode context show --purpose orient');
       expect(bootstrap).toContain('--session <id>');
       expect(bootstrap).toContain('First run `mancode status --json`');
+      expect(bootstrap).toContain('mancode team identity create --name');
       expect(bootstrap).toContain(
         '`currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
       );
@@ -114,13 +118,57 @@ describe('V3 adapter bootstrap integration', () => {
         'Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`',
       );
       expect(bootstrap).toContain(
-        'do not run `mancode init`, `mancode migrate`, `mancode workflow`',
+        'An explicitly invoked original `man`, `manba`, `manteam`, `manps`, or `mansolo` entry supplies its authorized action',
+      );
+      expect(bootstrap).toContain(
+        'before the operator explicitly requests task work, do not run `mancode init`, `mancode migrate`, `mancode workflow`',
       );
       expect(bootstrap).toContain(
         'an `export` inside one command tool does not persist to later command tools',
       );
+      expect(bootstrap).toContain(
+        'reuse any explicit session ID already returned in this conversation',
+      );
       expect(bootstrap).not.toContain('.mancode/state.json');
       expect(bootstrap).not.toContain('currentMode');
+      if (platform === 'claude-code') {
+        expect(bootstrap).toContain('user-invocable: false');
+      }
+
+      for (const mode of V3_MODE_NAMES) {
+        const entry = await readFile(
+          v3ModeEntryPath(root, platform, mode),
+          'utf8',
+        );
+        if (
+          platform === 'claude-code' ||
+          platform === 'codex' ||
+          platform === 'zcode'
+        ) {
+          expect(entry).toContain(`name: ${mode}`);
+        }
+        expect(entry).toContain('# mancode V3 mode');
+        expect(entry).toContain('mancode status --json');
+        expect(entry).not.toContain('.mancode/state.json');
+        if (mode === 'manps') {
+          expect(entry).toContain(
+            'A local scan needs no TaskRef, actor identity, or explicit session',
+          );
+          expect(entry).toContain(
+            'do not require a TaskRef, workflow revision, actor, or session',
+          );
+          expect(entry).not.toContain('For every mutation, use the TaskRef');
+        }
+        if (mode === 'mansolo') {
+          expect(entry).toContain('Ordinary focused work needs no TaskRef');
+          expect(entry).toContain(
+            'Only an explicit governed handoff mutation requires',
+          );
+        }
+        if (mode === 'man' || mode === 'manba' || mode === 'manteam') {
+          expect(entry).toContain(`mancode workflow create ${mode}`);
+        }
+      }
 
       // Installation is an idempotent bootstrap renderer, not task authority.
       await installV3Adapter(root, platform);
@@ -137,6 +185,11 @@ describe('V3 adapter bootstrap integration', () => {
         installed: false,
         ready: false,
       });
+      if (platform !== 'codex' && platform !== 'zcode') {
+        await expect(
+          readFile(v3ModeEntryPath(root, platform, 'man'), 'utf8'),
+        ).rejects.toThrow();
+      }
     },
   );
 
@@ -149,6 +202,213 @@ describe('V3 adapter bootstrap integration', () => {
     const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
     expect(agents).toContain('# User instructions');
     expect(agents.match(/mancode:v3:codex:start/g)).toHaveLength(1);
+  });
+
+  it('stages the bootstrap and every original mode entry without changing live files', async () => {
+    await mkdir(path.join(root, '.mancode'), { recursive: true });
+
+    const staged = await stageV3Adapter(root, 'cursor');
+
+    expect(staged.modeEntries.map((entry) => entry.mode)).toEqual([
+      ...V3_MODE_NAMES,
+    ]);
+    await expect(
+      readFile(path.join(root, staged.stagingTarget), 'utf8'),
+    ).resolves.toContain('# mancode V3 bootstrap');
+    for (const entry of staged.modeEntries) {
+      await expect(
+        readFile(path.join(root, entry.stagingTarget), 'utf8'),
+      ).resolves.toContain(`# mancode V3 mode: ${entry.mode}`);
+    }
+    await expect(
+      readFile(path.join(root, '.cursor', 'commands', 'man.md'), 'utf8'),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'), 'utf8'),
+    ).rejects.toThrow();
+  });
+
+  it('keeps shared Codex and ZCode original mode entries host-neutral', async () => {
+    await init(root, { v3: true });
+    await installV3Adapter(root, 'codex');
+    const modePath = v3ModeEntryPath(root, 'codex', 'man');
+    const afterCodex = await readFile(modePath, 'utf8');
+    expect(afterCodex).toContain('--client codex');
+    expect(afterCodex).toContain('--client zcode');
+    const agentsAfterCodex = await readFile(
+      path.join(root, 'AGENTS.md'),
+      'utf8',
+    );
+
+    await installV3Adapter(root, 'zcode');
+    await expect(readFile(modePath, 'utf8')).resolves.toBe(afterCodex);
+    const agentsAfterZcode = await readFile(
+      path.join(root, 'AGENTS.md'),
+      'utf8',
+    );
+    expect(agentsAfterZcode).toContain('--client codex');
+    expect(agentsAfterZcode).toContain('--client zcode');
+    expect(agentsAfterCodex).toContain('Codex or ZCode');
+  });
+
+  it('refuses to overwrite a user-authored original mode entry', async () => {
+    await init(root, { v3: true });
+    const modePath = v3ModeEntryPath(root, 'codex', 'man');
+    await mkdir(path.dirname(modePath), { recursive: true });
+    await writeFile(modePath, '# My own man skill\n');
+
+    await expect(installV3Adapter(root, 'codex')).rejects.toThrow(
+      'MANCODE_V3_MODE_ENTRY_USER_AUTHORED',
+    );
+    await expect(readFile(modePath, 'utf8')).resolves.toBe(
+      '# My own man skill\n',
+    );
+    await expect(
+      readFile(path.join(root, 'AGENTS.md'), 'utf8'),
+    ).rejects.toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlinked adapter parent without writing outside the project',
+    async () => {
+      await init(root, { v3: true });
+      const outside = `${root}-outside`;
+      await mkdir(outside, { recursive: true });
+      try {
+        await symlink(outside, path.join(root, '.agents'));
+
+        await expect(installV3Adapter(root, 'codex')).rejects.toThrow(
+          'MANCODE_ARTIFACT_PATH_UNSAFE',
+        );
+        await expect(
+          readFile(path.join(outside, 'AGENTS.md')),
+        ).rejects.toThrow();
+        await expect(
+          readFile(path.join(outside, 'skills', 'man', 'SKILL.md')),
+        ).rejects.toThrow();
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('retires legacy managed entrypoints when repairing an active V3 adapter', async () => {
+    await init(root, { v3: true });
+    const legacyCodexAlias = path.join(
+      root,
+      '.agents',
+      'skills',
+      'mamba',
+      'SKILL.md',
+    );
+    await mkdir(path.dirname(legacyCodexAlias), { recursive: true });
+    await writeFile(
+      legacyCodexAlias,
+      '<!-- Managed by mancode:codex-skill. Do not edit this file manually. -->\nRead `.mancode/state.json`.\n',
+    );
+    await writeFile(
+      path.join(root, 'AGENTS.md'),
+      [
+        '# User instructions',
+        '<!-- mancode:start -->',
+        'Read `.mancode/state.json`.',
+        '<!-- mancode:end -->',
+        '<!-- mancode:zcode:start -->',
+        'Also read `.mancode/state.json`.',
+        '<!-- mancode:zcode:end -->',
+      ].join('\n'),
+    );
+    await installV3Adapter(root, 'codex');
+    const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('# User instructions');
+    expect(agents).not.toContain('.mancode/state.json');
+    const codexAlias = await readFile(legacyCodexAlias, 'utf8');
+    expect(codexAlias).toContain('# mancode V3 mode compatibility alias');
+    expect(codexAlias).toContain('public V3 mode `manba`');
+    expect(codexAlias).not.toContain('.mancode/state.json');
+    await removeV3Adapter(root, 'codex');
+    await expect(readFile(legacyCodexAlias, 'utf8')).rejects.toThrow();
+
+    await mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+    await writeFile(
+      path.join(root, '.cursor', 'rules', 'mancode-context.mdc'),
+      '<!-- Managed by mancode:cursor-rule. Do not edit this marker. -->\nRead `.mancode/state.json`.\n',
+    );
+    const legacyCursorAlias = path.join(
+      root,
+      '.cursor',
+      'rules',
+      'mancode-mamba.mdc',
+    );
+    await writeFile(
+      legacyCursorAlias,
+      '<!-- Managed by mancode:cursor-rule. Do not edit this marker. -->\nRead `.mancode/state.json`.\n',
+    );
+    await installV3Adapter(root, 'cursor');
+    const cursorRule = await readFile(
+      path.join(root, '.cursor', 'rules', 'mancode-context.mdc'),
+      'utf8',
+    );
+    expect(cursorRule).toContain('alwaysApply: false');
+    expect(cursorRule).not.toContain('.mancode/state.json');
+    const cursorAlias = await readFile(legacyCursorAlias, 'utf8');
+    expect(cursorAlias).toContain('Use the `/manba` V3 mode command.');
+    expect(cursorAlias).not.toContain('.mancode/state.json');
+    await removeV3Adapter(root, 'cursor');
+    await expect(
+      readFile(
+        path.join(root, '.cursor', 'rules', 'mancode-context.mdc'),
+        'utf8',
+      ),
+    ).rejects.toThrow();
+    await expect(readFile(legacyCursorAlias, 'utf8')).rejects.toThrow();
+
+    await mkdir(path.join(root, '.claude', 'skills', 'solo'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(root, '.claude', 'skills', 'solo', 'SKILL.md'),
+      '<!-- Managed by mancode:claude-skill. Do not edit this marker. -->\nRead `.mancode/state.json`.\n',
+    );
+    await mkdir(path.join(root, '.claude'), { recursive: true });
+    await writeFile(
+      path.join(root, '.claude', 'settings.json'),
+      `${JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node ".mancode/hooks/session-start.mjs"',
+                },
+                { type: 'command', command: 'node user-hook.mjs' },
+              ],
+            },
+          ],
+        },
+      })}\n`,
+    );
+    await installV3Adapter(root, 'claude-code');
+    const settings = await readFile(
+      path.join(root, '.claude', 'settings.json'),
+      'utf8',
+    );
+    expect(settings).not.toContain('session-start.mjs');
+    expect(settings).toContain('node user-hook.mjs');
+    await expect(
+      readFile(
+        path.join(root, '.claude', 'skills', 'solo', 'SKILL.md'),
+        'utf8',
+      ),
+    ).resolves.toContain('# mancode V3 mode compatibility alias');
+    await removeV3Adapter(root, 'claude-code');
+    await expect(
+      readFile(
+        path.join(root, '.claude', 'skills', 'solo', 'SKILL.md'),
+        'utf8',
+      ),
+    ).rejects.toThrow();
   });
 
   it('stages a dual-read adapter candidate without changing the live target', async () => {

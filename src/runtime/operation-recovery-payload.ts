@@ -20,7 +20,10 @@ import {
   type WorkflowMetadataV3,
   parseWorkflowMetadata,
 } from '../context/workflow-metadata.js';
-import type { V3AdapterFileTarget } from '../installers/v3-adapter.js';
+import {
+  type V3AdapterFileTarget,
+  V3_ADAPTER_FILE_TARGETS,
+} from '../installers/v3-adapter.js';
 import {
   type CheckpointV1,
   checkpointDigest,
@@ -115,7 +118,7 @@ export interface MigrationStageFileRecoveryAction {
   targetContent: string;
 }
 
-/** Exact physical adapter replacement, scoped to the four fixed V3 targets. */
+/** Exact physical replacement for one journaled V3 adapter target. */
 export interface V3AdapterFileRecoveryAction {
   kind: 'v3_adapter_file';
   stepId: string;
@@ -1074,12 +1077,9 @@ function parseMigrationStageFileAction(
   };
 }
 
-const V3_ADAPTER_TARGETS = new Set<V3AdapterFileTarget>([
-  'claude-skill',
-  'cursor-rule',
-  'agents',
-  'copilot-instructions',
-]);
+const V3_ADAPTER_TARGETS = new Set<V3AdapterFileTarget>(
+  V3_ADAPTER_FILE_TARGETS,
+);
 
 function parseV3AdapterFileAction(
   value: Record<string, unknown>,

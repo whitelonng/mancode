@@ -76,11 +76,13 @@ program
   .option('--style <name>', 'Specify aesthetic style (MVP-2)')
   .option('--platform <platforms>', 'Adapters: comma-separated names or all')
   .option('--empty', 'Initialize a safe empty directory as a generic project')
-  .option('--v3', 'Use the journaled V3 greenfield initializer')
+  .option('--v3', 'Use V3 authority explicitly (the CLI default)')
+  .option('--legacy', 'Use the legacy state.json initializer')
   .option('--lang <locale>', 'Initialization language: zh-CN or en')
   .action(async (options) => {
     const code = await init(process.cwd(), {
       ...options,
+      fromCli: true,
       interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     });
     process.exitCode = code;

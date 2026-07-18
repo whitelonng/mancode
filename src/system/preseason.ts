@@ -88,6 +88,13 @@ export interface PreseasonRemediationOptions {
   ask?: (question: string) => Promise<string>;
   write?: (message: string) => void;
   now?: string;
+  /** Internal authority path; defaults to the legacy database location. */
+  issueDbPath?: string;
+}
+
+export interface PreseasonScanOptions {
+  /** Storage root for reports and the issue database. */
+  storageRoot?: string;
 }
 
 export interface PreseasonRemediationResult {
@@ -205,6 +212,7 @@ const SCANNERS: PreseasonScanner[] = [
 export async function runPreseasonScan(
   projectRoot: string,
   area = 'all',
+  options: PreseasonScanOptions = {},
 ): Promise<PreseasonReport> {
   const generatedAt = new Date().toISOString();
   const normalizedArea = normalizeArea(area);
@@ -218,13 +226,10 @@ export async function runPreseasonScan(
     await scanArea(projectRoot, normalizedArea, pkg, files)
   ).slice(0, 20);
 
-  const reportDir = path.join(projectRoot, '.mancode', 'preseason-reports');
+  const storageRoot = options.storageRoot ?? path.join(projectRoot, '.mancode');
+  const reportDir = path.join(storageRoot, 'preseason-reports');
   await mkdir(reportDir, { recursive: true });
-  const issueDbPath = path.join(
-    projectRoot,
-    '.mancode',
-    'preseason-issues.json',
-  );
+  const issueDbPath = path.join(storageRoot, 'preseason-issues.json');
   const reportPath = await allocateReportPath(
     reportDir,
     `${generatedAt.replace(/[:.]/g, '-')}-${normalizedArea}`,
@@ -240,7 +245,7 @@ export async function runPreseasonScan(
   const database = await buildIssueDatabase(projectRoot, report);
   await writeFile(reportPath, renderPreseasonReport(report), 'utf-8');
   await writeFile(
-    path.join(projectRoot, '.mancode', 'preseason-report.md'),
+    path.join(storageRoot, 'preseason-report.md'),
     renderPreseasonReport(report),
     'utf-8',
   );
@@ -253,11 +258,9 @@ export async function runPreseasonRemediation(
   issues: PreseasonIssue[],
   options: PreseasonRemediationOptions = {},
 ): Promise<PreseasonRemediationResult> {
-  const issueDbPath = path.join(
-    projectRoot,
-    '.mancode',
-    'preseason-issues.json',
-  );
+  const issueDbPath =
+    options.issueDbPath ??
+    path.join(projectRoot, '.mancode', 'preseason-issues.json');
   const database = await readIssueDatabase(issueDbPath);
   const keys = new Set(issues.map((issue) => issueKey(issue)));
   const targets = database.issues.filter(

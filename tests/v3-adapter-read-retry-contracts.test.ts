@@ -26,6 +26,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 
 import {
+  V3_MODE_NAMES,
   inspectV3Adapter,
   installV3Adapter,
 } from '../src/installers/v3-adapter.js';
@@ -56,7 +57,7 @@ describe('V3 adapter status reads', () => {
       installed: true,
       ready: true,
     });
-    expect(reads.calls).toBe(2);
+    expect(reads.calls).toBe(V3_MODE_NAMES.length + 2);
   });
 
   it('keeps a persistent adapter read failure closed', async () => {
