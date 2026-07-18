@@ -247,7 +247,9 @@ describe('V3 local claim lifecycle operations', () => {
 
   it('routes a duration-based renew through the team command contract', async () => {
     const actors = await bootstrap(root);
-    const { claim } = await workflowWithOwnerClaim(root, actors, 50);
+    const { claim } = await workflowWithOwnerClaim(root, actors, 50, {
+      now: new Date(),
+    });
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -293,8 +295,9 @@ async function workflowWithOwnerClaim(
   projectRoot: string,
   actors: Awaited<ReturnType<typeof bootstrap>>,
   offset: number,
-  options: { ttlMs?: number } = {},
+  options: { ttlMs?: number; now?: Date } = {},
 ) {
+  const now = options.now ?? NOW;
   const workflow = await createV3Workflow({
     projectRoot,
     task: `Claim lifecycle task ${offset}.`,
@@ -306,14 +309,14 @@ async function workflowWithOwnerClaim(
     participantActorIds: [actors.participantActorId],
     taskId: id(offset),
     operationId: id(offset + 1),
-    now: NOW,
+    now,
   });
   const confirmed = await confirmManteamPlan({
     projectRoot,
     taskRef: workflow.taskRef,
     sessionId: actors.ownerSessionId,
     requirements: workflow.requirements,
-    now: NOW,
+    now,
   });
   const claim = await acquireV3Claim({
     projectRoot,
@@ -329,7 +332,7 @@ async function workflowWithOwnerClaim(
     ttlMs: options.ttlMs,
     claimId: id(offset + 2),
     operationId: id(offset + 3),
-    now: NOW,
+    now,
   });
   return { workflow, claim, taskRevision: confirmed.taskRevision };
 }
