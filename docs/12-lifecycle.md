@@ -107,7 +107,7 @@ Node 直接解析 JSON。不存在 jq fallback，也不会调用任何外部进�
 
 ```json
 {
-  "version": "0.3.11",
+  "version": "0.3.12",
   "currentMode": "solo",
   "lastMode": "solo",
   "platform": "claude-code",

@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.11-green?style=flat-square" alt="状态：稳定版 v0.3.11" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.12-green?style=flat-square" alt="状态：稳定版 v0.3.12" />
   <img src="https://img.shields.io/badge/V3-%E8%B7%A8%20CLI%20%E5%9B%A2%E9%98%9F%20Beta-FB6A21?style=flat-square" alt="V3：跨 CLI 团队协作 Beta" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="测试通过" />
@@ -300,7 +300,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.11。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：稳定版 v0.3.12。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
 发现路径在发布前仍作为验证门禁。
 
@@ -395,7 +395,7 @@ mancode version
 以下是 V3 项目的简化输出示例：
 
 ```text
-mancode v0.3.11 (V3 authority)
+mancode v0.3.12 (V3 authority)
 
 Project:     my-app
 Activation:  v3_active
