@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.9-green?style=flat-square" alt="状态：稳定版 v0.3.9" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.11-green?style=flat-square" alt="状态：稳定版 v0.3.11" />
   <img src="https://img.shields.io/badge/V3-%E8%B7%A8%20CLI%20%E5%9B%A2%E9%98%9F%20Beta-FB6A21?style=flat-square" alt="V3：跨 CLI 团队协作 Beta" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
   <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="测试通过" />
@@ -108,10 +108,10 @@ legacy `state.json` 与 V3 authority。
 ### Beta 的验证边界
 
 - `main` 的 Windows 门禁会从 CMD、PowerShell 和 Git Bash 运行 smoke 测试。
-- `mancode context beta --json` 会检查 activation、adapter、repair、worktree binding 和
-  五个平台的 session evidence；任何 blocker 都会阻止大范围启用。
-- 每个平台都必须在真实宿主中证明两个窗口的 session 区分和子进程传播。证据不保存原始
-  session key。
+- `mancode context beta --release-candidate <commit> --json` 会检查 activation、adapter、repair、worktree binding 和
+  五个平台的 session evidence；evidence 必须绑定同一个不可变发布候选，任何 blocker 都会阻止大范围启用。
+- 每个平台都必须在真实宿主中证明两个窗口的 session 区分、子命令传播以及子 agent 继承（或记录明确的不适用原因）。
+  `context session spike` 只记录操作者报告的真实宿主结果，不会由临时环境变量自动推断传播成功；证据不保存原始 session key。
 
 在门禁通过前，继续显式传入 `--session <id>`，不要把 host identity 视为已验证。这样可以
 先试用 V3，同时避免把尚未证明的跨平台 session 行为当作事实。
@@ -296,7 +296,7 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.9。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：稳定版 v0.3.11。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
 发现路径在发布前仍作为验证门禁。
 
@@ -397,7 +397,7 @@ mancode version
 以下是 UI 项目的输出示例，并非默认技术栈：
 
 ```text
-mancode v0.3.9
+mancode v0.3.11
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)

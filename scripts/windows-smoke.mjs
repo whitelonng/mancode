@@ -205,6 +205,14 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
     'codex',
     '--host-session-source',
     'api',
+    '--command-propagation',
+    'not_tested',
+    '--subagent-inheritance',
+    'not_tested',
+    '--host-version',
+    'windows-smoke',
+    '--release-candidate',
+    'windows-smoke-rc',
   ];
   runCli(project, spikeArgs, spikeEnv);
   const evidenceTarget = path.join(

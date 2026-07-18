@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.9-green?style=flat-square" alt="Status: stable v0.3.9" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.11-green?style=flat-square" alt="Status: stable v0.3.11" />
   <img src="https://img.shields.io/badge/V3-cross--CLI%20team%20Beta-FB6A21?style=flat-square" alt="V3: cross-CLI team Beta" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="Tests passing" />
@@ -117,12 +117,15 @@ with V3 authority.
 
 - The `main` branch requires a Windows gate that runs smoke tests in CMD,
   PowerShell, and Git Bash.
-- `mancode context beta --json` checks activation, adapters, repair state,
-  worktree binding, and session evidence for all five platforms. Any blocker
+- `mancode context beta --release-candidate <commit> --json` checks activation,
+  adapters, repair state, worktree binding, and session evidence for all five
+  platforms. Evidence must bind to that immutable release candidate; any blocker
   stops broad enablement.
-- Each platform must prove distinct sessions in two real host windows and its
-  subagent or command propagation. Stored evidence never includes raw session
-  keys.
+- Each platform must prove distinct sessions in two real host windows, child-command
+  propagation, and child-agent inheritance (or record a specific reason it is not
+  applicable). `context session spike` records an operator-attested real-host result;
+  it never infers propagation from a temporary environment variable. Stored evidence
+  never includes raw session keys.
 
 Until that gate passes, use an explicit `--session <id>` and do not treat host
 identity as verified. This lets you try V3 without presenting unproven
@@ -341,7 +344,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.9. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.11. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
 
@@ -444,7 +447,7 @@ mancode version
 Example output for a UI project (not a default stack):
 
 ```text
-mancode v0.3.9
+mancode v0.3.11
 
 Project:     my-app (React + TypeScript + Tailwind)
 Mode:        solo (default)

@@ -106,6 +106,19 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain('# mancode V3 bootstrap');
       expect(bootstrap).toContain('mancode context show --purpose orient');
       expect(bootstrap).toContain('--session <id>');
+      expect(bootstrap).toContain('First run `mancode status --json`');
+      expect(bootstrap).toContain(
+        '`currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
+      );
+      expect(bootstrap).toContain(
+        'Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`',
+      );
+      expect(bootstrap).toContain(
+        'do not run `mancode init`, `mancode migrate`, `mancode workflow`',
+      );
+      expect(bootstrap).toContain(
+        'an `export` inside one command tool does not persist to later command tools',
+      );
       expect(bootstrap).not.toContain('.mancode/state.json');
       expect(bootstrap).not.toContain('currentMode');
 

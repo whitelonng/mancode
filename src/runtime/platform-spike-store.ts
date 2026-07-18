@@ -1,25 +1,26 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { replaceFileAtomically } from './atomic-file.js';
 import {
-  type PlatformSessionSpikeV1,
+  type PlatformSessionSpike,
   SESSION_SPIKE_PLATFORMS,
   type SessionSpikePlatform,
   parsePlatformSessionSpike,
 } from './platform-spike.js';
+
+const EVIDENCE_DIRECTORY_SEGMENTS = [
+  '.mancode',
+  'local',
+  'evidence',
+  'platform-session',
+] as const;
 
 /**
  * Session-spike evidence is local operational evidence. It is intentionally
  * outside shared authority and contains outcomes only, never host keys.
  */
 export function platformSessionSpikeDirectory(projectRoot: string): string {
-  return path.join(
-    path.resolve(projectRoot),
-    '.mancode',
-    'local',
-    'evidence',
-    'platform-session',
-  );
+  return path.join(path.resolve(projectRoot), ...EVIDENCE_DIRECTORY_SEGMENTS);
 }
 
 export function platformSessionSpikePath(
@@ -36,11 +37,13 @@ export function platformSessionSpikePath(
 export async function readPlatformSessionSpike(
   projectRoot: string,
   platform: SessionSpikePlatform,
-): Promise<PlatformSessionSpikeV1 | null> {
+): Promise<PlatformSessionSpike | null> {
+  assertPlatform(platform);
+  const directory = await safeEvidenceDirectory(projectRoot, false);
+  if (directory === null) return null;
   try {
-    const raw = await readFile(
-      platformSessionSpikePath(projectRoot, platform),
-      'utf8',
+    const raw = await readSafeRegularFile(
+      path.join(directory, `${platform}.json`),
     );
     return parsePlatformSessionSpike(JSON.parse(raw));
   } catch (error) {
@@ -54,25 +57,31 @@ export async function readPlatformSessionSpike(
 
 export async function listPlatformSessionSpikes(
   projectRoot: string,
-): Promise<PlatformSessionSpikeV1[]> {
+): Promise<PlatformSessionSpike[]> {
   const spikes = await Promise.all(
     SESSION_SPIKE_PLATFORMS.map((platform) =>
       readPlatformSessionSpike(projectRoot, platform),
     ),
   );
   return spikes.filter(
-    (spike): spike is PlatformSessionSpikeV1 => spike !== null,
+    (spike): spike is PlatformSessionSpike => spike !== null,
   );
 }
 
 export async function writePlatformSessionSpike(
   projectRoot: string,
-  spike: PlatformSessionSpikeV1,
-): Promise<PlatformSessionSpikeV1> {
+  spike: PlatformSessionSpike,
+): Promise<PlatformSessionSpike> {
   const parsed = parsePlatformSessionSpike(spike);
-  const directory = platformSessionSpikeDirectory(projectRoot);
-  await mkdir(directory, { recursive: true });
-  const target = platformSessionSpikePath(projectRoot, parsed.platform);
+  if (parsed.schemaVersion !== 2) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_RECAPTURE_REQUIRED');
+  }
+  const directory = await safeEvidenceDirectory(projectRoot, true);
+  if (directory === null) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const target = path.join(directory, `${parsed.platform}.json`);
+  await assertSafeReplacementTarget(target);
   const temporary = path.join(
     directory,
     `.${parsed.platform}.${process.pid}.${Date.now()}.tmp`,
@@ -83,11 +92,73 @@ export async function writePlatformSessionSpike(
   });
   try {
     await replaceFileAtomically(temporary, target);
+    await assertSafeReplacementTarget(target);
   } catch (error) {
     await rm(temporary, { force: true });
     throw error;
   }
   return parsed;
+}
+
+async function safeEvidenceDirectory(
+  projectRoot: string,
+  create: boolean,
+): Promise<string | null> {
+  let current = path.resolve(projectRoot);
+  for (const segment of EVIDENCE_DIRECTORY_SEGMENTS) {
+    const target = path.join(current, segment);
+    try {
+      await assertSafeDirectory(target);
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      if (!create) return null;
+      try {
+        await mkdir(target);
+      } catch (mkdirError) {
+        if (!isAlreadyExists(mkdirError)) throw mkdirError;
+      }
+      await assertSafeDirectory(target);
+    }
+    current = target;
+  }
+  return current;
+}
+
+async function assertSafeDirectory(target: string): Promise<void> {
+  const entry = await lstat(target);
+  if (!entry.isDirectory() || entry.isSymbolicLink()) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+}
+
+async function assertSafeReplacementTarget(target: string): Promise<void> {
+  try {
+    const entry = await lstat(target);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+}
+
+async function readSafeRegularFile(target: string): Promise<string> {
+  const before = await lstat(target);
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const content = await readFile(target, 'utf8');
+  const after = await lstat(target);
+  if (
+    !after.isFile() ||
+    after.isSymbolicLink() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino
+  ) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  return content;
 }
 
 function assertPlatform(value: unknown): asserts value is SessionSpikePlatform {
@@ -105,5 +176,14 @@ function isNotFound(error: unknown): error is NodeJS.ErrnoException {
     error !== null &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === 'ENOENT'
+  );
+}
+
+function isAlreadyExists(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'EEXIST'
   );
 }

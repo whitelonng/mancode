@@ -41,6 +41,19 @@ describe('V3 CLI command surface', () => {
       expect(requiredOptions(commandAt(cliProgram, 'team', 'claim'))).toEqual([
         '--expected-task-revision',
       ]);
+      expect(
+        requiredOptions(commandAt(cliProgram, 'context', 'session', 'spike')),
+      ).toEqual([
+        '--platform',
+        '--host-session-source',
+        '--command-propagation',
+        '--subagent-inheritance',
+        '--host-version',
+        '--release-candidate',
+      ]);
+      expect(requiredOptions(commandAt(cliProgram, 'context', 'beta'))).toEqual(
+        ['--release-candidate'],
+      );
     } finally {
       process.argv = originalArgv;
       log.mockRestore();

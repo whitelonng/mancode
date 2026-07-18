@@ -255,13 +255,29 @@ contextSessionProgram
     '--host-session-source <source>',
     'hook_stdin, environment, or api',
   )
-  .option(
+  .requiredOption(
+    '--command-propagation <status>',
+    'Real host child-command result: proven, not_proven, not_tested, or not_applicable',
+  )
+  .requiredOption(
     '--subagent-inheritance <status>',
-    'proven, not_proven, not_tested, or not_applicable',
+    'Real host child-agent result: proven, not_proven, not_tested, or not_applicable',
+  )
+  .option(
+    '--subagent-inheritance-reason <reason>',
+    'Required when child-agent inheritance is not applicable',
   )
   .option(
     '--hook-approval <status>',
     'approved, unapproved, unknown, or not_applicable',
+  )
+  .requiredOption(
+    '--host-version <version>',
+    'Installed host version used for the spike',
+  )
+  .requiredOption(
+    '--release-candidate <id>',
+    'Immutable mancode release candidate or source commit identifier',
   )
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
@@ -324,6 +340,10 @@ contextProgram
 contextProgram
   .command('beta')
   .description('Evaluate hard V3 Beta readiness gates')
+  .requiredOption(
+    '--release-candidate <id>',
+    'Release candidate that must match every platform evidence record',
+  )
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     process.exitCode = await contextBeta(process.cwd(), options);
