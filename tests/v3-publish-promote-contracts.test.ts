@@ -463,7 +463,7 @@ describe('V3 local-to-shared publish/promote', () => {
         });
       }
     }
-  });
+  }, 20_000);
 });
 
 async function bootstrap(

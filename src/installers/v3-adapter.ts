@@ -30,6 +30,9 @@ const V3_ZCODE_START_MARKER = '<!-- mancode:v3:zcode:start -->';
 const V3_ZCODE_END_MARKER = '<!-- mancode:v3:zcode:end -->';
 const V3_COPILOT_START_MARKER = '<!-- mancode:v3:copilot:start -->';
 const V3_COPILOT_END_MARKER = '<!-- mancode:v3:copilot:end -->';
+const RETRIABLE_ADAPTER_READ_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
+const ADAPTER_READ_MAX_ATTEMPTS = 4;
+const ADAPTER_READ_RETRY_DELAY_MS = 25;
 
 export interface V3AdapterCapabilities {
   nativeModeEntry: boolean;
@@ -568,12 +571,21 @@ async function managedBlockPresent(
 }
 
 async function readTextIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, 'utf8');
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') return null;
-    throw error;
+  for (let attempt = 1; attempt <= ADAPTER_READ_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await readFile(filePath, 'utf8');
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return null;
+      if (
+        !isRetriableAdapterReadError(error) ||
+        attempt === ADAPTER_READ_MAX_ATTEMPTS
+      ) {
+        throw error;
+      }
+      await delay(ADAPTER_READ_RETRY_DELAY_MS * attempt);
+    }
   }
+  throw new Error('MANCODE_V3_ADAPTER_READ_RETRY_EXHAUSTED');
 }
 
 async function atomicWrite(filePath: string, content: string): Promise<void> {
@@ -629,4 +641,16 @@ function capabilitiesFor(platform: PlatformName): V3AdapterCapabilities {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error !== null && 'code' in error;
+}
+
+function isRetriableAdapterReadError(error: unknown): boolean {
+  return (
+    isNodeError(error) && RETRIABLE_ADAPTER_READ_CODES.has(error.code ?? '')
+  );
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
