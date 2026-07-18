@@ -59,14 +59,18 @@ export function assertManteamPlanContent(plan: string): void {
     throw new Error('MANCODE_PLAN_CONTENT_REQUIRED');
   }
   const sections = parseMarkdownSections(plan);
-  const missing = REQUIRED_SECTIONS.filter(
-    (required) =>
-      !sections.some(
-        (section) =>
-          hasAnyMarker(section.heading, required.headingMarkers) &&
-          hasMeaningfulBody(section.body),
-      ),
-  ).map(({ key }) => key);
+  const usedSectionIndexes = new Set<number>();
+  const missing = REQUIRED_SECTIONS.flatMap((required) => {
+    const sectionIndex = sections.findIndex(
+      (section, index) =>
+        !usedSectionIndexes.has(index) &&
+        hasAnyMarker(section.heading, required.headingMarkers) &&
+        hasMeaningfulBody(section.body),
+    );
+    if (sectionIndex === -1) return [required.key];
+    usedSectionIndexes.add(sectionIndex);
+    return [];
+  });
   if (!hasMeaningfulSectionFor(sections, ACQUISITION_MARKERS)) {
     missing.push('capability_acquisition');
   }

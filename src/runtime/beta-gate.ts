@@ -20,6 +20,7 @@ import { readProjectRuntimeContext } from './project-runtime.js';
 
 export interface V3BetaGateResult {
   schemaVersion: 1;
+  releaseCandidate: string;
   ready: boolean;
   blockers: string[];
   activationState: string;
@@ -48,7 +49,11 @@ export interface V3BetaGateResult {
  */
 export async function evaluateV3BetaGate(
   projectRoot: string,
+  input: { releaseCandidate: string },
 ): Promise<V3BetaGateResult> {
+  if (!input.releaseCandidate.trim()) {
+    throw new Error('MANCODE_BETA_RELEASE_CANDIDATE_REQUIRED');
+  }
   const store = new V3ContextStore(projectRoot);
   const [
     snapshot,
@@ -82,7 +87,10 @@ export async function evaluateV3BetaGate(
     legacyAuthorityPresent: legacy.authorityPresent,
     operation: 'v3_business_write',
   });
-  const sessionEvidence = platformSpikeFreezeStatus(spikes);
+  const sessionEvidence = platformSpikeFreezeStatus(spikes, {
+    releaseCandidate: input.releaseCandidate,
+    mancodeVersion: VERSION,
+  });
   const adapters = Object.fromEntries(adapterEntries) as Record<
     PlatformName,
     V3PlatformAdapterStatus
@@ -115,6 +123,7 @@ export async function evaluateV3BetaGate(
   }
   return {
     schemaVersion: 1,
+    releaseCandidate: input.releaseCandidate,
     ready: blockers.length === 0,
     blockers: [...new Set(blockers)].sort(),
     activationState: snapshot.manifest.activationState,

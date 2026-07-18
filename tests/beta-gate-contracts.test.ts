@@ -11,6 +11,9 @@ import {
   SESSION_SPIKE_PLATFORMS,
   createPlatformSessionSpike,
 } from '../src/runtime/platform-spike.js';
+import { VERSION } from '../src/version.js';
+
+const RELEASE_CANDIDATE = '5c40d6b';
 
 describe('V3 Beta gate', () => {
   let root: string;
@@ -37,7 +40,12 @@ describe('V3 Beta gate', () => {
   it('refuses Beta while real-host spike evidence and adapters are missing', async () => {
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      expect(await contextBeta(root, { json: true })).toBe(3);
+      expect(
+        await contextBeta(root, {
+          releaseCandidate: RELEASE_CANDIDATE,
+          json: true,
+        }),
+      ).toBe(3);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         ready: false,
         blockers: expect.arrayContaining([
@@ -57,12 +65,62 @@ describe('V3 Beta gate', () => {
     await makeBetaReady(root);
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      expect(await contextBeta(root, { json: true })).toBe(0);
+      expect(
+        await contextBeta(root, {
+          releaseCandidate: RELEASE_CANDIDATE,
+          json: true,
+        }),
+      ).toBe(0);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         ready: true,
         blockers: [],
         sessionEvidence: { ready: true },
         runtimeBinding: 'ready',
+      });
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('refuses Beta when any platform has not proven child inheritance', async () => {
+    await makeBetaReady(root, 'not_proven');
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(
+        await contextBeta(root, {
+          releaseCandidate: RELEASE_CANDIDATE,
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        ready: false,
+        blockers: expect.arrayContaining([
+          'MANCODE_BETA_PLATFORM_SESSION_SPIKE_REQUIRED',
+        ]),
+        sessionEvidence: {
+          explicitRequiredPlatforms: expect.arrayContaining(['codex']),
+        },
+      });
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('refuses Beta when evidence belongs to another release candidate', async () => {
+    await makeBetaReady(root, 'proven', '721845d');
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(
+        await contextBeta(root, {
+          releaseCandidate: RELEASE_CANDIDATE,
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        ready: false,
+        sessionEvidence: {
+          evidenceMismatchPlatforms: expect.arrayContaining(['codex']),
+        },
       });
     } finally {
       logs.mockRestore();
@@ -104,7 +162,12 @@ describe('V3 Beta gate', () => {
     );
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      expect(await contextBeta(root, { json: true })).toBe(3);
+      expect(
+        await contextBeta(root, {
+          releaseCandidate: RELEASE_CANDIDATE,
+          json: true,
+        }),
+      ).toBe(3);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         ready: false,
         blockers: expect.arrayContaining([
@@ -124,7 +187,11 @@ describe('V3 Beta gate', () => {
   });
 });
 
-async function makeBetaReady(projectRoot: string): Promise<void> {
+async function makeBetaReady(
+  projectRoot: string,
+  subagentInheritance: 'proven' | 'not_proven' = 'proven',
+  releaseCandidate = RELEASE_CANDIDATE,
+): Promise<void> {
   for (const platform of [
     'claude-code',
     'codex',
@@ -145,8 +212,15 @@ async function makeBetaReady(projectRoot: string): Promise<void> {
           firstWindowHostSessionKey: `${platform}-window-a`,
           secondWindowHostSessionKey: `${platform}-window-b`,
           commandPropagation: 'proven',
-          subagentInheritance: 'not_applicable',
+          subagentInheritance,
           hookApproval: 'not_applicable',
+          evidence: {
+            releaseCandidate,
+            mancodeVersion: VERSION,
+            hostVersion: 'fixture-host-1.0.0',
+            nodeVersion: process.version,
+            runtimePlatform: `${process.platform}-${process.arch}`,
+          },
         }),
       ),
     ),

@@ -97,6 +97,35 @@ describe('V3 CLI command contracts', () => {
     }
   });
 
+  it('requires an operator-attested child-command result instead of inferring propagation', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubEnv('MANCODE_SPIKE_HOST_SESSION_KEY', 'codex-window-a-private-key');
+    vi.stubEnv(
+      'MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY',
+      'codex-window-b-private-key',
+    );
+    try {
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          hostSessionSource: 'api',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(logs.mock.calls.flat().join(' ')).toContain(
+        'MANCODE_PLATFORM_SPIKE_COMMAND_PROPAGATION_REQUIRED',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      logs.mockRestore();
+    }
+  });
+
   it('records host-session evidence without persisting host keys and only then resolves a host session', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -110,6 +139,10 @@ describe('V3 CLI command contracts', () => {
         await contextSessionSpike(root, {
           platform: 'codex',
           hostSessionSource: 'api',
+          commandPropagation: 'proven',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
           json: true,
         }),
       ).toBe(0);

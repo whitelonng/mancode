@@ -6,10 +6,23 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { teamSyncPull } from '../src/commands/team.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
+import { workflow } from '../src/commands/workflow.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
+import {
+  type ReviewLedgerV1,
+  parseReviewLedger,
+  reviewLedgerDigest,
+} from '../src/context/review-ledger.js';
+import { applyV3ReviewLedger } from '../src/context/review-remediation.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { formatTaskRef } from '../src/context/task-ref.js';
+import {
+  type VerificationLedgerV1,
+  parseVerificationLedger,
+  verificationLedgerDigest,
+} from '../src/context/verification-ledger.js';
+import { recordV3Verification } from '../src/context/verification-record.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import {
   ensureProjectRuntimeContext,
@@ -491,6 +504,117 @@ describe('git-ref coordination across independent clones', () => {
       }),
     ).rejects.toThrow('MANCODE_REPAIR_AUTHORIZATION_MISMATCH');
   }, 20_000);
+
+  it('completes a ready shared task and releases its remote claim in one CAS', async () => {
+    const fixture = await createFixture();
+    const created = await createRemoteTask(fixture.cloneA, fixture.codeHead, {
+      completionReady: true,
+    });
+    const storeA = await strictStore(fixture.cloneA);
+    const initialBundle = await taskBundle(fixture.cloneA);
+    const establishOperationId = id(50);
+    await storeA.establishCoordinationAuthority({
+      operationId: establishOperationId,
+      actorId: ACTOR_A,
+      expectedRemoteRevision: 0,
+      expectedPriorTransportEpoch: null,
+      targetTransportEpoch: 2,
+      actorProfiles: fixture.profiles,
+      ownershipFences: [
+        ownershipFence(initialBundle, ACTOR_A, 1, establishOperationId),
+      ],
+      claims: [],
+      handoffs: [],
+      taskBundles: [initialBundle],
+    });
+    const acquired = await acquireGitRefClaim({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      scope: scope('src/auth/**'),
+      claimId: id(51),
+      operationId: id(52),
+      now: at(4),
+    });
+
+    const completion = await captureWorkflowCompletion(() =>
+      workflow(fixture.cloneA, 'complete', [formatTaskRef(created.taskRef)], {
+        session: SESSION_A,
+        client: 'vitest-a',
+        expectedRevision: String(created.metadata.revision),
+        sync: true,
+        json: true,
+      }),
+    );
+    expect(completion.exitCode, JSON.stringify(completion.value)).toBe(0);
+    const completed = completion.value;
+    expect(completed).toMatchObject({
+      metadata: {
+        status: 'completed',
+        revision: created.metadata.revision + 2,
+        transitionState: 'stable',
+      },
+      releasedClaims: [
+        {
+          claimId: acquired.claim.claimId,
+          state: 'released',
+          revision: 2,
+          lastOperationId: completed.metadata.lastOperationId,
+        },
+      ],
+      remoteRevision: 3,
+      materialization: { status: 'updated' },
+    });
+    await expect(storeA.pull()).resolves.toMatchObject({
+      manifest: {
+        revision: 3,
+        claims: [
+          {
+            claimId: acquired.claim.claimId,
+            state: 'released',
+            revision: 2,
+          },
+        ],
+        taskBundles: [
+          {
+            taskRevision: completed.metadata.revision,
+            aggregateDigest: expect.any(String),
+          },
+        ],
+        receipts: expect.arrayContaining([
+          expect.objectContaining({
+            operationId: completed.metadata.lastOperationId,
+            remoteRevision: 3,
+          }),
+        ]),
+      },
+    });
+
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    await git(fixture.cloneB, ['fetch', 'origin']);
+    const pulled = await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    expect(pulled).toMatchObject({
+      exitCode: 0,
+      value: {
+        remoteRevision: 3,
+        materializedBundles: [{ status: 'created' }],
+      },
+    });
+    await expect(
+      new V3ContextStore(fixture.cloneB).readTaskSnapshot(created.taskRef),
+    ).resolves.toMatchObject({
+      metadata: {
+        status: 'completed',
+        revision: completed.metadata.revision,
+      },
+    });
+  }, 20_000);
 });
 
 interface Fixture {
@@ -581,7 +705,11 @@ async function createFixture(): Promise<Fixture> {
   return { cloneA, cloneB, codeHead, profiles: [profileA, profileB] };
 }
 
-async function createRemoteTask(projectRoot: string, codeHead: string) {
+async function createRemoteTask(
+  projectRoot: string,
+  codeHead: string,
+  options: { completionReady?: boolean } = {},
+) {
   const created = await createV3Workflow({
     projectRoot,
     task: 'Coordinate authentication boundary changes across clones.',
@@ -614,8 +742,115 @@ async function createRemoteTask(projectRoot: string, codeHead: string) {
     operationId: id(13),
     now: at(1),
   });
+  let metadata = checkpoint.metadata;
+  if (options.completionReady === true) {
+    const snapshot = await new V3ContextStore(projectRoot).readTaskSnapshot(
+      created.taskRef,
+    );
+    const reviewed = await applyV3ReviewLedger({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: snapshot.metadata.revision,
+      review: passedReview(
+        snapshot.review,
+        snapshot.requirements.contentDigest,
+        snapshot.metadata.governance.planVersion,
+      ),
+      operationId: id(70),
+      now: at(2),
+    });
+    const verified = await recordV3Verification({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: reviewed.metadata.revision,
+      verification: passedVerification(
+        reviewed.verification,
+        snapshot.requirements,
+        reviewed.metadata.governance.planVersion,
+        reviewed.review.remediationRound,
+      ),
+      operationId: id(71),
+      now: at(3),
+    });
+    metadata = verified.metadata;
+  }
   expect(await gitOutput(projectRoot, ['rev-parse', 'HEAD'])).toBe(codeHead);
-  return { ...created, metadata: checkpoint.metadata };
+  return { ...created, metadata };
+}
+
+function passedReview(
+  previous: ReviewLedgerV1,
+  requirementsDigest: string,
+  planVersion: number,
+): ReviewLedgerV1 {
+  const draft: ReviewLedgerV1 = {
+    ...previous,
+    revision: 99,
+    status: 'passed',
+    requirementsDigest,
+    planVersion,
+    requiredDomains: ['quality'],
+    domains: [{ domain: 'quality', status: 'passed', reportRef: null }],
+    blockers: [],
+    remediationRound: 0,
+    skip: null,
+    contentDigest: '',
+    lastOperationId: id(72),
+    updatedAt: at(2).toISOString(),
+  };
+  return parseReviewLedger({
+    ...draft,
+    contentDigest: reviewLedgerDigest(draft),
+  });
+}
+
+function passedVerification(
+  previous: VerificationLedgerV1,
+  requirements: Parameters<typeof parseVerificationLedger>[1],
+  planVersion: number,
+  remediationRound: number,
+): VerificationLedgerV1 {
+  const criterion = requirements.acceptanceCriteria[0];
+  if (criterion === undefined) throw new Error('missing fixture criterion');
+  const draft: VerificationLedgerV1 = {
+    ...previous,
+    revision: 99,
+    status: 'passed',
+    requirementsDigest: requirements.contentDigest,
+    planVersion,
+    remediationRound,
+    checks: [
+      {
+        displayId: criterion.displayId,
+        legacyId: criterion.legacyId,
+        checkId: id(73),
+        criterionId: criterion.criterionId,
+        required: criterion.required,
+        verificationRequirement: criterion.verificationRequirement,
+        automated: {
+          evidenceId: id(74),
+          status: 'passed',
+          summary: 'The shared completion fixture verification passed.',
+          command: 'npm test',
+          exitCode: 0,
+          artifactRef: null,
+          confirmedByActorId: null,
+          confirmationSource: null,
+          updatedAt: at(3).toISOString(),
+        },
+        manual: null,
+      },
+    ],
+    contentDigest: '',
+    lastOperationId: id(75),
+    updatedAt: at(3).toISOString(),
+  };
+  return parseVerificationLedger(
+    { ...draft, contentDigest: verificationLedgerDigest(draft) },
+    requirements,
+  );
 }
 
 async function strictStore(
@@ -708,6 +943,34 @@ interface SyncPullJson extends Record<string, unknown> {
   materializedBundles: Array<
     Record<string, unknown> & { quarantinePath?: string }
   >;
+}
+
+interface WorkflowCompletionJson extends Record<string, unknown> {
+  metadata: {
+    revision: number;
+    status: string;
+    transitionState: string;
+    lastOperationId: string;
+  };
+  releasedClaims: Array<Record<string, unknown>>;
+  remoteRevision: number;
+  materialization: Record<string, unknown>;
+}
+
+async function captureWorkflowCompletion(
+  action: () => Promise<number>,
+): Promise<{ exitCode: number; value: WorkflowCompletionJson }> {
+  const writes: string[] = [];
+  const previous = console.log;
+  console.log = (value: unknown) => writes.push(String(value));
+  try {
+    return {
+      exitCode: await action(),
+      value: JSON.parse(writes.at(-1) ?? '{}') as WorkflowCompletionJson,
+    };
+  } finally {
+    console.log = previous;
+  }
 }
 
 function scope(pathPattern: string) {

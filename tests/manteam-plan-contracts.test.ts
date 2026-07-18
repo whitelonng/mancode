@@ -17,6 +17,14 @@ describe('manteam plan content gate', () => {
     ).toThrow('MANCODE_MANTEAM_PLAN_SECTIONS_REQUIRED');
   });
 
+  it('rejects a single keyword-stuffed heading reused for every obligation', () => {
+    expect(() =>
+      assertManteamPlanContent(
+        '# Ownership scope claim dependencies integration compatibility verification handoff capabilities acquisition transport\n\nThis generic paragraph is deliberately long enough to pass a superficial body check.',
+      ),
+    ).toThrow('MANCODE_MANTEAM_PLAN_SECTIONS_REQUIRED');
+  });
+
   it('requires meaningful capability acquisition and transport coverage', () => {
     const missingTransport = CONFIRMED_MANTEAM_PLAN.replace(
       'Current claim acquisition, write guard, and transport capabilities are checked before work.',

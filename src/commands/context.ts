@@ -31,9 +31,9 @@ import {
   SESSION_SPIKE_PLATFORMS,
   type SessionSpikePlatform,
   type SpikeEvidenceStatus,
+  createPlatformSessionSpike,
   evaluatePlatformSessionCapability,
   platformSpikeFreezeStatus,
-  probePlatformSessionSpike,
 } from '../runtime/platform-spike.js';
 import {
   ensureProjectRuntimeContext,
@@ -81,8 +81,12 @@ export interface ContextSessionNewOptions {
 export interface ContextSessionSpikeOptions {
   platform?: string;
   hostSessionSource?: string;
+  commandPropagation?: string;
   subagentInheritance?: string;
+  subagentInheritanceReason?: string;
   hookApproval?: string;
+  hostVersion?: string;
+  releaseCandidate?: string;
   json?: boolean;
 }
 
@@ -123,6 +127,7 @@ export interface ContextCompactOptions {
 }
 
 export interface ContextBetaOptions {
+  releaseCandidate?: string;
   json?: boolean;
 }
 
@@ -186,6 +191,16 @@ export async function contextSessionSpike(
     if (hostSessionSource === 'none') {
       throw new Error('MANCODE_PLATFORM_SPIKE_HOST_SOURCE_REQUIRED');
     }
+    const releaseCandidate = parseReleaseCandidate(options.releaseCandidate);
+    const hostVersion = parseHostVersion(options.hostVersion);
+    const commandPropagation = parseRequiredSpikeEvidenceStatus(
+      options.commandPropagation,
+      'command propagation',
+    );
+    const subagentInheritance = parseRequiredSpikeEvidenceStatus(
+      options.subagentInheritance,
+      'subagent inheritance',
+    );
     const firstWindowHostSessionKey =
       process.env.MANCODE_SPIKE_HOST_SESSION_KEY ?? null;
     const secondWindowHostSessionKey =
@@ -197,27 +212,38 @@ export async function contextSessionSpike(
       throw new Error('MANCODE_PLATFORM_SPIKE_WINDOW_EVIDENCE_REQUIRED');
     }
     const project = await readV3CommandProject(rootDir);
-    const spike = await probePlatformSessionSpike({
+    const spike = createPlatformSessionSpike({
       platform,
+      observedAt: new Date().toISOString(),
       hostSessionSource,
       firstWindowHostSessionKey,
       secondWindowHostSessionKey,
-      subagentInheritance: parseSpikeEvidenceStatus(
-        options.subagentInheritance ?? 'not_tested',
-        'subagent inheritance',
-      ),
+      commandPropagation,
+      subagentInheritance,
+      subagentInheritanceReason: options.subagentInheritanceReason ?? null,
       hookApproval: parseHookApproval(
         options.hookApproval ??
           (hostSessionSource === 'hook_stdin' ? 'unknown' : 'not_applicable'),
       ),
+      evidence: {
+        releaseCandidate,
+        mancodeVersion: VERSION,
+        hostVersion,
+        nodeVersion: process.version,
+        runtimePlatform: `${process.platform}-${process.arch}`,
+      },
     });
     await writePlatformSessionSpike(project.projectRoot, spike);
     const spikes = await listPlatformSessionSpikes(project.projectRoot);
+    const evidenceRequirement = {
+      releaseCandidate,
+      mancodeVersion: VERSION,
+    };
     return printV3Result(options.json, {
       schemaVersion: 1,
       spike,
-      capability: evaluatePlatformSessionCapability(spike),
-      freeze: platformSpikeFreezeStatus(spikes),
+      capability: evaluatePlatformSessionCapability(spike, evidenceRequirement),
+      freeze: platformSpikeFreezeStatus(spikes, evidenceRequirement),
       rawHostKeysPersisted: false,
     });
   } catch (error) {
@@ -237,7 +263,9 @@ export async function contextBeta(
   options: ContextBetaOptions,
 ): Promise<number> {
   try {
-    const result = await evaluateV3BetaGate(rootDir);
+    const result = await evaluateV3BetaGate(rootDir, {
+      releaseCandidate: parseReleaseCandidate(options.releaseCandidate),
+    });
     printV3Result(options.json, result);
     return result.ready ? EXIT_V3_OK : EXIT_V3_BLOCKED;
   } catch (error) {
@@ -858,6 +886,18 @@ function parseSpikeEvidenceStatus(
   return value;
 }
 
+function parseRequiredSpikeEvidenceStatus(
+  value: string | undefined,
+  label: string,
+): SpikeEvidenceStatus {
+  if (value === undefined) {
+    throw new Error(
+      `MANCODE_PLATFORM_SPIKE_${label.toUpperCase().replaceAll(' ', '_')}_REQUIRED`,
+    );
+  }
+  return parseSpikeEvidenceStatus(value, label);
+}
+
 function parseHookApproval(value: string): HookApprovalStatus {
   if (
     value !== 'approved' &&
@@ -868,6 +908,28 @@ function parseHookApproval(value: string): HookApprovalStatus {
     throw new Error('MANCODE_PLATFORM_SPIKE_HOOK_APPROVAL_INVALID');
   }
   return value;
+}
+
+function parseReleaseCandidate(value: string | undefined): string {
+  if (
+    value === undefined ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:+/@-]{5,127}$/.test(value)
+  ) {
+    throw new Error('MANCODE_BETA_RELEASE_CANDIDATE_REQUIRED');
+  }
+  return value;
+}
+
+function parseHostVersion(value: string | undefined): string {
+  if (
+    value === undefined ||
+    !value.trim() ||
+    value.includes('\0') ||
+    value.trim().length > 256
+  ) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_HOST_VERSION_REQUIRED');
+  }
+  return value.trim();
 }
 
 function parseExpectedRevision(value: string | undefined): number | null {
