@@ -139,6 +139,9 @@ describe('website documentation', () => {
     expect(chinese).toContain('id="v3"');
     expect(chinese).toContain('06 / V3 Beta');
     expect(chinese).toContain('07 / 快速开始');
+    expect(chinese).toContain('交付干净');
+    expect(chinese).toContain('代码，避免');
+    expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
   });
 
