@@ -27,17 +27,20 @@ try {
     '--lang',
     'en',
   ]);
-  const emptyConfig = await readJson(
-    path.join(emptyProject, '.mancode', 'config.json'),
+  const emptySchema = await readJson(
+    path.join(emptyProject, '.mancode', 'schema.json'),
   );
   assert(
-    JSON.stringify(emptyConfig.platforms) ===
-      JSON.stringify(['codex', 'cursor']),
-    'empty multi-platform init did not preserve adapter selection',
+    emptySchema.activationState === 'v3_active',
+    'empty multi-platform init did not activate mancode authority',
   );
   await readFile(path.join(emptyProject, 'AGENTS.md'), 'utf8');
   await readFile(
-    path.join(emptyProject, '.cursor', 'rules', 'mancode-solo.mdc'),
+    path.join(emptyProject, '.cursor', 'rules', 'mancode-v3.mdc'),
+    'utf8',
+  );
+  await readFile(
+    path.join(emptyProject, '.agents', 'skills', 'man', 'SKILL.md'),
     'utf8',
   );
   await writeFile(
@@ -51,23 +54,32 @@ try {
     'utf8',
   );
   assert(
-    refreshedAgents.includes('React'),
-    'refresh-project did not regenerate static adapter context',
+    refreshedAgents.includes('mancode'),
+    'refresh-project removed the static adapter bootstrap',
+  );
+  const refreshedFacts = await readJson(
+    path.join(emptyProject, '.mancode', 'shared', 'context', 'project.json'),
+  );
+  assert(
+    JSON.stringify(refreshedFacts).includes('React'),
+    'refresh-project did not update shared project facts',
   );
 
   if (process.platform === 'win32') {
     const systemLocale = readWindowsUiCulture();
     const normalizedSystemLocale = systemLocale.toLowerCase().replace('_', '-');
     const isChinese =
-      normalizedSystemLocale === 'zh' || normalizedSystemLocale.startsWith('zh-');
+      normalizedSystemLocale === 'zh' ||
+      normalizedSystemLocale.startsWith('zh-');
     const isEnglish =
-      normalizedSystemLocale === 'en' || normalizedSystemLocale.startsWith('en-');
+      normalizedSystemLocale === 'en' ||
+      normalizedSystemLocale.startsWith('en-');
     if (isChinese || isEnglish) {
       const opposingLocale = isChinese ? 'en_US.UTF-8' : 'zh_CN.UTF-8';
       const localeProject = await createProject('locale-project');
       const localeResult = runCli(
         localeProject,
-        ['init', '--platform', 'codex'],
+        ['init', '--legacy', '--platform', 'codex'],
         {
           ...process.env,
           LANGUAGE: opposingLocale,
@@ -90,7 +102,7 @@ try {
   }
 
   const codexProject = await createProject('codex-project');
-  runCli(codexProject, ['init', '--platform', 'codex']);
+  runCli(codexProject, ['init', '--legacy', '--platform', 'codex']);
   const codexState = await readJson(
     path.join(codexProject, '.mancode', 'state.json'),
   );
@@ -102,7 +114,7 @@ try {
   await readFile(path.join(codexProject, 'AGENTS.md'), 'utf8');
 
   const claudeProject = await createProject('claude-project');
-  runCli(claudeProject, ['init', '--platform', 'claude-code']);
+  runCli(claudeProject, ['init', '--legacy', '--platform', 'claude-code']);
   const settings = await readJson(
     path.join(claudeProject, '.claude', 'settings.json'),
   );
@@ -196,7 +208,7 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
     MANCODE_SPIKE_HOST_SESSION_KEY: 'windows-smoke-host-a',
     MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY: 'windows-smoke-host-b',
   };
-  runCli(project, ['init', '--v3'], spikeEnv);
+  runCli(project, ['init', '--platform', 'codex'], spikeEnv);
   const spikeArgs = [
     'context',
     'session',
@@ -229,7 +241,7 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
   const evidence = await readFile(evidenceTarget, 'utf8');
   assert(
     evidence.includes('"platform": "codex"'),
-    'V3 session evidence was not atomically replaced after the Windows handle closed',
+    'Session evidence was not atomically replaced after the Windows handle closed',
   );
 
   runCli(project, ['team', 'identity', 'create', '--name', 'Windows Smoke']);
@@ -273,7 +285,7 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
   const session = await readJson(sessionTarget);
   assert(
     session.activeTaskRef?.taskId === taskRef.taskId,
-    'V3 session authority was not atomically replaced after the Windows handle closed',
+    'Session authority was not atomically replaced after the Windows handle closed',
   );
 }
 
