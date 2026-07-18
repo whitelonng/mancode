@@ -773,6 +773,11 @@ html[data-theme="light"] .docs-topbar .language-link {
     padding: 44px 22px 92px;
   }
 
+  .docs-note {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
   .docs-hero h1 {
     font-size: clamp(54px, 17vw, 76px);
   }

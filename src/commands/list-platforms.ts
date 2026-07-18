@@ -34,7 +34,7 @@ async function listV3Platforms(rootDir: string): Promise<number> {
     platforms.map((platform) => inspectV3Adapter(rootDir, platform.name)),
   );
   console.log('');
-  console.log('Available platforms (V3 bootstrap):');
+  console.log('Available platforms (mancode bootstrap):');
   for (const [index, platform] of platforms.entries()) {
     const status = statuses[index];
     if (status === undefined) {
@@ -42,7 +42,7 @@ async function listV3Platforms(rootDir: string): Promise<number> {
     }
     const marker = status.installed ? '✓' : '○';
     console.log(
-      `  ${marker} ${platform.name.padEnd(12)} ${platform.displayName.padEnd(16)} V3 bootstrap; explicit session identity`,
+      `  ${marker} ${platform.name.padEnd(12)} ${platform.displayName.padEnd(16)} mancode bootstrap; explicit session identity`,
     );
   }
   console.log('');

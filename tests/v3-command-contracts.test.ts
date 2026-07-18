@@ -648,6 +648,97 @@ describe('V3 CLI command contracts', () => {
       errors.mockRestore();
     }
   });
+
+  it('accepts the documented semantic requirements format and allocates V3 identities', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const sessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(root, 'create', ['man', 'Use semantic requirements.'], {
+        session: sessionId,
+        client: 'fixture',
+        json: true,
+      });
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: { namespace: 'local' | 'shared'; taskId: string };
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+      const inputPath = path.join(root, 'semantic-requirements.json');
+      await writeFile(
+        inputPath,
+        `${JSON.stringify(
+          {
+            version: 1,
+            goal: 'Use a human-authored requirements file.',
+            confirmedScope: ['Accept semantic requirements input'],
+            excludedScope: ['Require internal ULIDs in the input file'],
+            technicalDecisions: ['Use the existing TypeScript stack'],
+            defaults: [],
+            blockingUnknowns: [],
+            coverage: REQUIREMENT_DIMENSIONS.map((dimension) => ({
+              dimension,
+              status:
+                dimension === 'technical_stack' ? 'confirmed' : 'defaulted',
+              rationale: `Considered ${dimension}.`,
+            })),
+            acceptanceCriteria: [
+              {
+                id: 'AC-1',
+                description: 'The semantic file is converted and committed.',
+                required: true,
+                method: 'automated',
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      expect(
+        await workflow(root, 'requirements', [task, 'finalize'], {
+          session: sessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          file: inputPath,
+          json: true,
+        }),
+      ).toBe(0);
+      const result = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        requirements: RequirementsLedgerV1;
+      };
+      expect(result.requirements).toMatchObject({
+        status: 'confirmed',
+        goal: 'Use a human-authored requirements file.',
+        functionalScope: {
+          inScope: ['Accept semantic requirements input'],
+          outOfScope: ['Require internal ULIDs in the input file'],
+        },
+      });
+      expect(result.requirements.requirements).toEqual([]);
+      expect(result.requirements.acceptanceCriteria[0]).toMatchObject({
+        displayId: 'AC-1',
+        legacyId: 'AC-1',
+        required: true,
+        verificationRequirement: 'automated',
+      });
+      expect(result.requirements.acceptanceCriteria[0]?.criterionId).toMatch(
+        /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/,
+      );
+      expect(result.requirements.contentDigest).toMatch(
+        /^sha256:[a-f0-9]{64}$/,
+      );
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
 });
 
 function finalizedRequirements(

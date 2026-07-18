@@ -491,8 +491,8 @@ export async function inspectV3Adapter(
     ready: installed,
     target,
     detail: installed
-      ? 'V3 bootstrap and original mode entries are present; session identity is explicit-required.'
-      : 'V3 bootstrap or one of its original mode entries is not installed.',
+      ? 'mancode bootstrap and original mode entries are present; session identity is explicit-required.'
+      : 'mancode bootstrap or one of its original mode entries is not installed.',
     capabilities: capabilitiesFor(platform),
   };
 }
@@ -578,6 +578,7 @@ export async function removeV3Adapter(
 
 export function renderV3Bootstrap(platform: PlatformName): string {
   const platformLabel = platformLabelFor(platform);
+  const sessionArguments = sessionArgumentsFor(platform);
   const sessionCreationGuidance =
     platform === 'codex' || platform === 'zcode'
       ? 'When status has no `currentSession`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode.'
@@ -588,23 +589,24 @@ export function renderV3Bootstrap(platform: PlatformName): string {
       : platform;
   const modeEntry = capabilitiesFor(platform).nativeModeEntry
     ? 'Use the platform mode entry only as a shortcut; resolve a Context Pack first.'
-    : 'This platform has no native V3 mode entry; use the CLI commands explicitly.';
+    : 'This platform has no native mancode mode entry; use the CLI commands explicitly.';
   return [
-    '# mancode V3 bootstrap',
+    '# mancode bootstrap',
     '',
     V3_ADAPTER_MANAGED_MARKER,
     '',
     `- Platform: ${platformLabel}. This file is a non-authoritative bootstrap.`,
     '- Locate the project root before running mancode commands.',
     '- First run `mancode status --json` from the project root.',
+    '- Treat status values such as `authority: "v3"` and `v3_active` as internal machine fields. In operator-facing narration, say `mancode`; never prefix a mode or action with a version label.',
     '- An explicitly invoked original `man`, `manba`, `manteam`, `manps`, or `mansolo` entry supplies its authorized action. Its mode-specific steps override conflicting generic no-task or mutation guidance below.',
     '- In particular, `manps` may run local health scans without an actor, session, or TaskRef. `mansolo` needs them only for an explicit governed handoff.',
     '- If status has no `localIdentity.actorId`, ask for a display name and run `mancode team identity create --name "<display name>"` before creating a session.',
     '- If status reports `currentSession`, reuse it. `currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale.',
-    `- ${sessionCreationGuidance} Pass its returned \`sessionId\` as \`--session <id>\` to later commands; an \`export\` inside one command tool does not persist to later command tools.`,
+    `- ${sessionCreationGuidance} Pass its returned \`sessionId\` and matching client as \`${sessionArguments}\` to every later session command; an \`export\` inside one command tool does not persist to later command tools.`,
     '- Outside an invoked original mode entry, if no current task and no task is explicitly supplied, report "no task bound" and stop. Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`.',
     '- Bootstrap discovery is read-only: before the operator explicitly requests task work, do not run `mancode init`, `mancode migrate`, `mancode workflow`, or inspect mancode installed package/source.',
-    '- With an existing or supplied task, read its Context Pack with `mancode context show --purpose orient --session <id>`; for anonymous diagnosis, include an explicit `--task <namespace:id>`.',
+    `- With an existing or supplied task, read its Context Pack with \`mancode context show --purpose orient ${sessionArguments}\`; for anonymous diagnosis, include an explicit \`--task <namespace:id>\`.`,
     '- After an operator explicitly requests task work, perform mutations only through `mancode workflow`, `mancode team`, and `mancode context` commands with their required revision and session arguments.',
     '- For a mode entry, request the matching Context Pack purpose: `plan`, `implement`, `review`, `verify`, or `handoff`.',
     '- Do not persist task, mode, or session state in this adapter file or any legacy state file.',
@@ -623,31 +625,44 @@ export function renderV3ModeEntry(
   platform: PlatformName,
 ): string {
   const definition = V3_MODE_DEFINITIONS[mode];
+  const sessionArguments = sessionArgumentsFor(platform);
+  const sessionClientGuidance = sessionClientGuidanceFor(platform);
   const sessionCreationGuidance =
     platform === 'codex' || platform === 'zcode'
       ? 'If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode exactly once, then retain the returned session ID.'
       : `If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run \`mancode context session new --client ${platform}\` exactly once and retain the returned session ID.`;
-  const authoritySteps =
-    mode === 'manps'
-      ? [
-          '1. Run `mancode status --json` from the project root and require active V3 authority.',
-          '2. Run the health action below directly. A local scan needs no TaskRef, actor identity, or explicit session.',
-          '3. Never read or write legacy mode authority before or after the scan.',
-        ]
-      : mode === 'mansolo'
-        ? [
-            '1. Run `mancode status --json` from the project root. Never read or write legacy mode authority.',
-            '2. If no governed task is being handed off, continue with focused solo work without creating a persistent mode, actor, session, or TaskRef.',
-            '3. For an explicit governed handoff, ensure `localIdentity.actorId`, reuse or create the current session, and bind the existing TaskRef before running the handoff action below.',
-            '4. For that governed task only, read `mancode context show --purpose implement --session <id>` using the bound or explicit TaskRef.',
-          ]
-        : [
-            '1. Run `mancode status --json` from the project root. Never read or write the legacy authority file.',
-            '2. If `localIdentity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
-            `3. Reuse \`currentSession.sessionId\` when present. ${sessionCreationGuidance}`,
-            '4. Reuse the current TaskRef. To bind a supplied existing task, run `mancode context resume <namespace:ULID> --session <id>`.',
-            `5. For an existing task, read only the needed Context Pack with \`mancode context show --purpose ${definition.contextPurpose} --session <id>\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's Context Pack.`,
-          ];
+  let authoritySteps: string[];
+  if (mode === 'manps') {
+    authoritySteps = [
+      '1. Run `mancode status --json` from the project root and require active mancode authority.',
+      '2. Run the health action below directly. A local scan needs no TaskRef, actor identity, or explicit session.',
+      '3. Never read or write legacy mode authority before or after the scan.',
+    ];
+  } else if (mode === 'mansolo') {
+    authoritySteps = [
+      '1. Run `mancode status --json` from the project root. Never read or write legacy mode authority.',
+      '2. If no governed task is being handed off, continue with focused solo work without creating a persistent mode, actor, session, or TaskRef.',
+      `3. For an explicit governed handoff, ensure \`localIdentity.actorId\`, reuse or create the current session, and bind the existing TaskRef. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `4. For that governed task only, read \`mancode context show --purpose implement ${sessionArguments}\` using the bound or explicit TaskRef.`,
+    ];
+  } else if (mode === 'man') {
+    authoritySteps = [
+      '1. Run `mancode status --json` from the project root. Never read or write the legacy authority file.',
+      '2. If the request is only a read-only project orientation, introduction, explanation, or summary, inspect the repository and answer directly without creating an actor, session, TaskRef, or workflow. Do not turn an orientation request into a `plan_only` workflow.',
+      '3. Only for requested governed task work, if `localIdentity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
+      `4. Reuse \`currentSession.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `5. Reuse the current TaskRef. To bind a supplied existing task, run \`mancode context resume <namespace:ULID> ${sessionArguments}\`.`,
+      `6. For an existing task, read only the needed Context Pack with \`mancode context show --purpose ${definition.contextPurpose} ${sessionArguments}\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's Context Pack.`,
+    ];
+  } else {
+    authoritySteps = [
+      '1. Run `mancode status --json` from the project root. Never read or write the legacy authority file.',
+      '2. If `localIdentity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
+      `3. Reuse \`currentSession.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `4. Reuse the current TaskRef. To bind a supplied existing task, run \`mancode context resume <namespace:ULID> ${sessionArguments}\`.`,
+      `5. For an existing task, read only the needed Context Pack with \`mancode context show --purpose ${definition.contextPurpose} ${sessionArguments}\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's Context Pack.`,
+    ];
+  }
   const frontmatter = [
     '---',
     ...(platform === 'claude-code' ||
@@ -664,27 +679,44 @@ export function renderV3ModeEntry(
       ? 'The local scan and an explicitly requested remediation do not require a TaskRef, workflow revision, actor, or session. Never turn their report files into workflow authority.'
       : mode === 'mansolo'
         ? 'Only an explicit governed handoff mutation requires the bound TaskRef, explicit session, and latest expected revision. Ordinary focused solo work persists no mode state.'
-        : 'For every mutation, use the TaskRef, explicit session, and latest expected revision reported by V3. Do not emulate the legacy `--step` protocol or persist mode state in an adapter file.';
+        : 'For every mutation, use the TaskRef, explicit session, matching client, and latest expected revision reported by mancode. Do not emulate the legacy `--step` protocol or persist mode state in an adapter file.';
+  const actions = definition.actions.map((action) =>
+    action.replaceAll('--session <id>', sessionArguments),
+  );
   return [
     ...frontmatter,
     '',
     V3_MODE_ENTRY_MANAGED_MARKER,
     '',
-    `# mancode V3 mode: ${mode}`,
+    `# mancode mode: ${mode}`,
     '',
     `Purpose: ${definition.purpose}.`,
     '',
-    '## Enter through V3 authority',
+    '## Enter through mancode',
     '',
     ...authoritySteps,
     '',
     '## Mode action',
     '',
-    ...definition.actions,
+    ...actions,
+    '',
+    'Treat status values such as `authority: "v3"` and `v3_active` as internal machine fields. In operator-facing narration, say `mancode`; never prefix this mode or its actions with a version label.',
     '',
     mutationGuidance,
     '',
   ].join('\n');
+}
+
+function sessionArgumentsFor(platform: PlatformName): string {
+  const client =
+    platform === 'codex' || platform === 'zcode' ? '<active-client>' : platform;
+  return `--session <id> --client ${client}`;
+}
+
+function sessionClientGuidanceFor(platform: PlatformName): string {
+  return platform === 'codex' || platform === 'zcode'
+    ? 'Use `--client codex` in Codex or `--client zcode` in ZCode on every command that uses this session.'
+    : `Use \`--client ${platform}\` on every command that uses this session.`;
 }
 
 const V3_MODE_DEFINITIONS: Record<
@@ -703,39 +735,41 @@ const V3_MODE_DEFINITIONS: Record<
   }
 > = {
   man: {
-    description: 'Plan and execute governed work through mancode V3.',
+    description: 'Plan and execute governed work through mancode.',
     purpose: 'clarify, plan, implement, verify, and review governed work',
     contextPurpose: 'plan',
     actions: [
+      '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
       '- For a new task, run `mancode workflow create man "<task>" --session <id>`.',
+      '- Write requirements as semantic JSON with `version: 1`, `goal`, `confirmedScope`, `excludedScope`, `technicalDecisions`, `defaults`, `blockingUnknowns`, all seven `coverage` dimensions, and `acceptanceCriteria`; mancode generates canonical internal IDs and digests.',
       '- Finalize requirements with `mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>`.',
       '- Revise or confirm the plan with `mancode workflow plan <namespace:ULID> revise|confirm --expected-revision <n> ... --session <id>`.',
-      '- Apply verification and review ledgers with their V3 `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
+      '- Apply verification and review ledgers with their mancode `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
     ],
   },
   manba: {
-    description: 'Diagnose and verify a bug through mancode V3.',
+    description: 'Diagnose and verify a bug through mancode.',
     purpose: 'reproduce, diagnose, fix, and verify a regression',
     contextPurpose: 'implement',
     actions: [
       '- For a new diagnostic task, run `mancode workflow create manba "<task>" --session <id>`.',
-      '- When this is a child investigation, add `--parent <namespace:ULID>`; report and merge the typed outcome through the V3 child commands.',
+      '- When this is a child investigation, add `--parent <namespace:ULID>`; report and merge the typed outcome through the mancode child commands.',
       '- Change lifecycle only with `mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>` and finish with `workflow complete` plus the typed `--outcome`.',
     ],
   },
   manteam: {
-    description: 'Coordinate shared governed work through mancode V3.',
+    description: 'Coordinate shared governed work through mancode.',
     purpose: 'plan and execute work with explicit team ownership and handoff',
     contextPurpose: 'plan',
     actions: [
       '- Confirm team membership with `mancode team status`; join invited participants before assigning shared work.',
       '- For a new shared task, run `mancode workflow create manteam "<task>" --visibility shared --coordination team --confirm-shared --session <id>`.',
       '- Use claims, checkpoints, sync, and handoffs through `mancode team`; never infer ownership from an adapter prompt.',
-      '- Use the same V3 requirements, plan, verification, review, and completion commands as `man`, adding `--sync` whenever the active transport requires it.',
+      '- Use the same mancode requirements, plan, verification, review, and completion commands as `man`, adding `--sync` whenever the active transport requires it.',
     ],
   },
   manps: {
-    description: 'Inspect project health through the existing manps command.',
+    description: 'Inspect project health through mancode.',
     purpose: 'scan project health and review bounded remediation',
     contextPurpose: 'review',
     actions: [
@@ -744,7 +778,7 @@ const V3_MODE_DEFINITIONS: Record<
     ],
   },
   mansolo: {
-    description: 'Return to focused solo execution under V3 authority.',
+    description: 'Return to focused solo execution through mancode.',
     purpose: 'perform a small focused task or accept an explicit solo handoff',
     contextPurpose: 'implement',
     actions: [
@@ -810,7 +844,7 @@ function renderClaudeSkill(content: string): string {
   return [
     '---',
     'name: mancode-v3',
-    'description: "Internal bootstrap for original mancode mode entries under V3 authority."',
+    'description: "Internal bootstrap for the original mancode mode entries."',
     'user-invocable: false',
     '---',
     '',
@@ -822,7 +856,7 @@ function renderClaudeSkill(content: string): string {
 function renderCursorRule(content: string): string {
   return [
     '---',
-    'description: "Stable bootstrap for mancode V3 context and workflow commands."',
+    'description: "Stable bootstrap for mancode context and workflow commands."',
     'alwaysApply: true',
     'globs: "**/*"',
     '---',
@@ -1254,15 +1288,15 @@ function renderRetiredClaudeSoloEntry(): string {
   return [
     '---',
     'name: solo',
-    'description: "Compatibility alias for the mancode V3 mansolo entry."',
+    'description: "Compatibility alias for the mancode mansolo entry."',
     'user-invocable: false',
     '---',
     '',
     V3_MODE_ENTRY_MANAGED_MARKER,
     '',
-    '# mancode V3 mode compatibility alias',
+    '# mancode mode compatibility alias',
     '',
-    'Use the `mansolo` mode entry. Resolve V3 status, identity, session, TaskRef, and Context Pack there; do not use legacy mode persistence.',
+    'Use the `mansolo` mode entry. Resolve mancode status, identity, session, TaskRef, and Context Pack there; do not use legacy mode persistence.',
     '',
   ].join('\n');
 }
@@ -1279,18 +1313,18 @@ function renderRetiredCursorRule(target: V3LegacyAdapterFileTarget): string {
           : legacyName;
   const guidance =
     mode === 'context' || mode === 'practice'
-      ? 'Run `mancode status --json`, then use the matching V3 mode command.'
-      : `Use the \`/${mode}\` V3 mode command.`;
+      ? 'Run `mancode status --json`, then use the matching mancode mode command.'
+      : `Use the \`/${mode}\` mancode mode command.`;
   return [
     '---',
-    'description: "Retired legacy mancode rule; V3 mode entries are authoritative."',
+    'description: "Retired legacy mancode rule; current mancode mode entries are authoritative."',
     'alwaysApply: false',
     'globs: "__mancode_v3_retired_rule__"',
     '---',
     '',
     V3_ADAPTER_MANAGED_MARKER,
     '',
-    '# mancode V3 compatibility redirect',
+    '# mancode compatibility redirect',
     '',
     guidance,
     'Do not use legacy mode persistence or legacy workflow paths.',
@@ -1311,7 +1345,7 @@ function renderRetiredModeAlias(target: V3AdapterFileTarget): string {
       : []),
     ...(parsed.family === 'copilot' ? ["agent: 'agent'"] : []),
     ...(parsed.family === 'claude' ? ['user-invocable: false'] : []),
-    `description: ${JSON.stringify(`Compatibility alias for the mancode V3 ${publicMode} entry.`)}`,
+    `description: ${JSON.stringify(`Compatibility alias for the mancode ${publicMode} entry.`)}`,
     '---',
   ];
   return [
@@ -1319,11 +1353,11 @@ function renderRetiredModeAlias(target: V3AdapterFileTarget): string {
     '',
     V3_MODE_ENTRY_MANAGED_MARKER,
     '',
-    '# mancode V3 mode compatibility alias',
+    '# mancode mode compatibility alias',
     '',
-    `The legacy name \`${parsed.alias}\` maps to the public V3 mode \`${publicMode}\`. Use that original V3 mode entry instead.`,
+    `The legacy name \`${parsed.alias}\` maps to the public mancode mode \`${publicMode}\`. Use that original mancode mode entry instead.`,
     '',
-    'Resolve status, identity, session, TaskRef, and Context Pack through V3 authority there. Do not use legacy mode persistence or the legacy workflow protocol.',
+    'Resolve status, identity, session, TaskRef, and Context Pack through mancode there. Do not use legacy mode persistence or the legacy workflow protocol.',
     '',
   ].join('\n');
 }

@@ -169,6 +169,18 @@ describe('mancode status', () => {
     expect(output).toContain('settings.json');
   });
 
+  it('uses mancode terminology in current text output', async () => {
+    await silentInit(dir, { v3: true, platform: 'codex' });
+
+    const logs = await captureLog(() => status(dir));
+    const output = logs.join('\n');
+
+    expect(output).toContain('Activation:  active');
+    expect(output).toContain('mancode adapter status:');
+    expect(output).not.toContain('V3');
+    expect(output).not.toContain('v3_active');
+  });
+
   it('omits top-level Hooks section for non-Claude Code projects', async () => {
     await silentInit(dir, { platform: 'codex' });
 

@@ -157,7 +157,7 @@ async function refreshV3Style(rootDir: string): Promise<number> {
     if (project.manifest.activationState !== 'v3_active') {
       throw new Error('MANCODE_V3_REFRESH_REQUIRES_ACTIVE');
     }
-    console.log('✓  刷新 V3 项目 profile...');
+    console.log('✓  刷新 mancode 项目 profile...');
     const profile = await detectProjectProfile(rootDir);
     const uiLibraryHint = primaryUiLibrary(profile);
     await writeV3ProjectFacts(
@@ -182,7 +182,7 @@ async function refreshV3Style(rootDir: string): Promise<number> {
       console.log(
         'ℹ️  No UI assets detected in project profile. Skipping style scan.',
       );
-      console.log('   Updated V3 project facts.');
+      console.log('   Updated mancode project facts.');
       return EXIT_OK;
     }
 
@@ -202,7 +202,7 @@ async function refreshV3Style(rootDir: string): Promise<number> {
     return EXIT_OK;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`✗  V3 style refresh failed: ${message}`);
+    console.error(`✗  mancode style refresh failed: ${message}`);
     return EXIT_V3_REFRESH_FAILED;
   }
 }

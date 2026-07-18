@@ -415,7 +415,7 @@ function assertSourcePlacement(
 ): void {
   if (purpose === 'legacy_migration' && sourceTaskRef !== null) {
     throw new Error(
-      'legacy migration quarantine cannot claim a V3 source TaskRef',
+      'legacy migration quarantine cannot claim a current mancode source TaskRef',
     );
   }
   if (purpose === 'publish_promote') {

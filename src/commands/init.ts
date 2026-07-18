@@ -165,7 +165,7 @@ export async function init(
 
   if (authority === 'legacy' && (await pathExists(v3SchemaFile))) {
     console.error(
-      '✗  V3 authority is already present; refusing to create legacy state.json.',
+      '✗  mancode authority is already present; refusing to create legacy state.json.',
     );
     console.error(
       '   Use `mancode status` or `mancode install <platform>` to inspect or repair this project.',
@@ -685,14 +685,14 @@ async function initializeV3(
 ): Promise<number> {
   if (options.force) {
     console.error(
-      '✗  --force is not supported for journaled V3 initialization.',
+      '✗  --force is not supported for journaled mancode initialization.',
     );
     return EXIT_INIT_FAILED;
   }
   if (options.style !== undefined) {
     console.error('✗  --style is only supported by `mancode init --legacy`.');
     console.error(
-      '   V3 detects project facts; run `mancode refresh-style` after initialization to refresh local style tokens.',
+      '   mancode detects project facts; run `mancode refresh-style` after initialization to refresh local style tokens.',
     );
     return EXIT_INIT_FAILED;
   }
@@ -710,7 +710,7 @@ async function initializeV3(
       }
       existingV3 = true;
       if (options.platform === undefined) {
-        console.log('ℹ️  mancode V3 is already initialized.');
+        console.log('ℹ️  mancode is already initialized.');
         return EXIT_ALREADY_INITIALIZED;
       }
     } catch (error) {
@@ -751,10 +751,10 @@ async function initializeV3(
       for (const platform of selectedPlatforms) {
         await installV3Adapter(rootDir, platform);
       }
-      console.log('ℹ️  mancode V3 is already initialized.');
+      console.log('ℹ️  mancode is already initialized.');
       if (selectedPlatforms.length > 0) {
         console.log(
-          `   V3 bootstrap repaired: ${selectedPlatforms.join(', ')}`,
+          `   mancode bootstrap repaired: ${selectedPlatforms.join(', ')}`,
         );
       }
       return EXIT_ALREADY_INITIALIZED;
@@ -767,7 +767,7 @@ async function initializeV3(
     for (const platform of selectedPlatforms) {
       await installV3Adapter(rootDir, platform);
     }
-    console.log('✓  Initialized mancode V3 greenfield project.');
+    console.log('✓  Initialized mancode project.');
     console.log(`   workspace: ${result.runtime.workspaceId}`);
     console.log(`   operation: ${result.journal.operationId}`);
     if (options.team !== undefined) {
@@ -780,7 +780,7 @@ async function initializeV3(
         '   No platform bootstrap selected. Run `mancode install <platform>`.',
       );
     } else {
-      console.log(`   V3 bootstrap: ${selectedPlatforms.join(', ')}`);
+      console.log(`   mancode bootstrap: ${selectedPlatforms.join(', ')}`);
     }
     return EXIT_OK;
   } catch (error) {
@@ -791,7 +791,7 @@ async function initializeV3(
 
 function printV3InitError(error: unknown): void {
   const message =
-    error instanceof Error ? error.message : 'V3 initialization failed';
+    error instanceof Error ? error.message : 'mancode initialization failed';
   console.error(`✗  ${message}`);
   if (message === 'MANCODE_LEGACY_AUTHORITY_PRESENT') {
     console.error('   Run `mancode migrate context --dry-run` instead.');

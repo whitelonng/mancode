@@ -67,7 +67,9 @@ export async function install(
   }
   if (options.shadow) {
     console.error('✗  MANCODE_V3_ADAPTER_SHADOW_REQUIRES_V3');
-    console.error('   Adapter shadow staging requires a V3 dual-read project.');
+    console.error(
+      '   Adapter shadow staging requires a mancode dual-read project.',
+    );
     return EXIT_INSTALL_FAILED;
   }
 
@@ -187,7 +189,7 @@ async function installV3(
       }
       const staged = await stageV3Adapter(rootDir, installer.name);
       console.log(
-        `✓  ${formatPlatformName(platform)} V3 bootstrap and original mode entries staged for shadow comparison.`,
+        `✓  ${formatPlatformName(platform)} mancode bootstrap and original mode entries staged for shadow comparison.`,
       );
       console.log(`   ${staged.stagingTarget}`);
       for (const entry of staged.modeEntries) {
@@ -200,17 +202,19 @@ async function installV3(
     }
     if (options.minimal) {
       console.log(
-        'ℹ️  V3 adapters are already bootstrap-only; --minimal has no additional effect.',
+        'ℹ️  mancode adapters are already bootstrap-only; --minimal has no additional effect.',
       );
     }
     const installed = await installV3Adapter(rootDir, installer.name);
-    console.log(`✓  ${formatPlatformName(platform)} V3 bootstrap installed.`);
+    console.log(
+      `✓  ${formatPlatformName(platform)} mancode bootstrap installed.`,
+    );
     console.log(`   ${installed.target}`);
     return EXIT_OK;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `✗  ${formatPlatformName(platform)} V3 adapter install failed: ${message}`,
+      `✗  ${formatPlatformName(platform)} mancode adapter install failed: ${message}`,
     );
     return EXIT_INSTALL_FAILED;
   }

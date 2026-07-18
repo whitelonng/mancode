@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.3.12</span>
+      <span class="docs-wordmark">文档 / v0.3.13</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -43,7 +43,7 @@
         <p class="docs-search-status" data-search-status aria-live="polite"></p>
         <p class="docs-nav-hint" aria-hidden="true">横向滑动查看全部主题 →</p>
         <nav class="docs-nav">
-          <div class="docs-nav-group"><p>从这里开始</p><a class="active" href="#overview">概览</a><a href="#install">安装与初始化</a><a href="#files">文件与隐私</a><a href="#recommend">选择模式</a></div>
+          <div class="docs-nav-group"><p>从这里开始</p><a class="active" href="#overview">概览</a><a href="#install">安装与初始化</a><a href="#files">文件与隐私</a><a href="#continuity">跨会话续接</a><a href="#recommend">选择模式</a></div>
           <div class="docs-nav-group"><p>使用 mancode</p><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台适配</a></div>
           <div class="docs-nav-group"><p>维护</p><a href="#style">刷新上下文</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></div>
           <div class="docs-nav-group"><p>链接</p><a href="./index.zh-CN.html">官网首页</a><a href="./docs.html">English Docs</a><a href="https://github.com/whitelonng/mancode/blob/main/README.md">GitHub README</a></div>
@@ -105,6 +105,17 @@
             <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>安全边界</strong><p><code>mancode manps</code> 默认只扫描和报告，修复必须显式进入 remediation 路径。安装 mancode 也不会赋予 Agent 发布、删除或重写无关工作的权限；不可逆操作仍需人工确认。</p></div>
+        </section>
+
+        <section class="doc-section" id="continuity" data-searchable>
+          <h2>跨会话继续工作</h2>
+          <p>mancode 把目标、需求、计划、检查结果和交接信息保存在稳定的 <code>TaskRef</code> 下。新聊天窗口或受支持的 CLI 可以恢复同一项任务，再按当前目的读取精简的 Context Pack。</p>
+          <div class="docs-note"><strong>会带过去什么</strong><p>这是任务上下文的续接，不是原始聊天记录的复制。不同客户端的 session 仍然隔离；新 session 必须使用自己的 client 身份，并显式恢复已有 TaskRef。</p></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --json
+<span class="command-prompt">$</span> mancode context session new --client claude-code
+<span class="command-prompt">$</span> mancode context resume &lt;namespace:ULID&gt; --session &lt;id&gt; --client claude-code
+<span class="command-prompt">$</span> mancode context show --purpose orient --session &lt;id&gt; --client claude-code</code></pre><button type="button" data-copy-code>复制</button></div>
+          <p>生成的 <code>/man</code>、<code>/manba</code> 和 <code>/manteam</code> 入口使用同一套记录。CLI 形式适合排查、自动化或手工恢复。</p>
         </section>
 
         <section class="doc-section" id="recommend" data-searchable>
@@ -345,7 +356,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
         <footer class="docs-footer"><p>mancode 本地优先，不发送遥测。</p><p><a href="./docs.html">English Docs →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
       </main>
 
-      <aside class="docs-toc" aria-label="本页目录"><p>本页目录</p><a href="#overview">概览</a><a href="#install">安装</a><a href="#files">文件与隐私</a><a href="#recommend">选择模式</a><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台</a><a href="#style">刷新</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></aside>
+      <aside class="docs-toc" aria-label="本页目录"><p>本页目录</p><a href="#overview">概览</a><a href="#install">安装</a><a href="#files">文件与隐私</a><a href="#continuity">跨会话续接</a><a href="#recommend">选择模式</a><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台</a><a href="#style">刷新</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></aside>
     </div>
     <p class="sr-only" data-copy-status aria-live="polite"></p>
   </body>

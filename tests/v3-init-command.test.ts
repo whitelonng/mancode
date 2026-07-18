@@ -92,7 +92,7 @@ describe('journaled V3 init command', () => {
     );
     await expect(
       readFile(path.join(root, '.agents', 'skills', 'man', 'SKILL.md'), 'utf8'),
-    ).resolves.toContain('# mancode V3 mode: man');
+    ).resolves.toContain('# mancode mode: man');
     expect(await init(root, { fromCli: true, interactive: false })).toBe(
       EXIT_ALREADY_INITIALIZED,
     );

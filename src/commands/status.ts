@@ -846,11 +846,11 @@ function printText(r: StatusResult): void {
 
 function printV3Text(result: V3StatusResult): void {
   console.log('');
-  console.log(`mancode v${result.version} (V3 authority)`);
+  console.log(`mancode v${result.version}`);
   console.log('');
   console.log(`Project:     ${result.project}`);
   console.log(
-    `Activation:  ${result.activation.state} (epoch ${result.activation.epoch})`,
+    `Activation:  ${formatActivationState(result.activation.state)} (epoch ${result.activation.epoch})`,
   );
   console.log(
     `Runtime:     ${result.runtime.binding}${result.runtime.error ? ` (${result.runtime.error})` : ''}`,
@@ -880,11 +880,11 @@ function printV3Text(result: V3StatusResult): void {
   }
   if (result.legacyAuthorityPresent) {
     console.log(
-      'Legacy:      legacy authority detected; V3 writes may be blocked.',
+      'Legacy:      legacy authority detected; mancode writes may be blocked.',
     );
   }
   console.log('');
-  console.log('V3 adapter status:');
+  console.log('mancode adapter status:');
   for (const platform of getPlatformInstallers()) {
     const adapter = result.adapters[platform.name];
     const marker = adapter.installed ? '✓' : '○';
@@ -896,10 +896,14 @@ function printV3Text(result: V3StatusResult): void {
   if (result.runtime.binding !== 'ready') {
     console.log('');
     console.log(
-      'Run `mancode context worktree register` in this checkout before V3 mutations.',
+      'Run `mancode context worktree register` in this checkout before mancode mutations.',
     );
   }
   console.log('');
+}
+
+function formatActivationState(state: string): string {
+  return state.replace(/^v3_/, '').replaceAll('_', ' ');
 }
 
 function formatTeamStatus(team: StatusResult['team']): string {

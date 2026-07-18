@@ -54,6 +54,13 @@ describe('V3 CLI command surface', () => {
       expect(requiredOptions(commandAt(cliProgram, 'context', 'beta'))).toEqual(
         ['--release-candidate'],
       );
+      expect(commandAt(cliProgram, 'init').helpInformation()).not.toContain(
+        '--v3',
+      );
+      expect(commandAt(cliProgram, 'context').helpInformation()).not.toMatch(
+        /\bbeta\b/i,
+      );
+      expect(publicHelpText(cliProgram).join('\n')).not.toMatch(/\bV3\b/);
     } finally {
       process.argv = originalArgv;
       log.mockRestore();
@@ -77,4 +84,12 @@ function requiredOptions(command: Command): string[] {
     .filter((option) => option.mandatory)
     .map((option) => option.long)
     .filter((option): option is string => option !== undefined);
+}
+
+function publicHelpText(command: Command): string[] {
+  return [
+    command.description(),
+    ...command.options.map((option) => option.description),
+    ...command.commands.flatMap((child) => publicHelpText(child)),
+  ];
 }

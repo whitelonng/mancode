@@ -1,4 +1,4 @@
-name: Windows beta gate
+name: Windows compatibility gate
 
 on:
   push:

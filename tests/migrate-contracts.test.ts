@@ -244,12 +244,12 @@ describe('legacy migration stage contract', () => {
       ),
     ).resolves.toContain('legacy_migration');
     const migratedMode = await readFile(legacyModePath, 'utf8');
-    expect(migratedMode).toContain('# mancode V3 mode: man');
+    expect(migratedMode).toContain('# mancode mode: man');
     expect(migratedMode).toContain('mancode workflow create man');
     expect(migratedMode).not.toContain('.mancode/state.json');
     const migratedAlias = await readFile(legacyAliasPath, 'utf8');
-    expect(migratedAlias).toContain('# mancode V3 mode compatibility alias');
-    expect(migratedAlias).toContain('public V3 mode `manba`');
+    expect(migratedAlias).toContain('# mancode mode compatibility alias');
+    expect(migratedAlias).toContain('public mancode mode `manba`');
     expect(migratedAlias).not.toContain('.mancode/state.json');
     const migratedAgents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
     expect(migratedAgents).toContain('# User instructions');
@@ -269,7 +269,7 @@ describe('legacy migration stage contract', () => {
         path.join(root, '.claude', 'skills', 'solo', 'SKILL.md'),
         'utf8',
       ),
-    ).resolves.toContain('# mancode V3 mode compatibility alias');
+    ).resolves.toContain('# mancode mode compatibility alias');
     const retiredCursorRule = await readFile(
       path.join(root, '.cursor', 'rules', 'mancode-context.mdc'),
       'utf8',

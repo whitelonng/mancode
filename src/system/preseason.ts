@@ -602,11 +602,7 @@ function readTodoIssues(
     const lines = content.split('\n');
     const issues: PreseasonIssue[] = [];
     for (let i = 0; i < lines.length && issues.length < 2; i++) {
-      if (
-        /\b(TODO|FIXME|HACK|XXX|deprecated|legacy|temporary|workaround)\b/i.test(
-          lines[i] ?? '',
-        )
-      ) {
+      if (isMaintenanceMarker(lines[i] ?? '')) {
         issues.push({
           id: `todo-${offset + issues.length + 1}`,
           severity: 'P2',
@@ -623,6 +619,13 @@ function readTodoIssues(
   } catch {
     return [];
   }
+}
+
+function isMaintenanceMarker(line: string): boolean {
+  const trimmed = line.trim();
+  return /(?:^|\s)(?:\/\/|#|\/\*|\*|<!--)\s*(?:TODO|FIXME|HACK|XXX)\b/i.test(
+    trimmed,
+  );
 }
 
 function scanTestGaps(files: string[]): PreseasonIssue[] {

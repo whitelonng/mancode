@@ -257,7 +257,7 @@ export async function contextSessionSpike(
   }
 }
 
-/** Reports Beta readiness and exits non-zero until every hard local gate passes. */
+/** Reports internal release readiness and exits non-zero until every gate passes. */
 export async function contextBeta(
   rootDir: string,
   options: ContextBetaOptions,
@@ -274,7 +274,7 @@ export async function contextBeta(
       v3ErrorCode(error, 'MANCODE_BETA_GATE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to evaluate Beta readiness.',
+        : 'Unable to evaluate release readiness.',
     );
   }
 }
@@ -420,7 +420,7 @@ export async function contextWorktreeRegister(
       v3ErrorCode(error, 'MANCODE_WORKTREE_REGISTER_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to register this worktree for V3 coordination.',
+        : 'Unable to register this worktree for mancode coordination.',
     );
   }
 }
@@ -618,7 +618,9 @@ export async function contextCompact(
     return printV3Error(
       options.json,
       v3ErrorCode(error, 'MANCODE_CONTEXT_COMPACT_FAILED'),
-      error instanceof Error ? error.message : 'Unable to compact V3 context.',
+      error instanceof Error
+        ? error.message
+        : 'Unable to compact mancode context.',
     );
   }
 }
@@ -679,7 +681,7 @@ export async function contextPublish(
         v3ErrorCode(error, 'MANCODE_CONTEXT_PUBLISH_FAILED'),
         error instanceof Error
           ? error.message
-          : 'Unable to preview the local V3 task publish.',
+          : 'Unable to preview the local mancode task publish.',
       );
     }
   }
@@ -711,7 +713,7 @@ export async function contextPublish(
       v3ErrorCode(error, 'MANCODE_CONTEXT_PUBLISH_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to publish the local V3 task.',
+        : 'Unable to publish the local mancode task.',
     );
   }
 }
@@ -789,7 +791,7 @@ export async function contextReconcileTaskHead(
       v3ErrorCode(error, 'MANCODE_CONTEXT_RECONCILE_TASK_HEAD_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to reconcile the V3 task head.',
+        : 'Unable to reconcile the mancode task head.',
     );
   }
 }

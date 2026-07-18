@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.3.12</span>
+      <span class="docs-wordmark">Documentation / v0.3.13</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -43,7 +43,7 @@
         <p class="docs-search-status" data-search-status aria-live="polite"></p>
         <p class="docs-nav-hint" aria-hidden="true">Swipe to see every topic →</p>
         <nav class="docs-nav">
-          <div class="docs-nav-group"><p>Start here</p><a class="active" href="#overview">Overview</a><a href="#install">Install &amp; initialize</a><a href="#files">Files &amp; privacy</a><a href="#recommend">Choose a mode</a></div>
+          <div class="docs-nav-group"><p>Start here</p><a class="active" href="#overview">Overview</a><a href="#install">Install &amp; initialize</a><a href="#files">Files &amp; privacy</a><a href="#continuity">Cross-session continuity</a><a href="#recommend">Choose a mode</a></div>
           <div class="docs-nav-group"><p>Use mancode</p><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a></div>
           <div class="docs-nav-group"><p>Maintain</p><a href="#style">Refresh context</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></div>
           <div class="docs-nav-group"><p>Links</p><a href="./index.html">Marketing site</a><a href="./docs.zh-CN.html">中文文档</a><a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">README on GitHub</a></div>
@@ -105,6 +105,17 @@
             <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>Safety boundary</strong><p><code>mancode manps</code> scans and reports by default. Remediation is explicit. Irreversible project operations still require human confirmation; installing mancode does not grant the agent permission to publish, delete, or rewrite unrelated work.</p></div>
+        </section>
+
+        <section class="doc-section" id="continuity" data-searchable>
+          <h2>Continue work across sessions</h2>
+          <p>mancode stores goals, requirements, plans, validation results, and handoff notes under a stable <code>TaskRef</code>. A new chat window or supported CLI can resume the same task and load a purpose-specific Context Pack.</p>
+          <div class="docs-note"><strong>What is carried forward</strong><p>This is task continuity, not a copy of raw chat history. Sessions from different clients remain isolated; the new session must identify its own client and explicitly resume the existing TaskRef.</p></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --json
+<span class="command-prompt">$</span> mancode context session new --client claude-code
+<span class="command-prompt">$</span> mancode context resume &lt;namespace:ULID&gt; --session &lt;id&gt; --client claude-code
+<span class="command-prompt">$</span> mancode context show --purpose orient --session &lt;id&gt; --client claude-code</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <p>The generated <code>/man</code>, <code>/manba</code>, and <code>/manteam</code> entries use the same records. Use the CLI form for diagnostics, automation, or manual recovery.</p>
         </section>
 
         <section class="doc-section" id="recommend" data-searchable>
@@ -345,7 +356,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
         <footer class="docs-footer"><p>mancode is local-first and sends no telemetry.</p><p><a href="./docs.zh-CN.html">中文文档 →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
       </main>
 
-      <aside class="docs-toc" aria-label="On this page"><p>On this page</p><a href="#overview">Overview</a><a href="#install">Install</a><a href="#files">Files &amp; privacy</a><a href="#recommend">Choose a mode</a><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a><a href="#style">Refresh</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></aside>
+      <aside class="docs-toc" aria-label="On this page"><p>On this page</p><a href="#overview">Overview</a><a href="#install">Install</a><a href="#files">Files &amp; privacy</a><a href="#continuity">Cross-session continuity</a><a href="#recommend">Choose a mode</a><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a><a href="#style">Refresh</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></aside>
     </div>
     <p class="sr-only" data-copy-status aria-live="polite"></p>
   </body>

@@ -45,7 +45,7 @@ describe('V3 adapter bootstrap integration', () => {
         readFile(path.join(root, '.mancode', 'state.json'), 'utf8'),
       ).rejects.toThrow();
       const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
-      expect(agents).toContain('# mancode V3 bootstrap');
+      expect(agents).toContain('# mancode bootstrap');
       expect(agents).toContain('mancode context show --purpose orient');
       expect(agents).not.toContain('.mancode/state.json');
       expect(agents).not.toContain('currentMode');
@@ -78,7 +78,7 @@ describe('V3 adapter bootstrap integration', () => {
         path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
         'utf8',
       );
-      expect(cursorRule).toContain('# mancode V3 bootstrap');
+      expect(cursorRule).toContain('# mancode bootstrap');
       await expect(
         readFile(path.join(root, '.mancode', 'config.json'), 'utf8'),
       ).rejects.toThrow();
@@ -106,10 +106,13 @@ describe('V3 adapter bootstrap integration', () => {
       });
       const target = path.join(root, installed.target);
       const bootstrap = await readFile(target, 'utf8');
-      expect(bootstrap).toContain('# mancode V3 bootstrap');
+      expect(bootstrap).toContain('# mancode bootstrap');
       expect(bootstrap).toContain('mancode context show --purpose orient');
       expect(bootstrap).toContain('--session <id>');
       expect(bootstrap).toContain('First run `mancode status --json`');
+      expect(bootstrap).toContain(
+        'In operator-facing narration, say `mancode`',
+      );
       expect(bootstrap).toContain('mancode team identity create --name');
       expect(bootstrap).toContain(
         '`currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
@@ -129,8 +132,19 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain(
         'reuse any explicit session ID already returned in this conversation',
       );
+      expect(bootstrap).not.toMatch(/\bV3\b/);
       expect(bootstrap).not.toContain('.mancode/state.json');
       expect(bootstrap).not.toContain('currentMode');
+      const bootstrapSessionCommands = Array.from(
+        bootstrap.matchAll(/`(mancode [^`\n]*--session <id>[^`\n]*)`/g),
+        (match) => match[1] ?? '',
+      );
+      expect(bootstrapSessionCommands.length).toBeGreaterThan(0);
+      expect(
+        bootstrapSessionCommands.every((command) =>
+          command.includes('--client'),
+        ),
+      ).toBe(true);
       if (platform === 'claude-code') {
         expect(bootstrap).toContain('user-invocable: false');
       }
@@ -147,9 +161,32 @@ describe('V3 adapter bootstrap integration', () => {
         ) {
           expect(entry).toContain(`name: ${mode}`);
         }
-        expect(entry).toContain('# mancode V3 mode');
+        const description = entry.match(/^description: "([^"]+)"$/m)?.[1];
+        expect(description).toContain('mancode');
+        expect(description).not.toContain('V3');
+        expect(entry).toContain('# mancode mode');
+        expect(entry).toContain('## Enter through mancode');
+        expect(entry).toContain('In operator-facing narration, say `mancode`');
+        expect(entry).not.toMatch(/\bV3\b/);
         expect(entry).toContain('mancode status --json');
         expect(entry).not.toContain('.mancode/state.json');
+        if (mode !== 'manps') {
+          const sessionCommands = Array.from(
+            entry.matchAll(/`(mancode [^`\n]*--session <id>[^`\n]*)`/g),
+            (match) => match[1] ?? '',
+          );
+          expect(sessionCommands.length).toBeGreaterThan(0);
+          expect(
+            sessionCommands.every((command) => command.includes('--client')),
+          ).toBe(true);
+        }
+        if (mode === 'man') {
+          expect(entry).toContain('read-only project orientation');
+          expect(entry).toContain(
+            'without creating an actor, session, TaskRef, or workflow',
+          );
+          expect(entry).toContain('internal IDs and digests');
+        }
         if (mode === 'manps') {
           expect(entry).toContain(
             'A local scan needs no TaskRef, actor identity, or explicit session',
@@ -214,11 +251,11 @@ describe('V3 adapter bootstrap integration', () => {
     ]);
     await expect(
       readFile(path.join(root, staged.stagingTarget), 'utf8'),
-    ).resolves.toContain('# mancode V3 bootstrap');
+    ).resolves.toContain('# mancode bootstrap');
     for (const entry of staged.modeEntries) {
       await expect(
         readFile(path.join(root, entry.stagingTarget), 'utf8'),
-      ).resolves.toContain(`# mancode V3 mode: ${entry.mode}`);
+      ).resolves.toContain(`# mancode mode: ${entry.mode}`);
     }
     await expect(
       readFile(path.join(root, '.cursor', 'commands', 'man.md'), 'utf8'),
@@ -323,8 +360,8 @@ describe('V3 adapter bootstrap integration', () => {
     expect(agents).toContain('# User instructions');
     expect(agents).not.toContain('.mancode/state.json');
     const codexAlias = await readFile(legacyCodexAlias, 'utf8');
-    expect(codexAlias).toContain('# mancode V3 mode compatibility alias');
-    expect(codexAlias).toContain('public V3 mode `manba`');
+    expect(codexAlias).toContain('# mancode mode compatibility alias');
+    expect(codexAlias).toContain('public mancode mode `manba`');
     expect(codexAlias).not.toContain('.mancode/state.json');
     await removeV3Adapter(root, 'codex');
     await expect(readFile(legacyCodexAlias, 'utf8')).rejects.toThrow();
@@ -352,7 +389,7 @@ describe('V3 adapter bootstrap integration', () => {
     expect(cursorRule).toContain('alwaysApply: false');
     expect(cursorRule).not.toContain('.mancode/state.json');
     const cursorAlias = await readFile(legacyCursorAlias, 'utf8');
-    expect(cursorAlias).toContain('Use the `/manba` V3 mode command.');
+    expect(cursorAlias).toContain('Use the `/manba` mancode mode command.');
     expect(cursorAlias).not.toContain('.mancode/state.json');
     await removeV3Adapter(root, 'cursor');
     await expect(
@@ -401,7 +438,7 @@ describe('V3 adapter bootstrap integration', () => {
         path.join(root, '.claude', 'skills', 'solo', 'SKILL.md'),
         'utf8',
       ),
-    ).resolves.toContain('# mancode V3 mode compatibility alias');
+    ).resolves.toContain('# mancode mode compatibility alias');
     await removeV3Adapter(root, 'claude-code');
     await expect(
       readFile(
@@ -454,7 +491,7 @@ describe('V3 adapter bootstrap integration', () => {
           ),
           'utf8',
         ),
-      ).resolves.toContain('# mancode V3 bootstrap');
+      ).resolves.toContain('# mancode bootstrap');
       expect(logs.mock.calls.flat().join(' ')).toContain(
         'staged for shadow comparison',
       );
@@ -527,7 +564,7 @@ describe('V3 adapter bootstrap integration', () => {
       expect(await init(root, { v3: true, platform: 'codex' })).toBe(0);
       expect(await listPlatforms(root)).toBe(0);
       expect(logs.mock.calls.flat().join(' ')).toContain(
-        'Available platforms (V3 bootstrap)',
+        'Available platforms (mancode bootstrap)',
       );
       expect(logs.mock.calls.flat().join(' ')).toContain('codex');
 

@@ -149,6 +149,71 @@ describe('preseason scan', () => {
     expect(report.issues[0]?.type).toBe('dependency');
   });
 
+  it('does not report ordinary adapter prose as stale maintenance markers', async () => {
+    await mkdir(path.join(dir, '.agents', 'skills', 'man'), {
+      recursive: true,
+    });
+    await mkdir(path.join(dir, '.cursor', 'commands'), { recursive: true });
+    await mkdir(path.join(dir, '.github', 'prompts'), { recursive: true });
+    await writeFile(
+      path.join(dir, '.agents', 'skills', 'man', 'SKILL.md'),
+      'This legacy mode is a temporary compatibility workaround.\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, '.cursor', 'commands', 'man.md'),
+      'This legacy mode is a temporary compatibility workaround.\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, '.github', 'prompts', 'man.prompt.md'),
+      'This legacy mode is a temporary compatibility workaround.\n',
+      'utf-8',
+    );
+    await writeFile(
+      path.join(dir, 'README.md'),
+      'The compatibility guide documents a legacy workaround, not a TODO.\n',
+      'utf-8',
+    );
+
+    const report = await runPreseasonScan(dir, 'dead-code');
+
+    expect(report.issues.filter((issue) => issue.type === 'todo')).toEqual([]);
+  });
+
+  it('still reports explicit TODO markers in project source', async () => {
+    await mkdir(path.join(dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'src', 'pending.ts'),
+      'export const pending = true; // TODO: cover this branch\n',
+      'utf-8',
+    );
+
+    const report = await runPreseasonScan(dir, 'dead-code');
+
+    expect(report.issues.some((issue) => issue.type === 'todo')).toBe(true);
+  });
+
+  it('still scans user-authored files inside adapter directories', async () => {
+    await mkdir(path.join(dir, '.github'), { recursive: true });
+    await writeFile(
+      path.join(dir, '.github', 'CONTRIBUTING.md'),
+      '<!-- TODO: document the release checklist -->\n',
+      'utf-8',
+    );
+
+    const report = await runPreseasonScan(dir, 'dead-code');
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'todo',
+          file: '.github/CONTRIBUTING.md:1',
+        }),
+      ]),
+    );
+  });
+
   it('reports dependency-cruiser architecture violations when depcruise is installed locally', async () => {
     await writeFile(
       path.join(dir, 'package.json'),

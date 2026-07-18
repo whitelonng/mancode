@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { program } from 'commander';
+import { Option, program } from 'commander';
 import {
   contextBeta,
   contextClose,
@@ -76,7 +76,7 @@ program
   .option('--style <name>', 'Specify aesthetic style (MVP-2)')
   .option('--platform <platforms>', 'Adapters: comma-separated names or all')
   .option('--empty', 'Initialize a safe empty directory as a generic project')
-  .option('--v3', 'Use V3 authority explicitly (the CLI default)')
+  .addOption(new Option('--v3').hideHelp())
   .option('--legacy', 'Use the legacy state.json initializer')
   .option('--lang <locale>', 'Initialization language: zh-CN or en')
   .action(async (options) => {
@@ -97,7 +97,7 @@ program
   .option('--minimal', 'Minimal install (MVP-2)')
   .option(
     '--shadow',
-    'Stage a V3 bootstrap candidate without changing live files',
+    'Stage a mancode bootstrap candidate without changing live files',
   )
   .action(async (platform, options) => {
     const code = await install(
@@ -146,28 +146,28 @@ program
     '--parent-task <taskId>',
     'Parent /man or /manteam workflow for manba',
   )
-  .option('--parent <namespace:id>', 'V3 parent TaskRef for a manba child')
+  .option('--parent <namespace:id>', 'Parent TaskRef for a manba child')
   .option(
     '--participant <actorId>',
     'Invite a joined team participant',
     collectOption,
     [],
   )
-  .option('--visibility <visibility>', 'V3: local or shared')
-  .option('--coordination <coordination>', 'V3: single or team')
-  .option('--session <id>', 'V3 session ID (otherwise MANCODE_SESSION_ID)')
-  .option('--client <name>', 'V3 client identity (default: mancode-cli)')
-  .option('--expected-revision <n>', 'V3 expected task revision for mutations')
-  .option('--child-revision <n>', 'V3 expected child task revision for merge')
+  .option('--visibility <visibility>', 'Task visibility: local or shared')
+  .option('--coordination <coordination>', 'Task coordination: single or team')
+  .option('--session <id>', 'mancode session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--expected-revision <n>', 'Expected task revision for mutations')
+  .option('--child-revision <n>', 'Expected child task revision for merge')
   .option('--summary <text>', 'Privacy-screened child result summary')
   .option('--next-action <text>', 'Next parent action after a child merge')
-  .option('--sync', 'Publish shared V3 mutations through git-ref transport')
+  .option('--sync', 'Publish shared mutations through git-ref transport')
   .option(
     '--confirm-shared',
-    'Confirm that task metadata may enter shared V3 authority',
+    'Confirm that task metadata may enter shared mancode authority',
   )
   .option('--blocking-reason <reason>', 'Explain why a workflow is blocked')
-  .option('--outcome <outcome>', 'Set manba outcome when completing a V3 task')
+  .option('--outcome <outcome>', 'Set manba outcome when completing a task')
   .option('--plan-version <n>', 'Set the next man/manteam plan revision')
   .option(
     '--requirements-status <status>',
@@ -194,7 +194,10 @@ program
     '--resolved <ids>',
     'Comma-separated blocker ids resolved in remediation',
   )
-  .option('--file <path>', 'Structured requirements JSON input file')
+  .option(
+    '--file <path>',
+    'Semantic or canonical structured requirements JSON input file',
+  )
   .option('--acceptance <id>', 'Acceptance criterion id (for example AC-1)')
   .option('--method <method>', 'Verification method: automated or manual')
   .option('--result <result>', 'Verification result')
@@ -215,11 +218,11 @@ program
 
 const contextProgram = program
   .command('context')
-  .description('Resolve V3 task context and manage explicit sessions');
+  .description('Resolve mancode task context and manage explicit sessions');
 
 contextProgram
   .command('show')
-  .description('Resolve one V3 Context Pack')
+  .description('Resolve one mancode Context Pack')
   .option('--task <namespace:id>', 'Explicit TaskRef')
   .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
   .option('--client <name>', 'Client identity (default: mancode-cli)')
@@ -235,7 +238,7 @@ contextProgram
 
 const contextSessionProgram = contextProgram
   .command('session')
-  .description('Manage V3 session identities');
+  .description('Manage mancode session identities');
 
 contextSessionProgram
   .command('new')
@@ -288,10 +291,10 @@ contextSessionProgram
 
 contextProgram
   .command('resume <namespace:id>')
-  .description('Validate and bind the current session to a V3 TaskRef')
+  .description('Validate and bind the current session to a mancode TaskRef')
   .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
   .option('--client <name>', 'Client identity (default: mancode-cli)')
-  .option('--sync', 'Publish shared V3 mutations through git-ref transport')
+  .option('--sync', 'Publish shared mutations through git-ref transport')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (task, options) => {
     process.exitCode = await contextResume(process.cwd(), task, options);
@@ -308,7 +311,7 @@ contextProgram
 
 contextProgram
   .command('doctor')
-  .description('Inspect unfinished V3 operations or repair one explicitly')
+  .description('Inspect unfinished mancode operations or repair one explicitly')
   .option(
     '--repair <operationId>',
     'Repair this operation with its original session',
@@ -330,7 +333,7 @@ contextProgram
 
 contextProgram
   .command('compact')
-  .description('List and remove eligible V3 runtime retention candidates')
+  .description('List and remove eligible mancode runtime retention candidates')
   .option('--task <namespace:id>', 'Compact checkpoints for one completed task')
   .option('--dry-run', 'Show the deletion list without changing files')
   .option('--apply-shared', 'Permit deletion for shared completed tasks')
@@ -340,8 +343,8 @@ contextProgram
   });
 
 contextProgram
-  .command('beta')
-  .description('Evaluate hard V3 Beta readiness gates')
+  .command('beta', { hidden: true })
+  .description('Evaluate internal release-evidence gates')
   .requiredOption(
     '--release-candidate <id>',
     'Release candidate that must match every platform evidence record',
@@ -394,11 +397,13 @@ contextProgram
 
 const contextWorktreeProgram = contextProgram
   .command('worktree')
-  .description('Register and inspect the current V3 checkout binding');
+  .description('Register and inspect the current mancode checkout binding');
 
 contextWorktreeProgram
   .command('register')
-  .description('Register this linked worktree before using V3 coordination')
+  .description(
+    'Register this linked worktree before using mancode coordination',
+  )
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     process.exitCode = await contextWorktreeRegister(process.cwd(), options);
@@ -406,7 +411,7 @@ contextWorktreeProgram
 
 const operationProgram = program
   .command('operation')
-  .description('Inspect and recover durable V3 operations');
+  .description('Inspect and recover durable mancode operations');
 
 operationProgram
   .command('show <operationId>')
@@ -448,11 +453,11 @@ operationProgram
 
 const teamProgram = program
   .command('team')
-  .description('Manage V3 local identity and local-team membership');
+  .description('Manage mancode local identity and local-team membership');
 
 teamProgram
   .command('status')
-  .description('Show V3 team policy, transport, and local identity state')
+  .description('Show mancode team policy, transport, and local identity state')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     process.exitCode = await teamStatus(process.cwd(), options);
@@ -460,7 +465,7 @@ teamProgram
 
 teamProgram
   .command('policy <mode>')
-  .description('Set the V3 team recommendation policy with a revision CAS')
+  .description('Set the mancode team recommendation policy with a revision CAS')
   .requiredOption('--expected-revision <n>', 'Current team policy revision')
   .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
   .option('--client <name>', 'Client identity (default: mancode-cli)')
@@ -642,7 +647,7 @@ teamProgram
 
 teamProgram
   .command('checkpoint <namespace:id>')
-  .description('Create a journaled immutable checkpoint for a shared V3 task')
+  .description('Create a journaled immutable checkpoint for a shared task')
   .requiredOption(
     '--expected-task-revision <n>',
     'Current shared task revision',
@@ -662,7 +667,7 @@ teamProgram
 
 teamProgram
   .command('claim <namespace:id>')
-  .description('Acquire a scoped claim for a shared V3 task')
+  .description('Acquire a scoped claim for a shared task')
   .requiredOption(
     '--expected-task-revision <n>',
     'Current shared task revision',
@@ -851,23 +856,26 @@ teamHandoffProgram
 
 const migrateProgram = program
   .command('migrate')
-  .description('Inspect and migrate legacy mancode context into V3 staging');
+  .description('Inspect and migrate legacy context into mancode staging');
 
 const migrateContextProgram = migrateProgram
   .command('context')
-  .description('Manage the isolated legacy-to-V3 context migration stage')
+  .description('Manage the isolated legacy-to-mancode context migration stage')
   .option('--dry-run', 'Inspect legacy authority without writing files')
   .option('--stage', 'Create or refresh an isolated local migration stage')
   .option('--status', 'Show local migration stages')
-  .option('--activate', 'Attempt the journaled V3 activation')
-  .option('--rollback <operationId>', 'Roll back an untouched V3 activation')
+  .option('--activate', 'Attempt the journaled mancode activation')
+  .option(
+    '--rollback <operationId>',
+    'Roll back an untouched mancode activation',
+  )
   .option('--stage-id <id>', 'Migration stage ID (required if more than one)')
   .option(
     '--expected-stage-revision <n>',
     'Expected stage revision for activation',
   )
   .option('--session <id>', 'Active session required for activation')
-  .option('--confirm', 'Explicitly confirm the V3 cutover')
+  .option('--confirm', 'Explicitly confirm the mancode cutover')
   .option('--confirm-shared', 'Confirm promotion of staged shared authority')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
@@ -883,7 +891,7 @@ migrateContextProgram
     'Expected local migration stage revision',
   )
   .option('--stage-id <id>', 'Migration stage ID (required if more than one)')
-  .option('--owner <actorId>', 'Explicit V3 owner actor ID')
+  .option('--owner <actorId>', 'Explicit owner actor ID')
   .option(
     '--scope-file <path>',
     'JSON implementation scope {include,exclude,modules}',

@@ -73,6 +73,7 @@ import {
   completeGitRefTask,
   updateGitRefWorkflow,
 } from '../team/git-ref-workflow-operation.js';
+import { normalizeRequirementsInput } from './requirements-input.js';
 import {
   commandClient,
   printV3Error,
@@ -157,7 +158,7 @@ export async function workflow(
       return printV3Error(
         options.json,
         'MANCODE_V3_WRITE_REQUIRES_ACTIVATION',
-        'This project has staged V3 context but remains in dual-read migration. Use legacy workflows until activation.',
+        'This project has staged mancode context but remains in dual-read migration. Use legacy workflows until activation.',
       );
     }
     if (options.json) {
@@ -251,7 +252,7 @@ async function workflowV3(
   return printV3Error(
     options.json,
     'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
-    `workflow ${subcommand} is not yet implemented for V3 authority.`,
+    `workflow ${subcommand} is not yet implemented for mancode authority.`,
   );
 }
 
@@ -273,7 +274,7 @@ async function workflowUpdateV3(
     return printV3Error(
       options.json,
       'MANCODE_WORKFLOW_UPDATE_EMPTY',
-      'V3 workflow update requires --status or --blocking-reason.',
+      'Workflow update requires --status or --blocking-reason.',
       EXIT_INVALID_ARG,
     );
   }
@@ -288,7 +289,7 @@ async function workflowUpdateV3(
     return printV3Error(
       options.json,
       'MANCODE_V3_WORKFLOW_UPDATE_FIELD_UNSUPPORTED',
-      'V3 workflow update only changes lifecycle status and a blocked reason. Use the dedicated requirements, plan, review, verification, scope, complete, or promote command for governed fields.',
+      'Workflow update only changes lifecycle status and a blocked reason. Use the dedicated requirements, plan, review, verification, scope, complete, or promote command for governed fields.',
       EXIT_INVALID_ARG,
     );
   }
@@ -297,7 +298,7 @@ async function workflowUpdateV3(
     return printV3Error(
       options.json,
       'MANCODE_EXPECTED_REVISION_REQUIRED',
-      'V3 workflow update requires --expected-revision <positive integer>.',
+      'Workflow update requires --expected-revision <positive integer>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -361,7 +362,7 @@ async function workflowUpdateV3(
       v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_UPDATE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to update the V3 workflow lifecycle.',
+        : 'Unable to update the mancode workflow lifecycle.',
     );
   }
 }
@@ -430,7 +431,7 @@ async function workflowChildResultMergeV3(
       v3ErrorCode(error, 'MANCODE_V3_CHILD_RESULT_MERGE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to merge the V3 child diagnostic result.',
+        : 'Unable to merge the mancode child diagnostic result.',
     );
   }
 }
@@ -501,7 +502,7 @@ async function workflowSoloHandoffV3(
       v3ErrorCode(error, 'MANCODE_V3_SOLO_HANDOFF_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to run the V3 solo handoff.',
+        : 'Unable to run the mancode solo handoff.',
     );
   }
 }
@@ -568,7 +569,7 @@ async function workflowPromoteV3(
         v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_PROMOTE_FAILED'),
         error instanceof Error
           ? error.message
-          : 'Unable to preview the V3 workflow promotion.',
+          : 'Unable to preview the mancode workflow promotion.',
       );
     }
   }
@@ -600,7 +601,7 @@ async function workflowPromoteV3(
       v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_PROMOTE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to promote the local V3 workflow.',
+        : 'Unable to promote the local mancode workflow.',
     );
   }
 }
@@ -692,7 +693,7 @@ async function workflowScopeChangeV3(
       v3ErrorCode(error, 'MANCODE_V3_SCOPE_CHANGE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to change the V3 workflow scope.',
+        : 'Unable to change the mancode workflow scope.',
     );
   }
 }
@@ -775,7 +776,7 @@ async function workflowCompleteV3(
       v3ErrorCode(error, 'MANCODE_V3_TASK_COMPLETE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to complete the V3 task.',
+        : 'Unable to complete the mancode task.',
     );
   }
 }
@@ -832,7 +833,7 @@ async function workflowVerifyV3(
       v3ErrorCode(error, 'MANCODE_V3_VERIFICATION_RECORD_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to record V3 verification.',
+        : 'Unable to record mancode verification.',
     );
   }
 }
@@ -888,7 +889,9 @@ async function workflowReviewV3(
     return printV3Error(
       options.json,
       v3ErrorCode(error, 'MANCODE_V3_REVIEW_APPLY_FAILED'),
-      error instanceof Error ? error.message : 'Unable to apply the V3 review.',
+      error instanceof Error
+        ? error.message
+        : 'Unable to apply the mancode review.',
     );
   }
 }
@@ -970,7 +973,9 @@ async function workflowPlanV3(
     return printV3Error(
       options.json,
       v3ErrorCode(error, 'MANCODE_V3_PLAN_REVISION_FAILED'),
-      error instanceof Error ? error.message : 'Unable to revise the V3 plan.',
+      error instanceof Error
+        ? error.message
+        : 'Unable to revise the mancode plan.',
     );
   }
 }
@@ -1002,13 +1007,15 @@ async function workflowRequirementsV3(
   try {
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
-    const requirements = await readWorkflowJsonInputFile(
+    const taskRef = parseTaskRef(task);
+    const requirementsInput = await readWorkflowJsonInputFile(
       project.projectRoot,
       options.file,
     );
+    const requirements = normalizeRequirementsInput(requirementsInput, taskRef);
     const result = await finalizeV3Requirements({
       projectRoot: project.projectRoot,
-      taskRef: parseTaskRef(task),
+      taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
       requirements,
@@ -1030,7 +1037,7 @@ async function workflowRequirementsV3(
       v3ErrorCode(error, 'MANCODE_V3_REQUIREMENTS_FINALIZE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to finalize V3 requirements.',
+        : 'Unable to finalize mancode requirements.',
     );
   }
 }
@@ -1174,7 +1181,9 @@ async function workflowCreateV3(
     return printV3Error(
       options.json,
       v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_CREATE_FAILED'),
-      error instanceof Error ? error.message : 'Unable to create V3 workflow.',
+      error instanceof Error
+        ? error.message
+        : 'Unable to create mancode workflow.',
     );
   }
 }

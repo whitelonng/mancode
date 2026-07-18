@@ -58,6 +58,8 @@ describe('website documentation', () => {
         '.cursor/commands/',
         '.github/prompts/',
         'ZCode',
+        'context session new --client',
+        'context resume &lt;namespace:ULID&gt;',
       ]) {
         expect(html, `${name} is missing ${requiredText}`).toContain(
           requiredText,
@@ -123,26 +125,40 @@ describe('website documentation', () => {
     }
   });
 
-  it('keeps both landing pages honest about adapter capabilities', async () => {
+  it('keeps both landing pages honest about adapter capabilities and continuity', async () => {
     const english = await readPage('index.html');
     const chinese = await readPage('index.zh-CN.html');
 
     expect(english).toContain('Project rules · commands');
     expect(english).toContain('Repository instructions · prompts');
     expect(english).toContain('Preview adapter');
-    expect(english).toContain('id="v3"');
-    expect(english).toContain('06 / V3 Beta');
+    expect(english).toContain('id="continuity"');
+    expect(english).toContain('06 / Cross-session continuity');
+    expect(english).toContain('Raw chat history is not copied');
     expect(english).toContain('07 / Quick start');
     expect(chinese).toContain('id="context"');
     expect(chinese).toContain('04 / 项目感知');
     expect(chinese).toContain('05 / 适配器');
-    expect(chinese).toContain('id="v3"');
-    expect(chinese).toContain('06 / V3 Beta');
+    expect(chinese).toContain('id="continuity"');
+    expect(chinese).toContain('06 / 跨会话续接');
+    expect(chinese).toContain('不复制原始聊天记录');
     expect(chinese).toContain('07 / 快速开始');
     expect(chinese).toContain('交付干净');
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
+    expect(english).not.toMatch(/\b(?:V3|Beta)\b/);
+    expect(chinese).not.toMatch(/\b(?:V3|Beta)\b/);
+  });
+
+  it('documents the cross-session boundary in both languages', async () => {
+    const english = await readPage('docs.html');
+    const chinese = await readPage('docs.zh-CN.html');
+
+    expect(english).toContain('id="continuity"');
+    expect(english).toContain('not a copy of raw chat history');
+    expect(chinese).toContain('id="continuity"');
+    expect(chinese).toContain('不是原始聊天记录的复制');
   });
 
   it('keeps version labels aligned with package.json', async () => {

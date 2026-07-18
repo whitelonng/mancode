@@ -102,9 +102,9 @@ async function uninstallV3(
   options: UninstallOptions,
 ): Promise<number> {
   if (!platform || options.all) {
-    console.error('✗  V3 authority is protected from bulk uninstall.');
+    console.error('✗  mancode authority is protected from bulk uninstall.');
     console.error(
-      '   Remove a single bootstrap with `mancode uninstall <platform>`, or complete an explicit V3 archive/migration workflow first.',
+      '   Remove a single bootstrap with `mancode uninstall <platform>`, or complete an explicit mancode archive/migration workflow first.',
     );
     return EXIT_V3_AUTHORITY_PROTECTED;
   }
@@ -120,17 +120,21 @@ async function uninstallV3(
   }
   if (!options.force) {
     console.log(
-      `ℹ️  This will remove only the ${formatPlatformName(platform)} V3 bootstrap.`,
+      `ℹ️  This will remove only the ${formatPlatformName(platform)} mancode bootstrap.`,
     );
-    console.log('   V3 task, session, and shared authority are preserved.');
+    console.log(
+      '   mancode task, session, and shared authority are preserved.',
+    );
   }
   try {
     await removeV3Adapter(rootDir, installer.name);
-    console.log(`✓  Removed ${formatPlatformName(platform)} V3 bootstrap.`);
+    console.log(
+      `✓  Removed ${formatPlatformName(platform)} mancode bootstrap.`,
+    );
     return EXIT_OK;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`✗  V3 bootstrap removal failed: ${message}`);
+    console.error(`✗  mancode bootstrap removal failed: ${message}`);
     return EXIT_V3_AUTHORITY_PROTECTED;
   }
 }

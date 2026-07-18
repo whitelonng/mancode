@@ -125,17 +125,17 @@ async function refreshV3Project(rootDir: string): Promise<number> {
       revision: (project.projectFacts?.revision ?? 0) + 1,
     });
     await writeV3ProjectFacts(rootDir, facts);
-    console.log('✓  V3 project facts refreshed.');
+    console.log('✓  mancode project facts refreshed.');
     console.log(
       `   Kind: ${facts.profile.projectKind} | Stack: ${[...facts.profile.languages, ...facts.profile.frameworks].join(' + ') || 'unknown'}`,
     );
     console.log(
-      '   V3 adapters remain unchanged because their bootstrap is static.',
+      '   mancode adapters remain unchanged because their bootstrap is static.',
     );
     return EXIT_OK;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`✗  V3 project facts refresh failed: ${message}`);
+    console.error(`✗  mancode project facts refresh failed: ${message}`);
     return EXIT_REFRESH_FAILED;
   }
 }

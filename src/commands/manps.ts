@@ -32,7 +32,7 @@ export async function manps(
     v3Activation !== 'v3_active' &&
     v3Activation !== 'dual_read'
   ) {
-    const message = `manps is unavailable while V3 activation is ${v3Activation}`;
+    const message = `manps is unavailable while mancode activation is ${v3Activation}`;
     if (options.json) {
       console.log(JSON.stringify({ error: 'scan failed', message }, null, 2));
     } else {

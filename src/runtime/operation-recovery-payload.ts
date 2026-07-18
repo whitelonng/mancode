@@ -1094,29 +1094,33 @@ function parseV3AdapterFileAction(
       'beforeContent',
       'targetContent',
     ],
-    'operation recovery V3 adapter action',
+    'operation recovery mancode adapter action',
   );
   if (
     value.kind !== 'v3_adapter_file' ||
     !V3_ADAPTER_TARGETS.has(value.target as V3AdapterFileTarget)
   ) {
-    throw new Error('operation recovery V3 adapter action is invalid');
+    throw new Error('operation recovery mancode adapter action is invalid');
   }
   const target = value.target as V3AdapterFileTarget;
   const beforeContent =
     value.beforeContent === null
       ? null
-      : parseText(value.beforeContent, 'V3 adapter beforeContent');
+      : parseText(value.beforeContent, 'mancode adapter beforeContent');
   const beforeDigest = parseDigestOrNull(value.beforeDigest, 'beforeDigest');
   if (beforeDigest !== adapterFileContentDigest(target, beforeContent)) {
-    throw new Error('operation recovery V3 adapter before digest is invalid');
+    throw new Error(
+      'operation recovery mancode adapter before digest is invalid',
+    );
   }
   const targetContent = parseText(
     value.targetContent,
-    'V3 adapter targetContent',
+    'mancode adapter targetContent',
   );
   if (!targetContent.trim()) {
-    throw new Error('operation recovery V3 adapter target content is invalid');
+    throw new Error(
+      'operation recovery mancode adapter target content is invalid',
+    );
   }
   adapterFileContentDigest(target, targetContent);
   return {

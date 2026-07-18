@@ -17,10 +17,8 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.12-green?style=flat-square" alt="Status: stable v0.3.12" />
-  <img src="https://img.shields.io/badge/V3-cross--CLI%20team%20Beta-FB6A21?style=flat-square" alt="V3: cross-CLI team Beta" />
+  <img src="https://img.shields.io/badge/status-stable%20v0.3.13-green?style=flat-square" alt="Status: stable v0.3.13" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
-  <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="Tests passing" />
 </p>
 
 <p align="center">
@@ -39,17 +37,17 @@ research, planning, implementation, and review.
 [Installation](#installation) · [Usage](#usage)
 
 mancode ships with adapters for Claude Code, Cursor, Codex in the ChatGPT
-desktop app and CLI, GitHub Copilot, and ZCode. V3 keeps the original `man*`
+desktop app and CLI, GitHub Copilot, and ZCode. It keeps the original `man*`
 entries on every platform and connects them to one Context Pack and workflow
 authority through static bootstraps.
 
 mancode installs three things:
 
-1. **V3 authority** for explicit sessions, TaskRefs, Context Packs, workflows,
+1. **Workflow authority** for explicit sessions, TaskRefs, Context Packs, workflows,
    and team coordination.
 2. **Skills / modes** for `solo`, `/manba`, `/man`, `/manteam`, `/manps`, and
    `/mansolo`.
-3. **Platform bootstraps** that connect those original entries to V3; only
+3. **Platform bootstraps** that connect those original entries to mancode; only
    `--legacy` installs the old hooks.
 
 Use mancode when an AI coding agent writes too much code, ignores your existing
@@ -90,13 +88,36 @@ These are agent skills, not deprecated custom prompts. See the official
 [slash-command](https://learn.chatgpt.com/docs/reference/slash-commands) docs.
 Existing workflow metadata remains compatible and does not need migration.
 
-## V3 Cross-CLI and Team Beta
+## Continue Work Across Sessions
 
-V3 gives new team projects stable `TaskRef` context, isolated sessions,
-governance ledgers, worktree claims and handoffs, and optional git-ref
-coordination across clones. It is a **hard-gated Beta**: adapters bootstrap
-Claude Code, Cursor, Codex, GitHub Copilot, and ZCode, but platform files never
-become the authority for task or session state.
+mancode keeps goals, requirements, plans, validation results, and handoff notes
+under a stable `TaskRef`. When you open a new chat window, restart your coding
+agent, or continue from another supported CLI, the new session can resume the
+same task and load a purpose-specific Context Pack without depending on the old
+conversation remaining open.
+
+This resumes **task context**, not raw chat history. Sessions from different
+clients remain isolated. A new session uses its own client identity and
+explicitly resumes the existing TaskRef, preserving continuity without treating
+one window's temporary state as another window's identity.
+
+```bash
+mancode status --json
+mancode context session new --client claude-code
+mancode context resume <namespace:ULID> --session <id> --client claude-code
+mancode context show --purpose orient --session <id> --client claude-code
+```
+
+The original `/man`, `/manba`, and `/manteam` entries handle these steps. The
+CLI form above is useful for diagnostics, automation, or manual recovery.
+
+## Cross-Client and Team Collaboration
+
+mancode gives team projects stable TaskRefs, isolated sessions, governance
+ledgers, worktree claims and handoffs, and optional git-ref coordination across
+clones. Claude Code, Cursor, Codex, GitHub Copilot, and ZCode use the same
+workflow data through platform bootstraps; platform files do not hold task or
+session copies.
 
 For a new project, start with one platform you actually use:
 
@@ -107,38 +128,19 @@ mancode context session new --client claude-code
 mancode list-platforms
 ```
 
-Plain `mancode init` is now the V3 entry and still generates the original
-`man`, `manba`, `manteam`, `manps`, and `mansolo` host commands. No separate V3
-command name is required. `--v3` remains an explicit compatibility alias; use
+Plain `mancode init` generates the original `man`, `manba`, `manteam`, `manps`,
+and `mansolo` host commands. No separate command family is required. Use
 `mancode init --legacy` only when the old `state.json` architecture is required.
 
 Use the CLI for creation, resume, and coordination: `mancode workflow create`,
 `mancode context resume`, `mancode team claim`, and `mancode team handoff`. For
 an existing project, begin with `mancode migrate context --dry-run`, then follow
 its stage and activation report. Do not manually mix legacy `state.json` writes
-with V3 authority.
-
-### Beta validation boundary
-
-- The `main` branch requires a Windows gate that runs smoke tests in CMD,
-  PowerShell, and Git Bash.
-- `mancode context beta --release-candidate <commit> --json` checks activation,
-  adapters, repair state, worktree binding, and session evidence for all five
-  platforms. Evidence must bind to that immutable release candidate; any blocker
-  stops broad enablement.
-- Each platform must prove distinct sessions in two real host windows, child-command
-  propagation, and child-agent inheritance (or record a specific reason it is not
-  applicable). `context session spike` records an operator-attested real-host result;
-  it never infers propagation from a temporary environment variable. Stored evidence
-  never includes raw session keys.
-
-Until that gate passes, use an explicit `--session <id>` and do not treat host
-identity as verified. This lets you try V3 without presenting unproven
-cross-platform session behavior as a fact.
+with current workflow authority.
 
 ## What Gets Installed
 
-By default, `mancode init` creates V3 authority and platform integration files:
+By default, `mancode init` creates mancode workflow and platform integration files:
 
 ```text
 .mancode/
@@ -156,7 +158,7 @@ AGENTS.md                        # Codex (ChatGPT desktop/CLI): managed instruct
 .github/prompts/                 # GitHub Copilot: original mode prompts
 ```
 
-`.mancode/` separates shareable V3 authority from checkout-local sessions,
+`.mancode/` separates shareable workflow data from checkout-local sessions,
 workflows, and scan reports. Platform files contain only bootstrap guidance and
 the original mode entries, never task/session snapshots. `mancode init
 --legacy` creates the old `state.json` layout.
@@ -187,7 +189,7 @@ mancode is useful for:
 
 - Developers using AI coding agents on backend, web, mobile, desktop, CLI,
   library, data, or mixed projects
-- Users who want V3 Context Packs, skills, and explicit governance behind the original `man*` entries
+- Users who want Context Packs, skills, and explicit governance behind the original `man*` entries
 - Teams that want AI agents to reuse existing components and patterns
 - Projects that need a repeatable AI-assisted code review workflow
 - UI codebases with existing design conventions (when a UI is present)
@@ -242,8 +244,8 @@ The default workflow asks six questions before writing code:
 
 ## Usage
 
-V3 no longer persists a “current mode.” Invoke the original command for the
-kind of work you need; the entry resolves V3 status, session, TaskRef, and
+mancode does not persist a “current mode.” Invoke the original command for the
+kind of work you need; the entry resolves status, session, TaskRef, and
 Context Pack:
 
 | Mode | Best For | What It Does |
@@ -253,7 +255,7 @@ Context Pack:
 | `/man` | Work needing requirement alignment or a formal plan · playoffs | Research, recommendations, and a durable plan; then choose lightweight solo delivery or the full 9-step workflow |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
-| `/mansolo` | Returning to lightweight work | Writes no legacy mode; performs an explicit V3 handoff only when needed |
+| `/mansolo` | Returning to lightweight work | Writes no legacy mode; performs an explicit handoff only when needed |
 
 ## How `/man` Works: Playoffs Mode
 
@@ -286,10 +288,10 @@ decision was made later.
 
 ### Bootstrap and Adapters
 
-V3 assumes no hook approval. Each adapter installs a stable bootstrap plus the
-original `man/manba/manteam/manps/mansolo` entries; task, mode, and session
-authority stays in V3. Claude Code's internal bootstrap is hidden from users,
-so it does not add a public `/mancode-v3` command. Until real-host session
+mancode assumes no hook approval. Each adapter installs a stable bootstrap plus
+the original `man/manba/manteam/manps/mansolo` entries; task, mode, and session
+authority stays in mancode workflow data. Claude Code's internal bootstrap is
+hidden from users, so it does not add another public command. Until real-host session
 propagation is proven, mutations require an explicit `--session`.
 
 Only `mancode init --legacy` installs the old Claude hooks that read
@@ -297,7 +299,7 @@ Only `mancode init --legacy` installs the old Claude hooks that read
 
 ### Design Token Awareness
 
-V3 writes detected project facts to `.mancode/shared/context/project.json` and
+mancode writes detected project facts to `.mancode/shared/context/project.json` and
 keeps checkout-local design-token caches under `.mancode/local/cache/`. It can
 work with backend services, web applications, mobile apps, desktop apps, CLIs,
 libraries, and mixed repositories; it does not assume a JavaScript or UI stack.
@@ -333,7 +335,7 @@ Before writing new code, mancode pushes the agent through this priority order:
 
 ### Team Memory
 
-`/manteam` reads and updates confirmed entities in V3 shared authority:
+`/manteam` reads and updates confirmed entities in shared workflow data:
 
 ```text
 .mancode/shared/
@@ -348,7 +350,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.12. Claude Code, Cursor, Codex in the ChatGPT desktop app
+**Status**: stable v0.3.13. Claude Code, Cursor, Codex in the ChatGPT desktop app
 and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
 with project skill discovery kept behind a verification gate before release.
 
@@ -368,7 +370,7 @@ mancode init --platform all
 
 Supported platforms:
 
-- Claude Code: hidden bootstrap plus original mode skills; V3 does not depend on hooks
+- Claude Code: hidden bootstrap plus original mode skills; the default setup does not depend on hooks
 - Cursor: `.cursor/rules/*.mdc` bootstrap plus original mode commands under `.cursor/commands/`
 - Codex (ChatGPT desktop app, CLI, and IDE extension): managed `AGENTS.md`
   block plus `$man*` repo skills under `.agents/skills/`
@@ -390,8 +392,8 @@ mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilo
 mancode init --empty      # Allow a safe empty directory in non-interactive scripts
 mancode init --lang zh-CN # Explicit initialization language (zh-CN or en)
 mancode refresh-project   # Refresh facts after Git or project files are added
-mancode install --force   # Repair or reinstall the selected V3 adapter
-mancode install --minimal # V3 is already bootstrap-only; retained for compatibility
+mancode install --force   # Repair or reinstall the selected adapter
+mancode install --minimal # The bootstrap is already minimal; retained for compatibility
 ```
 
 ## Agent Modes
@@ -442,19 +444,18 @@ mancode version
 
 ### `mancode status`
 
-Simplified V3 output:
+Simplified output:
 
 ```text
-mancode v0.3.12 (V3 authority)
+mancode v0.3.13
 
 Project:     my-app
-Activation:  v3_active
 Runtime:     ready
 Transport:   local
 Identity:    not configured
 Session evidence: explicit required
 
-V3 adapter status:
+mancode adapter status:
   ○ Claude Code: not installed
   ○ Cursor: not installed
   ✓ Codex (ChatGPT desktop/CLI): ready
@@ -475,8 +476,8 @@ Issue DB: .mancode/local/preseason-issues.json
 
 ### `mancode init`
 
-Initializes V3 authority and connects the selected platform's original mode
-entries to V3 Context Packs and workflow commands. It does not create legacy
+Initializes mancode workflow data and connects the selected platform's original
+mode entries to Context Packs and workflow commands. It does not create legacy
 `state.json`; use `mancode init --legacy` explicitly for the old architecture.
 
 ```bash
@@ -485,7 +486,7 @@ mancode init
 
 ### `mancode status`
 
-Shows V3 activation, runtime binding, identity/session evidence, transport, and
+Shows activation, runtime binding, identity/session evidence, transport, and
 the physical readiness of each platform bootstrap and original mode entry.
 
 ```bash
@@ -495,7 +496,7 @@ mancode status --json
 
 ### `mancode workflow`
 
-Creates and manages V3 workflows used by `/manba`, `/man`, and `/manteam`.
+Creates and manages workflows used by `/manba`, `/man`, and `/manteam`.
 Every mutation uses a `namespace:ULID` TaskRef, an explicit session, and the
 latest expected revision. Requirements, plan, review, verification, and
 completion use dedicated commands instead of the legacy `--step` protocol.
@@ -541,7 +542,7 @@ tokens. It updates:
 .mancode/shared/context/project.json
 ```
 
-V3 adapters are static bootstraps that embed no task or style snapshot, so
+Platform adapters are static bootstraps that embed no task or style snapshot, so
 refreshing project facts does not require reinstalling them.
 
 ## Project Files
@@ -553,7 +554,7 @@ mancode/
 │   ├── mancode status
 │   └── mancode install <platform>
 │
-├── V3 authority
+├── Workflow authority
 │   ├── shared/context + team
 │   └── local/session + workflow + cache
 │
@@ -681,7 +682,7 @@ are opt-in for work that needs planning, tests, and review.
 
 Yes. mancode supports Claude Code, Cursor, Codex in the ChatGPT desktop app and
 CLI, GitHub Copilot, and experimental ZCode adaptation through static
-bootstraps and original mode entries. V3 treats no platform hook as approved by
+bootstraps and original mode entries. mancode treats no platform hook as approved by
 default.
 
 ### Can mancode help with frontend consistency?
