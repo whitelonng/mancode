@@ -1,3 +1,4 @@
+import { recordLocalDiagnostic } from '../runtime/diagnostics.js';
 import {
   type EntityHomeStoreContext,
   resolveTaskEntityHomeStore,
@@ -261,6 +262,9 @@ export class ContextResolver {
       const second = await this.readSnapshot(taskRef, request);
       if (first.fingerprint === second.fingerprint) return first;
     }
+    await recordLocalDiagnostic(this.store.projectRoot, {
+      kind: 'context_stale',
+    }).catch(() => undefined);
     throw new Error('MANCODE_CONTEXT_READ_UNSTABLE');
   }
 

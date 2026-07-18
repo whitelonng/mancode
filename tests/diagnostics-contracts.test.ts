@@ -10,6 +10,7 @@ import {
   parseLocalDiagnostics,
   readLocalDiagnostics,
   recordLocalDiagnostic,
+  recordV3ErrorDiagnostic,
   setLocalDiagnosticsEnabled,
 } from '../src/runtime/diagnostics.js';
 
@@ -85,6 +86,27 @@ describe('local diagnostics contract', () => {
       logs.mockRestore();
       errors.mockRestore();
     }
+  });
+
+  it('maps only classified V3 error codes to aggregate counters', async () => {
+    await recordV3ErrorDiagnostic(
+      root,
+      new Error('MANCODE_EXPECTED_REVISION_CONFLICT'),
+      NOW,
+    );
+    await recordV3ErrorDiagnostic(
+      root,
+      new Error('MANCODE_CONTEXT_STALE'),
+      NOW,
+    );
+    await recordV3ErrorDiagnostic(root, new Error('MANCODE_SPLIT_BRAIN'), NOW);
+    await recordV3ErrorDiagnostic(root, new Error('unclassified failure'), NOW);
+
+    await expect(readLocalDiagnostics(root)).resolves.toMatchObject({
+      revisionConflictCount: 1,
+      contextStaleCount: 1,
+      migrationSplitBrainDetectionCount: 1,
+    });
   });
 
   it('rejects unrecognized stored fields rather than accepting accidental content', () => {

@@ -35,6 +35,7 @@ import {
   recoverTransportMigration,
   stageTransportMigration,
 } from '../src/team/transport-migration.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-18T02:00:00.000Z');
@@ -236,7 +237,7 @@ describe('filesystem and git-ref transport migration adapters', () => {
         projectRoot: fixture.projectRoot,
         taskRef: fixture.taskRef,
         sessionId: fixture.sessionId,
-        expectedTaskRevision: 1,
+        expectedTaskRevision: fixture.taskRevision,
         kind: 'diagnostic_started',
         summary: 'This write must remain blocked during migration.',
         operationId: id(31),
@@ -380,6 +381,7 @@ interface Fixture {
   sessionId: Ulid;
   claimId: Ulid;
   taskRef: TaskRef;
+  taskRevision: number;
 }
 
 async function bootstrap(): Promise<Fixture> {
@@ -443,12 +445,19 @@ async function bootstrap(): Promise<Fixture> {
     implementationScope: { include: ['src/team/**'] },
     now: NOW,
   });
+  const confirmed = await confirmManteamPlan({
+    projectRoot,
+    taskRef: workflow.taskRef,
+    sessionId,
+    requirements: workflow.requirements,
+    now: NOW,
+  });
   const claimId = id(12);
   await acquireV3Claim({
     projectRoot,
     taskRef: workflow.taskRef,
     sessionId,
-    expectedTaskRevision: 1,
+    expectedTaskRevision: confirmed.taskRevision,
     scope: {
       paths: ['src/team/**'],
       modules: [],
@@ -465,6 +474,7 @@ async function bootstrap(): Promise<Fixture> {
     sessionId,
     claimId,
     taskRef: workflow.taskRef,
+    taskRevision: confirmed.taskRevision,
   };
 }
 

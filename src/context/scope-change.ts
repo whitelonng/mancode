@@ -495,7 +495,7 @@ function assertClaimsFreshForScopeChange(
   }
 }
 
-function normalizeImplementationScope(
+export function normalizeImplementationScope(
   value: unknown,
 ): WorkflowMetadataV3['implementationScope'] {
   assertRecord(value, 'workflow scope change');

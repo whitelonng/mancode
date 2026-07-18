@@ -14,12 +14,14 @@ import {
   completeProjectionIntent,
   enqueueAuditEventProjection,
 } from '../runtime/projection-outbox.js';
+import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
   type SharedActorProfileV1,
   createLocalActor,
   readLocalActor,
   readSharedActorProfile,
 } from '../team/actor.js';
+import { assessTeam } from '../team/assessment.js';
 import { createAuthorizationBasis } from '../team/authorization.js';
 import { parseCheckpointKind } from '../team/checkpoints.js';
 import { acquireV3Claim } from '../team/claim-acquisition.js';
@@ -62,6 +64,11 @@ import {
   rejectV3Handoff,
 } from '../team/handoff-operation.js';
 import { type TeamJoinSyncPublisher, joinTeam } from '../team/join.js';
+import {
+  previewSetTeamTransport,
+  setTeamTransport,
+  updateTeamPolicy,
+} from '../team/policy-operation.js';
 import type { ProjectConfigV1 } from '../team/policy.js';
 import { createTransportMigrationFileAdapters } from '../team/transport-migration-adapters.js';
 import {
@@ -97,6 +104,24 @@ export interface TeamJoinOptions {
 }
 
 export interface TeamStatusOptions {
+  json?: boolean;
+}
+
+export interface TeamPolicyOptions {
+  policy?: string;
+  expectedRevision?: string;
+  session?: string;
+  client?: string;
+  json?: boolean;
+}
+
+export interface TeamTransportSetOptions {
+  mode?: string;
+  remote?: string;
+  expectedConfigRevision?: string;
+  dryRun?: boolean;
+  session?: string;
+  client?: string;
   json?: boolean;
 }
 
@@ -758,7 +783,13 @@ export async function teamStatus(
 ): Promise<number> {
   try {
     const project = await readV3CommandProject(rootDir);
-    const actor = await readLocalActor(project.projectRoot);
+    const [actor, assessmentSignals] = await Promise.all([
+      readLocalActor(project.projectRoot),
+      detectTeamAssessmentSignals(
+        project.projectRoot,
+        project.project.policy.recentDays,
+      ),
+    ]);
     const profile =
       actor === null
         ? null
@@ -775,6 +806,11 @@ export async function teamStatus(
       schemaVersion: 1,
       workspaceId: project.project.config.workspaceId,
       policy: project.project.policy,
+      assessment: assessTeam({
+        policy: project.project.policy.policy,
+        signals: assessmentSignals,
+        evaluatedAt: new Date().toISOString(),
+      }),
       transport: project.project.config.transport,
       capabilities,
       remoteSnapshot:
@@ -794,6 +830,130 @@ export async function teamStatus(
       options.json,
       v3ErrorCode(error, 'MANCODE_TEAM_STATUS_FAILED'),
       error instanceof Error ? error.message : 'Unable to read team status.',
+    );
+  }
+}
+
+/** Updates the team recommendation policy through its independent revision CAS. */
+export async function teamPolicy(
+  rootDir: string,
+  options: TeamPolicyOptions,
+): Promise<number> {
+  const expectedPolicyRevision = parsePositiveInteger(options.expectedRevision);
+  if (
+    (options.policy !== 'on' &&
+      options.policy !== 'off' &&
+      options.policy !== 'auto') ||
+    expectedPolicyRevision === null
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_TEAM_POLICY_ARGUMENT_INVALID',
+      'Use: team policy <on|off|auto> --expected-revision <n>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const result = await updateTeamPolicy({
+      projectRoot: project.projectRoot,
+      sessionId: session.sessionId,
+      expectedPolicyRevision,
+      policy: options.policy,
+    });
+    return printV3Result(options.json, { schemaVersion: 1, ...result });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_TEAM_POLICY_UPDATE_FAILED'),
+      error instanceof Error ? error.message : 'Unable to update team policy.',
+    );
+  }
+}
+
+/** Emits only the transport/capability facet of the broader team status. */
+export async function teamTransportStatus(
+  rootDir: string,
+  options: TeamStatusOptions,
+): Promise<number> {
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const cache = await readGitRefTeamCache(
+      project.projectRoot,
+      project.project.config,
+    );
+    const capabilities =
+      project.project.config.transport.mode === 'git-ref'
+        ? capabilitiesFromGitRefCache(project.project.config, cache)
+        : capabilitiesFromProjectConfig(project.project.config);
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      transport: project.project.config.transport,
+      capabilities,
+      remoteSnapshot:
+        cache === null
+          ? null
+          : {
+              revision: cache.manifest?.revision ?? 0,
+              fetchedAt: cache.fetchedAt,
+              receipt: cache.receipt,
+            },
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_TEAM_TRANSPORT_STATUS_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to read transport status.',
+    );
+  }
+}
+
+/** Uses transport_set solely while no coordination authority has a history. */
+export async function teamTransportSet(
+  rootDir: string,
+  options: TeamTransportSetOptions,
+): Promise<number> {
+  const expectedConfigRevision = parsePositiveInteger(
+    options.expectedConfigRevision,
+  );
+  if (
+    (options.mode !== 'local' && options.mode !== 'git-ref') ||
+    expectedConfigRevision === null
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_TRANSPORT_SET_ARGUMENT_INVALID',
+      'Use: team transport set <local|git-ref> --expected-config-revision <n> [--remote <name>] [--dry-run].',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    const input = {
+      projectRoot: project.projectRoot,
+      sessionId: session.sessionId,
+      expectedConfigRevision,
+      mode: options.mode,
+      ...(options.remote === undefined ? {} : { remote: options.remote }),
+    } as const;
+    const result =
+      options.dryRun === true
+        ? await previewSetTeamTransport(input)
+        : await setTeamTransport(input);
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      dryRun: options.dryRun === true,
+      ...result,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_TEAM_TRANSPORT_SET_FAILED'),
+      error instanceof Error ? error.message : 'Unable to set transport.',
     );
   }
 }

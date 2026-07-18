@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  contextClose,
   contextDoctor,
   contextReconcileTaskHead,
   contextResume,
@@ -430,6 +431,84 @@ describe('V3 CLI command contracts', () => {
       expect(
         sessionFiles.filter((name) => name.endsWith('.json')),
       ).toHaveLength(1);
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  it('keeps supported CLI sessions isolated while they resume the same TaskRef', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Cross CLI User', json: true });
+      await contextSessionNew(root, { client: 'codex', json: true });
+      const codexSession = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await contextSessionNew(root, { client: 'claude-code', json: true });
+      const claudeSession = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      expect(codexSession).not.toBe(claudeSession);
+
+      expect(
+        await workflow(root, 'create', ['man', 'Resume across CLI clients.'], {
+          session: codexSession,
+          client: 'codex',
+          json: true,
+        }),
+      ).toBe(0);
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: { namespace: string; taskId: string };
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+
+      expect(
+        await contextResume(root, task, {
+          session: claudeSession,
+          client: 'claude-code',
+          json: true,
+        }),
+      ).toBe(0);
+      const resumed = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRevision: number;
+        pack: {
+          snapshot: {
+            taskRevision: number;
+            requirementsDigest: string;
+            reviewDigest: string;
+            verificationDigest: string;
+          };
+        };
+      };
+      expect(resumed.taskRevision).toBe(1);
+      expect(resumed.pack.snapshot.taskRevision).toBe(1);
+      expect(resumed.pack.snapshot.requirementsDigest).toMatch(/^sha256:/);
+      expect(resumed.pack.snapshot.reviewDigest).toMatch(/^sha256:/);
+      expect(resumed.pack.snapshot.verificationDigest).toMatch(/^sha256:/);
+
+      expect(
+        await contextClose(root, { session: codexSession, json: true }),
+      ).toBe(0);
+      await expect(readSession(root, claudeSession)).resolves.toMatchObject({
+        status: 'active',
+        activeTaskRef: created.taskRef,
+      });
+
+      expect(
+        await workflow(root, 'create', ['man', 'Missing identity must fail.'], {
+          client: 'cursor',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_SESSION_REQUIRED' },
+      });
     } finally {
       logs.mockRestore();
       errors.mockRestore();

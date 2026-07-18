@@ -13,6 +13,7 @@ import {
   resolveCoordinationEntityHomeStore,
   resolveLocalEntityHomeStore,
 } from './entity-home-store.js';
+import { listGitRefWorkflowRepairJournalSummaries } from './git-ref-workflow-repair-store.js';
 import { listHandoffs } from './handoff-store.js';
 import {
   type OperationJournalV1,
@@ -28,7 +29,9 @@ const RETAINED_NON_MILESTONE_CHECKPOINTS = 10;
 export type RetentionCandidateKind =
   | 'completed_session'
   | 'terminal_operation'
-  | 'checkpoint';
+  | 'checkpoint'
+  | 'local_overlay_artifact'
+  | 'local_cache';
 
 export interface RetentionCandidate {
   kind: RetentionCandidateKind;
@@ -86,27 +89,43 @@ export async function planContextCompaction(
   const coordinationStore = resolveCoordinationEntityHomeStore(
     runtime.entityHomeStoreContext,
   );
-  const operationPlan = await planOperationRetention(
-    uniqueStores([localStore, coordinationStore]),
-    now,
-  );
+  const [operationPlan, gitRefWorkflowRepairPlan] = await Promise.all([
+    planOperationRetention(uniqueStores([localStore, coordinationStore]), now),
+    planGitRefWorkflowRepairRetention(root, now),
+  ]);
+  const protectedSessionIds = new Set([
+    ...operationPlan.protectedSessionIds,
+    ...gitRefWorkflowRepairPlan.protectedSessionIds,
+  ]);
+  const protectedTaskRefs = new Set([
+    ...operationPlan.protectedTaskRefs,
+    ...gitRefWorkflowRepairPlan.protectedTaskRefs,
+  ]);
   const taskRefs =
     input.taskRef === undefined
       ? await listTaskRefs(root)
       : [parseTaskRefValue(input.taskRef)];
-  const [checkpointPlan, sessions] = await Promise.all([
+  const [checkpointPlan, sessions, overlays, cache] = await Promise.all([
     planCheckpointCompaction(
       store,
       coordinationStore,
       taskRefs,
-      operationPlan.protectedTaskRefs,
+      protectedTaskRefs,
     ),
     planCompletedSessionRetention(
       root,
       project.policy.retention.completedSessionDays,
       now,
-      operationPlan.protectedSessionIds,
+      protectedSessionIds,
     ),
+    planLocalOverlayRetention(
+      root,
+      store,
+      taskRefs,
+      project.policy.retention.localRawArtifactDays,
+      now,
+    ),
+    planLocalCacheRetention(root, project.policy.retention.localCacheDays, now),
   ]);
   return {
     schemaVersion: 1,
@@ -114,7 +133,10 @@ export async function planContextCompaction(
     candidates: [
       ...sessions,
       ...operationPlan.candidates,
+      ...gitRefWorkflowRepairPlan.candidates,
       ...checkpointPlan.candidates,
+      ...overlays,
+      ...cache,
     ].sort((left, right) =>
       Buffer.from(left.target, 'utf8').compare(
         Buffer.from(right.target, 'utf8'),
@@ -122,6 +144,72 @@ export async function planContextCompaction(
     ),
     skippedReferencedCheckpoints: checkpointPlan.skippedReferencedCheckpoints,
   };
+}
+
+/**
+ * Local overlays are never shared ArtifactRefs.  They can therefore be
+ * compacted only after the corresponding shared task is terminal; an active,
+ * planned, or blocked task retains every private trace regardless of age.
+ */
+async function planLocalOverlayRetention(
+  root: string,
+  store: V3ContextStore,
+  taskRefs: readonly TaskRef[],
+  localRawArtifactDays: number,
+  now: Date,
+): Promise<RetentionCandidate[]> {
+  const threshold = now.getTime() - localRawArtifactDays * 86_400_000;
+  const candidates: RetentionCandidate[] = [];
+  for (const taskRef of taskRefs) {
+    if (taskRef.namespace !== 'shared') continue;
+    const task = await store.readTaskSnapshot(taskRef);
+    if (!isTerminalTaskStatus(task.metadata.status)) continue;
+    const directory = path.join(
+      root,
+      '.mancode',
+      'local',
+      'overlays',
+      taskRef.taskId,
+      'artifacts',
+    );
+    for (const entry of await readDirectoryOrEmpty(directory)) {
+      const target = path.join(directory, entry);
+      const metadata = await regularFileMetadataOrNull(target);
+      if (metadata === null || metadata.mtimeMs >= threshold) continue;
+      candidates.push({
+        kind: 'local_overlay_artifact',
+        target,
+        reason: `terminal task raw artifact exceeds ${localRawArtifactDays} day retention`,
+        // The artifact is local-only even though it is grouped by shared task.
+        taskRef: null,
+        relatedTargets: [],
+      });
+    }
+  }
+  return candidates;
+}
+
+/** Cache records are disposable projections; retain no nested path authority. */
+async function planLocalCacheRetention(
+  root: string,
+  localCacheDays: number,
+  now: Date,
+): Promise<RetentionCandidate[]> {
+  const threshold = now.getTime() - localCacheDays * 86_400_000;
+  const directory = path.join(root, '.mancode', 'local', 'cache');
+  const candidates: RetentionCandidate[] = [];
+  for (const target of await listRegularFilesRecursively(directory)) {
+    const metadata = await regularFileMetadataOrNull(target);
+    if (metadata === null || metadata.mtimeMs >= threshold) continue;
+    candidates.push({
+      kind: 'local_cache',
+      target,
+      reason: `local cache exceeds ${localCacheDays} day retention`,
+      taskRef: null,
+      relatedTargets: [],
+    });
+  }
+  return candidates;
 }
 
 /** Applies a previously rendered deletion list after rechecking every target. */
@@ -275,6 +363,39 @@ async function planOperationRetention(
   return { candidates, protectedSessionIds, protectedTaskRefs };
 }
 
+async function planGitRefWorkflowRepairRetention(
+  projectRoot: string,
+  now: Date,
+): Promise<OperationRetentionPlan> {
+  const threshold =
+    now.getTime() - TERMINAL_JOURNAL_RETENTION_DAYS * 86_400_000;
+  const candidates: RetentionCandidate[] = [];
+  const protectedSessionIds = new Set<string>();
+  const protectedTaskRefs = new Set<string>();
+  const journals = await listGitRefWorkflowRepairJournalSummaries(projectRoot, {
+    includeTerminal: true,
+  });
+  for (const journal of journals) {
+    const terminal =
+      journal.state === 'committed' || journal.state === 'aborted';
+    if (!terminal) {
+      protectedSessionIds.add(journal.sessionId);
+      protectedTaskRefs.add(taskRefKey(journal.taskRef));
+      continue;
+    }
+    if (Date.parse(journal.updatedAt) < threshold) {
+      candidates.push({
+        kind: 'terminal_operation',
+        target: journal.journalPath,
+        reason: `${journal.state} git-ref workflow repair exceeds ${TERMINAL_JOURNAL_RETENTION_DAYS} day retention`,
+        taskRef: null,
+        relatedTargets: [],
+      });
+    }
+  }
+  return { candidates, protectedSessionIds, protectedTaskRefs };
+}
+
 function operationRetentionCandidate(
   store: EntityHomeStore,
   journal: OperationJournalV1,
@@ -310,6 +431,12 @@ function taskRefKeyFromEntityKey(entityKey: string): string | null {
     entityKey,
   );
   return match === null ? null : `${match[1]}:${match[2]}`;
+}
+
+function isTerminalTaskStatus(status: string): boolean {
+  return (
+    status === 'completed' || status === 'abandoned' || status === 'superseded'
+  );
 }
 
 async function listTaskRefs(root: string): Promise<TaskRef[]> {
@@ -389,6 +516,30 @@ async function readDirectoryOrEmpty(directory: string): Promise<string[]> {
   }
 }
 
+async function listRegularFilesRecursively(
+  directory: string,
+): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readDirectoryOrEmpty(directory)) {
+    const target = path.join(directory, entry);
+    const metadata = await lstatOrNull(target);
+    if (metadata === null) continue;
+    if (metadata.isSymbolicLink()) {
+      throw new Error('MANCODE_RETENTION_PATH_UNSAFE');
+    }
+    if (metadata.isFile()) {
+      files.push(target);
+      continue;
+    }
+    if (metadata.isDirectory()) {
+      files.push(...(await listRegularFilesRecursively(target)));
+      continue;
+    }
+    throw new Error('MANCODE_RETENTION_PATH_UNSAFE');
+  }
+  return files;
+}
+
 async function readRegularFile(target: string): Promise<string> {
   const before = await lstat(target);
   if (!before.isFile() || before.isSymbolicLink()) {
@@ -418,6 +569,26 @@ async function regularFileExists(target: string): Promise<boolean> {
     return true;
   } catch (error) {
     if (isNotFound(error)) return false;
+    throw error;
+  }
+}
+
+async function regularFileMetadataOrNull(
+  target: string,
+): Promise<{ mtimeMs: number } | null> {
+  const metadata = await lstatOrNull(target);
+  if (metadata === null) return null;
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error('MANCODE_RETENTION_PATH_UNSAFE');
+  }
+  return { mtimeMs: metadata.mtimeMs };
+}
+
+async function lstatOrNull(target: string) {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if (isNotFound(error)) return null;
     throw error;
   }
 }

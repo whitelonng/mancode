@@ -21,6 +21,7 @@ import {
   readLocalActor,
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T15:00:00.000Z');
@@ -67,11 +68,18 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       operationId: id(11),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId: actors.ownerSessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
     const authClaim = await acquireV3Claim({
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         paths: ['src/auth/**'],
         modules: ['auth'],
@@ -86,7 +94,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.participantSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         paths: ['src/billing/**'],
         modules: ['billing'],
@@ -102,7 +110,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         include: ['src/**'],
         exclude: ['src/billing/**'],
@@ -116,7 +124,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
 
     expect(changed).toMatchObject({
       metadata: {
-        revision: 3,
+        revision: 5,
         transitionState: 'stable',
         implementationScope: {
           source: 'explicit',
@@ -131,7 +139,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         checkpointId: id(16),
         operationId: id(18),
         kind: 'scope_changed',
-        taskRevision: 2,
+        taskRevision: 4,
       },
       terminatedClaims: [
         {
@@ -154,13 +162,13 @@ describe('V3 journaled workflow scope change and re-claim', () => {
           revision: 2,
           ownerActorId: actors.ownerActorId,
           predecessorClaimId: authClaim.claim.claimId,
-          taskRevisionAtAcquire: 3,
-          lastValidatedTaskRevision: 3,
+          taskRevisionAtAcquire: 5,
+          lastValidatedTaskRevision: 5,
         },
       ],
       taskHeadFence: {
-        fenceRevision: 2,
-        taskRevision: 3,
+        fenceRevision: 4,
+        taskRevision: 5,
         lastOperationId: id(18),
       },
       operation: { type: 'scope_change_reclaim', state: 'committed' },
@@ -176,12 +184,12 @@ describe('V3 journaled workflow scope change and re-claim', () => {
     );
     await expect(readOperationJournal(home, id(18))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 1,
+        [`task:shared:${workflow.taskRef.taskId}`]: 3,
         [`checkpoint:${id(16)}`]: 0,
         [`claim:${id(12)}`]: 1,
         [`claim:${id(14)}`]: 1,
         [`claim:${id(17)}`]: 0,
-        [`task_head:${workflow.taskRef.taskId}`]: 1,
+        [`task_head:${workflow.taskRef.taskId}`]: 3,
       },
       entityLocks: expect.arrayContaining([
         `checkpoint:${id(16)}`,
@@ -262,6 +270,13 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       operationId: id(41),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.ownerSessionId,
+      requirements: created.requirements,
+      now: NOW,
+    });
     await writeFile(
       path.join(root, 'scope.json'),
       JSON.stringify({
@@ -279,7 +294,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
           'scope',
           ['change', `shared:${created.taskRef.taskId}`],
           {
-            expectedRevision: '1',
+            expectedRevision: String(confirmed.taskRevision),
             file: 'scope.json',
             session: actors.ownerSessionId,
             client: 'owner-client',
@@ -297,7 +312,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       };
       expect(payload).toMatchObject({
         metadata: {
-          revision: 3,
+          revision: 5,
           implementationScope: { modules: ['auth'] },
         },
         checkpoint: { kind: 'scope_changed' },

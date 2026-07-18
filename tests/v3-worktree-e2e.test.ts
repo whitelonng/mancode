@@ -10,6 +10,9 @@ import { V3ContextStore } from '../src/context/store.js';
 import { reconcileV3TaskHead } from '../src/context/task-head-reconcile.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { resolveTaskEntityHomeStore } from '../src/runtime/entity-home-store.js';
+import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
+import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
+import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
 import {
   ensureProjectRuntimeContext,
   readProjectRuntimeContext,
@@ -21,6 +24,12 @@ import {
   publishSharedActorProfile,
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
+import {
+  acceptV3Handoff,
+  createV3HandoffDraft,
+  offerV3Handoff,
+} from '../src/team/handoff-operation.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-18T10:00:00.000Z');
@@ -94,6 +103,13 @@ describe('V3 linked-worktree end to end', () => {
       operationId: id(11),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: sessionA,
+      requirements: created.requirements,
+      now: NOW,
+    });
 
     await expect(
       new V3ContextStore(linked).readTaskSnapshot(created.taskRef),
@@ -104,7 +120,7 @@ describe('V3 linked-worktree end to end', () => {
       projectRoot: root,
       taskRef: created.taskRef,
       sessionId: sessionA,
-      expectedFenceRevision: 1,
+      expectedFenceRevision: 3,
       fromGit: true,
       operationId: id(12),
       now: NOW,
@@ -124,7 +140,7 @@ describe('V3 linked-worktree end to end', () => {
       projectRoot: root,
       taskRef: created.taskRef,
       sessionId: sessionA,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: claimScope('src/auth/**'),
       claimId: id(20),
       operationId: id(21),
@@ -136,7 +152,7 @@ describe('V3 linked-worktree end to end', () => {
         projectRoot: linked,
         taskRef: created.taskRef,
         sessionId: sessionB,
-        expectedTaskRevision: 1,
+        expectedTaskRevision: confirmed.taskRevision,
         scope: claimScope('src/auth/**'),
         claimId: id(22),
         operationId: id(23),
@@ -148,7 +164,7 @@ describe('V3 linked-worktree end to end', () => {
       projectRoot: linked,
       taskRef: created.taskRef,
       sessionId: sessionB,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: claimScope('tests/auth/**'),
       claimId: id(24),
       operationId: id(25),
@@ -169,6 +185,141 @@ describe('V3 linked-worktree end to end', () => {
     ).readCoordinationSnapshot(created.taskRef, homeA);
     expect(coordination.claims).toEqual([firstClaim.claim, secondClaim.claim]);
   });
+
+  it('recovers a handoff acceptance started from a linked worktree', async () => {
+    const actorA = id(40);
+    const actorB = id(41);
+    const sessionA = id(42);
+    const sessionB = id(43);
+    await initializeV3Project({
+      projectRoot: root,
+      operationId: id(44),
+      workspaceId: id(45),
+      schemaEpoch: id(46),
+      now: NOW,
+    });
+    await createActorAndSession(root, actorA, sessionA, 'Actor A');
+    await commitSharedAuthority(root, 'initialize shared authority');
+
+    linked = path.join(
+      tmpdir(),
+      `mancode-v3-worktree-handoff-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await git(root, ['worktree', 'add', '-b', 'worktree-handoff', linked]);
+    await ensureProjectRuntimeContext(linked, NOW);
+    await createActorAndSession(linked, actorB, sessionB, 'Actor B');
+    await commitSharedAuthority(linked, 'join actor B');
+    await git(root, ['merge', '--ff-only', 'worktree-handoff']);
+
+    const workflow = await createV3Workflow({
+      projectRoot: root,
+      task: 'Recover a linked-worktree handoff without duplicate ownership.',
+      workflowMode: 'manteam',
+      sessionId: sessionA,
+      client: 'vitest',
+      sharedPrivacyConfirmed: true,
+      participantActorIds: [actorB],
+      implementationScope: { include: ['src/**'], modules: ['auth'] },
+      taskId: id(47),
+      operationId: id(48),
+      now: NOW,
+    });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId: sessionA,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
+    await commitSharedAuthority(root, 'publish handoff task');
+    await reconcileV3TaskHead({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId: sessionA,
+      expectedFenceRevision: 3,
+      fromGit: true,
+      operationId: id(49),
+      now: NOW,
+    });
+    await git(linked, ['merge', '--ff-only', 'main']);
+
+    const ownerSessionInLinkedWorktree = id(50);
+    await createSession(linked, {
+      actorId: actorA,
+      sessionId: ownerSessionInLinkedWorktree,
+      client: 'vitest-owner',
+      identitySource: 'explicit',
+      now: NOW,
+    });
+    const claim = await acquireV3Claim({
+      projectRoot: linked,
+      taskRef: workflow.taskRef,
+      sessionId: ownerSessionInLinkedWorktree,
+      expectedTaskRevision: confirmed.taskRevision,
+      scope: claimScope('src/auth/**'),
+      claimId: id(51),
+      operationId: id(52),
+      now: NOW,
+    });
+    const drafted = await createV3HandoffDraft({
+      projectRoot: linked,
+      taskRef: workflow.taskRef,
+      sessionId: ownerSessionInLinkedWorktree,
+      expectedTaskRevision: confirmed.taskRevision,
+      toActorId: actorB,
+      claimIds: [claim.claim.claimId],
+      handoffId: id(53),
+      checkpointId: id(54),
+      checkpointOperationId: id(55),
+      operationId: id(56),
+      now: NOW,
+    });
+    await offerV3Handoff({
+      projectRoot: linked,
+      handoffId: drafted.handoff.handoffId,
+      sessionId: ownerSessionInLinkedWorktree,
+      expectedHandoffRevision: 1,
+      operationId: id(57),
+      now: NOW,
+    });
+
+    const crash = OPERATION_CRASH_FIXTURES.handoff_accept.find(
+      (fixture) => fixture.crashAfter === 'accept-handoff',
+    );
+    if (crash === undefined)
+      throw new Error('missing handoff accept crash fixture');
+    const operationId = id(58);
+    await expect(
+      withOperationCrashInjectionForTesting(crash, () =>
+        acceptV3Handoff({
+          projectRoot: linked ?? root,
+          handoffId: drafted.handoff.handoffId,
+          sessionId: sessionB,
+          expectedHandoffRevision: 2,
+          successorClaimIds: [id(59)],
+          operationId,
+          now: NOW,
+        }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+    const recovered = await executeOperationRecovery({
+      projectRoot: linked,
+      operationId,
+      actorId: actorB,
+      sessionId: sessionB,
+      now: NOW,
+    });
+    expect(recovered).toMatchObject({
+      state: 'repaired',
+      journal: { state: 'committed' },
+    });
+    await expect(
+      new V3ContextStore(linked).readTaskSnapshot(workflow.taskRef),
+    ).resolves.toMatchObject({
+      metadata: { ownerActorId: actorB, ownershipEpoch: 2 },
+    });
+  }, 20_000);
 });
 
 async function createActorAndSession(

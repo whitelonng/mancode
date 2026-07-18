@@ -580,6 +580,19 @@ async function auditEventAuthority(
       ? 'present'
       : 'conflict';
   }
+  if (
+    event.entityRef.kind === 'team_policy' ||
+    event.entityRef.kind === 'project_config' ||
+    event.entityRef.kind === 'transport'
+  ) {
+    const project = await new V3ContextStore(projectRoot).readProjectSnapshot();
+    const authority =
+      event.entityRef.kind === 'team_policy' ? project.policy : project.config;
+    return authority.workspaceId === event.entityRef.id &&
+      authority.lastOperationId === event.operationId
+      ? 'present'
+      : 'conflict';
+  }
   return 'conflict';
 }
 

@@ -21,6 +21,7 @@ import {
   readLocalActor,
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T13:00:00.000Z');
@@ -65,12 +66,19 @@ describe('V3 claim acquisition', () => {
       operationId: id(11),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
 
     const result = await acquireV3Claim({
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         paths: ['src/auth/**'],
         modules: ['auth'],
@@ -87,7 +95,7 @@ describe('V3 claim acquisition', () => {
       taskRef: workflow.taskRef,
       state: 'active',
       revision: 1,
-      taskRevisionAtAcquire: 1,
+      taskRevisionAtAcquire: 3,
       lastOperationId: id(13),
     });
     expect(result.operation).toMatchObject({
@@ -101,7 +109,7 @@ describe('V3 claim acquisition', () => {
     );
     await expect(readOperationJournal(home, id(13))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 1,
+        [`task:shared:${workflow.taskRef.taskId}`]: 3,
         [`claim:${id(12)}`]: 0,
       },
     });
@@ -115,7 +123,7 @@ describe('V3 claim acquisition', () => {
         projectRoot: root,
         taskRef: workflow.taskRef,
         sessionId,
-        expectedTaskRevision: 1,
+        expectedTaskRevision: confirmed.taskRevision,
         scope: {
           paths: ['src/auth/**'],
           modules: ['auth'],
@@ -149,13 +157,20 @@ describe('V3 claim acquisition', () => {
       operationId: id(21),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       expect(
         await teamClaim(root, {
           task: `shared:${workflow.taskRef.taskId}`,
-          expectedTaskRevision: '1',
+          expectedTaskRevision: String(confirmed.taskRevision),
           paths: ['tests/auth/**', 'src/auth/**'],
           modules: ['auth'],
           session: sessionId,

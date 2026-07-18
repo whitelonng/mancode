@@ -21,6 +21,7 @@ import {
 } from './aggregate.js';
 import { digestCanonicalJson } from './canonical.js';
 import type { Ulid } from './ids.js';
+import { assertManteamPlanContent } from './manteam-plan.js';
 import { assertSharedTextSafe } from './privacy.js';
 import {
   type RequirementsLedgerV1,
@@ -96,6 +97,12 @@ export async function reviseV3Plan(
       context.task.metadata,
       context.task.requirements,
     );
+    if (
+      context.task.metadata.workflowMode === 'manteam' &&
+      planDecision === 'governed_execution'
+    ) {
+      assertManteamPlanContent(plan);
+    }
     if (context.task.plan?.content === plan && planDecision === null) {
       throw new Error('MANCODE_PLAN_CONTENT_UNCHANGED');
     }

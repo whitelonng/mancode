@@ -19,7 +19,7 @@
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.3.9-green?style=flat-square" alt="Status: stable v0.3.9" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
-  <img src="https://img.shields.io/badge/tests-444%20passed-brightgreen?style=flat-square" alt="Tests: 444 passed" />
+  <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="Tests passing" />
 </p>
 
 <p align="center">
@@ -88,6 +88,34 @@ These are agent skills, not deprecated custom prompts. See the official
 [skills](https://learn.chatgpt.com/docs/build-skills) and
 [slash-command](https://learn.chatgpt.com/docs/reference/slash-commands) docs.
 Existing workflow metadata remains compatible and does not need migration.
+
+## V3 Cross-CLI and Team Beta
+
+V3 adds stable `TaskRef` context across CLIs, isolated sessions, governance
+ledgers, worktree claims and handoffs, and optional git-ref coordination across
+clones. It is currently Beta. Plain `mancode init` still creates a compatible
+legacy project; initialize V3 explicitly for a new project:
+
+```bash
+mancode init --v3
+mancode install codex
+mancode team identity create --name "Your name"
+mancode context session new --client codex
+```
+
+V3 adapters are bootstrap-only and never persist task or session state in a
+platform file. Use the CLI for creation, resume, and coordination:
+`mancode workflow create`, `mancode context resume`, `mancode team claim`, and
+`mancode team handoff`. For an existing project, begin with
+`mancode migrate context --dry-run`, then follow its stage and activation
+report. Do not manually mix legacy `state.json` writes with V3 authority.
+
+Before releasing or broadly enabling V3, run `mancode context beta --json`.
+It checks activation, adapters, repair state, worktree binding, and session
+evidence for all five platforms. Each platform must prove distinct sessions in
+two real host windows and command propagation; stored evidence never includes
+raw session keys. Until that gate passes, use an explicit `--session <id>` and
+do not treat host identity as verified.
 
 ## What Gets Installed
 

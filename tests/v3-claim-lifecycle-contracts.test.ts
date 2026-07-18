@@ -27,6 +27,7 @@ import {
   revalidateV3Claim,
   transferV3Claim,
 } from '../src/team/claim-operation.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T16:00:00.000Z');
@@ -97,7 +98,7 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(15))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 1,
+        [`task:shared:${workflow.taskRef.taskId}`]: 3,
         [`claim:${claim.claim.claimId}`]: 2,
       },
     });
@@ -142,7 +143,7 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(25))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 1,
+        [`task:shared:${workflow.taskRef.taskId}`]: 3,
         [`claim:${claim.claim.claimId}`]: 1,
         [`claim:${id(24)}`]: 0,
       },
@@ -155,12 +156,16 @@ describe('V3 local claim lifecycle operations', () => {
 
   it('revalidates a claim against the final task revision without mutating its acquisition snapshot', async () => {
     const actors = await bootstrap(root);
-    const { workflow, claim } = await workflowWithOwnerClaim(root, actors, 30);
+    const { workflow, claim, taskRevision } = await workflowWithOwnerClaim(
+      root,
+      actors,
+      30,
+    );
     await createV3Checkpoint({
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: taskRevision,
       kind: 'diagnostic_started',
       summary: 'A normal task mutation made existing claims need validation.',
       checkpointId: id(34),
@@ -178,17 +183,17 @@ describe('V3 local claim lifecycle operations', () => {
       now: NOW,
     });
     expect(revalidated).toMatchObject({
-      metadata: { revision: 5, transitionState: 'stable' },
+      metadata: { revision: 7, transitionState: 'stable' },
       claim: {
         claimId: claim.claim.claimId,
         state: 'active',
         revision: 2,
-        taskRevisionAtAcquire: 1,
-        lastValidatedTaskRevision: 5,
+        taskRevisionAtAcquire: 3,
+        lastValidatedTaskRevision: 7,
         lastOperationId: id(37),
       },
       checkpoint: null,
-      taskHeadFence: { fenceRevision: 3, taskRevision: 5 },
+      taskHeadFence: { fenceRevision: 5, taskRevision: 7 },
       operation: { type: 'claim_revalidation', state: 'committed' },
     });
     const runtime = await readProjectRuntimeContext(root);
@@ -198,9 +203,9 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(37))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`claim:${claim.claim.claimId}`]: 1,
-        [`task_head:${workflow.taskRef.taskId}`]: 2,
+        [`task_head:${workflow.taskRef.taskId}`]: 4,
       },
       entityLocks: expect.arrayContaining([
         `claim:${claim.claim.claimId}`,
@@ -303,11 +308,18 @@ async function workflowWithOwnerClaim(
     operationId: id(offset + 1),
     now: NOW,
   });
+  const confirmed = await confirmManteamPlan({
+    projectRoot,
+    taskRef: workflow.taskRef,
+    sessionId: actors.ownerSessionId,
+    requirements: workflow.requirements,
+    now: NOW,
+  });
   const claim = await acquireV3Claim({
     projectRoot,
     taskRef: workflow.taskRef,
     sessionId: actors.ownerSessionId,
-    expectedTaskRevision: 1,
+    expectedTaskRevision: confirmed.taskRevision,
     scope: {
       paths: ['src/auth/**'],
       modules: ['auth'],
@@ -319,7 +331,7 @@ async function workflowWithOwnerClaim(
     operationId: id(offset + 3),
     now: NOW,
   });
-  return { workflow, claim };
+  return { workflow, claim, taskRevision: confirmed.taskRevision };
 }
 
 async function bootstrap(projectRoot: string): Promise<{

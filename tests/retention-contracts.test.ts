@@ -258,6 +258,65 @@ describe('V3 retention and compaction', () => {
     );
   });
 
+  it('retains active git-ref workflow repairs and compacts only their aged terminal journals', async () => {
+    const directory = path.join(
+      root,
+      '.mancode',
+      'local',
+      'journals',
+      'git-ref-workflow',
+    );
+    const terminalOperationId = id(120);
+    const activeOperationId = id(121);
+    const terminalTarget = path.join(directory, `${terminalOperationId}.json`);
+    const activeTarget = path.join(directory, `${activeOperationId}.json`);
+    await mkdir(directory, { recursive: true });
+    await Promise.all([
+      writeFile(
+        terminalTarget,
+        `${JSON.stringify(
+          gitRefWorkflowRepairJournal({
+            operationId: terminalOperationId,
+            state: 'committed',
+            updatedAt: '2026-05-01T00:00:00.000Z',
+            actorId,
+            sessionId,
+          }),
+        )}\n`,
+      ),
+      writeFile(
+        activeTarget,
+        `${JSON.stringify(
+          gitRefWorkflowRepairJournal({
+            operationId: activeOperationId,
+            state: 'repair_required',
+            updatedAt: '2026-05-01T00:00:00.000Z',
+            actorId,
+            sessionId,
+          }),
+        )}\n`,
+      ),
+    ]);
+    await closeSession(root, sessionId, new Date('2026-05-01T01:00:00.000Z'));
+
+    const plan = await planContextCompaction({ projectRoot: root, now: NOW });
+    expect(plan.candidates.map((candidate) => candidate.target)).toContain(
+      terminalTarget,
+    );
+    expect(plan.candidates.map((candidate) => candidate.target)).not.toContain(
+      activeTarget,
+    );
+    expect(plan.candidates.map((candidate) => candidate.target)).not.toContain(
+      path.join(root, '.mancode', 'local', 'sessions', `${sessionId}.json`),
+    );
+
+    await applyContextCompaction(plan);
+    await expect(readFile(terminalTarget, 'utf8')).rejects.toThrow();
+    await expect(readFile(activeTarget, 'utf8')).resolves.toContain(
+      'repair_required',
+    );
+  });
+
   it('defaults shared CLI compaction to dry-run and deletes only with apply-shared', async () => {
     const localActor = await readLocalActor(root);
     if (localActor === null) throw new Error('missing retention actor');
@@ -354,6 +413,30 @@ describe('V3 retention and compaction', () => {
 interface CompactJsonValue {
   candidates: Array<{ target: string; taskRef: TaskRef | null }>;
   deleted: string[];
+}
+
+function gitRefWorkflowRepairJournal(input: {
+  operationId: Ulid;
+  state: 'committed' | 'repair_required';
+  updatedAt: string;
+  actorId: Ulid;
+  sessionId: Ulid;
+}) {
+  return {
+    schemaVersion: 1,
+    operationId: input.operationId,
+    actorId: input.actorId,
+    sessionId: input.sessionId,
+    state: input.state,
+    prepared: {
+      kind: 'workflow_update',
+      targetRemoteRevision: 1,
+      targetBundle: {
+        taskRef: { namespace: 'shared', taskId: id(122) },
+      },
+    },
+    updatedAt: input.updatedAt,
+  };
 }
 
 async function captureCompact(

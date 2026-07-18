@@ -1,5 +1,6 @@
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
+import { assertManteamPlanContent } from '../context/manteam-plan.js';
 import {
   type TaskRef,
   formatTaskRef,
@@ -370,6 +371,7 @@ function prepareClaimAcquire(
 ): PreparedGitRefCoordinationMutation {
   const { fence, taskBundle, metadata } = requireTaskContext(context);
   assertRemoteTaskEligible(metadata);
+  assertRemoteManteamPlanReady(metadata, taskBundle);
   assertOwnerOrParticipant(context, metadata);
   const source = parseClaim(proposal);
   if (context.claims.some((claim) => claim.claimId === source.claimId)) {
@@ -1204,6 +1206,25 @@ function assertRemoteTaskEligible(metadata: WorkflowMetadataV3): void {
   ) {
     throw new Error('MANCODE_REMOTE_COORDINATION_TASK_INVALID');
   }
+}
+
+function assertRemoteManteamPlanReady(
+  metadata: WorkflowMetadataV3,
+  taskBundle: GitRefTaskBundleV1,
+): void {
+  if (
+    metadata.governance.planDecision !== 'governed_execution' ||
+    metadata.currentStep < 5
+  ) {
+    throw new Error('MANCODE_MANTEAM_PLAN_CONFIRMATION_REQUIRED');
+  }
+  const plan = taskBundle.artifacts.find(
+    (artifact) => artifact.kind === 'plan',
+  );
+  if (plan === undefined || typeof plan.content !== 'string') {
+    throw new Error('MANCODE_MANTEAM_PLAN_CONFIRMATION_REQUIRED');
+  }
+  assertManteamPlanContent(plan.content);
 }
 
 function handoffMetadataOnlyTransfersOwner(

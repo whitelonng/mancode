@@ -34,6 +34,7 @@ import { assertTransportCoordinationWriteAllowed } from '../team/transport-migra
 import { capabilitiesFromProjectConfig } from '../team/transport.js';
 import { VERSION } from '../version.js';
 import { replaceFileAtomically } from './atomic-file.js';
+import { recordV3ErrorDiagnostic } from './diagnostics.js';
 import {
   type EntityHomeStore,
   resolveTaskEntityHomeStore,
@@ -245,6 +246,7 @@ export async function openV3TaskOperation(
     };
   } catch (error) {
     await releaseLocks(locks);
+    await recordV3ErrorDiagnostic(projectRoot, error).catch(() => undefined);
     throw error;
   }
 }

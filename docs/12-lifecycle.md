@@ -217,7 +217,7 @@ Bash 执行 smoke test。测试清空子进程 PATH 来模拟 Git/Bash 不可用
 初始化、solo 降级、Claude Code 初始化和两个 Node hooks 均能完成。它还会让
 PowerShell 以不允许删除的共享模式实际打开 V3 session evidence 文件，再运行一次
 `context session spike`；原子替换必须在句柄释放后自行重试并成功。该 job 名为
-`Windows beta gate`，应作为 Beta 发布的必需 CI 检查。
+`Windows beta gate`；其 `windows-shells` check 已配置为 `main` 的 Beta 发布必需检查。
 
 V3 Beta 还必须在目标项目执行 `mancode context beta --json`。该命令会拒绝
 未激活或不兼容的 V3 authority、未安装的 V3 bootstrap、未完成的 repair journal、

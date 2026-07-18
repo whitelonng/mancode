@@ -45,6 +45,7 @@ import {
   readLocalActor,
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
+import { CONFIRMED_MANTEAM_PLAN } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T10:00:00.000Z');
@@ -394,7 +395,7 @@ describe('V3 requirements finalization operation', () => {
       taskRef: created.taskRef,
       sessionId,
       expectedTaskRevision: finalized.metadata.revision,
-      plan: '# Shared plan\n\n1. Complete the governed work.\n',
+      plan: CONFIRMED_MANTEAM_PLAN,
       planDecision: 'governed_execution',
       operationId: id(93),
       now: NOW,

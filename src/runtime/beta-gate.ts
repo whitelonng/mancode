@@ -8,6 +8,8 @@ import {
   inspectV3AdapterVersions,
 } from '../installers/v3-adapter.js';
 import { VERSION } from '../version.js';
+import { recordLocalDiagnostic } from './diagnostics.js';
+import { listUnfinishedGitRefWorkflowRepairs } from './git-ref-workflow-repair-store.js';
 import { listUnfinishedOperationRecoveries } from './operation-recovery-executor.js';
 import { listPlatformSessionSpikes } from './platform-spike-store.js';
 import {
@@ -30,6 +32,13 @@ export interface V3BetaGateResult {
     type: string;
     recoveryAction: string;
   }>;
+  unfinishedGitRefWorkflowRepairs: Array<{
+    operationId: string;
+    kind: string;
+    state: string;
+    taskRef: { namespace: 'local' | 'shared'; taskId: string };
+    remoteRevision: number;
+  }>;
 }
 
 /**
@@ -48,6 +57,7 @@ export async function evaluateV3BetaGate(
     adapterEntries,
     spikes,
     unfinished,
+    unfinishedGitRefWorkflowRepairs,
   ] = await Promise.all([
     store.readProjectSnapshot(),
     scanLegacyAuthority(projectRoot),
@@ -60,6 +70,7 @@ export async function evaluateV3BetaGate(
     ),
     listPlatformSessionSpikes(projectRoot),
     listUnfinishedOperationRecoveries(projectRoot),
+    listUnfinishedGitRefWorkflowRepairs(projectRoot),
   ]);
   const compatibility = evaluateCompatibilityGate({
     manifest: snapshot.manifest,
@@ -93,10 +104,15 @@ export async function evaluateV3BetaGate(
     ...(runtimeBinding === 'ready'
       ? []
       : ['MANCODE_BETA_RUNTIME_BINDING_REQUIRED']),
-    ...(unfinished.length === 0
+    ...(unfinished.length === 0 && unfinishedGitRefWorkflowRepairs.length === 0
       ? []
       : ['MANCODE_BETA_OPERATION_RECOVERY_REQUIRED']),
   ];
+  if (Object.values(adapters).some((adapter) => !adapter.ready)) {
+    await recordLocalDiagnostic(projectRoot, {
+      kind: 'adapter_capability_downgrade',
+    }).catch(() => undefined);
+  }
   return {
     schemaVersion: 1,
     ready: blockers.length === 0,
@@ -111,6 +127,15 @@ export async function evaluateV3BetaGate(
       type: recovery.journal.type,
       recoveryAction: recovery.recoveryAction,
     })),
+    unfinishedGitRefWorkflowRepairs: unfinishedGitRefWorkflowRepairs.map(
+      (repair) => ({
+        operationId: repair.operationId,
+        kind: repair.kind,
+        state: repair.state,
+        taskRef: repair.taskRef,
+        remoteRevision: repair.remoteRevision,
+      }),
+    ),
   };
 }
 

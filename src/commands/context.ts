@@ -55,6 +55,10 @@ import {
   resumeSession,
 } from '../runtime/session.js';
 import { readLocalActor } from '../team/actor.js';
+import {
+  listGitRefWorkflowRepairs,
+  recoverGitRefWorkflowRepair,
+} from '../team/git-ref-workflow-repair.js';
 import { VERSION } from '../version.js';
 import {
   EXIT_V3_BLOCKED,
@@ -401,14 +405,17 @@ export async function contextDoctor(
   try {
     const project = await readV3CommandProject(rootDir);
     if (options.repair === undefined) {
-      const [operations, projections] = await Promise.all([
-        listUnfinishedOperationRecoveries(project.projectRoot),
-        listProjectionIntents(project.projectRoot),
-      ]);
+      const [operations, projections, gitRefWorkflowRepairs] =
+        await Promise.all([
+          listUnfinishedOperationRecoveries(project.projectRoot),
+          listProjectionIntents(project.projectRoot),
+          listGitRefWorkflowRepairs(project.projectRoot),
+        ]);
       return printV3Result(options.json, {
         schemaVersion: 1,
         operations,
         projections,
+        gitRefWorkflowRepairs,
       });
     }
     const session = await resolveV3CommandSession(project, options);
@@ -421,6 +428,9 @@ export async function contextDoctor(
     let inspection: Awaited<
       ReturnType<typeof inspectOperationRecovery>
     > | null = null;
+    let gitRefWorkflowRepair: Awaited<
+      ReturnType<typeof recoverGitRefWorkflowRepair>
+    > | null = null;
     try {
       inspection = await inspectOperationRecovery(
         project.projectRoot,
@@ -428,7 +438,6 @@ export async function contextDoctor(
       );
     } catch (error) {
       if (
-        projectionIntents.length === 0 ||
         !(error instanceof Error) ||
         error.message !== 'MANCODE_OPERATION_JOURNAL_NOT_FOUND'
       ) {
@@ -453,6 +462,27 @@ export async function contextDoctor(
         mode: 'repair',
       });
     }
+    if (inspection === null && projectionIntents.length === 0) {
+      try {
+        gitRefWorkflowRepair = await recoverGitRefWorkflowRepair(
+          project.projectRoot,
+          options.repair,
+          null,
+          {
+            actorId: session.actorId,
+            sessionId: session.sessionId,
+          },
+        );
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          error.message !== 'MANCODE_REMOTE_WORKFLOW_REPAIR_JOURNAL_NOT_FOUND'
+        ) {
+          throw error;
+        }
+        throw new Error('MANCODE_OPERATION_JOURNAL_NOT_FOUND');
+      }
+    }
     const projections =
       projectionIntents.length === 0
         ? null
@@ -469,6 +499,7 @@ export async function contextDoctor(
       schemaVersion: 1,
       operation,
       projections,
+      gitRefWorkflowRepair,
     });
   } catch (error) {
     return printV3Error(

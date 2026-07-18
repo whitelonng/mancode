@@ -35,6 +35,7 @@ import {
   GitRefTeamManifestStore as ManifestStore,
   resolveGitRefRemoteIdentityHash,
 } from '../src/team/git-ref-transport.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const TASK_REF: TaskRef = { namespace: 'shared', taskId: id(1) };
@@ -360,6 +361,13 @@ async function createTaskBundle(
     implementationScope: { include: ['src/auth/**'], modules: ['auth'] },
     taskId: TASK_REF.taskId,
     operationId: id(41),
+    now: NOW,
+  });
+  await confirmManteamPlan({
+    projectRoot,
+    taskRef: workflow.taskRef,
+    sessionId: OWNER_SESSION_ID,
+    requirements: workflow.requirements,
     now: NOW,
   });
   const task = await new V3ContextStore(projectRoot).readTaskSnapshot(

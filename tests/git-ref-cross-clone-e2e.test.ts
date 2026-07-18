@@ -40,6 +40,12 @@ import type {
   GitRefTaskBundleV1,
   GitRefTeamManifestStore,
 } from '../src/team/git-ref-transport.js';
+import {
+  changeGitRefWorkflowScope,
+  updateGitRefWorkflow,
+} from '../src/team/git-ref-workflow-operation.js';
+import { recoverGitRefWorkflowRepair } from '../src/team/git-ref-workflow-repair.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-18T10:00:00.000Z');
@@ -352,6 +358,139 @@ describe('git-ref coordination across independent clones', () => {
       manifest: { revision: 6 },
     });
   }, 20_000);
+
+  it('commits scope and lifecycle updates through one remote CAS before local materialization', async () => {
+    const fixture = await createFixture();
+    const created = await createRemoteTask(fixture.cloneA, fixture.codeHead);
+    const storeA = await strictStore(fixture.cloneA);
+    const initialBundle = await taskBundle(fixture.cloneA);
+    const establishOperationId = id(40);
+    await storeA.establishCoordinationAuthority({
+      operationId: establishOperationId,
+      actorId: ACTOR_A,
+      expectedRemoteRevision: 0,
+      expectedPriorTransportEpoch: null,
+      targetTransportEpoch: 2,
+      actorProfiles: fixture.profiles,
+      ownershipFences: [
+        ownershipFence(initialBundle, ACTOR_A, 1, establishOperationId),
+      ],
+      claims: [],
+      handoffs: [],
+      taskBundles: [initialBundle],
+    });
+    await acquireGitRefClaim({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      scope: scope('src/auth/**'),
+      claimId: id(41),
+      operationId: id(42),
+      now: at(1),
+    });
+
+    const scoped = await changeGitRefWorkflowScope({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      scope: {
+        include: ['src/**', 'tests/**', 'docs/**'],
+        exclude: [],
+        modules: [],
+      },
+      operationId: id(43),
+      checkpointId: id(44),
+      now: at(2),
+    });
+    expect(scoped).toMatchObject({
+      metadata: {
+        revision: created.metadata.revision + 2,
+        transitionState: 'stable',
+      },
+      remoteRevision: 3,
+      materialization: { status: 'updated' },
+    });
+    await expect(
+      new V3ContextStore(fixture.cloneA).readTaskSnapshot(created.taskRef),
+    ).resolves.toMatchObject({
+      metadata: {
+        revision: created.metadata.revision + 2,
+        implementationScope: { include: ['docs/**', 'src/**', 'tests/**'] },
+      },
+    });
+
+    const blocked = await updateGitRefWorkflow({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: scoped.metadata.revision,
+      status: 'blocked',
+      blockingReason: 'Awaiting the coordinated integration window.',
+      operationId: id(45),
+      now: at(3),
+    });
+    expect(blocked).toMatchObject({
+      metadata: {
+        revision: scoped.metadata.revision + 2,
+        status: 'blocked',
+        transitionState: 'stable',
+      },
+      remoteRevision: 4,
+      materialization: { status: 'updated' },
+    });
+    await expect(storeA.pull()).resolves.toMatchObject({
+      manifest: {
+        revision: 4,
+        ownershipFences: [
+          { taskRevision: blocked.metadata.revision, lastOperationId: id(45) },
+        ],
+        taskBundles: [
+          { taskRevision: blocked.metadata.revision, ownershipEpoch: 1 },
+        ],
+      },
+    });
+
+    const journalPath = path.join(
+      fixture.cloneA,
+      '.mancode',
+      'local',
+      'journals',
+      'git-ref-workflow',
+      `${id(45)}.json`,
+    );
+    const committedJournal = JSON.parse(await readFile(journalPath, 'utf8'));
+    await writeFile(
+      journalPath,
+      `${JSON.stringify(
+        {
+          ...committedJournal,
+          state: 'awaiting_remote',
+          updatedAt: at(4).toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    await expect(
+      updateGitRefWorkflow({
+        projectRoot: fixture.cloneA,
+        taskRef: created.taskRef,
+        sessionId: SESSION_A,
+        expectedTaskRevision: blocked.metadata.revision,
+        status: 'in_progress',
+        operationId: id(46),
+        now: at(4),
+      }),
+    ).rejects.toThrow('MANCODE_OPERATION_REPAIR_REQUIRED');
+    await expect(
+      recoverGitRefWorkflowRepair(fixture.cloneA, id(45), null, {
+        actorId: ACTOR_B,
+        sessionId: SESSION_B,
+      }),
+    ).rejects.toThrow('MANCODE_REPAIR_AUTHORIZATION_MISMATCH');
+  }, 20_000);
 });
 
 interface Fixture {
@@ -456,11 +595,18 @@ async function createRemoteTask(projectRoot: string, codeHead: string) {
     operationId: id(11),
     now: NOW,
   });
+  const confirmed = await confirmManteamPlan({
+    projectRoot,
+    taskRef: created.taskRef,
+    sessionId: SESSION_A,
+    requirements: created.requirements,
+    now: NOW,
+  });
   const checkpoint = await createV3Checkpoint({
     projectRoot,
     taskRef: created.taskRef,
     sessionId: SESSION_A,
-    expectedTaskRevision: created.metadata.revision,
+    expectedTaskRevision: confirmed.taskRevision,
     kind: 'diagnostic_started',
     summary: 'Remote handoff checkpoint.',
     nextAction: 'Transfer the task to Actor B.',

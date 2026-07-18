@@ -11,6 +11,7 @@ import {
 
 export type OperationType =
   | 'workflow_create'
+  | 'workflow_update'
   | 'requirements_finalize'
   | 'plan_revision'
   | 'review_remediation'
@@ -80,6 +81,7 @@ export interface OperationTransitionOptions {
 
 const OPERATION_TYPES = new Set<OperationType>([
   'workflow_create',
+  'workflow_update',
   'requirements_finalize',
   'plan_revision',
   'review_remediation',

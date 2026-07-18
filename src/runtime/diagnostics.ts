@@ -110,6 +110,20 @@ export async function recordLocalDiagnostic(
   return next;
 }
 
+/**
+ * Records only the fixed categories that can be inferred from a public V3
+ * error code.  The original error text is never persisted.
+ */
+export async function recordV3ErrorDiagnostic(
+  projectRoot: string,
+  error: unknown,
+  now: Date = new Date(),
+): Promise<LocalDiagnosticsV1 | null> {
+  const code = errorCode(error);
+  const event = diagnosticEventForCode(code);
+  return event === null ? null : recordLocalDiagnostic(projectRoot, event, now);
+}
+
 export function localDiagnosticsPath(projectRoot: string): string {
   return path.join(
     path.resolve(projectRoot),
@@ -258,6 +272,39 @@ function incrementDiagnostic(
       next.adapterCapabilityDowngradeCount += 1;
       return next;
   }
+}
+
+function errorCode(error: unknown): string | null {
+  if (!(error instanceof Error) || !error.message.startsWith('MANCODE_')) {
+    return null;
+  }
+  return error.message.split(':', 1)[0] ?? null;
+}
+
+function diagnosticEventForCode(
+  code: string | null,
+): LocalDiagnosticEvent | null {
+  if (
+    code === 'MANCODE_CONTEXT_READ_UNSTABLE' ||
+    code === 'MANCODE_CONTEXT_STALE'
+  ) {
+    return { kind: 'context_stale' };
+  }
+  if (
+    code === 'MANCODE_EXPECTED_REVISION_CONFLICT' ||
+    code === 'MANCODE_REVISION_CONFLICT' ||
+    code === 'MANCODE_TRANSPORT_CAS_CONFLICT' ||
+    code === 'MANCODE_TRANSPORT_REVISION_CONFLICT'
+  ) {
+    return { kind: 'revision_conflict' };
+  }
+  if (
+    code === 'MANCODE_SPLIT_BRAIN' ||
+    code === 'MANCODE_LEGACY_BASELINE_CHANGED'
+  ) {
+    return { kind: 'migration_split_brain' };
+  }
+  return null;
 }
 
 async function readJsonOrNull<T>(

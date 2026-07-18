@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { evaluateCompatibilityGate } from '../context/compatibility.js';
+import { assertUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
 import { V3ContextStore } from '../context/store.js';
 import {
@@ -24,7 +25,11 @@ import {
   platformSpikeFreezeStatus,
 } from '../runtime/platform-spike.js';
 import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
-import { detectTeamStatus } from '../system/detect-team.js';
+import { readSession } from '../runtime/session.js';
+import {
+  detectTeamAssessmentSignals,
+  detectTeamStatus,
+} from '../system/detect-team.js';
 import { PROJECT_MANIFESTS } from '../system/project-profile.js';
 import {
   type WorkflowMode,
@@ -35,6 +40,12 @@ import {
   readWorkflow,
 } from '../system/workflow.js';
 import { readLocalActor } from '../team/actor.js';
+import { type TeamAssessment, assessTeam } from '../team/assessment.js';
+import {
+  capabilitiesFromGitRefCache,
+  readGitRefTeamCache,
+} from '../team/git-ref-cache.js';
+import { capabilitiesFromProjectConfig } from '../team/transport.js';
 import { VERSION } from '../version.js';
 
 const HOOK_ESTIMATE_TIMEOUT_MS = 2000;
@@ -147,15 +158,41 @@ export interface V3StatusResult {
     mode: 'local' | 'git-ref';
     remote: string | null;
   };
+  capabilities: ReturnType<typeof capabilitiesFromProjectConfig>;
+  remoteSnapshot: {
+    revision: number;
+    fetchedAt: string;
+    receipt: string | null;
+  } | null;
   policy: {
     revision: number;
     mode: string;
     defaultVisibility: string;
   };
+  assessment: TeamAssessment;
   localIdentity: {
     actorId: string | null;
     displayName: string | null;
   };
+  currentSession: {
+    sessionId: string;
+    client: string;
+    activeTaskRef: { namespace: 'local' | 'shared'; taskId: string } | null;
+  } | null;
+  currentTask: {
+    taskRef: { namespace: 'local' | 'shared'; taskId: string };
+    workflowMode: 'man' | 'manba' | 'manteam';
+    visibility: 'local' | 'shared';
+    coordination: 'single' | 'team';
+    status:
+      | 'in_progress'
+      | 'planned'
+      | 'blocked'
+      | 'completed'
+      | 'abandoned'
+      | 'superseded';
+    revision: number;
+  } | null;
   sessionEvidence: {
     ready: boolean;
     missingPlatforms: SessionSpikePlatform[];
@@ -281,22 +318,32 @@ async function statusV3(
 ): Promise<number> {
   try {
     const store = new V3ContextStore(rootDir);
-    const [snapshot, project, legacy, actor, adapterEntries, sessionSpikes] =
-      await Promise.all([
-        store.readProjectSnapshot(),
-        getProjectName(rootDir),
-        scanLegacyAuthority(rootDir),
-        readLocalActor(rootDir).catch(() => null),
-        Promise.all(
-          getPlatformInstallers().map(async (platform) =>
-            Promise.all([
-              platform.name,
-              inspectV3Adapter(rootDir, platform.name),
-            ]),
-          ),
+    const [
+      snapshot,
+      project,
+      legacy,
+      actor,
+      adapterEntries,
+      sessionSpikes,
+      assessmentSignals,
+      currentSession,
+    ] = await Promise.all([
+      store.readProjectSnapshot(),
+      getProjectName(rootDir),
+      scanLegacyAuthority(rootDir),
+      readLocalActor(rootDir).catch(() => null),
+      Promise.all(
+        getPlatformInstallers().map(async (platform) =>
+          Promise.all([
+            platform.name,
+            inspectV3Adapter(rootDir, platform.name),
+          ]),
         ),
-        listPlatformSessionSpikes(rootDir),
-      ]);
+      ),
+      listPlatformSessionSpikes(rootDir),
+      detectTeamAssessmentSignals(rootDir),
+      readV3StatusSession(rootDir),
+    ]);
     const compatibility = evaluateCompatibilityGate({
       manifest: snapshot.manifest,
       expectedSchemaEpoch: snapshot.manifest.epoch,
@@ -311,6 +358,25 @@ async function statusV3(
       PlatformName,
       V3PlatformAdapterStatus
     >;
+    const cache = await readGitRefTeamCache(rootDir, snapshot.config);
+    const capabilities =
+      snapshot.config.transport.mode === 'git-ref'
+        ? capabilitiesFromGitRefCache(snapshot.config, cache)
+        : capabilitiesFromProjectConfig(snapshot.config);
+    const currentTask =
+      currentSession === null || currentSession.activeTaskRef === null
+        ? null
+        : await store
+            .readTaskSnapshot(currentSession.activeTaskRef)
+            .then((task) => ({
+              taskRef: task.metadata.taskRef,
+              workflowMode: task.metadata.workflowMode,
+              visibility: task.metadata.visibility,
+              coordination: task.metadata.coordination,
+              status: task.metadata.status,
+              revision: task.metadata.revision,
+            }))
+            .catch(() => null);
     let runtime: V3StatusResult['runtime'];
     try {
       const context = await readProjectRuntimeContext(rootDir);
@@ -350,15 +416,38 @@ async function statusV3(
       },
       runtime,
       transport: snapshot.config.transport,
+      capabilities,
+      remoteSnapshot:
+        cache === null
+          ? null
+          : {
+              revision: cache.manifest?.revision ?? 0,
+              fetchedAt: cache.fetchedAt,
+              receipt: cache.receipt,
+            },
       policy: {
         revision: snapshot.policy.revision,
         mode: snapshot.policy.policy,
         defaultVisibility: snapshot.policy.defaultVisibility,
       },
+      assessment: assessTeam({
+        policy: snapshot.policy.policy,
+        signals: assessmentSignals,
+        evaluatedAt: new Date().toISOString(),
+      }),
       localIdentity: {
         actorId: actor?.actorId ?? null,
         displayName: actor?.displayName ?? null,
       },
+      currentSession:
+        currentSession === null
+          ? null
+          : {
+              sessionId: currentSession.sessionId,
+              client: currentSession.client,
+              activeTaskRef: currentSession.activeTaskRef,
+            },
+      currentTask,
       sessionEvidence: platformSpikeFreezeStatus(sessionSpikes),
       adapters,
       legacyAuthorityPresent: legacy.authorityPresent,
@@ -374,6 +463,18 @@ async function statusV3(
     console.error('✗  .mancode/schema.json is corrupt or incomplete.');
     console.error(`   ${message}`);
     return EXIT_CORRUPT_STATE;
+  }
+}
+
+/** Status is read-only: an invalid ambient session is simply not current. */
+async function readV3StatusSession(rootDir: string) {
+  const sessionId = process.env.MANCODE_SESSION_ID;
+  if (sessionId === undefined || !sessionId) return null;
+  try {
+    assertUlid(sessionId, 'status sessionId');
+    return await readSession(rootDir, sessionId);
+  } catch {
+    return null;
   }
 }
 
@@ -757,6 +858,17 @@ function printV3Text(result: V3StatusResult): void {
   console.log(
     `Transport:   ${result.transport.mode}${result.transport.remote ? ` (${result.transport.remote})` : ''}`,
   );
+  console.log(
+    `Team:        ${result.assessment.recommendation} (${result.assessment.confidence}; ${result.assessment.reasons.join('; ')})`,
+  );
+  console.log(
+    `Claim/write: ${result.capabilities.claimAcquisition}/${result.capabilities.writeGuard} (${result.capabilities.transportFreshness})`,
+  );
+  if (result.currentTask !== null) {
+    console.log(
+      `Current task:${result.currentTask.taskRef.namespace}:${result.currentTask.taskRef.taskId} / ${result.currentTask.workflowMode} / ${result.currentTask.status} r${result.currentTask.revision}`,
+    );
+  }
   console.log(
     `Identity:    ${result.localIdentity.displayName ?? 'not configured'}`,
   );

@@ -42,6 +42,10 @@ import type {
 import { GitRefTeamManifestStore } from '../src/team/git-ref-transport.js';
 import { resolveGitRefRemoteIdentityHash } from '../src/team/git-ref-transport.js';
 import type { HandoffV1 } from '../src/team/handoff.js';
+import {
+  CONFIRMED_MANTEAM_PLAN,
+  confirmManteamPlan,
+} from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const TASK_REF: TaskRef = { namespace: 'shared', taskId: id(1) };
@@ -487,6 +491,13 @@ describe('git-ref coordination domain contracts', () => {
       operationId: id(83),
       now: NOW,
     });
+    await confirmManteamPlan({
+      projectRoot: fixture.clone,
+      taskRef: workflow.taskRef,
+      sessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
     const stored = await new V3ContextStore(fixture.clone).readTaskSnapshot(
       workflow.taskRef,
     );
@@ -796,6 +807,12 @@ function bundle(value: WorkflowMetadataV3): GitRefTaskBundleV1 {
         relativePath: 'metadata.json',
         content: value,
         contentDigest: digestCanonicalJson(value),
+      },
+      {
+        kind: 'plan' as const,
+        relativePath: 'plan.md',
+        content: CONFIRMED_MANTEAM_PLAN,
+        contentDigest: digestCanonicalJson(CONFIRMED_MANTEAM_PLAN),
       },
     ],
     createdAt: '2026-07-18T09:00:00.000Z',

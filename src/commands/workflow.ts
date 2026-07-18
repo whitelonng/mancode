@@ -19,6 +19,8 @@ import { completeV3Task } from '../context/task-complete.js';
 import { parseTaskRef } from '../context/task-ref.js';
 import { recordV3Verification } from '../context/verification-record.js';
 import { createV3Workflow } from '../context/workflow-create.js';
+import { updateV3Workflow } from '../context/workflow-update.js';
+import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
   parseRequirementsLedger,
   readRequirementsLedger,
@@ -65,6 +67,12 @@ import {
   readWorkflow,
   updateWorkflow,
 } from '../system/workflow.js';
+import { assessTeam } from '../team/assessment.js';
+import {
+  changeGitRefWorkflowScope,
+  completeGitRefTask,
+  updateGitRefWorkflow,
+} from '../team/git-ref-workflow-operation.js';
 import {
   commandClient,
   printV3Error,
@@ -210,6 +218,9 @@ async function workflowV3(
   if (subcommand === 'create') {
     return workflowCreateV3(rootDir, args, options);
   }
+  if (subcommand === 'update') {
+    return workflowUpdateV3(rootDir, args, options);
+  }
   if (subcommand === 'requirements') {
     return workflowRequirementsV3(rootDir, args, options);
   }
@@ -242,6 +253,117 @@ async function workflowV3(
     'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
     `workflow ${subcommand} is not yet implemented for V3 authority.`,
   );
+}
+
+async function workflowUpdateV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (!task || args.length !== 1) {
+    return printV3Error(
+      options.json,
+      'MANCODE_WORKFLOW_UPDATE_ARGUMENT_INVALID',
+      'Use: workflow update <namespace:ULID> --expected-revision <n> --status <in_progress|planned|blocked|abandoned> [--blocking-reason <text>].',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (options.status === undefined && options.blockingReason === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_WORKFLOW_UPDATE_EMPTY',
+      'V3 workflow update requires --status or --blocking-reason.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (
+    options.step !== undefined ||
+    options.outcome !== undefined ||
+    options.planVersion !== undefined ||
+    options.requirementsStatus !== undefined ||
+    options.planDecision !== undefined ||
+    options.skipped !== undefined
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_V3_WORKFLOW_UPDATE_FIELD_UNSUPPORTED',
+      'V3 workflow update only changes lifecycle status and a blocked reason. Use the dedicated requirements, plan, review, verification, scope, complete, or promote command for governed fields.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'V3 workflow update requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    if (
+      project.project.config.transport.mode === 'git-ref' &&
+      taskRef.namespace === 'shared'
+    ) {
+      if (options.sync !== true) {
+        throw new Error('MANCODE_GIT_REF_SYNC_REQUIRED');
+      }
+      const session = await resolveV3CommandSession(project, options);
+      const result = await updateGitRefWorkflow({
+        projectRoot: project.projectRoot,
+        taskRef,
+        sessionId: session.sessionId,
+        expectedTaskRevision,
+        status: parseV3WorkflowUpdateStatus(options.status),
+        ...(options.blockingReason === undefined
+          ? {}
+          : { blockingReason: options.blockingReason }),
+      });
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        taskRef: result.metadata.taskRef,
+        metadata: result.metadata,
+        aggregate: result.aggregate,
+        remoteRevision: result.remoteRevision,
+        ownershipEpoch: result.ownershipEpoch,
+        receipt: result.receipt,
+        materialization: result.materialization,
+      });
+    }
+    if (options.sync === true) {
+      throw new Error('MANCODE_GIT_REF_SYNC_UNAVAILABLE');
+    }
+    const session = await resolveV3CommandSession(project, options);
+    const result = await updateV3Workflow({
+      projectRoot: project.projectRoot,
+      taskRef,
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      status: parseV3WorkflowUpdateStatus(options.status),
+      ...(options.blockingReason === undefined
+        ? {}
+        : { blockingReason: options.blockingReason }),
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_UPDATE_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to update the V3 workflow lifecycle.',
+    );
+  }
 }
 
 async function workflowChildResultMergeV3(
@@ -508,17 +630,50 @@ async function workflowScopeChangeV3(
     );
   }
   try {
-    if (options.sync === true) {
-      throw new Error('MANCODE_GIT_REF_TRANSPORT_NOT_IMPLEMENTED');
-    }
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
+    const taskRef = parseTaskRef(task);
+    const scope = await readWorkflowJsonInputFile(
+      project.projectRoot,
+      options.file,
+    );
+    if (
+      project.project.config.transport.mode === 'git-ref' &&
+      taskRef.namespace === 'shared'
+    ) {
+      if (options.sync !== true) {
+        throw new Error('MANCODE_GIT_REF_SYNC_REQUIRED');
+      }
+      const result = await changeGitRefWorkflowScope({
+        projectRoot: project.projectRoot,
+        taskRef,
+        sessionId: session.sessionId,
+        expectedTaskRevision,
+        scope,
+      });
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        taskRef: result.metadata.taskRef,
+        metadata: result.metadata,
+        checkpoint: result.checkpoint,
+        terminatedClaims: result.terminatedClaims,
+        successorClaims: result.successorClaims,
+        aggregate: result.aggregate,
+        remoteRevision: result.remoteRevision,
+        ownershipEpoch: result.ownershipEpoch,
+        receipt: result.receipt,
+        materialization: result.materialization,
+      });
+    }
+    if (options.sync === true) {
+      throw new Error('MANCODE_GIT_REF_SYNC_UNAVAILABLE');
+    }
     const result = await changeV3WorkflowScope({
       projectRoot: project.projectRoot,
-      taskRef: parseTaskRef(task),
+      taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
-      scope: await readWorkflowJsonInputFile(project.projectRoot, options.file),
+      scope,
     });
     return printV3Result(options.json, {
       schemaVersion: 1,
@@ -568,9 +723,39 @@ async function workflowCompleteV3(
   try {
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
+    const taskRef = parseTaskRef(task);
+    if (
+      project.project.config.transport.mode === 'git-ref' &&
+      taskRef.namespace === 'shared'
+    ) {
+      if (options.sync !== true) {
+        throw new Error('MANCODE_GIT_REF_SYNC_REQUIRED');
+      }
+      const result = await completeGitRefTask({
+        projectRoot: project.projectRoot,
+        taskRef,
+        sessionId: session.sessionId,
+        expectedTaskRevision,
+        outcome: parseV3Outcome(options.outcome),
+      });
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        taskRef: result.metadata.taskRef,
+        metadata: result.metadata,
+        releasedClaims: result.releasedClaims,
+        aggregate: result.aggregate,
+        remoteRevision: result.remoteRevision,
+        ownershipEpoch: result.ownershipEpoch,
+        receipt: result.receipt,
+        materialization: result.materialization,
+      });
+    }
+    if (options.sync === true) {
+      throw new Error('MANCODE_GIT_REF_SYNC_UNAVAILABLE');
+    }
     const result = await completeV3Task({
       projectRoot: project.projectRoot,
-      taskRef: parseTaskRef(task),
+      taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
       outcome: parseV3Outcome(options.outcome),
@@ -879,6 +1064,30 @@ function parseV3Outcome(
   throw new Error('MANCODE_WORKFLOW_OUTCOME_INVALID');
 }
 
+function parseV3WorkflowUpdateStatus(
+  value: string | undefined,
+):
+  | 'in_progress'
+  | 'planned'
+  | 'blocked'
+  | 'abandoned'
+  | 'completed'
+  | 'superseded'
+  | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === 'in_progress' ||
+    value === 'planned' ||
+    value === 'blocked' ||
+    value === 'abandoned' ||
+    value === 'completed' ||
+    value === 'superseded'
+  ) {
+    return value;
+  }
+  throw new Error('MANCODE_WORKFLOW_STATUS_INVALID');
+}
+
 function parseV3ParticipantActorIds(
   values: string[] | undefined,
 ): Ulid[] | undefined {
@@ -930,6 +1139,14 @@ async function workflowCreateV3(
         'MANCODE_TASK_REF_REQUIRED: use --parent local:<ULID> or shared:<ULID>',
       );
     }
+    const assessment = assessTeam({
+      policy: project.project.policy.policy,
+      signals: await detectTeamAssessmentSignals(
+        project.projectRoot,
+        project.project.policy.recentDays,
+      ),
+      evaluatedAt: new Date().toISOString(),
+    });
     const result = await createV3Workflow({
       projectRoot: project.projectRoot,
       task,
@@ -942,6 +1159,7 @@ async function workflowCreateV3(
       coordination: parseV3Coordination(options.coordination),
       participantActorIds: parseV3ParticipantActorIds(options.participants),
       sharedPrivacyConfirmed: options.confirmShared === true,
+      assessment,
     });
     return printV3Result(options.json, {
       schemaVersion: 1,

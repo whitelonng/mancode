@@ -11,6 +11,12 @@ import {
   EXIT_V3_AUTHORITY_PROTECTED,
   uninstall,
 } from '../src/commands/uninstall.js';
+import type { PlatformName } from '../src/installers/registry.js';
+import {
+  inspectV3Adapter,
+  installV3Adapter,
+  removeV3Adapter,
+} from '../src/installers/v3-adapter.js';
 
 describe('V3 adapter bootstrap integration', () => {
   let root: string;
@@ -78,6 +84,48 @@ describe('V3 adapter bootstrap integration', () => {
       errors.mockRestore();
     }
   });
+
+  it.each(['claude-code', 'codex', 'cursor', 'copilot', 'zcode'] as const)(
+    'applies the common V3 bootstrap contract for %s',
+    async (platform: PlatformName) => {
+      await init(root, { v3: true });
+
+      const installed = await installV3Adapter(root, platform);
+      expect(installed).toMatchObject({
+        installed: true,
+        ready: true,
+        version: '3',
+        capabilities: {
+          sessionIdentity: 'explicit-required',
+          sessionHook: false,
+          promptHook: false,
+        },
+      });
+      const target = path.join(root, installed.target);
+      const bootstrap = await readFile(target, 'utf8');
+      expect(bootstrap).toContain('# mancode V3 bootstrap');
+      expect(bootstrap).toContain('mancode context show --purpose orient');
+      expect(bootstrap).toContain('--session <id>');
+      expect(bootstrap).not.toContain('.mancode/state.json');
+      expect(bootstrap).not.toContain('currentMode');
+
+      // Installation is an idempotent bootstrap renderer, not task authority.
+      await installV3Adapter(root, platform);
+      expect(await inspectV3Adapter(root, platform)).toMatchObject({
+        installed: true,
+        ready: true,
+      });
+      await expect(
+        readFile(path.join(root, '.mancode', 'state.json'), 'utf8'),
+      ).rejects.toThrow();
+
+      await removeV3Adapter(root, platform);
+      expect(await inspectV3Adapter(root, platform)).toMatchObject({
+        installed: false,
+        ready: false,
+      });
+    },
+  );
 
   it('preserves user instructions outside the V3 managed block', async () => {
     await init(root, { v3: true });

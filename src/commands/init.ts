@@ -653,13 +653,22 @@ async function initializeV3(
     return EXIT_INIT_FAILED;
   }
   try {
-    const result = await initializeV3Project({ projectRoot: rootDir });
+    const result = await initializeV3Project({
+      projectRoot: rootDir,
+      teamPolicy:
+        options.team === undefined ? 'auto' : options.team ? 'on' : 'off',
+    });
     for (const platform of selectedPlatforms) {
       await installV3Adapter(rootDir, platform);
     }
     console.log('✓  Initialized mancode V3 greenfield project.');
     console.log(`   workspace: ${result.runtime.workspaceId}`);
     console.log(`   operation: ${result.journal.operationId}`);
+    if (options.team !== undefined) {
+      console.log(
+        `   team policy: ${options.team ? 'on (--team)' : 'off (--no-team)'}`,
+      );
+    }
     if (selectedPlatforms.length === 0) {
       console.log(
         '   No platform bootstrap selected. Run `mancode install <platform>`.',

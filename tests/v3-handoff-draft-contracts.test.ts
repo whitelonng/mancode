@@ -30,6 +30,7 @@ import {
   offerV3Handoff,
   rejectV3Handoff,
 } from '../src/team/handoff-operation.js';
+import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T14:00:00.000Z');
@@ -78,11 +79,18 @@ describe('V3 local-coordination handoff draft and transition', () => {
       operationId: id(11),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId: actors.ownerSessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
     const claim = await acquireV3Claim({
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         paths: ['src/auth/**'],
         modules: ['auth'],
@@ -98,7 +106,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       toActorId: actors.receiverActorId,
       handoffId: id(14),
       checkpointId: id(15),
@@ -113,7 +121,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
         handoffId: id(14),
         state: 'draft',
         revision: 1,
-        taskRevision: 3,
+        taskRevision: 5,
         ownershipEpochAtOffer: 1,
         claimIds: [claim.claim.claimId],
         checkpointRef: { artifactId: id(15) },
@@ -167,20 +175,20 @@ describe('V3 local-coordination handoff draft and transition', () => {
     );
     await expect(readOperationJournal(home, id(17))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`handoff:${id(14)}`]: 0,
       },
     });
     await expect(readOperationJournal(home, id(18))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`handoff:${id(14)}`]: 1,
       },
     });
     expect(
       (await new V3ContextStore(root).readTaskSnapshot(workflow.taskRef))
         .metadata,
-    ).toMatchObject({ revision: 3, ownerActorId: actors.ownerActorId });
+    ).toMatchObject({ revision: 5, ownerActorId: actors.ownerActorId });
   });
 
   it('transfers owner and claims only after the offered handoff is accepted', async () => {
@@ -198,11 +206,18 @@ describe('V3 local-coordination handoff draft and transition', () => {
       operationId: id(31),
       now: NOW,
     });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId: actors.ownerSessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
     const claim = await acquireV3Claim({
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       scope: {
         paths: ['src/auth/**'],
         modules: ['auth'],
@@ -217,7 +232,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
       projectRoot: root,
       taskRef: workflow.taskRef,
       sessionId: actors.ownerSessionId,
-      expectedTaskRevision: 1,
+      expectedTaskRevision: confirmed.taskRevision,
       toActorId: actors.receiverActorId,
       handoffId: id(34),
       checkpointId: id(35),
@@ -245,7 +260,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
     });
     expect(accepted).toMatchObject({
       metadata: {
-        revision: 5,
+        revision: 7,
         transitionState: 'stable',
         ownerActorId: actors.receiverActorId,
         ownershipEpoch: 2,
@@ -271,14 +286,14 @@ describe('V3 local-coordination handoff draft and transition', () => {
           state: 'active',
           revision: 2,
           ownerActorId: actors.receiverActorId,
-          taskRevisionAtAcquire: 5,
+          taskRevisionAtAcquire: 7,
           ownershipEpochAtAcquire: 2,
           predecessorClaimId: claim.claim.claimId,
         },
       ],
       taskHeadFence: {
-        fenceRevision: 3,
-        taskRevision: 5,
+        fenceRevision: 5,
+        taskRevision: 7,
         ownershipEpoch: 2,
         lastOperationId: id(40),
       },
@@ -292,12 +307,12 @@ describe('V3 local-coordination handoff draft and transition', () => {
     );
     await expect(readOperationJournal(home, id(40))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`handoff:${id(34)}`]: 2,
         [`claim:${claim.claim.claimId}`]: 1,
         [`claim:${id(39)}`]: 0,
-        [`checkpoint:${id(35)}`]: 2,
-        [`task_head:${workflow.taskRef.taskId}`]: 2,
+        [`checkpoint:${id(35)}`]: 4,
+        [`task_head:${workflow.taskRef.taskId}`]: 4,
       },
       entityLocks: expect.arrayContaining([
         `handoff:${id(34)}`,
@@ -453,11 +468,18 @@ async function createOfferedHandoff(
     operationId: id(51),
     now: NOW,
   });
+  const confirmed = await confirmManteamPlan({
+    projectRoot,
+    taskRef: workflow.taskRef,
+    sessionId: actors.ownerSessionId,
+    requirements: workflow.requirements,
+    now: NOW,
+  });
   const claim = await acquireV3Claim({
     projectRoot,
     taskRef: workflow.taskRef,
     sessionId: actors.ownerSessionId,
-    expectedTaskRevision: 1,
+    expectedTaskRevision: confirmed.taskRevision,
     scope: { paths: ['src/auth/**'], modules: ['auth'], apis: [], schemas: [] },
     claimId: id(52),
     operationId: id(53),
@@ -467,7 +489,7 @@ async function createOfferedHandoff(
     projectRoot,
     taskRef: workflow.taskRef,
     sessionId: actors.ownerSessionId,
-    expectedTaskRevision: 1,
+    expectedTaskRevision: confirmed.taskRevision,
     toActorId: actors.receiverActorId,
     claimIds: [claim.claim.claimId],
     handoffId: id(54),

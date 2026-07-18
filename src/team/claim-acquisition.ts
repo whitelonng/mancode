@@ -1,5 +1,6 @@
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
+import { assertManteamPlanContent } from '../context/manteam-plan.js';
 import { assertTaskCodeHeadUnchanged } from '../context/task-mutation.js';
 import { type TaskRef, parseTaskRefValue } from '../context/task-ref.js';
 import { createClaim } from '../runtime/claim-store.js';
@@ -81,7 +82,10 @@ export async function acquireV3Claim(
   });
   let journal: OperationJournalV1 | null = null;
   try {
-    assertClaimTaskEligible(context.task.metadata);
+    assertClaimTaskEligible(
+      context.task.metadata,
+      context.task.plan?.content ?? null,
+    );
     if (context.project.config.transport.mode !== 'local') {
       throw new Error('MANCODE_TRANSPORT_UNAVAILABLE');
     }
@@ -202,11 +206,16 @@ export async function acquireV3Claim(
   }
 }
 
-function assertClaimTaskEligible(metadata: {
-  workflowMode: string;
-  status: string;
-  implementationScope: { source: string };
-}): void {
+function assertClaimTaskEligible(
+  metadata: {
+    workflowMode: string;
+    status: string;
+    currentStep: number;
+    governance: { planDecision: string | null };
+    implementationScope: { source: string };
+  },
+  plan: string | null,
+): void {
   if (metadata.workflowMode !== 'manteam') {
     throw new Error('MANCODE_CLAIM_WORKFLOW_MODE_INVALID');
   }
@@ -216,6 +225,14 @@ function assertClaimTaskEligible(metadata: {
   if (metadata.implementationScope.source === 'legacy_unspecified') {
     throw new Error('MANCODE_SCOPE_CONFIRMATION_REQUIRED');
   }
+  if (
+    metadata.governance.planDecision !== 'governed_execution' ||
+    metadata.currentStep < 5 ||
+    plan === null
+  ) {
+    throw new Error('MANCODE_MANTEAM_PLAN_CONFIRMATION_REQUIRED');
+  }
+  assertManteamPlanContent(plan);
 }
 
 function coordinationDomainId(

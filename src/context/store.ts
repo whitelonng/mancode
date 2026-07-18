@@ -8,6 +8,7 @@ import {
   reservationDirectory,
   taskHeadDirectory,
 } from '../runtime/entity-home-store.js';
+import { listUnfinishedGitRefWorkflowRepairs } from '../runtime/git-ref-workflow-repair-store.js';
 import {
   type OperationJournalV1,
   parseOperationJournal,
@@ -96,9 +97,17 @@ export interface StoredProjectSnapshot {
 }
 
 export interface PendingOperationRecord {
-  source: 'primary_journal' | 'secondary_reservation';
+  source:
+    | 'primary_journal'
+    | 'secondary_reservation'
+    | 'git_ref_workflow_repair';
   operationId: string;
-  state: OperationJournalV1['state'] | null;
+  state:
+    | OperationJournalV1['state']
+    | 'awaiting_remote'
+    | 'applying'
+    | 'repair_required'
+    | null;
   entityKeys: string[];
 }
 
@@ -473,7 +482,7 @@ export class V3ContextStore {
     homeStore: EntityHomeStore,
   ): Promise<PendingOperationRecord[]> {
     const taskKey = `task:${taskRef.namespace}:${taskRef.taskId}`;
-    const [journals, reservations] = await Promise.all([
+    const [journals, reservations, gitRefWorkflowRepairs] = await Promise.all([
       readJsonCollectionWithin(
         homeStore.root,
         path.relative(homeStore.root, operationDirectory(homeStore)),
@@ -484,6 +493,7 @@ export class V3ContextStore {
         path.relative(homeStore.root, reservationDirectory(homeStore)),
         parseOperationReservation,
       ),
+      listUnfinishedGitRefWorkflowRepairs(this.projectRoot),
     ]);
     const primary = journals
       .filter(
@@ -506,7 +516,15 @@ export class V3ContextStore {
         state: null,
         entityKeys: reservation.entityKeys,
       }));
-    return [...primary, ...secondary].sort(
+    const gitRefWorkflow = gitRefWorkflowRepairs
+      .filter((journal) => sameTaskRef(journal.taskRef, taskRef))
+      .map<PendingOperationRecord>((journal) => ({
+        source: 'git_ref_workflow_repair',
+        operationId: journal.operationId,
+        state: journal.state,
+        entityKeys: [taskKey],
+      }));
+    return [...primary, ...secondary, ...gitRefWorkflow].sort(
       (left, right) =>
         compareUtf8(left.operationId, right.operationId) ||
         left.source.localeCompare(right.source, 'en'),

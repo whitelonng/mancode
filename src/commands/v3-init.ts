@@ -11,7 +11,11 @@ import {
   ensureProjectRuntimeContext,
 } from '../runtime/project-runtime.js';
 import { detectProjectProfile } from '../system/project-profile.js';
-import type { ProjectConfigV1, TeamPolicyV1 } from '../team/policy.js';
+import type {
+  ProjectConfigV1,
+  TeamPolicyV1,
+  TeamRecommendationPolicy,
+} from '../team/policy.js';
 import { VERSION } from '../version.js';
 
 export interface InitializeV3ProjectInput {
@@ -20,6 +24,8 @@ export interface InitializeV3ProjectInput {
   workspaceId?: Ulid;
   schemaEpoch?: Ulid;
   managedAdapters?: Record<ManagedAdapter, string>;
+  /** Explicit init preference; omitted keeps V3's evidence-based auto mode. */
+  teamPolicy?: TeamRecommendationPolicy;
   now?: Date;
 }
 
@@ -53,7 +59,7 @@ export async function initializeV3Project(
     schemaVersion: 1,
     revision: 1,
     workspaceId,
-    policy: 'auto',
+    policy: input.teamPolicy ?? 'auto',
     recentDays: 30,
     defaultVisibility: 'local',
     shareConfirmedDecisions: false,

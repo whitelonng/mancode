@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { promisify } from 'node:util';
+import type { TeamAssessmentSignals } from '../team/assessment.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,8 +29,6 @@ const NO_TEAM: TeamStatus = {
   hasRemote: false,
 };
 
-const REMOTE_PATTERN = /github\.com|gitlab\.com|bitbucket\.org/;
-
 const GIT_ENV = {
   ...process.env,
   GIT_PAGER: 'cat',
@@ -45,32 +44,63 @@ const GIT_ENV = {
 export async function detectTeamStatus(
   projectRoot: string,
 ): Promise<TeamStatus> {
+  const signals = await detectTeamAssessmentSignals(projectRoot);
+  if (signals === null) return NO_TEAM;
+  return {
+    isTeam:
+      signals.contributorsRecent > 1 &&
+      (signals.remoteCount > 0 || signals.hasTrackedUpstream),
+    contributors: signals.contributorsAllTime || 1,
+    recentActive: signals.contributorsRecent || 1,
+    hasRemote: signals.remoteCount > 0 || signals.hasTrackedUpstream,
+  };
+}
+
+/**
+ * Collects the bounded Git and repository-layout facts consumed by V3's team
+ * assessment. A self-hosted remote is just as valid as a hosted one; the
+ * assessment decides whether these facts recommend team coordination.
+ */
+export async function detectTeamAssessmentSignals(
+  projectRoot: string,
+  recentDays = 30,
+): Promise<TeamAssessmentSignals | null> {
+  if (!Number.isSafeInteger(recentDays) || recentDays < 0) {
+    throw new Error('MANCODE_TEAM_RECENT_DAYS_INVALID');
+  }
   try {
-    await access(path.join(projectRoot, '.git'));
     const inside = await runGit(projectRoot, [
       'rev-parse',
       '--is-inside-work-tree',
     ]);
-    if (inside.trim() !== 'true') return NO_TEAM;
+    if (inside.trim() !== 'true') {
+      return emptySignals(false);
+    }
 
-    const [allEmails, recentEmails, remotes] = await Promise.all([
-      runGit(projectRoot, ['log', '--all', '--format=%ae']),
-      runGit(projectRoot, ['log', '--since=30 days ago', '--format=%ae']),
-      runGit(projectRoot, ['remote', '-v']),
-    ]);
-
-    const contributors = countUniqueLines(allEmails);
-    const recentActive = countUniqueLines(recentEmails);
-    const hasRemote = REMOTE_PATTERN.test(remotes);
+    const [allEmails, recentEmails, remotes, hasTrackedUpstream, templates] =
+      await Promise.all([
+        runGit(projectRoot, ['log', '--all', '--format=%ae']),
+        runGit(projectRoot, [
+          'log',
+          `--since=${recentDays} days ago`,
+          '--format=%ae',
+        ]),
+        runGit(projectRoot, ['remote']),
+        hasGitTrackedUpstream(projectRoot),
+        detectRepositoryTemplates(projectRoot),
+      ]);
 
     return {
-      isTeam: contributors > 1 && hasRemote && recentActive > 1,
-      contributors: contributors || 1,
-      recentActive: recentActive || 1,
-      hasRemote,
+      isGitRepository: true,
+      remoteCount: countUniqueLines(remotes),
+      contributorsAllTime: countUniqueLines(allEmails),
+      contributorsRecent: countUniqueLines(recentEmails),
+      hasTrackedUpstream,
+      hasCodeowners: templates.hasCodeowners,
+      hasPullRequestTemplate: templates.hasPullRequestTemplate,
     };
   } catch {
-    return NO_TEAM;
+    return null;
   }
 }
 
@@ -91,4 +121,68 @@ function countUniqueLines(output: string): number {
       .map((line) => line.trim())
       .filter(Boolean),
   ).size;
+}
+
+async function hasGitTrackedUpstream(projectRoot: string): Promise<boolean> {
+  try {
+    const upstream = await runGit(projectRoot, [
+      'rev-parse',
+      '--abbrev-ref',
+      '--symbolic-full-name',
+      '@{upstream}',
+    ]);
+    return Boolean(upstream.trim());
+  } catch {
+    return false;
+  }
+}
+
+async function detectRepositoryTemplates(projectRoot: string): Promise<{
+  hasCodeowners: boolean;
+  hasPullRequestTemplate: boolean;
+}> {
+  const [hasCodeowners, hasPullRequestTemplate] = await Promise.all([
+    anyPathExists(projectRoot, [
+      'CODEOWNERS',
+      '.github/CODEOWNERS',
+      'docs/CODEOWNERS',
+    ]),
+    anyPathExists(projectRoot, [
+      'PULL_REQUEST_TEMPLATE.md',
+      '.github/PULL_REQUEST_TEMPLATE.md',
+      '.github/pull_request_template.md',
+      '.github/PULL_REQUEST_TEMPLATE',
+      '.github/pull_request_template',
+    ]),
+  ]);
+  return { hasCodeowners, hasPullRequestTemplate };
+}
+
+async function anyPathExists(
+  projectRoot: string,
+  candidates: readonly string[],
+): Promise<boolean> {
+  const results = await Promise.all(
+    candidates.map(async (candidate) => {
+      try {
+        await access(path.join(projectRoot, candidate));
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return results.some(Boolean);
+}
+
+function emptySignals(isGitRepository: boolean): TeamAssessmentSignals {
+  return {
+    isGitRepository,
+    remoteCount: 0,
+    contributorsAllTime: 0,
+    contributorsRecent: 0,
+    hasTrackedUpstream: false,
+    hasCodeowners: false,
+    hasPullRequestTemplate: false,
+  };
 }

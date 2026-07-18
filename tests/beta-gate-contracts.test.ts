@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,32 +54,7 @@ describe('V3 Beta gate', () => {
   });
 
   it('passes only after every V3 adapter and every platform spike is present', async () => {
-    for (const platform of [
-      'claude-code',
-      'codex',
-      'cursor',
-      'copilot',
-      'zcode',
-    ] as const) {
-      await installV3Adapter(root, platform);
-    }
-    await Promise.all(
-      SESSION_SPIKE_PLATFORMS.map((platform) =>
-        writePlatformSessionSpike(
-          root,
-          createPlatformSessionSpike({
-            platform,
-            observedAt: '2026-07-18T12:00:00.000Z',
-            hostSessionSource: 'api',
-            firstWindowHostSessionKey: `${platform}-window-a`,
-            secondWindowHostSessionKey: `${platform}-window-b`,
-            commandPropagation: 'proven',
-            subagentInheritance: 'not_applicable',
-            hookApproval: 'not_applicable',
-          }),
-        ),
-      ),
-    );
+    await makeBetaReady(root);
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       expect(await contextBeta(root, { json: true })).toBe(0);
@@ -93,7 +68,90 @@ describe('V3 Beta gate', () => {
       logs.mockRestore();
     }
   });
+
+  it('blocks Beta for an unfinished durable git-ref workflow repair', async () => {
+    await makeBetaReady(root);
+    const directory = path.join(
+      root,
+      '.mancode',
+      'local',
+      'journals',
+      'git-ref-workflow',
+    );
+    const operationId = id(40);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, `${operationId}.json`),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          operationId,
+          actorId: id(41),
+          sessionId: id(42),
+          state: 'awaiting_remote',
+          prepared: {
+            kind: 'workflow_update',
+            targetRemoteRevision: 1,
+            targetBundle: {
+              taskRef: { namespace: 'shared', taskId: id(43) },
+            },
+          },
+          updatedAt: '2026-07-18T12:00:00.000Z',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(await contextBeta(root, { json: true })).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        ready: false,
+        blockers: expect.arrayContaining([
+          'MANCODE_BETA_OPERATION_RECOVERY_REQUIRED',
+        ]),
+        unfinishedGitRefWorkflowRepairs: [
+          {
+            operationId,
+            kind: 'workflow_update',
+            state: 'awaiting_remote',
+          },
+        ],
+      });
+    } finally {
+      logs.mockRestore();
+    }
+  });
 });
+
+async function makeBetaReady(projectRoot: string): Promise<void> {
+  for (const platform of [
+    'claude-code',
+    'codex',
+    'cursor',
+    'copilot',
+    'zcode',
+  ] as const) {
+    await installV3Adapter(projectRoot, platform);
+  }
+  await Promise.all(
+    SESSION_SPIKE_PLATFORMS.map((platform) =>
+      writePlatformSessionSpike(
+        projectRoot,
+        createPlatformSessionSpike({
+          platform,
+          observedAt: '2026-07-18T12:00:00.000Z',
+          hostSessionSource: 'api',
+          firstWindowHostSessionKey: `${platform}-window-a`,
+          secondWindowHostSessionKey: `${platform}-window-b`,
+          commandPropagation: 'proven',
+          subagentInheritance: 'not_applicable',
+          hookApproval: 'not_applicable',
+        }),
+      ),
+    ),
+  );
+}
 
 function id(offset: number) {
   return createUlid(

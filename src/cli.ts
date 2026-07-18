@@ -45,11 +45,14 @@ import {
   teamIdentityCreate,
   teamIdentityShow,
   teamJoin,
+  teamPolicy,
   teamStatus,
   teamSyncPull,
   teamSyncPush,
   teamTransportMigrate,
   teamTransportRecover,
+  teamTransportSet,
+  teamTransportStatus,
 } from './commands/team.js';
 import { uninstall } from './commands/uninstall.js';
 import { version } from './commands/version.js';
@@ -156,7 +159,7 @@ program
   .option('--child-revision <n>', 'V3 expected child task revision for merge')
   .option('--summary <text>', 'Privacy-screened child result summary')
   .option('--next-action <text>', 'Next parent action after a child merge')
-  .option('--sync', 'Use git-ref transport when available (P2; unavailable)')
+  .option('--sync', 'Publish shared V3 mutations through git-ref transport')
   .option(
     '--confirm-shared',
     'Confirm that task metadata may enter shared V3 authority',
@@ -270,7 +273,7 @@ contextProgram
   .description('Validate and bind the current session to a V3 TaskRef')
   .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
   .option('--client <name>', 'Client identity (default: mancode-cli)')
-  .option('--sync', 'Publish through git-ref transport (P2; unavailable)')
+  .option('--sync', 'Publish shared V3 mutations through git-ref transport')
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (task, options) => {
     process.exitCode = await contextResume(process.cwd(), task, options);
@@ -434,6 +437,20 @@ teamProgram
   });
 
 teamProgram
+  .command('policy <mode>')
+  .description('Set the V3 team recommendation policy with a revision CAS')
+  .requiredOption('--expected-revision <n>', 'Current team policy revision')
+  .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (policy, options) => {
+    process.exitCode = await teamPolicy(process.cwd(), {
+      ...options,
+      policy,
+    });
+  });
+
+teamProgram
   .command('conflicts')
   .description(
     'Inspect local claim conflicts and handoffs without mutating coordination',
@@ -447,6 +464,38 @@ teamProgram
 const teamTransportProgram = teamProgram
   .command('transport')
   .description('Inspect and migrate the coordination authority');
+
+teamTransportProgram
+  .command('status')
+  .description('Show active coordination transport and freshness')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await teamTransportStatus(process.cwd(), options);
+  });
+
+teamTransportProgram
+  .command('set <mode>')
+  .description(
+    'Switch an empty coordination authority; otherwise use transport migrate',
+  )
+  .requiredOption(
+    '--expected-config-revision <n>',
+    'Current project config revision',
+  )
+  .option(
+    '--remote <name>',
+    'Git remote for a git-ref target (default: origin)',
+  )
+  .option('--dry-run', 'Validate the empty-authority switch without writing')
+  .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (mode, options) => {
+    process.exitCode = await teamTransportSet(process.cwd(), {
+      ...options,
+      mode,
+    });
+  });
 
 teamTransportProgram
   .command('migrate')
