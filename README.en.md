@@ -18,6 +18,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/status-stable%20v0.3.9-green?style=flat-square" alt="Status: stable v0.3.9" />
+  <img src="https://img.shields.io/badge/V3-cross--CLI%20team%20Beta-FB6A21?style=flat-square" alt="V3: cross-CLI team Beta" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
   <img src="https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square" alt="Tests passing" />
 </p>
@@ -91,31 +92,41 @@ Existing workflow metadata remains compatible and does not need migration.
 
 ## V3 Cross-CLI and Team Beta
 
-V3 adds stable `TaskRef` context across CLIs, isolated sessions, governance
-ledgers, worktree claims and handoffs, and optional git-ref coordination across
-clones. It is currently Beta. Plain `mancode init` still creates a compatible
-legacy project; initialize V3 explicitly for a new project:
+V3 gives new team projects stable `TaskRef` context, isolated sessions,
+governance ledgers, worktree claims and handoffs, and optional git-ref
+coordination across clones. It is a **hard-gated Beta**: adapters bootstrap
+Claude Code, Cursor, Codex, GitHub Copilot, and ZCode, but platform files never
+become the authority for task or session state.
+
+For a new project, start with one platform you actually use:
 
 ```bash
-mancode init --v3
-mancode install codex
+mancode init --v3 --team --platform claude-code
 mancode team identity create --name "Your name"
-mancode context session new --client codex
+mancode context session new --client claude-code
+mancode list-platforms
 ```
 
-V3 adapters are bootstrap-only and never persist task or session state in a
-platform file. Use the CLI for creation, resume, and coordination:
-`mancode workflow create`, `mancode context resume`, `mancode team claim`, and
-`mancode team handoff`. For an existing project, begin with
-`mancode migrate context --dry-run`, then follow its stage and activation
-report. Do not manually mix legacy `state.json` writes with V3 authority.
+Use the CLI for creation, resume, and coordination: `mancode workflow create`,
+`mancode context resume`, `mancode team claim`, and `mancode team handoff`. For
+an existing project, begin with `mancode migrate context --dry-run`, then follow
+its stage and activation report. Do not manually mix legacy `state.json` writes
+with V3 authority.
 
-Before releasing or broadly enabling V3, run `mancode context beta --json`.
-It checks activation, adapters, repair state, worktree binding, and session
-evidence for all five platforms. Each platform must prove distinct sessions in
-two real host windows and command propagation; stored evidence never includes
-raw session keys. Until that gate passes, use an explicit `--session <id>` and
-do not treat host identity as verified.
+### Beta validation boundary
+
+- The `main` branch requires a Windows gate that runs smoke tests in CMD,
+  PowerShell, and Git Bash.
+- `mancode context beta --json` checks activation, adapters, repair state,
+  worktree binding, and session evidence for all five platforms. Any blocker
+  stops broad enablement.
+- Each platform must prove distinct sessions in two real host windows and its
+  subagent or command propagation. Stored evidence never includes raw session
+  keys.
+
+Until that gate passes, use an explicit `--session <id>` and do not treat host
+identity as verified. This lets you try V3 without presenting unproven
+cross-platform session behavior as a fact.
 
 ## What Gets Installed
 

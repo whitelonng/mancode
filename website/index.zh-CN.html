@@ -20,7 +20,7 @@
     <a class="skip-link" href="#main">跳到正文</a><div class="noise" aria-hidden="true"></div>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <nav class="main-nav" aria-label="主导航"><a href="#modes">模式</a><a href="#workflow">工作流</a><a href="#platforms">平台</a><a href="./docs.zh-CN.html">文档</a><a href="https://github.com/whitelonng/mancode">GitHub</a></nav>
+      <nav class="main-nav" aria-label="主导航"><a href="#modes">模式</a><a href="#workflow">工作流</a><a href="#platforms">平台</a><a href="#v3">V3 Beta</a><a href="./docs.zh-CN.html">文档</a><a href="https://github.com/whitelonng/mancode">GitHub</a></nav>
       <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span aria-hidden="true">◐</span><b>主题</b></button><a class="language-link" href="./index.html" lang="en" aria-label="Switch to English">EN</a><a class="button button-small button-ghost header-cta" href="#install">开始使用 ↘</a></div>
     </header>
 
@@ -69,7 +69,22 @@
 
       <section class="platforms-section" id="platforms"><div class="section-kicker reveal"><span>05 / 适配器</span><span>保留你的 Agent，加入纪律。</span></div><div class="section-title-row platform-title reveal"><h2>一套战术。<br />你的工具。</h2><p>mancode 是工作流层，不是新的编码 Agent。Claude Code 获得最完整的原生集成；其他工具获得持久 rules、skills 或 instruction 文件。</p></div><div class="platform-table reveal" role="table"><div class="platform-row platform-head" role="row"><span role="columnheader">平台</span><span role="columnheader">适配方式</span><span role="columnheader">级别</span></div><div class="platform-row" role="row"><strong role="cell">Claude Code</strong><span role="cell">Hooks · skills · subagents</span><em role="cell">完整集成</em></div><div class="platform-row" role="row"><strong role="cell">Cursor</strong><span role="cell">项目 rules · commands</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">Codex</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">GitHub Copilot</strong><span role="cell">仓库 instructions · prompts</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">ZCode</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">预览适配器</em></div></div></section>
 
-      <section class="install-section section-dark" id="install"><div class="section-kicker reveal"><span>06 / 快速开始</span><span>安装一次，初始化一次，继续编码。</span></div><div class="install-grid"><div class="install-copy reveal"><p class="eyebrow">准备上场</p><h2>把 mancode<br />放进轮换。</h2><p>不需要账户、Dashboard、API Key 或新编辑器。原生支持 Windows CMD、PowerShell、Git Bash、macOS 与 Linux。</p><a class="button button-solid" href="./docs.zh-CN.html">阅读完整文档 ↗</a></div><div class="steps-terminal reveal"><div class="terminal-command"><span>01 / 安装</span><code>npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><div class="terminal-command"><span>02 / 进入项目</span><code>cd your-project</code><button type="button" data-copy="cd your-project">复制</button></div><div class="terminal-command"><span>03 / 初始化</span><code>mancode init</code><button type="button" data-copy="mancode init">复制</button></div><div class="terminal-ready"><i></i><span>solo 模式已就绪</span><b>00:03</b></div></div></div></section>
+      <section class="platforms-section" id="v3">
+        <div class="section-kicker reveal"><span>06 / V3 Beta</span><span>跨 CLI 协作，先证明再推广。</span></div>
+        <div class="section-title-row platform-title reveal">
+          <h2>一项任务。<br />多个 CLI。</h2>
+          <p>V3 为新团队项目提供稳定 TaskRef、隔离 session 和可审计的 claim/handoff。它故意设置门禁：五个平台都有 bootstrap adapter，但在真实 session 证据齐全前，Beta 门禁不会放行大范围启用。</p>
+        </div>
+        <div class="platform-table reveal" role="table" aria-label="V3 Beta 工作流">
+          <div class="platform-row platform-head" role="row"><span role="columnheader">阶段</span><span role="columnheader">你要做什么</span><span role="columnheader">边界</span></div>
+          <div class="platform-row" role="row"><strong role="cell">开始</strong><span role="cell"><code>mancode init --v3 --team --platform claude-code</code></span><em role="cell">新项目</em></div>
+          <div class="platform-row" role="row"><strong role="cell">接入</strong><span role="cell">只为团队实际使用的编码界面安装 adapter。</span><em role="cell">五个平台</em></div>
+          <div class="platform-row" role="row"><strong role="cell">协作</strong><span role="cell">workflow、claim 与 handoff 使用 V3 authority，不依赖平台文件保存状态。</span><em role="cell">本地优先</em></div>
+          <div class="platform-row" role="row"><strong role="cell">推广</strong><span role="cell"><code>mancode context beta --json</code> 会在所需证据不完整时阻止启用。</span><em role="cell">需要证据</em></div>
+        </div>
+      </section>
+
+      <section class="install-section section-dark" id="install"><div class="section-kicker reveal"><span>07 / 快速开始</span><span>安装一次，初始化一次，继续编码。</span></div><div class="install-grid"><div class="install-copy reveal"><p class="eyebrow">准备上场</p><h2>把 mancode<br />放进轮换。</h2><p>不需要账户、Dashboard、API Key 或新编辑器。原生支持 Windows CMD、PowerShell、Git Bash、macOS 与 Linux。</p><a class="button button-solid" href="./docs.zh-CN.html">阅读完整文档 ↗</a></div><div class="steps-terminal reveal"><div class="terminal-command"><span>01 / 安装</span><code>npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><div class="terminal-command"><span>02 / 进入项目</span><code>cd your-project</code><button type="button" data-copy="cd your-project">复制</button></div><div class="terminal-command"><span>03 / 初始化</span><code>mancode init</code><button type="button" data-copy="mancode init">复制</button></div><div class="terminal-ready"><i></i><span>solo 模式已就绪</span><b>00:03</b></div></div></div></section>
 
       <section class="final-cta"><div class="final-cta-mark" aria-hidden="true">M</div><p class="reveal">简单任务少一点仪式。<br />关键任务多一点纪律。</p><h2 class="reveal">别再替 AI<br />收拾臃肿。</h2><div class="final-actions reveal"><div class="command-bar command-light"><code><span>&gt;</span> npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><a class="button button-dark" href="https://github.com/whitelonng/mancode">GitHub 上查看 ↗</a></div></section>
     </main>
