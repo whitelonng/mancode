@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { teamSyncPull } from '../src/commands/team.js';
+import {
+  contextReconcileTaskHead,
+  contextResume,
+} from '../src/commands/context.js';
+import { teamClaim, teamSyncPull, teamSyncPush } from '../src/commands/team.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { workflow } from '../src/commands/workflow.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
@@ -78,6 +82,238 @@ afterEach(async () => {
 });
 
 describe('git-ref coordination across independent clones', () => {
+  it('publishes a newly created git-ref task after its Git commit', async () => {
+    const fixture = await createFixture();
+    const storeA = await strictStore(fixture.cloneA);
+    const [profileA, profileB] = fixture.profiles;
+    if (profileA === undefined || profileB === undefined) {
+      throw new Error('missing fixture actor profiles');
+    }
+    await storeA.publishActorProfile({
+      operationId: id(15),
+      expectedRemoteRevision: 0,
+      profile: profileA,
+    });
+    await storeA.publishActorProfile({
+      operationId: id(16),
+      expectedRemoteRevision: 1,
+      profile: profileB,
+    });
+    await expect(
+      captureJson(() => teamSyncPull(fixture.cloneA, { json: true })),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      value: { remoteRevision: 2 },
+    });
+    await rm(
+      path.join(
+        fixture.cloneA,
+        '.mancode',
+        'shared',
+        'team',
+        'actors',
+        `${ACTOR_B}.json`,
+      ),
+    );
+
+    const created = await captureJson<WorkflowCreateJson>(() =>
+      workflow(
+        fixture.cloneA,
+        'create',
+        [
+          'manteam',
+          'Publish a new shared task through the public sync sequence.',
+        ],
+        {
+          session: SESSION_A,
+          client: 'vitest-a',
+          participants: [ACTOR_B],
+          confirmShared: true,
+          json: true,
+        },
+      ),
+    );
+    expect(created).toMatchObject({
+      exitCode: 0,
+      value: { metadata: { revision: 1, ownershipEpoch: 0 } },
+    });
+    await publishSharedActorProfile(fixture.cloneA, profileB);
+    const taskRef = created.value.taskRef;
+    const formattedTaskRef = formatTaskRef(taskRef);
+
+    await writeFile(
+      path.join(fixture.cloneA, 'README.md'),
+      '# git-ref cross-clone fixture\n\ncode head\n\nteam task\n',
+    );
+    const dirtyPush = await captureJson<CommandJson>(() =>
+      teamSyncPush(fixture.cloneA, {
+        task: formattedTaskRef,
+        expectedTaskRevision: '1',
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(dirtyPush).toMatchObject({
+      exitCode: 3,
+      value: { error: { code: 'MANCODE_HANDOFF_DIRTY_WORKTREE' } },
+    });
+
+    const taskRoot = path.join(
+      '.mancode',
+      'shared',
+      'workflows',
+      taskRef.taskId,
+    );
+    await git(fixture.cloneA, ['add', '--force', 'README.md', taskRoot]);
+    await git(fixture.cloneA, ['commit', '-m', 'publish shared task']);
+    const reconciled = await captureJson<CommandJson>(() =>
+      contextReconcileTaskHead(fixture.cloneA, formattedTaskRef, {
+        expectedFenceRevision: '1',
+        fromGit: true,
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(reconciled.exitCode).toBe(0);
+
+    const synced = await captureJson<CommandJson>(() =>
+      teamSyncPush(fixture.cloneA, {
+        task: formattedTaskRef,
+        expectedTaskRevision: '1',
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(synced).toMatchObject({
+      exitCode: 0,
+      value: {
+        changed: true,
+        remoteRevision: 3,
+        ownershipEpoch: 0,
+        taskRevision: 1,
+      },
+    });
+    const publishedReconcile = await captureJson<CommandJson>(() =>
+      contextReconcileTaskHead(fixture.cloneA, formattedTaskRef, {
+        expectedFenceRevision: '2',
+        fromGit: true,
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(publishedReconcile).toMatchObject({
+      exitCode: 3,
+      value: { error: { code: 'MANCODE_GIT_REF_TASK_ALREADY_PUBLISHED' } },
+    });
+
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    await git(fixture.cloneB, ['fetch', 'origin']);
+    await git(fixture.cloneB, ['merge', '--ff-only', 'origin/main']);
+    const pulled = await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formattedTaskRef,
+        json: true,
+      }),
+    );
+    expect(pulled).toMatchObject({
+      exitCode: 0,
+      value: {
+        remoteRevision: 3,
+        materializedBundles: [{ status: 'unchanged' }],
+      },
+    });
+    const resumed = await captureJson<CommandJson>(() =>
+      contextResume(fixture.cloneB, formattedTaskRef, {
+        session: SESSION_B,
+        client: 'vitest-b',
+        json: true,
+      }),
+    );
+    expect(resumed).toMatchObject({
+      exitCode: 0,
+      value: { taskRef, taskRevision: 1 },
+    });
+
+    const unconfirmedClaim = await captureJson<CommandJson>(() =>
+      teamClaim(fixture.cloneB, {
+        task: formattedTaskRef,
+        expectedTaskRevision: '1',
+        paths: ['src/**'],
+        session: SESSION_B,
+        client: 'vitest-b',
+        sync: true,
+        json: true,
+      }),
+    );
+    expect(unconfirmedClaim).toMatchObject({
+      exitCode: 3,
+      value: {
+        error: { code: 'MANCODE_MANTEAM_PLAN_CONFIRMATION_REQUIRED' },
+      },
+    });
+    await expect(
+      new V3ContextStore(fixture.cloneB).readTaskSnapshot(taskRef),
+    ).resolves.toMatchObject({
+      metadata: { revision: 1, ownershipEpoch: 0 },
+    });
+
+    const checkpoint = await createV3Checkpoint({
+      projectRoot: fixture.cloneA,
+      taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: 1,
+      kind: 'handoff_offered',
+      summary: 'Publish a journaled handoff checkpoint after initial sync.',
+      nextAction: 'Pull the successor bundle in the second clone.',
+      checkpointId: id(17),
+      operationId: id(18),
+      now: at(3),
+    });
+    expect(
+      await gitOutput(fixture.cloneA, [
+        'status',
+        '--porcelain=v1',
+        '--untracked-files=all',
+      ]),
+    ).toContain(taskRoot);
+    const updatedSync = await captureJson<CommandJson>(() =>
+      teamSyncPush(fixture.cloneA, {
+        task: formattedTaskRef,
+        expectedTaskRevision: String(checkpoint.metadata.revision),
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(updatedSync).toMatchObject({
+      exitCode: 0,
+      value: {
+        remoteRevision: 4,
+        taskRevision: checkpoint.metadata.revision,
+        ownershipEpoch: 0,
+      },
+    });
+    const updatedPull = await captureJson(() =>
+      teamSyncPull(fixture.cloneB, { task: formattedTaskRef, json: true }),
+    );
+    expect(updatedPull).toMatchObject({
+      exitCode: 0,
+      value: {
+        remoteRevision: 4,
+        materializedBundles: [
+          {
+            status: 'updated',
+            taskRevision: checkpoint.metadata.revision,
+          },
+        ],
+      },
+    });
+  }, 20_000);
+
   it('fences claims, materializes a quarantined bundle, and transfers ownership once', async () => {
     const fixture = await createFixture();
     const created = await createRemoteTask(fixture.cloneA, fixture.codeHead);
@@ -119,7 +355,7 @@ describe('git-ref coordination across independent clones', () => {
     });
     expect(claim).toMatchObject({
       remoteRevision: 2,
-      ownershipEpoch: 1,
+      ownershipEpoch: 0,
       claim: { state: 'active', ownerActorId: ACTOR_A },
     });
 
@@ -267,7 +503,7 @@ describe('git-ref coordination across independent clones', () => {
         actorId: ACTOR_A,
         taskRef: created.taskRef,
         expectedRemoteRevision: beforeAcceptManifest.revision,
-        expectedOwnershipEpoch: 1,
+        expectedOwnershipEpoch: 0,
         claimId: claim.claim.claimId,
         expectedClaimRevision: 1,
         expiresAt: at(2 * 24 * 60).toISOString(),
@@ -289,11 +525,11 @@ describe('git-ref coordination across independent clones', () => {
     expect(preparedRemoteRevision).toBe(5);
     expect(accepted).toMatchObject({
       remoteRevision: 5,
-      ownershipEpoch: 2,
+      ownershipEpoch: 1,
       handoff: { state: 'accepted', revision: 3 },
       taskBundle: {
         taskRevision: initialBundle.taskRevision + 2,
-        ownershipEpoch: 2,
+        ownershipEpoch: 1,
       },
       forwardRepair: { remoteRevision: 5, ownerActorId: ACTOR_B },
     });
@@ -303,13 +539,13 @@ describe('git-ref coordination across independent clones', () => {
       manifest: {
         revision: 5,
         ownershipFences: [
-          { ownerActorId: ACTOR_B, ownershipEpoch: 2, remoteRevision: 5 },
+          { ownerActorId: ACTOR_B, ownershipEpoch: 1, remoteRevision: 5 },
         ],
         receipts: expect.arrayContaining([
           expect.objectContaining({
             operationId: id(31),
             remoteRevision: 5,
-            ownershipEpoch: 2,
+            ownershipEpoch: 1,
           }),
         ]),
       },
@@ -319,7 +555,7 @@ describe('git-ref coordination across independent clones', () => {
     ).resolves.toMatchObject({
       metadata: {
         ownerActorId: ACTOR_B,
-        ownershipEpoch: 2,
+        ownershipEpoch: 1,
         revision: initialBundle.taskRevision + 2,
         transitionState: 'stable',
       },
@@ -460,7 +696,7 @@ describe('git-ref coordination across independent clones', () => {
           { taskRevision: blocked.metadata.revision, lastOperationId: id(45) },
         ],
         taskBundles: [
-          { taskRevision: blocked.metadata.revision, ownershipEpoch: 1 },
+          { taskRevision: blocked.metadata.revision, ownershipEpoch: 0 },
         ],
       },
     });
@@ -922,9 +1158,9 @@ async function setGitRefConfig(projectRoot: string): Promise<void> {
   );
 }
 
-async function captureJson(
+async function captureJson<T extends Record<string, unknown> = SyncPullJson>(
   action: () => Promise<number>,
-): Promise<{ exitCode: number; value: SyncPullJson }> {
+): Promise<{ exitCode: number; value: T }> {
   const writes: string[] = [];
   const previous = console.log;
   console.log = (value: unknown) => writes.push(String(value));
@@ -932,7 +1168,7 @@ async function captureJson(
     const exitCode = await action();
     return {
       exitCode,
-      value: JSON.parse(writes.at(-1) ?? '{}') as SyncPullJson,
+      value: JSON.parse(writes.at(-1) ?? '{}') as T,
     };
   } finally {
     console.log = previous;
@@ -943,6 +1179,15 @@ interface SyncPullJson extends Record<string, unknown> {
   materializedBundles: Array<
     Record<string, unknown> & { quarantinePath?: string }
   >;
+}
+
+interface CommandJson extends Record<string, unknown> {
+  error?: { code: string };
+}
+
+interface WorkflowCreateJson extends CommandJson {
+  taskRef: { namespace: 'shared'; taskId: Ulid };
+  metadata: { revision: number; ownershipEpoch: number };
 }
 
 interface WorkflowCompletionJson extends Record<string, unknown> {

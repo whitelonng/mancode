@@ -9,6 +9,13 @@ async function readPage(name: string): Promise<string> {
   return readFile(path.join(website, name), 'utf8');
 }
 
+async function readPackageVersion(): Promise<string> {
+  const packageJson = JSON.parse(
+    await readFile(path.join(root, 'package.json'), 'utf8'),
+  ) as { version: string };
+  return packageJson.version;
+}
+
 function internalAnchors(html: string): string[] {
   return [...html.matchAll(/href="#([^"]+)"/g)].map((match) => match[1]);
 }
@@ -145,8 +152,9 @@ describe('website documentation', () => {
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
-    expect(english).toContain('Continuity / v0.3.15');
-    expect(chinese).toContain('Continuity / v0.3.15');
+    const version = await readPackageVersion();
+    expect(english).toContain(`Continuity / v${version}`);
+    expect(chinese).toContain(`Continuity / v${version}`);
   });
 
   it('documents the cross-session boundary in both languages', async () => {
@@ -160,16 +168,14 @@ describe('website documentation', () => {
   });
 
   it('keeps version labels aligned with package.json', async () => {
-    const packageJson = JSON.parse(
-      await readFile(path.join(root, 'package.json'), 'utf8'),
-    ) as { version: string };
+    const version = await readPackageVersion();
     for (const name of [
       'index.html',
       'index.zh-CN.html',
       'docs.html',
       'docs.zh-CN.html',
     ]) {
-      expect(await readPage(name)).toContain(`v${packageJson.version}`);
+      expect(await readPage(name)).toContain(`v${version}`);
     }
   });
 });
