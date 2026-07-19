@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.14-orange?style=flat-square" alt="Status: V3 beta v0.3.14" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.3.15-2f855a?style=flat-square" alt="Status: mancode Continuity v0.3.15" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -33,6 +33,9 @@
 different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
+
+**mancode Continuity** is the continuous-context runtime that carries tasks,
+decisions, and verification evidence safely into later conversations.
 
 [Installation](#installation) · [Usage](#usage)
 
@@ -102,7 +105,7 @@ explicitly resumes the existing TaskRef, preserving continuity without treating
 one window's temporary state as another window's identity.
 
 ```bash
-mancode status --json
+mancode status --brief --json
 mancode context session new --client claude-code
 mancode context resume <namespace:ULID> --session <id> --client claude-code
 mancode context show --purpose orient --session <id> --client claude-code
@@ -350,9 +353,8 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: V3 beta v0.3.14. Claude Code, Cursor, Codex in the ChatGPT desktop
-app and CLI, GitHub Copilot, and ZCode adapters are included. Stable release
-still requires the five-host real-session acceptance and the `context beta` B1 gate.
+**Status**: mancode Continuity v0.3.15. Claude Code, Cursor, Codex in the ChatGPT
+desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
 are supported. Git is optional: without it, initialization continues with solo
@@ -421,6 +423,7 @@ mancode init
 mancode init --legacy
 mancode status
 mancode status --json
+mancode status --brief --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode team identity create --name "<name>"
@@ -449,7 +452,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.3.14
+mancode v0.3.15
 
 Project:     my-app
 Runtime:     ready
@@ -488,12 +491,15 @@ mancode init
 
 ### `mancode status`
 
-Shows activation, runtime binding, identity/session evidence, transport, and
-the physical readiness of each platform bootstrap and original mode entry.
+The default and full JSON views show activation, runtime binding,
+identity/session evidence, transport, and the physical readiness of each
+platform bootstrap and original mode entry. Coding agents should combine
+`--brief --json` to read only the compact Continuity runtime view.
 
 ```bash
 mancode status
 mancode status --json
+mancode status --brief --json
 ```
 
 ### `mancode workflow`
@@ -639,7 +645,7 @@ Ensure the `.cursor/rules/mancode-*.mdc` files exist. Rules with
 Mode-specific rules (manba, man, manteam, manps) trigger based on the
 description field — invoke them by asking for `/manba` or similar.
 
-### How to reinstall V3 adapters
+### How to reinstall Continuity adapters
 
 ```bash
 mancode uninstall claude-code --force
@@ -654,7 +660,7 @@ mancode install copilot
 mancode install zcode
 ```
 
-V3 authority is protected, so `mancode uninstall --all` does not delete workflow
+Continuity authority is protected, so `mancode uninstall --all` does not delete workflow
 authority. To inspect removable runtime records, run
 `mancode context compact --dry-run` first.
 
@@ -665,7 +671,7 @@ npm uninstall -g mancode
 ```
 
 Uninstalling each platform removes its mancode bootstrap while preserving
-user-authored rules, instructions, and V3 workflow data. The `--all` form is only
+user-authored rules, instructions, and Continuity workflow data. The `--all` form is only
 supported for projects explicitly initialized with `mancode init --legacy`.
 
 ## FAQ

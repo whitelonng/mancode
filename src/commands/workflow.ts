@@ -384,7 +384,7 @@ function workflowCleanV3(options: WorkflowOptions): number {
   return printV3Error(
     options.json,
     'MANCODE_V3_WORKFLOW_CLEAN_UNSUPPORTED',
-    'V3 workflow authority is durable and is not deleted by workflow clean. Use `mancode context compact --dry-run` to inspect eligible runtime retention records.',
+    'Continuity workflow authority is durable and is not deleted by workflow clean. Use `mancode context compact --dry-run` to inspect eligible runtime retention records.',
     EXIT_INVALID_ARG,
   );
 }

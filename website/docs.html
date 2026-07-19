@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.3.14</span>
+      <span class="docs-wordmark">Documentation / v0.3.15</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -90,7 +90,7 @@
           <h3>Verify the installation</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status
 <span class="command-prompt">$</span> mancode status --json</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <p>The human-readable result names the project, current mode, team state, installed adapters, and each adapter's <strong>ready</strong> or <strong>not ready</strong> status. JSON is the stable choice for scripts. A ready adapter means its required generated files are present; it does not guarantee that an already-open agent session has reloaded them.</p>
+          <p>The human-readable result names the project, current mode, team state, installed adapters, and each adapter's <strong>ready</strong> or <strong>not ready</strong> status. JSON is the stable choice for scripts; <code>mancode status --brief --json</code> returns the compact public Continuity view used by coding agents. A ready adapter means its required generated files are present; it does not guarantee that an already-open agent session has reloaded them.</p>
           <div class="docs-admonition"><strong>Reload after setup</strong><p>Restart or reload the coding agent after initialization. Then start a small request in <code>solo</code>. If an adapter remains <em>not ready</em>, repair it with <code>mancode install &lt;platform&gt; --force</code>.</p></div>
         </section>
 
@@ -98,9 +98,9 @@
           <h2>Files &amp; privacy</h2>
           <p>mancode works locally, scans only the current project, and sends no telemetry. It deliberately does not rewrite your project's <code>.gitignore</code>, so your team—not the installer—decides which generated context belongs in version control.</p>
           <table class="docs-table artifact-table"><thead><tr><th>Path</th><th>What it contains</th><th>Before committing</th></tr></thead><tbody>
-            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>V3 authority, project policy, sessions, workflow metadata, and local runtime records. Legacy <code>state.json</code> exists only after explicit <code>--legacy</code> initialization.</td><td>Review workflow evidence and local records before sharing; raw host session keys are never persisted.</td></tr>
+            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>Continuity authority, project policy, sessions, workflow metadata, and local runtime records. Legacy <code>state.json</code> exists only after explicit <code>--legacy</code> initialization.</td><td>Review workflow evidence and local records before sharing; raw host session keys are never persisted.</td></tr>
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>Detected stack, validation commands, and local UI tokens.</td><td>Inspect for internal project details and decide whether reproducibility justifies sharing.</td></tr>
-            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>Requirements, plans, review and verification ledgers, reports, checkpoints, and summaries.</td><td>Review carefully. Evidence and reports may contain sensitive data; shared workflows pass the V3 privacy boundary.</td></tr>
+            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>Requirements, plans, review and verification ledgers, reports, checkpoints, and summaries.</td><td>Review carefully. Evidence and reports may contain sensitive data; shared workflows pass the Continuity privacy boundary.</td></tr>
             <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>Confirmed decisions and durable coordination authority.</td><td>Commit only information intentionally written for the team.</td></tr>
             <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
           </tbody></table>
@@ -111,7 +111,7 @@
           <h2>Continue work across sessions</h2>
           <p>mancode stores goals, requirements, plans, validation results, and handoff notes under a stable <code>TaskRef</code>. A new chat window or supported CLI can resume the same task and load a purpose-specific Context Pack.</p>
           <div class="docs-note"><strong>What is carried forward</strong><p>This is task continuity, not a copy of raw chat history. Sessions from different clients remain isolated; the new session must identify its own client and explicitly resume the existing TaskRef.</p></div>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --json
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --brief --json
 <span class="command-prompt">$</span> mancode context session new --client claude-code
 <span class="command-prompt">$</span> mancode context resume &lt;namespace:ULID&gt; --session &lt;id&gt; --client claude-code
 <span class="command-prompt">$</span> mancode context show --purpose orient --session &lt;id&gt; --client claude-code</code></pre><button type="button" data-copy-code>Copy</button></div>
@@ -169,21 +169,21 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <div class="command-list">
             <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project, scans style tokens where relevant, and installs adapters.</p><ul><li>Options: <code>--force</code>, <code>--yes</code>, <code>--team</code>, <code>--no-team</code>, <code>--style &lt;name&gt;</code>, <code>--platform &lt;list&gt;</code>, <code>--empty</code>, <code>--lang &lt;locale&gt;</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs or repairs an adapter after initialization. Omit the platform for interactive selection.</p><ul><li><code>--force</code> regenerates managed content.</li><li><code>--minimal</code> installs solo-mode essentials only.</li></ul></article>
-            <article class="command-card"><header><h3>mancode status [--json]</h3><span>Inspect</span></header><p>Reports project facts, current mode and workflow, adapter readiness, and Claude hook registration where applicable.</p></article>
+            <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>Inspect</span></header><p>Reports project facts, current mode and workflow, adapter readiness, and Claude hook registration where applicable. Combine <code>--brief --json</code> for the compact Continuity runtime view.</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists adapters known to the installed CLI and marks those already configured in the project.</p></article>
-            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates V3 requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; V3 workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
+            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates Continuity requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; Continuity workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic health scan for <code>all</code>, <code>deps</code>, <code>security</code>, <code>dead-code</code>, <code>config</code>.</p><ul><li><code>--json</code> emits machine-readable output.</li><li><code>--remediate</code> enters the explicit remediation path; the default is scan-only.</li></ul></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then updates installed static adapters.</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Reinstall static adapters with <code>--force</code> afterward.</p></article>
-            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one V3 adapter. V3 protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
+            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one Continuity adapter. Continuity protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version for upgrade checks and issue reports.</p></article>
           </div>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>Study the /man workflow</h2>
-          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a lightweight handoff, a plan-only result, or governed execution. Every gate is backed by V3 files under <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>.</p>
-          <div class="docs-note"><strong>Who runs these commands?</strong><p>The installed V3 mode entry creates the task and reads its Context Pack. The commands below are the machine contract for studying, debugging, or integrating the process. V3 identifies tasks with explicit <code>namespace:ULID</code> TaskRefs and does not use a legacy active pointer.</p></div>
+          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a lightweight handoff, a plan-only result, or governed execution. Every gate is backed by Continuity files under <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>.</p>
+          <div class="docs-note"><strong>Who runs these commands?</strong><p>The installed Continuity mode entry creates the task and reads its Context Pack. The commands below are the machine contract for studying, debugging, or integrating the process. Continuity identifies tasks with explicit <code>namespace:ULID</code> TaskRefs and does not use a legacy active pointer.</p></div>
 
           <h3>The nine steps and their gates</h3>
           <table class="docs-table workflow-table"><thead><tr><th>Step</th><th>Agent work</th><th>Durable gate</th></tr></thead><tbody>
@@ -239,8 +239,8 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           </div>
           <p>All three choices require an active <code>man</code> workflow, confirmed requirements, and <code>plan.md</code>. Revise the plan with <code>workflow plan ... revise</code>; every successful mutation returns the revision required by the next command.</p>
 
-          <h3>A valid V3 sequence</h3>
-          <p>V3 uses explicit TaskRefs and expected revisions. The CLI owns every durable mutation; do not edit metadata files or use the legacy <code>--step</code> protocol.</p>
+          <h3>A valid Continuity sequence</h3>
+          <p>Continuity uses explicit TaskRefs and expected revisions. The CLI owns every durable mutation; do not edit metadata files or use the legacy <code>--step</code> protocol.</p>
           <div class="code-wrap"><pre><code><span class="command-prompt"># Bootstrap an actor and explicit session</span>
 <span class="command-prompt">$</span> mancode team identity create --name "Your name"
 <span class="command-prompt">$</span> mancode context session new --client codex --json
@@ -262,7 +262,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
           <h3>Verification, manual checks, and remediation</h3>
           <table class="docs-table"><thead><tr><th>Case</th><th>Required record</th><th>Gate behavior</th></tr></thead><tbody>
-            <tr><td>Automated</td><td>The canonical verification ledger records the criterion, command, exit code, evidence summary, and result.</td><td><code>workflow verify ... apply</code> rejects a ledger that does not satisfy the V3 schema and current revision.</td></tr>
+            <tr><td>Automated</td><td>The canonical verification ledger records the criterion, command, exit code, evidence summary, and result.</td><td><code>workflow verify ... apply</code> rejects a ledger that does not satisfy the Continuity schema and current revision.</td></tr>
             <tr><td>Manual</td><td>The ledger records why automation cannot decide and only changes to passed after explicit user confirmation.</td><td>Completion remains blocked while required manual evidence is pending.</td></tr>
             <tr><td>Review finding</td><td>The canonical review ledger stores stable blocker IDs and their remediation state.</td><td>Applying a review ledger makes earlier verification stale; apply current verification after review and before completion.</td></tr>
             <tr><td>User skips review</td><td>The review ledger records the explicit user decision and residual risk.</td><td>Completion still requires a valid summary and every remaining gate.</td></tr>
@@ -279,8 +279,8 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <tr><td><code>plan</code></td><td>Revise a plan or confirm its execution decision.</td><td><code>revise --file</code>; <code>confirm --plan-decision</code>; both require revision and session.</td></tr>
             <tr><td><code>update</code></td><td>Change lifecycle status or a blocking reason.</td><td><code>--status --expected-revision --session</code>; governed fields use dedicated commands.</td></tr>
             <tr><td><code>handoff</code></td><td>Transfer a confirmed local plan to solo and later close it.</td><td><code>--to solo</code> or <code>--complete</code>, with revision and session.</td></tr>
-            <tr><td><code>verify / review</code></td><td>Apply canonical V3 ledgers.</td><td><code>apply --file --expected-revision --session</code>.</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>List or inspect V3 TaskRefs. <code>clean</code> is not a V3 authority deletion command.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
+            <tr><td><code>verify / review</code></td><td>Apply canonical Continuity ledgers.</td><td><code>apply --file --expected-revision --session</code>.</td></tr>
+            <tr><td><code>list / show / clean</code></td><td>List or inspect Continuity TaskRefs. <code>clean</code> is not a Continuity authority deletion command.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
           </tbody></table>
         </section>
 
@@ -307,7 +307,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
         <section class="doc-section" id="uninstall" data-searchable>
           <h2>Uninstall safely</h2>
-          <p>Uninstalling one adapter preserves user-authored rules, instructions, unrelated Claude settings, and V3 workflow authority. Use <code>context compact --dry-run</code> to inspect eligible runtime retention records.</p>
+          <p>Uninstalling one adapter preserves user-authored rules, instructions, unrelated Claude settings, and Continuity workflow authority. Use <code>context compact --dry-run</code> to inspect eligible runtime retention records.</p>
           <h3>Remove one adapter</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>Copy</button></div>
           <h3>Reinstall one adapter</h3>
@@ -328,7 +328,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3>Cursor rules do not trigger</h3>
           <p>Confirm that <code>.cursor/rules/mancode-*.mdc</code> and <code>.cursor/commands/*.md</code> exist. Core context and solo rules are persistent; higher-intensity rules are description-triggered, so invoke the generated mode command explicitly.</p>
           <h3>A workflow command is rejected</h3>
-          <p>Treat the rejection as a gate, not a file-corruption problem. Use <code>mancode workflow list --json</code> to discover TaskRefs, then <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> to inspect metadata, revision, aggregate, and blockers. Do not edit V3 metadata manually.</p>
+          <p>Treat the rejection as a gate, not a file-corruption problem. Use <code>mancode workflow list --json</code> to discover TaskRefs, then <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> to inspect metadata, revision, aggregate, and blockers. Do not edit Continuity metadata manually.</p>
           <h3>Project facts became stale</h3>
           <p>After adding Git, a manifest, dependencies, or validation scripts, run <code>mancode refresh-project</code>. Use <code>refresh-style</code> for UI tokens. Then repair a static adapter only if its generated files need regeneration.</p>
         </section>

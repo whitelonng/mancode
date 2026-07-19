@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.3.14</span>
+      <span class="docs-wordmark">文档 / v0.3.15</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -90,7 +90,7 @@
           <h3>验证安装结果</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status
 <span class="command-prompt">$</span> mancode status --json</code></pre><button type="button" data-copy-code>复制</button></div>
-          <p>普通输出会列出项目、当前模式、团队状态、已安装平台，以及每个平台的 <strong>ready</strong> 或 <strong>not ready</strong> 状态；脚本应使用 JSON。<em>ready</em> 表示适配器要求的生成文件已经存在，但不代表一个早已打开的 Agent 会话已经重新加载这些文件。</p>
+          <p>普通输出会列出项目、当前模式、团队状态、已安装平台，以及每个平台的 <strong>ready</strong> 或 <strong>not ready</strong> 状态；脚本应使用 JSON，编码 Agent 可用 <code>mancode status --brief --json</code> 获取精简的 Continuity 公开视图。<em>ready</em> 表示适配器要求的生成文件已经存在，但不代表一个早已打开的 Agent 会话已经重新加载这些文件。</p>
           <div class="docs-admonition"><strong>初始化后重载</strong><p>安装后重启或重新加载编程 Agent，再用 <code>solo</code> 完成一个小任务。如果平台仍显示 <em>not ready</em>，执行 <code>mancode install &lt;platform&gt; --force</code> 修复。</p></div>
         </section>
 
@@ -98,9 +98,9 @@
           <h2>文件与隐私</h2>
           <p>mancode 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
           <table class="docs-table artifact-table"><thead><tr><th>路径</th><th>包含什么</th><th>提交前怎么处理</th></tr></thead><tbody>
-            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>V3 权威、项目策略、会话、工作流元数据和本地运行时记录。只有显式使用 <code>--legacy</code> 初始化后才会出现旧 <code>state.json</code>。</td><td>共享前检查工作流证据和本地记录；原始宿主 session key 不会持久化。</td></tr>
+            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>Continuity 权威、项目策略、会话、工作流元数据和本地运行时记录。只有显式使用 <code>--legacy</code> 初始化后才会出现旧 <code>state.json</code>。</td><td>共享前检查工作流证据和本地记录；原始宿主 session key 不会持久化。</td></tr>
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>识别出的技术栈、验证命令和本地 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
-            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>需求、计划、评审和验证台账、报告、checkpoint 与总结。</td><td>重点检查。证据和报告可能含敏感数据；shared workflow 必须通过 V3 隐私边界。</td></tr>
+            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>需求、计划、评审和验证台账、报告、checkpoint 与总结。</td><td>重点检查。证据和报告可能含敏感数据；shared workflow 必须通过 Continuity 隐私边界。</td></tr>
             <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>已确认决策与持久化协调权威。</td><td>只提交有意写给团队的内容。</td></tr>
             <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
           </tbody></table>
@@ -111,7 +111,7 @@
           <h2>跨会话继续工作</h2>
           <p>mancode 把目标、需求、计划、检查结果和交接信息保存在稳定的 <code>TaskRef</code> 下。新聊天窗口或受支持的 CLI 可以恢复同一项任务，再按当前目的读取精简的 Context Pack。</p>
           <div class="docs-note"><strong>会带过去什么</strong><p>这是任务上下文的续接，不是原始聊天记录的复制。不同客户端的 session 仍然隔离；新 session 必须使用自己的 client 身份，并显式恢复已有 TaskRef。</p></div>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --json
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --brief --json
 <span class="command-prompt">$</span> mancode context session new --client claude-code
 <span class="command-prompt">$</span> mancode context resume &lt;namespace:ULID&gt; --session &lt;id&gt; --client claude-code
 <span class="command-prompt">$</span> mancode context show --purpose orient --session &lt;id&gt; --client claude-code</code></pre><button type="button" data-copy-code>复制</button></div>
@@ -169,21 +169,21 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <div class="command-list">
             <article class="command-card"><header><h3>mancode init</h3><span>初始化</span></header><p>创建 <code>.mancode/</code>，识别项目，在适用时扫描样式 token，并安装平台适配器。</p><ul><li>选项：<code>--force</code>、<code>--yes</code>、<code>--team</code>、<code>--no-team</code>、<code>--style &lt;name&gt;</code>、<code>--platform &lt;list&gt;</code>、<code>--empty</code>、<code>--lang &lt;locale&gt;</code>。</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>适配器</span></header><p>初始化后安装或修复一个平台。省略平台名时进入交互选择。</p><ul><li><code>--force</code> 重新生成受控内容。</li><li><code>--minimal</code> 只安装 solo 的必要内容。</li></ul></article>
-            <article class="command-card"><header><h3>mancode status [--json]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。</p></article>
+            <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。组合使用 <code>--brief --json</code> 可获得精简的 Continuity 运行时视图。</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前 CLI 支持的平台，并标出项目中已经配置的平台。</p></article>
-            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 V3 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；V3 workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
+            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 Continuity 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；Continuity workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、框架或验证命令后刷新项目事实，并更新已安装的静态适配器。</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>设计上下文</span></header><p>刷新项目画像和设计 token，之后可用 <code>--force</code> 重装需要更新的静态适配器。</p></article>
-            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 V3 适配器。V3 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
+            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 Continuity 适配器。Continuity 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>输出已安装 CLI 版本，便于升级检查和提交问题。</p></article>
           </div>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>深入研究 /man 工作流</h2>
-          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 V3 的 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 文件支撑。</p>
-          <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 V3 mode entry 会创建任务并读取 Context Pack。下面展示的是供研究、排错或集成使用的机器契约。V3 使用显式 <code>namespace:ULID</code> TaskRef，不依赖旧的活动指针。</p></div>
+          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 Continuity 的 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 文件支撑。</p>
+          <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 Continuity mode entry 会创建任务并读取 Context Pack。下面展示的是供研究、排错或集成使用的机器契约。Continuity 使用显式 <code>namespace:ULID</code> TaskRef，不依赖旧的活动指针。</p></div>
 
           <h3>九个步骤与闸门</h3>
           <table class="docs-table workflow-table"><thead><tr><th>步骤</th><th>Agent 工作</th><th>持久化闸门</th></tr></thead><tbody>
@@ -239,8 +239,8 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           </div>
           <p>三种选择都要求活动中的 <code>man</code> 工作流、已确认需求和 <code>plan.md</code>。使用 <code>workflow plan ... revise</code> 修订计划；每次成功写入都会返回下一个命令需要的 revision。</p>
 
-          <h3>一条合法的 V3 顺序</h3>
-          <p>V3 使用显式 TaskRef 和 expected revision。所有持久化变更都由 CLI 完成；不要手工编辑 metadata，也不要使用 legacy <code>--step</code> 协议。</p>
+          <h3>一条合法的 Continuity 顺序</h3>
+          <p>Continuity 使用显式 TaskRef 和 expected revision。所有持久化变更都由 CLI 完成；不要手工编辑 metadata，也不要使用 legacy <code>--step</code> 协议。</p>
           <div class="code-wrap"><pre><code><span class="command-prompt"># 创建 actor 和显式 session</span>
 <span class="command-prompt">$</span> mancode team identity create --name "Your name"
 <span class="command-prompt">$</span> mancode context session new --client codex --json
@@ -262,7 +262,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
           <h3>自动验证、手工确认与修复后重验</h3>
           <table class="docs-table"><thead><tr><th>场景</th><th>必须记录</th><th>闸门行为</th></tr></thead><tbody>
-            <tr><td>自动验证</td><td>规范化 verification ledger 记录验收项、命令、退出码、证据摘要与结果。</td><td><code>workflow verify ... apply</code> 会拒绝不符合 V3 schema 或 revision 的台账。</td></tr>
+            <tr><td>自动验证</td><td>规范化 verification ledger 记录验收项、命令、退出码、证据摘要与结果。</td><td><code>workflow verify ... apply</code> 会拒绝不符合 Continuity schema 或 revision 的台账。</td></tr>
             <tr><td>手工验证</td><td>台账记录自动化不能判断的原因；只有用户明确确认后才能改为 passed。</td><td>必需人工证据未完成时，completion 持续阻塞。</td></tr>
             <tr><td>评审发现</td><td>规范化 review ledger 保存稳定 blocker ID 及其 remediation 状态。</td><td>应用 review ledger 会使旧验证失效；评审后、完成前必须 apply 当前验证。</td></tr>
             <tr><td>用户跳过评审</td><td>review ledger 记录用户显式决定和残余风险。</td><td>仍然需要有效 summary 和其余全部门禁。</td></tr>
@@ -279,8 +279,8 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <tr><td><code>plan</code></td><td>修订计划或确认执行决策。</td><td><code>revise --file</code>；<code>confirm --plan-decision</code>；两者都需要 revision 和 session。</td></tr>
             <tr><td><code>update</code></td><td>改变生命周期状态或阻塞原因。</td><td><code>--status --expected-revision --session</code>；治理字段使用专用命令。</td></tr>
             <tr><td><code>handoff</code></td><td>把已确认的本地计划交给 solo，随后关闭。</td><td><code>--to solo</code> 或 <code>--complete</code>，并传 revision 与 session。</td></tr>
-            <tr><td><code>verify / review</code></td><td>应用规范化 V3 台账。</td><td><code>apply --file --expected-revision --session</code>。</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>列出或检查 V3 TaskRef；<code>clean</code> 不是删除 V3 权威数据的命令。</td><td><code>show &lt;namespace:ULID&gt; --json</code>；保留清理使用 <code>context compact --dry-run</code>。</td></tr>
+            <tr><td><code>verify / review</code></td><td>应用规范化 Continuity 台账。</td><td><code>apply --file --expected-revision --session</code>。</td></tr>
+            <tr><td><code>list / show / clean</code></td><td>列出或检查 Continuity TaskRef；<code>clean</code> 不是删除 Continuity 权威数据的命令。</td><td><code>show &lt;namespace:ULID&gt; --json</code>；保留清理使用 <code>context compact --dry-run</code>。</td></tr>
           </tbody></table>
         </section>
 
@@ -307,7 +307,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
         <section class="doc-section" id="uninstall" data-searchable>
           <h2>安全卸载</h2>
-          <p>卸载单个平台会保留用户自己编写的 rules、instructions、无关的 Claude settings 和 V3 工作流权威数据。使用 <code>context compact --dry-run</code> 检查可清理的运行时保留记录。</p>
+          <p>卸载单个平台会保留用户自己编写的 rules、instructions、无关的 Claude settings 和 Continuity 工作流权威数据。使用 <code>context compact --dry-run</code> 检查可清理的运行时保留记录。</p>
           <h3>移除一个适配器</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>复制</button></div>
           <h3>重装一个适配器</h3>
@@ -328,7 +328,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h3>Cursor rules 没有触发</h3>
           <p>确认 <code>.cursor/rules/mancode-*.mdc</code> 和 <code>.cursor/commands/*.md</code> 都存在。核心上下文与 solo rules 持续生效；高强度规则按描述触发，因此应显式调用生成的模式命令。</p>
           <h3>workflow 命令被拒绝</h3>
-          <p>把拒绝当作流程闸门，而不是元数据损坏。先用 <code>mancode workflow list --json</code> 找到 TaskRef，再用 <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> 检查元数据、revision、aggregate 和 blocker。不要手工编辑 V3 metadata。</p>
+          <p>把拒绝当作流程闸门，而不是元数据损坏。先用 <code>mancode workflow list --json</code> 找到 TaskRef，再用 <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> 检查元数据、revision、aggregate 和 blocker。不要手工编辑 Continuity metadata。</p>
           <h3>项目事实已经过期</h3>
           <p>添加 Git、manifest、依赖或验证脚本后执行 <code>mancode refresh-project</code>；UI token 改变时执行 <code>refresh-style</code>。只有静态适配器的生成文件需要更新时，才重新安装对应平台。</p>
         </section>

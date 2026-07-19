@@ -71,13 +71,13 @@ describe('website documentation', () => {
     );
   });
 
-  it('shows the V3 workflow command contract', async () => {
+  it('shows the Continuity workflow command contract', async () => {
     for (const name of ['docs.html', 'docs.zh-CN.html']) {
       const html = await readPage(name);
       const start = html.indexOf(
         name === 'docs.html'
-          ? '<h3>A valid V3 sequence</h3>'
-          : '<h3>一条合法的 V3 顺序</h3>',
+          ? '<h3>A valid Continuity sequence</h3>'
+          : '<h3>一条合法的 Continuity 顺序</h3>',
       );
       const end = html.indexOf(
         name === 'docs.html'
@@ -145,8 +145,8 @@ describe('website documentation', () => {
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
-    expect(english).toContain('V3 Beta / v0.3.14');
-    expect(chinese).toContain('V3 Beta / v0.3.14');
+    expect(english).toContain('Continuity / v0.3.15');
+    expect(chinese).toContain('Continuity / v0.3.15');
   });
 
   it('documents the cross-session boundary in both languages', async () => {

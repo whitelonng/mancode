@@ -21,8 +21,8 @@ describe('version', () => {
 
     for (const readme of readmes) {
       expect(readme).toContain(`v${VERSION}`);
-      expect(readme).toContain(`status-V3%20beta%20v${VERSION}`);
-      expect(readme).not.toContain(`status-stable%20v${VERSION}`);
+      expect(readme).toContain(`status-Continuity%20v${VERSION}`);
+      expect(readme).not.toMatch(/V3%20beta/i);
     }
   });
 });

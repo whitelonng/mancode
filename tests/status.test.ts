@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { init } from '../src/commands/init.js';
 import { install } from '../src/commands/install.js';
 import {
+  type ContinuityStatusResult,
   EXIT_CORRUPT_STATE,
   EXIT_NOT_INITIALIZED,
   EXIT_OK,
@@ -175,9 +176,37 @@ describe('mancode status', () => {
     const logs = await captureLog(() => status(dir));
     const output = logs.join('\n');
 
+    expect(output).toContain(`mancode Continuity v${VERSION}`);
     expect(output).toContain('Activation:  active');
     expect(output).toContain('mancode adapter status:');
     expect(output).not.toContain('V3');
+    expect(output).not.toContain('v3_active');
+  });
+
+  it('--brief --json exposes only the public Continuity runtime view', async () => {
+    await silentInit(dir, { v3: true, platform: 'codex' });
+
+    const logs = await captureLog(() =>
+      status(dir, { brief: true, json: true }),
+    );
+    const output = logs.join('\n');
+    const result: ContinuityStatusResult = JSON.parse(output);
+
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      runtime: 'mancode-continuity',
+      state: 'active',
+      version: VERSION,
+      project: path.basename(dir),
+      ready: true,
+      identity: { actorId: null, displayName: null },
+      session: null,
+      task: null,
+      blockers: [],
+    });
+    expect(result).not.toHaveProperty('authority');
+    expect(result).not.toHaveProperty('activation');
+    expect(output).not.toContain('"v3"');
     expect(output).not.toContain('v3_active');
   });
 

@@ -112,6 +112,7 @@ program
   .command('status')
   .description('Show current mancode project status')
   .option('--json', 'Output as JSON (for scripts)')
+  .option('--brief', 'Output compact mancode Continuity runtime status')
   .action(async (options) => {
     const code = await status(process.cwd(), options);
     process.exitCode = code;

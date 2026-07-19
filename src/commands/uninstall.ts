@@ -104,7 +104,7 @@ async function uninstallV3(
   if (!platform || options.all) {
     console.error('✗  mancode authority is protected from bulk uninstall.');
     console.error(
-      '   Remove a single bootstrap with `mancode uninstall <platform>`. Inspect runtime retention with `mancode context compact --dry-run`; V3 workflow authority is not bulk-deleted.',
+      '   Remove a single bootstrap with `mancode uninstall <platform>`. Inspect runtime retention with `mancode context compact --dry-run`; Continuity workflow authority is not bulk-deleted.',
     );
     return EXIT_V3_AUTHORITY_PROTECTED;
   }
