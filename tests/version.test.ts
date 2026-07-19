@@ -8,7 +8,7 @@ describe('version', () => {
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('is a stable release without prerelease tag', () => {
+  it('keeps the npm version consumable without a prerelease tag', () => {
     expect(VERSION).not.toMatch(/-(alpha|beta|rc)\./);
   });
 
@@ -21,7 +21,8 @@ describe('version', () => {
 
     for (const readme of readmes) {
       expect(readme).toContain(`v${VERSION}`);
-      expect(readme).toContain(`status-stable%20v${VERSION}`);
+      expect(readme).toContain(`status-V3%20beta%20v${VERSION}`);
+      expect(readme).not.toContain(`status-stable%20v${VERSION}`);
     }
   });
 });

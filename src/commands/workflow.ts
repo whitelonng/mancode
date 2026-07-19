@@ -16,9 +16,10 @@ import {
   startV3SoloHandoff,
 } from '../context/solo-handoff.js';
 import { completeV3Task } from '../context/task-complete.js';
-import { parseTaskRef } from '../context/task-ref.js';
+import { formatTaskRef, parseTaskRef } from '../context/task-ref.js';
 import { recordV3Verification } from '../context/verification-record.js';
 import { createV3Workflow } from '../context/workflow-create.js';
+import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
 import { updateV3Workflow } from '../context/workflow-update.js';
 import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
@@ -216,6 +217,15 @@ async function workflowV3(
   args: string[],
   options: WorkflowOptions,
 ): Promise<number> {
+  if (subcommand === 'list') {
+    return workflowListV3(rootDir, args, options);
+  }
+  if (subcommand === 'show') {
+    return workflowShowV3(rootDir, args, options);
+  }
+  if (subcommand === 'clean') {
+    return workflowCleanV3(options);
+  }
   if (subcommand === 'create') {
     return workflowCreateV3(rootDir, args, options);
   }
@@ -254,6 +264,144 @@ async function workflowV3(
     'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
     `workflow ${subcommand} is not yet implemented for mancode authority.`,
   );
+}
+
+async function workflowListV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  if (args.length !== 0) {
+    return printV3Error(
+      options.json,
+      'MANCODE_WORKFLOW_LIST_ARGUMENT_INVALID',
+      'Use: workflow list [--json].',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const workflows = await project.store.listWorkflowMetadata();
+    if (options.json) {
+      return printV3Result(true, {
+        schemaVersion: 1,
+        workflows,
+      });
+    }
+    if (workflows.length === 0) {
+      console.log('No mancode workflows.');
+      return EXIT_OK;
+    }
+    const active = workflows.filter((item) =>
+      ['in_progress', 'planned', 'blocked'].includes(item.status),
+    ).length;
+    console.log(
+      `mancode workflows (${workflows.length} total, ${active} active)`,
+    );
+    console.log('');
+    for (const metadata of workflows) {
+      console.log(formatV3WorkflowRow(metadata));
+    }
+    return EXIT_OK;
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_LIST_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to list mancode workflows.',
+    );
+  }
+}
+
+async function workflowShowV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const requested = args[0];
+  if (!requested || args.length !== 1) {
+    return printV3Error(
+      options.json,
+      'MANCODE_WORKFLOW_SHOW_ARGUMENT_INVALID',
+      'Use: workflow show <namespace:ULID> [--json].',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const location = await project.store.locateTask(requested);
+    const [snapshot, activeChildren] = await Promise.all([
+      project.store.readTaskSnapshot(location.taskRef),
+      project.store.listActiveChildTaskRefs(location.taskRef),
+    ]);
+    const result = {
+      schemaVersion: 1,
+      taskRef: location.taskRef,
+      metadata: snapshot.metadata,
+      aggregate: snapshot.aggregate,
+      aggregateError: snapshot.aggregateError,
+      activeChildren,
+    };
+    if (options.json) return printV3Result(true, result);
+
+    const metadata = snapshot.metadata;
+    console.log(`Workflow:     ${formatTaskRef(metadata.taskRef)}`);
+    console.log(`Task:         ${metadata.task}`);
+    console.log(`Mode:         ${metadata.workflowMode}`);
+    console.log(`Status:       ${metadata.status}`);
+    console.log(
+      `Current step: ${metadata.currentStep}/${maxV3WorkflowStep(metadata.workflowMode)}`,
+    );
+    console.log(`Revision:     ${metadata.revision}`);
+    console.log(`Visibility:   ${metadata.visibility}`);
+    console.log(`Coordination: ${metadata.coordination}`);
+    console.log(`Updated:      ${metadata.updatedAt}`);
+    if (metadata.blockingReason !== null) {
+      console.log(`Blocked:      ${metadata.blockingReason}`);
+    }
+    if (activeChildren.length > 0) {
+      console.log(
+        `Children:     ${activeChildren.map(formatTaskRef).join(', ')}`,
+      );
+    }
+    if (snapshot.aggregateError !== null) {
+      console.log(`Aggregate:    ${snapshot.aggregateError}`);
+    }
+    return EXIT_OK;
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_WORKFLOW_SHOW_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to show the mancode workflow.',
+    );
+  }
+}
+
+function workflowCleanV3(options: WorkflowOptions): number {
+  return printV3Error(
+    options.json,
+    'MANCODE_V3_WORKFLOW_CLEAN_UNSUPPORTED',
+    'V3 workflow authority is durable and is not deleted by workflow clean. Use `mancode context compact --dry-run` to inspect eligible runtime retention records.',
+    EXIT_INVALID_ARG,
+  );
+}
+
+function formatV3WorkflowRow(metadata: WorkflowMetadataV3): string {
+  return [
+    formatTaskRef(metadata.taskRef),
+    metadata.workflowMode,
+    metadata.status,
+    `Step ${metadata.currentStep}/${maxV3WorkflowStep(metadata.workflowMode)}`,
+    `r${metadata.revision}`,
+    metadata.task,
+  ].join('  ');
+}
+
+function maxV3WorkflowStep(mode: WorkflowMetadataV3['workflowMode']): number {
+  return mode === 'manba' ? 5 : 9;
 }
 
 async function workflowUpdateV3(

@@ -98,10 +98,10 @@
           <h2>Files &amp; privacy</h2>
           <p>mancode works locally, scans only the current project, and sends no telemetry. It deliberately does not rewrite your project's <code>.gitignore</code>, so your team—not the installer—decides which generated context belongs in version control.</p>
           <table class="docs-table artifact-table"><thead><tr><th>Path</th><th>What it contains</th><th>Before committing</th></tr></thead><tbody>
-            <tr><td><code>.mancode/config.json</code><br /><code>.mancode/state.json</code></td><td>Selected adapters, current mode, and active workflow pointers.</td><td>Review as project configuration; share only when the team wants the same setup.</td></tr>
-            <tr><td><code>.mancode/project-profile.json</code><br /><code>style-tokens.json</code></td><td>Detected stack, validation commands, and UI tokens.</td><td>Inspect for internal project details and decide whether reproducibility justifies sharing.</td></tr>
-            <tr><td><code>.mancode/workflows/</code></td><td>Requirements, plans, review scope, verification evidence, reports, and summaries.</td><td>Review carefully. Evidence, logs, screenshots, traces, and browser artifacts may contain sensitive data and are often better ignored or sanitized.</td></tr>
-            <tr><td><code>.mancode/memory/</code></td><td>Team decisions and durable shared context.</td><td>Commit only information intentionally written for the team.</td></tr>
+            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>V3 authority, project policy, sessions, workflow metadata, and local runtime records. Legacy <code>state.json</code> exists only after explicit <code>--legacy</code> initialization.</td><td>Review workflow evidence and local records before sharing; raw host session keys are never persisted.</td></tr>
+            <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>Detected stack, validation commands, and local UI tokens.</td><td>Inspect for internal project details and decide whether reproducibility justifies sharing.</td></tr>
+            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>Requirements, plans, review and verification ledgers, reports, checkpoints, and summaries.</td><td>Review carefully. Evidence and reports may contain sensitive data; shared workflows pass the V3 privacy boundary.</td></tr>
+            <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>Confirmed decisions and durable coordination authority.</td><td>Commit only information intentionally written for the team.</td></tr>
             <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>Safety boundary</strong><p><code>mancode manps</code> scans and reports by default. Remediation is explicit. Irreversible project operations still require human confirmation; installing mancode does not grant the agent permission to publish, delete, or rewrite unrelated work.</p></div>
@@ -171,19 +171,19 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs or repairs an adapter after initialization. Omit the platform for interactive selection.</p><ul><li><code>--force</code> regenerates managed content.</li><li><code>--minimal</code> installs solo-mode essentials only.</li></ul></article>
             <article class="command-card"><header><h3>mancode status [--json]</h3><span>Inspect</span></header><p>Reports project facts, current mode and workflow, adapter readiness, and Claude hook registration where applicable.</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists adapters known to the installed CLI and marks those already configured in the project.</p></article>
-            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates requirements, plans, verification evidence, reviews, remediation, and completion. See the detailed lifecycle below.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;taskId&gt; [--json]</code>.</li><li>Prune old completed records with <code>clean --older-than &lt;duration&gt; [--dry-run]</code>.</li></ul></article>
+            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates V3 requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; V3 workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic health scan for <code>all</code>, <code>deps</code>, <code>security</code>, <code>dead-code</code>, <code>config</code>.</p><ul><li><code>--json</code> emits machine-readable output.</li><li><code>--remediate</code> enters the explicit remediation path; the default is scan-only.</li></ul></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then updates installed static adapters.</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Reinstall static adapters with <code>--force</code> afterward.</p></article>
-            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one adapter, or all mancode project artifacts with <code>--all</code>. Use <code>--force</code> for non-interactive confirmation.</p></article>
+            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one V3 adapter. V3 protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version for upgrade checks and issue reports.</p></article>
           </div>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>Study the /man workflow</h2>
-          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a lightweight handoff, a plan-only result, or governed execution. Every gate is backed by files under <code>.mancode/workflows/&lt;taskId&gt;/</code>.</p>
-          <div class="docs-note"><strong>Who runs these commands?</strong><p>The installed <code>man</code> skill creates the task, stores its active pointer in <code>.mancode/state.json</code>, writes artifacts, and calls the CLI. The commands below are the machine contract for studying, debugging, or integrating the process. A standalone <code>workflow create</code> does not activate the task pointer by itself.</p></div>
+          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a lightweight handoff, a plan-only result, or governed execution. Every gate is backed by V3 files under <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>.</p>
+          <div class="docs-note"><strong>Who runs these commands?</strong><p>The installed V3 mode entry creates the task and reads its Context Pack. The commands below are the machine contract for studying, debugging, or integrating the process. V3 identifies tasks with explicit <code>namespace:ULID</code> TaskRefs and does not use a legacy active pointer.</p></div>
 
           <h3>The nine steps and their gates</h3>
           <table class="docs-table workflow-table"><thead><tr><th>Step</th><th>Agent work</th><th>Durable gate</th></tr></thead><tbody>
@@ -226,78 +226,61 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
     }
   ]
 }</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div>
           <p>A successful result says <code>ready</code>. A result of <code>needs_clarification</code> is a hard stop: resolve <code>blockingUnknowns</code>, regenerate the input, and finalize again.</p>
 
           <h3>The Step 4 decision</h3>
           <div class="decision-grid">
-            <article class="command-card"><header><h3>Solo handoff</h3><span>Deliver</span></header><p>Use when the plan is settled but implementation risk is routine.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --to solo
+            <article class="command-card"><header><h3>Solo handoff</h3><span>Deliver</span></header><p>Use when the plan is settled but implementation risk is routine.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 <span class="command-prompt"># after solo implements and verifies</span>
-<span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --complete</code></pre><button type="button" data-copy-code>Copy</button></div></article>
-            <article class="command-card"><header><h3>Governed execution</h3><span>Continue</span></header><p>Use when implementation, evidence, and independent review should remain inside the nine-step record.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution</code></pre><button type="button" data-copy-code>Copy</button></div></article>
-            <article class="command-card"><header><h3>Plan only</h3><span>Stop</span></header><p>Use when the requested deliverable is the confirmed plan, not code.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision plan_only</code></pre><button type="button" data-copy-code>Copy</button></div></article>
+<span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --complete --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
+            <article class="command-card"><header><h3>Governed execution</h3><span>Continue</span></header><p>Use when implementation, evidence, and independent review should remain inside the nine-step record.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
+            <article class="command-card"><header><h3>Plan only</h3><span>Stop</span></header><p>Use when the requested deliverable is the confirmed plan, not code.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
           </div>
-          <p>All three choices require an active in-progress <code>man</code> workflow at Step 4, ready requirements, and <code>plan.md</code>. Revision stays at the plan gate, updates the file, and increments <code>--plan-version</code> from the initial v1 to v2, then v3, and so on.</p>
+          <p>All three choices require an active <code>man</code> workflow, confirmed requirements, and <code>plan.md</code>. Revise the plan with <code>workflow plan ... revise</code>; every successful mutation returns the revision required by the next command.</p>
 
-          <h3>A valid governed sequence</h3>
-          <p>This condensed trace shows legal ordering. Comments mark files written by the agent; they are not shell commands. The agent advances each numbered step only after its work and artifact are complete.</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt"># Step 1–2: create, scout, clarify, and freeze requirements</span>
-<span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --json
-<span class="command-prompt"># agent stores taskId as the active workflow and writes scout-report.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 2
-<span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json
+          <h3>A valid V3 sequence</h3>
+          <p>V3 uses explicit TaskRefs and expected revisions. The CLI owns every durable mutation; do not edit metadata files or use the legacy <code>--step</code> protocol.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># Bootstrap an actor and explicit session</span>
+<span class="command-prompt">$</span> mancode team identity create --name "Your name"
+<span class="command-prompt">$</span> mancode context session new --client codex --json
 
-<span class="command-prompt"># Step 3–4: write plan.md and reach the user decision gate</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 3
-<span class="command-prompt"># agent writes plan.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4
-<span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution
+<span class="command-prompt"># Create, discover, and inspect a task</span>
+<span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --session &lt;session-id&gt; --json
+<span class="command-prompt">$</span> mancode workflow list --json
+<span class="command-prompt">$</span> mancode workflow show &lt;local:ULID&gt; --json
 
-<span class="command-prompt"># Step 5–6: implement, initialize verification, and record every required AC</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 5
-<span class="command-prompt"># agent implements the confirmed plan</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 6
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; init
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "auth tests passed" --command "npm test -- auth" --exit-code 0
+<span class="command-prompt"># Requirements and plan gates (use the revision returned by each command)</span>
+<span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 
-<span class="command-prompt"># Step 7–9: targeted review, report, summary, completion</span>
-<span class="command-prompt"># agent writes review-scope.md</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth targeted --review-domain quality
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 7
-<span class="command-prompt"># agent writes film-report-1.md</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
-<span class="command-prompt"># agent writes summary.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --status completed</code></pre><button type="button" data-copy-code>Copy</button></div>
+<span class="command-prompt"># Record canonical review and verification ledgers</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;local:ULID&gt; apply --file review-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow verify &lt;local:ULID&gt; apply --file verification-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow complete &lt;local:ULID&gt; --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div>
 
           <h3>Verification, manual checks, and remediation</h3>
           <table class="docs-table"><thead><tr><th>Case</th><th>Required record</th><th>Gate behavior</th></tr></thead><tbody>
-            <tr><td>Automated</td><td><code>record</code> with acceptance ID, method, result, evidence, exact command, and exit code. A passing result requires exit code 0; a failure requires non-zero.</td><td>Step 7 and review stay blocked until every required acceptance criterion passes.</td></tr>
-            <tr><td>Manual</td><td><code>require-manual</code> explains why automation cannot decide. Only after the user performs the check may the agent call <code>confirm-manual</code> with observed evidence.</td><td>The workflow is blocked while confirmation is pending.</td></tr>
-            <tr><td>Review finding</td><td><code>review complete ... --blockers Q1,Q2</code> stores stable IDs. Fix once with <code>review remediate --resolved Q1,Q2</code>.</td><td>Remediation invalidates earlier verification; all required criteria must be re-run and re-recorded at Step 9.</td></tr>
-            <tr><td>User skips review</td><td><code>review skip --reason "explicit user request"</code> at Step 6 after verification.</td><td>The reason is durable, but <code>summary.md</code> and Step 9 completion are still required.</td></tr>
+            <tr><td>Automated</td><td>The canonical verification ledger records the criterion, command, exit code, evidence summary, and result.</td><td><code>workflow verify ... apply</code> rejects a ledger that does not satisfy the V3 schema and current revision.</td></tr>
+            <tr><td>Manual</td><td>The ledger records why automation cannot decide and only changes to passed after explicit user confirmation.</td><td>Completion remains blocked while required manual evidence is pending.</td></tr>
+            <tr><td>Review finding</td><td>The canonical review ledger stores stable blocker IDs and their remediation state.</td><td>Applying a review ledger makes earlier verification stale; apply current verification after review and before completion.</td></tr>
+            <tr><td>User skips review</td><td>The review ledger records the explicit user decision and residual risk.</td><td>Completion still requires a valid summary and every remaining gate.</td></tr>
           </tbody></table>
-          <div class="code-wrap"><pre><code><span class="command-prompt"># manual acceptance: stop and wait after require-manual</span>
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; require-manual --acceptance AC-UI --evidence "foreground browser judgment required"
-<span class="command-prompt"># only after explicit user confirmation</span>
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; confirm-manual --acceptance AC-UI --evidence "user confirmed the interaction"
-
-<span class="command-prompt"># one blocker-remediation round</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "post-fix tests passed" --command "npm test -- auth" --exit-code 0</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># Update the canonical ledgers after a remediation</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;local:ULID&gt; apply --file review-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow verify &lt;local:ULID&gt; apply --file verification-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow complete &lt;local:ULID&gt; --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div>
 
           <h3>Workflow subcommands</h3>
           <table class="docs-table"><thead><tr><th>Command</th><th>Purpose</th><th>Important options</th></tr></thead><tbody>
-            <tr><td><code>create</code></td><td>Start a <code>man</code>, <code>manba</code>, or <code>manteam</code> record.</td><td><code>--parent-task</code> links a diagnostic child; <code>--json</code> exposes the task ID.</td></tr>
-            <tr><td><code>requirements</code></td><td>Finalize the Step 2 ledger from JSON.</td><td><code>finalize --file</code>.</td></tr>
-            <tr><td><code>update</code></td><td>Advance step, status, plan version, or durable outcome.</td><td><code>--step</code>, <code>--status</code>, <code>--plan-version</code>, <code>--blocking-reason</code>, <code>--outcome</code>. Only clarification may use generic <code>--skipped</code>.</td></tr>
-            <tr><td><code>decide</code></td><td>Resolve the Step 4 plan gate.</td><td><code>--plan-decision governed_execution|plan_only</code>.</td></tr>
-            <tr><td><code>handoff</code></td><td>Transfer a confirmed plan to solo and later close it.</td><td><code>--to solo</code>, then <code>--complete</code>.</td></tr>
-            <tr><td><code>verify</code></td><td>Initialize and record acceptance evidence.</td><td><code>init</code>, <code>record</code>, <code>require-manual</code>, <code>confirm-manual</code>; evidence options include <code>--command</code>, <code>--exit-code</code>, and <code>--evidence-file</code>.</td></tr>
-            <tr><td><code>review</code></td><td>Initialize targeted/full review, store reports and blockers, remediate once, or record an explicit skip.</td><td><code>--review-depth</code>, <code>--review-domain</code>, <code>--report</code>, <code>--blockers</code>, <code>--resolved</code>, <code>--reason</code>.</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>Inspect records or remove old completed records.</td><td><code>show --json</code>; <code>clean --older-than 30d --dry-run</code>.</td></tr>
+            <tr><td><code>create</code></td><td>Start a <code>man</code>, <code>manba</code>, or <code>manteam</code> record.</td><td><code>--parent &lt;TaskRef&gt;</code> links a diagnostic child; <code>--json</code> exposes the TaskRef.</td></tr>
+            <tr><td><code>requirements</code></td><td>Finalize the structured requirements ledger.</td><td><code>finalize --file --expected-revision --session</code>.</td></tr>
+            <tr><td><code>plan</code></td><td>Revise a plan or confirm its execution decision.</td><td><code>revise --file</code>; <code>confirm --plan-decision</code>; both require revision and session.</td></tr>
+            <tr><td><code>update</code></td><td>Change lifecycle status or a blocking reason.</td><td><code>--status --expected-revision --session</code>; governed fields use dedicated commands.</td></tr>
+            <tr><td><code>handoff</code></td><td>Transfer a confirmed local plan to solo and later close it.</td><td><code>--to solo</code> or <code>--complete</code>, with revision and session.</td></tr>
+            <tr><td><code>verify / review</code></td><td>Apply canonical V3 ledgers.</td><td><code>apply --file --expected-revision --session</code>.</td></tr>
+            <tr><td><code>list / show / clean</code></td><td>List or inspect V3 TaskRefs. <code>clean</code> is not a V3 authority deletion command.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
           </tbody></table>
         </section>
 
@@ -324,16 +307,14 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
         <section class="doc-section" id="uninstall" data-searchable>
           <h2>Uninstall safely</h2>
-          <p>Uninstall preserves user-authored rules, instructions, and unrelated Claude settings. Review workflow records before deletion if they contain decisions or evidence you still need.</p>
+          <p>Uninstalling one adapter preserves user-authored rules, instructions, unrelated Claude settings, and V3 workflow authority. Use <code>context compact --dry-run</code> to inspect eligible runtime retention records.</p>
           <h3>Remove one adapter</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <h3>Clean reinstall</h3>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
-<span class="command-prompt">$</span> mancode init
-<span class="command-prompt">$</span> mancode install &lt;platform&gt;</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <h3>Remove mancode completely</h3>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
-<span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <h3>Reinstall one adapter</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall claude-code --force
+<span class="command-prompt">$</span> mancode install claude-code</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <h3>Remove the CLI</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>Copy</button></div>
         </section>
 
         <section class="doc-section" id="troubleshooting" data-searchable>
@@ -347,7 +328,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3>Cursor rules do not trigger</h3>
           <p>Confirm that <code>.cursor/rules/mancode-*.mdc</code> and <code>.cursor/commands/*.md</code> exist. Core context and solo rules are persistent; higher-intensity rules are description-triggered, so invoke the generated mode command explicitly.</p>
           <h3>A workflow command is rejected</h3>
-          <p>Treat the rejection as a gate, not a file-corruption problem. Use <code>mancode workflow show &lt;taskId&gt; --json</code> to inspect the step, requirements readiness, plan decision, verification, review domains, and blockers. Do not edit <code>metadata.json</code> manually.</p>
+          <p>Treat the rejection as a gate, not a file-corruption problem. Use <code>mancode workflow list --json</code> to discover TaskRefs, then <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> to inspect metadata, revision, aggregate, and blockers. Do not edit V3 metadata manually.</p>
           <h3>Project facts became stale</h3>
           <p>After adding Git, a manifest, dependencies, or validation scripts, run <code>mancode refresh-project</code>. Use <code>refresh-style</code> for UI tokens. Then repair a static adapter only if its generated files need regeneration.</p>
         </section>

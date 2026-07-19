@@ -253,7 +253,7 @@
           <div><p class="eyebrow">/man workflow</p><h2>From scout report<br />to final buzzer.</h2></div>
           <p>
             Every planning run leaves a readable trail under
-            <code>.mancode/workflows/&lt;taskId&gt;/</code>. After approval, hand the plan to lightweight solo
+            <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>. After approval, hand the plan to lightweight solo
             delivery or continue through the full governed workflow.
           </p>
         </div>
@@ -299,10 +299,10 @@
             <header><span></span><span></span><span></span><b>project / local</b></header>
             <pre><code><i>your-project/</i>
 ├── <strong>.mancode/</strong>
-│   ├── project-profile.json
-│   ├── aesthetics/style-tokens.json
-│   ├── workflows/&lt;taskId&gt;/
-│   └── memory/
+│   ├── shared/context/project.json
+│   ├── local/cache/style-tokens.json
+│   ├── local/workflows/&lt;ULID&gt;/
+│   └── shared/team/
 ├── .claude/
 ├── .cursor/rules/
 ├── .agents/skills/
@@ -439,7 +439,7 @@
         <a href="https://github.com/whitelonng/mancode/blob/main/README.md">中文</a>
         <a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a>
       </div>
-      <span class="footer-status"><i></i> Stable / v0.3.13</span>
+      <span class="footer-status"><i></i> V3 Beta / v0.3.13</span>
     </footer>
   </body>
 </html>
