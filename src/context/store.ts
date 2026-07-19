@@ -336,14 +336,9 @@ export class V3ContextStore {
     };
   }
 
-  /**
-   * Lists non-terminal children from canonical metadata only. Callers that
-   * need a completion gate must hold the parent task lock while invoking it;
-   * V3 child creation takes that same parent lock before publishing.
-   */
-  async listActiveChildTaskRefs(parentTaskRef: TaskRef): Promise<TaskRef[]> {
-    const parent = parseTaskRefValue(parentTaskRef);
-    const children: TaskRef[] = [];
+  /** Lists every canonical V3 workflow without relying on a session pointer. */
+  async listWorkflowMetadata(): Promise<WorkflowMetadataV3[]> {
+    const workflows: WorkflowMetadataV3[] = [];
     for (const namespace of ['local', 'shared'] as const) {
       const directory = path.join('.mancode', namespace, 'workflows');
       const entries = await readDirectoryEntriesWithin(
@@ -352,7 +347,7 @@ export class V3ContextStore {
       );
       for (const taskId of entries.sort(compareUtf8)) {
         try {
-          assertUlid(taskId, 'workflow child directory');
+          assertUlid(taskId, 'workflow directory');
         } catch {
           throw new Error('MANCODE_CONTEXT_COLLECTION_ENTRY_INVALID');
         }
@@ -367,20 +362,40 @@ export class V3ContextStore {
           'metadata.json',
           parseWorkflowMetadata,
         );
-        if (
-          metadata.parent !== null &&
-          sameTaskRef(metadata.parent.taskRef, parent) &&
-          !isTerminalWorkflowStatus(metadata.status)
-        ) {
-          children.push(metadata.taskRef);
+        if (!sameTaskRef(metadata.taskRef, taskRef)) {
+          throw new Error('MANCODE_CONTEXT_TASK_LOCATION_MISMATCH');
         }
+        workflows.push(metadata);
       }
     }
-    return children.sort(
+    return workflows.sort(
       (left, right) =>
-        compareUtf8(left.namespace, right.namespace) ||
-        compareUtf8(left.taskId, right.taskId),
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+        compareUtf8(left.taskRef.namespace, right.taskRef.namespace) ||
+        compareUtf8(left.taskRef.taskId, right.taskRef.taskId),
     );
+  }
+
+  /**
+   * Lists non-terminal children from canonical metadata only. Callers that
+   * need a completion gate must hold the parent task lock while invoking it;
+   * V3 child creation takes that same parent lock before publishing.
+   */
+  async listActiveChildTaskRefs(parentTaskRef: TaskRef): Promise<TaskRef[]> {
+    const parent = parseTaskRefValue(parentTaskRef);
+    return (await this.listWorkflowMetadata())
+      .filter(
+        (metadata) =>
+          metadata.parent !== null &&
+          sameTaskRef(metadata.parent.taskRef, parent) &&
+          !isTerminalWorkflowStatus(metadata.status),
+      )
+      .map((metadata) => metadata.taskRef)
+      .sort(
+        (left, right) =>
+          compareUtf8(left.namespace, right.namespace) ||
+          compareUtf8(left.taskId, right.taskId),
+      );
   }
 
   private mancodeRoot(): string {

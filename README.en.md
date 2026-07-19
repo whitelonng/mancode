@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.13-green?style=flat-square" alt="Status: stable v0.3.13" />
+  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.13-orange?style=flat-square" alt="Status: V3 beta v0.3.13" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -177,7 +177,7 @@ the original mode entries, never task/session snapshots. `mancode init
   default `solo` for lightweight implementation, or continue the full `/man`
   validation and bounded risk-review workflow.
 - **Keep workflow artifacts on disk**: save research, plans, review reports,
-  and summaries under `.mancode/local/workflows/<taskId>/`.
+  and summaries under `.mancode/<namespace>/workflows/<ULID>/`.
 - **Support team context**: use `/manteam` with confirmed typed entities under
   `.mancode/shared/`.
 - **Scan project health**: use `mancode manps` to detect stale TODOs, unused
@@ -263,7 +263,7 @@ Context Pack:
 work. A planning or research request made from default `solo` routes into `/man`.
 It inspects the project, asks only questions that can change scope, architecture,
 cost, or acceptance, and recommends 2–3 options when a decision benefits from
-guidance. It writes the plan under `.mancode/local/workflows/<taskId>/` only
+guidance. It writes the plan under `.mancode/local/workflows/<ULID>/` only
 after the requirements are ready.
 
 Finishing the plan does not automatically start the full workflow. At the plan
@@ -350,9 +350,9 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: stable v0.3.13. Claude Code, Cursor, Codex in the ChatGPT desktop app
-and CLI, and GitHub Copilot are supported. ZCode adapter support is included,
-with project skill discovery kept behind a verification gate before release.
+**Status**: V3 beta v0.3.13. Claude Code, Cursor, Codex in the ChatGPT desktop
+app and CLI, GitHub Copilot, and ZCode adapters are included. Stable release
+still requires the five-host real-session acceptance and the `context beta` B1 gate.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
 are supported. Git is optional: without it, initialization continues with solo
@@ -426,6 +426,8 @@ mancode list-platforms
 mancode team identity create --name "<name>"
 mancode context session new --client <platform>
 mancode workflow create <man|manba|manteam> "<task>" --session <id>
+mancode workflow list --json
+mancode workflow show <namespace:ULID> --json
 mancode context resume <local:ULID|shared:ULID> --session <id>
 mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>
 mancode workflow plan <namespace:ULID> revise --file <plan.md> --expected-revision <n> --session <id>
@@ -507,9 +509,11 @@ mancode context session new --client codex
 mancode workflow create man "refactor auth module" --session <id>
 mancode workflow requirements <local:ULID> finalize --file requirements.json --expected-revision <n> --session <id>
 mancode workflow plan <local:ULID> revise --file plan.md --expected-revision <n> --session <id>
+mancode workflow plan <local:ULID> confirm --plan-decision <plan_only|governed_execution> --expected-revision <n> --session <id>
 mancode workflow review <local:ULID> apply --file review-ledger.json --expected-revision <n> --session <id>
 mancode workflow verify <local:ULID> apply --file verification-ledger.json --expected-revision <n> --session <id>
 mancode workflow complete <local:ULID> --expected-revision <n> --session <id>
+mancode context compact --dry-run
 ```
 
 ### `mancode manps`
@@ -635,23 +639,34 @@ Ensure the `.cursor/rules/mancode-*.mdc` files exist. Rules with
 Mode-specific rules (manba, man, manteam, manps) trigger based on the
 description field — invoke them by asking for `/manba` or similar.
 
-### How to do a clean reinstall
+### How to reinstall V3 adapters
 
 ```bash
-mancode uninstall --all --force
-mancode init
-mancode install <platform>
+mancode uninstall claude-code --force
+mancode uninstall cursor --force
+mancode uninstall codex --force
+mancode uninstall copilot --force
+mancode uninstall zcode --force
+mancode install claude-code
+mancode install cursor
+mancode install codex
+mancode install copilot
+mancode install zcode
 ```
 
-### How to completely remove mancode
+V3 authority is protected, so `mancode uninstall --all` does not delete workflow
+authority. To inspect removable runtime records, run
+`mancode context compact --dry-run` first.
+
+### How to remove the CLI
 
 ```bash
-mancode uninstall --all --force
 npm uninstall -g mancode
 ```
 
-This removes `.mancode/`, platform config files, and mancode hooks from
-`.claude/settings.json`. User-authored rules and instructions are preserved.
+Uninstalling each platform removes its mancode bootstrap while preserving
+user-authored rules, instructions, and V3 workflow data. The `--all` form is only
+supported for projects explicitly initialized with `mancode init --legacy`.
 
 ## FAQ
 

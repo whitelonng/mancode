@@ -47,8 +47,8 @@ describe('website documentation', () => {
         'refresh-project',
         'manps [area]',
         '--remediate',
-        'require-manual',
-        'confirm-manual',
+        'workflow verify',
+        'workflow review',
         'governed_execution',
         'plan_only',
         'blockingUnknowns',
@@ -71,13 +71,13 @@ describe('website documentation', () => {
     );
   });
 
-  it('shows workflow commands in a legal governed order', async () => {
+  it('shows the V3 workflow command contract', async () => {
     for (const name of ['docs.html', 'docs.zh-CN.html']) {
       const html = await readPage(name);
       const start = html.indexOf(
         name === 'docs.html'
-          ? '<h3>A valid governed sequence</h3>'
-          : '<h3>一条合法的治理式执行顺序</h3>',
+          ? '<h3>A valid V3 sequence</h3>'
+          : '<h3>一条合法的 V3 顺序</h3>',
       );
       const end = html.indexOf(
         name === 'docs.html'
@@ -87,20 +87,15 @@ describe('website documentation', () => {
       );
       const example = html.slice(start, end);
       const orderedTokens = [
-        '--step 2',
-        'requirements &lt;taskId&gt; finalize',
-        '--step 3',
-        '--step 4',
-        'governed_execution',
-        '--step 5',
-        '--step 6',
-        'verify &lt;taskId&gt; init',
-        'verify &lt;taskId&gt; record',
-        'review &lt;taskId&gt; init',
-        '--step 7',
-        'review &lt;taskId&gt; complete',
-        '--step 9',
-        '--status completed',
+        'workflow create man',
+        'workflow list --json',
+        'workflow show &lt;local:ULID&gt; --json',
+        'workflow requirements &lt;local:ULID&gt; finalize',
+        'workflow plan &lt;local:ULID&gt; revise',
+        'workflow plan &lt;local:ULID&gt; confirm',
+        'workflow review &lt;local:ULID&gt; apply',
+        'workflow verify &lt;local:ULID&gt; apply',
+        'workflow complete &lt;local:ULID&gt;',
       ];
 
       let previous = -1;
@@ -111,7 +106,10 @@ describe('website documentation', () => {
         );
         previous = current;
       }
-      expect(example).not.toContain('--step 4 --plan-version 1');
+      expect(example).not.toMatch(/workflow update[^\n]*--step/);
+      expect(example).not.toContain('workflow decide');
+      expect(example).not.toContain('verify &lt;taskId&gt;');
+      expect(example).not.toContain('review &lt;taskId&gt;');
     }
   });
 
@@ -147,8 +145,8 @@ describe('website documentation', () => {
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
-    expect(english).not.toMatch(/\b(?:V3|Beta)\b/);
-    expect(chinese).not.toMatch(/\b(?:V3|Beta)\b/);
+    expect(english).toContain('V3 Beta / v0.3.13');
+    expect(chinese).toContain('V3 Beta / v0.3.13');
   });
 
   it('documents the cross-session boundary in both languages', async () => {

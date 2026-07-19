@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-stable%20v0.3.13-green?style=flat-square" alt="状态：稳定版 v0.3.13" />
+  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.13-orange?style=flat-square" alt="状态：V3 Beta v0.3.13" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -155,7 +155,7 @@ AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 ins
 - **在存在 UI 时匹配现有设计系统**：检查项目 UI 依赖、Tailwind 配置、CSS 变量和已有组件，让 agent 复用现有颜色、字体和交互模式。
 - **先把需求和计划对齐**：`/man` 会调研项目、引导澄清会改变方案的需求、推荐可行选项并生成可确认的持久计划；计划完成后不会自动进入完整实施。
 - **自由选择执行强度**：计划确认后，可只保留计划、交给默认 `solo` 轻量开发，或继续完整 `/man` 的验证与有界风险审查。
-- **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/local/workflows/<taskId>/`。
+- **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/<namespace>/workflows/<ULID>/`。
 - **支持团队上下文**：`/manteam` 通过 `.mancode/shared/` 的类型化实体共享已确认信息。
 - **扫描项目健康度**：`mancode manps` 检测陈旧 TODO、未使用依赖、风险依赖和硬编码设计值。
 
@@ -228,7 +228,7 @@ mancode 不把“当前模式”写进持久状态。需要某种工作方式时
 `solo`，当用户要求先调研、给方案或出计划时，也会进入 `/man`。它会先了解项目，
 只追问会改变范围、架构、成本或验收的问题；适合由系统推荐的决策会给出 2–3 个
 方案、优缺点和明确建议。需求足够清楚后，计划才会写入
-`.mancode/local/workflows/<taskId>/plan.md`。
+`.mancode/local/workflows/<ULID>/plan.md`。
 
 计划完成不会自动开始完整开发。用户在计划关卡选择：交给 `solo` 按已确认计划
 轻量开发、继续完整 `/man`、只保留计划，或修改计划。只有选择完整 `/man` 才继续
@@ -305,9 +305,9 @@ src/components/
 
 ## 安装
 
-**状态**：稳定版 v0.3.13。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
-Codex CLI 和 GitHub Copilot 均已支持。ZCode adapter 已接入，但项目级 skill
-发现路径在发布前仍作为验证门禁。
+**状态**：V3 Beta v0.3.13。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+Codex CLI 和 GitHub Copilot 均已接入；ZCode adapter 已接入。正式稳定发布仍需
+完成五平台真实宿主验收和 `context beta` B1 门禁。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
@@ -379,6 +379,8 @@ mancode list-platforms
 mancode team identity create --name "<name>"
 mancode context session new --client <platform>
 mancode workflow create <man|manba|manteam> "<task>" --session <id>
+mancode workflow list --json
+mancode workflow show <namespace:ULID> --json
 mancode context resume <local:ULID|shared:ULID> --session <id>
 mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>
 mancode workflow plan <namespace:ULID> revise --file <plan.md> --expected-revision <n> --session <id>
@@ -458,9 +460,11 @@ mancode context session new --client codex
 mancode workflow create man "refactor auth module" --session <id>
 mancode workflow requirements <local:ULID> finalize --file requirements.json --expected-revision <n> --session <id>
 mancode workflow plan <local:ULID> revise --file plan.md --expected-revision <n> --session <id>
+mancode workflow plan <local:ULID> confirm --plan-decision <plan_only|governed_execution> --expected-revision <n> --session <id>
 mancode workflow review <local:ULID> apply --file review-ledger.json --expected-revision <n> --session <id>
 mancode workflow verify <local:ULID> apply --file verification-ledger.json --expected-revision <n> --session <id>
 mancode workflow complete <local:ULID> --expected-revision <n> --session <id>
+mancode context compact --dry-run
 ```
 
 ### `mancode manps`
@@ -575,23 +579,33 @@ mancode/
 （context、practice、solo）在每次对话加载。模式规则（manba、man、manteam、
 manps）按 description 触发——输入 `/manba` 等关键词即可激活。
 
-### 如何完全重装
+### 如何重装 V3 适配器
 
 ```bash
-mancode uninstall --all --force
-mancode init
-mancode install <platform>
+mancode uninstall claude-code --force
+mancode uninstall cursor --force
+mancode uninstall codex --force
+mancode uninstall copilot --force
+mancode uninstall zcode --force
+mancode install claude-code
+mancode install cursor
+mancode install codex
+mancode install copilot
+mancode install zcode
 ```
 
-### 如何完全卸载 mancode
+V3 authority 受保护，`mancode uninstall --all` 不会删除工作流权威数据。需要
+清理运行时保留记录时，先用 `mancode context compact --dry-run` 检查候选。
+
+### 如何移除 CLI
 
 ```bash
-mancode uninstall --all --force
 npm uninstall -g mancode
 ```
 
-这会移除 `.mancode/`、平台配置文件和 `.claude/settings.json` 中的 mancode
-hooks。用户自定义的 rules 和 instructions 会被保留。
+逐个平台卸载会移除对应的 mancode bootstrap，并保留用户自定义 rules、instructions
+和 V3 工作流数据。旧项目若明确使用 `mancode init --legacy`，才支持 legacy 的
+`mancode uninstall --all --force`。
 
 ## 常见问题
 

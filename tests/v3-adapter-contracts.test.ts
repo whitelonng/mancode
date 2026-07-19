@@ -73,6 +73,13 @@ describe('V3 adapter bootstrap integration', () => {
       });
       expect(result.activation.managedAdapters.codex).toBe('3');
 
+      logs.mockClear();
+      expect(await status(root, {})).toBe(0);
+      const textOutput = logs.mock.calls.flat().join('\n');
+      expect(textOutput).toContain('Session evidence: explicit required');
+      expect(textOutput).toContain('codex');
+      expect(textOutput).not.toContain('explicit required ()');
+
       expect(await install(root, 'cursor')).toBe(0);
       const cursorRule = await readFile(
         path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
@@ -577,6 +584,12 @@ describe('V3 adapter bootstrap integration', () => {
       ).resolves.toContain('v3_active');
       expect(await uninstall(root, undefined, { all: true })).toBe(
         EXIT_V3_AUTHORITY_PROTECTED,
+      );
+      expect(errors.mock.calls.flat().join('\n')).toContain(
+        'context compact --dry-run',
+      );
+      expect(errors.mock.calls.flat().join('\n')).not.toContain(
+        'archive/migration workflow',
       );
     } finally {
       logs.mockRestore();

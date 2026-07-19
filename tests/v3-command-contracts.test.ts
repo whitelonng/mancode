@@ -33,6 +33,7 @@ import {
   requirementsLedgerDigest,
 } from '../src/context/requirements-ledger.js';
 import { V3ContextStore } from '../src/context/store.js';
+import type { TaskRef } from '../src/context/task-ref.js';
 import { readSession } from '../src/runtime/session.js';
 import { readLocalActor } from '../src/team/actor.js';
 
@@ -191,6 +192,68 @@ describe('V3 CLI command contracts', () => {
       };
       expect(result.workspaceId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
       expect(result.checkoutId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  it('lists and shows V3 workflows without deleting durable authority', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await workflow(root, 'list', [], { json: true })).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        schemaVersion: 1,
+        workflows: [],
+      });
+
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const sessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(root, 'create', ['man', 'Discover this V3 task.'], {
+        session: sessionId,
+        client: 'fixture',
+        json: true,
+      });
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: { namespace: string; taskId: string };
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+
+      expect(await workflow(root, 'list', [], { json: true })).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        workflows: [
+          {
+            taskRef: created.taskRef,
+            workflowMode: 'man',
+            status: 'in_progress',
+          },
+        ],
+      });
+      expect(await workflow(root, 'show', [task], { json: true })).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        taskRef: created.taskRef,
+        metadata: {
+          task: 'Discover this V3 task.',
+          revision: 1,
+        },
+        activeChildren: [],
+      });
+
+      expect(await workflow(root, 'clean', [], { json: true })).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_V3_WORKFLOW_CLEAN_UNSUPPORTED' },
+      });
+      await expect(
+        new V3ContextStore(root).readTaskSnapshot(created.taskRef as TaskRef),
+      ).resolves.toMatchObject({
+        metadata: { task: 'Discover this V3 task.' },
+      });
     } finally {
       logs.mockRestore();
       errors.mockRestore();

@@ -872,8 +872,19 @@ function printV3Text(result: V3StatusResult): void {
   console.log(
     `Identity:    ${result.localIdentity.displayName ?? 'not configured'}`,
   );
+  const sessionEvidenceDetail = result.sessionEvidence.ready
+    ? 'ready'
+    : [
+        ...result.sessionEvidence.explicitRequiredPlatforms,
+        ...result.sessionEvidence.missingPlatforms.filter(
+          (platform) =>
+            !result.sessionEvidence.explicitRequiredPlatforms.includes(
+              platform,
+            ),
+        ),
+      ].join(', ') || 'none recorded';
   console.log(
-    `Session evidence: ${result.sessionEvidence.ready ? 'ready' : `explicit required (${result.sessionEvidence.explicitRequiredPlatforms.join(', ')})`}`,
+    `Session evidence: ${result.sessionEvidence.ready ? 'ready' : `explicit required (${sessionEvidenceDetail})`}`,
   );
   if (result.compatibility.failures.length > 0) {
     console.log(`Compatibility: ${result.compatibility.failures.join(', ')}`);

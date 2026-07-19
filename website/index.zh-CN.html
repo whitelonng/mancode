@@ -38,7 +38,7 @@
 
       <section class="modes-section section-dark" id="modes"><div class="section-kicker reveal"><span>02 / 五档强度</span><span>按风险匹配流程。</span></div><div class="section-title-row reveal"><h2>不是每个任务<br />都是抢七。</h2><p>同一个编码 Agent，日常任务轻装上阵；需要正式方案时先用 /man 对齐需求和计划，再选择 solo 轻量开发或完整治理。针对最新模型自带审查的特点，mancode 会限制 review 轮次，同时给不主动审查的模型保留质量门槛。</p></div><div class="mode-guide-home reveal"><article><small>日常训练</small><h3>solo</h3><p>一次受限 diff 自检、最窄验证，不调用额外 reviewer。</p></article><article><small>真实诊断</small><h3>/manba</h3><p>复现、定位根因、驱动真实路径并回归验证。</p></article><article class="featured-mode"><small>先计划再选择</small><h3>/man</h3><p>引导需求对齐、方案推荐和持久计划；确认后选择 solo 或完整九步治理。</p></article><article><small>团队协作</small><h3>/manteam</h3><p>共享项目记忆、决策记录与协作约定。</p></article><article><small>季前赛</small><h3>/manps</h3><p>检测陈旧 TODO、依赖风险和硬编码设计值。</p></article></div></section>
 
-      <section class="workflow-section" id="workflow"><div class="section-kicker reveal"><span>03 / 先计划再选择</span><span>solo 交付或完整治理。</span></div><div class="workflow-lead reveal"><div><p class="eyebrow">/man 工作流</p><h2>从需求对齐<br />到确认计划。</h2></div><p>每次规划都会在 <code>.mancode/workflows/&lt;taskId&gt;/</code> 产生可读记录。计划确认后，可交给 solo 轻量开发，也可继续完整九步治理。</p></div><ol class="workflow-grid reveal"><li class="phase-scout"><b>01</b><span>球探报告</span><small>梳理代码、风险与未知项</small></li><li class="phase-scout"><b>02</b><span>需求澄清</span><small>确认真正要解决的问题</small></li><li class="phase-plan"><b>03</b><span>计划</span><small>输出可验证步骤</small></li><li class="phase-plan"><b>04</b><span>计划关卡</span><small>solo、完整治理、仅计划或修改</small></li><li class="phase-run featured"><b>05</b><span>实施</span><small>完整 /man 才进入</small></li><li class="phase-run"><b>06</b><span>验证与范围</span><small>验证后选择审查深度</small></li><li class="phase-review"><b>07</b><span>定向审查</span><small>有证据的质量 finding</small></li><li class="phase-review"><b>08</b><span>风险防守</span><small>高风险时审查安全边界</small></li><li class="phase-close"><b>09</b><span>收尾</span><small>一轮修复、复验、停止</small></li></ol></section>
+      <section class="workflow-section" id="workflow"><div class="section-kicker reveal"><span>03 / 先计划再选择</span><span>solo 交付或完整治理。</span></div><div class="workflow-lead reveal"><div><p class="eyebrow">/man 工作流</p><h2>从需求对齐<br />到确认计划。</h2></div><p>每次规划都会在 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 产生可读记录。计划确认后，可交给 solo 轻量开发，也可继续完整九步治理。</p></div><ol class="workflow-grid reveal"><li class="phase-scout"><b>01</b><span>球探报告</span><small>梳理代码、风险与未知项</small></li><li class="phase-scout"><b>02</b><span>需求澄清</span><small>确认真正要解决的问题</small></li><li class="phase-plan"><b>03</b><span>计划</span><small>输出可验证步骤</small></li><li class="phase-plan"><b>04</b><span>计划关卡</span><small>solo、完整治理、仅计划或修改</small></li><li class="phase-run featured"><b>05</b><span>实施</span><small>完整 /man 才进入</small></li><li class="phase-run"><b>06</b><span>验证与范围</span><small>验证后选择审查深度</small></li><li class="phase-review"><b>07</b><span>定向审查</span><small>有证据的质量 finding</small></li><li class="phase-review"><b>08</b><span>风险防守</span><small>高风险时审查安全边界</small></li><li class="phase-close"><b>09</b><span>收尾</span><small>一轮修复、复验、停止</small></li></ol></section>
 
       <section class="awareness-section section-dark" id="context">
         <div class="section-kicker reveal"><span>04 / 项目感知</span><span>你的代码库本来就有自己的战术。</span></div>
@@ -52,10 +52,10 @@
             <header><span></span><span></span><span></span><b>project / local</b></header>
             <pre><code><i>your-project/</i>
 ├── <strong>.mancode/</strong>
-│   ├── project-profile.json
-│   ├── aesthetics/style-tokens.json
-│   ├── workflows/&lt;taskId&gt;/
-│   └── memory/
+│   ├── shared/context/project.json
+│   ├── local/cache/style-tokens.json
+│   ├── local/workflows/&lt;ULID&gt;/
+│   └── shared/team/
 ├── .claude/
 ├── .cursor/rules/
 ├── .agents/skills/
@@ -88,6 +88,6 @@
 
       <section class="final-cta"><div class="final-cta-mark" aria-hidden="true">M</div><p class="reveal">简单任务少一点仪式。<br />关键任务多一点纪律。</p><h2 class="reveal">别再替 AI<br />收拾臃肿。</h2><div class="final-actions reveal"><div class="command-bar command-light"><code><span>&gt;</span> npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><a class="button button-dark" href="https://github.com/whitelonng/mancode">GitHub 上查看 ↗</a></div></section>
     </main>
-    <footer class="site-footer"><a class="brand footer-brand" href="#top"><img src="./logo.png" alt="" /><span>mancode</span></a><p>AI 编码 Agent 工作流调度工具。<br />日常训练，关键任务季后赛。</p><div class="footer-links"><a href="https://github.com/whitelonng/mancode">GitHub</a><a href="./docs.zh-CN.html">中文文档</a><a href="./docs.html">English</a><a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a></div><span class="footer-status"><i></i> Stable / v0.3.13</span></footer>
+    <footer class="site-footer"><a class="brand footer-brand" href="#top"><img src="./logo.png" alt="" /><span>mancode</span></a><p>AI 编码 Agent 工作流调度工具。<br />日常训练，关键任务季后赛。</p><div class="footer-links"><a href="https://github.com/whitelonng/mancode">GitHub</a><a href="./docs.zh-CN.html">中文文档</a><a href="./docs.html">English</a><a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a></div><span class="footer-status"><i></i> V3 Beta / v0.3.13</span></footer>
   </body>
 </html>

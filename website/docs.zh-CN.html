@@ -98,10 +98,10 @@
           <h2>文件与隐私</h2>
           <p>mancode 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
           <table class="docs-table artifact-table"><thead><tr><th>路径</th><th>包含什么</th><th>提交前怎么处理</th></tr></thead><tbody>
-            <tr><td><code>.mancode/config.json</code><br /><code>.mancode/state.json</code></td><td>所选平台、当前模式和活动工作流指针。</td><td>把它当作项目配置检查；只有团队希望共享同一套设置时才提交。</td></tr>
-            <tr><td><code>.mancode/project-profile.json</code><br /><code>style-tokens.json</code></td><td>识别出的技术栈、验证命令和 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
-            <tr><td><code>.mancode/workflows/</code></td><td>需求、计划、评审范围、验证证据、报告与总结。</td><td>重点检查。日志、截图、trace 和浏览器产物可能含敏感数据，通常应忽略、脱敏或只保留必要摘要。</td></tr>
-            <tr><td><code>.mancode/memory/</code></td><td>团队决策与长期共享上下文。</td><td>只提交有意写给团队的内容。</td></tr>
+            <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>V3 权威、项目策略、会话、工作流元数据和本地运行时记录。只有显式使用 <code>--legacy</code> 初始化后才会出现旧 <code>state.json</code>。</td><td>共享前检查工作流证据和本地记录；原始宿主 session key 不会持久化。</td></tr>
+            <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>识别出的技术栈、验证命令和本地 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
+            <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>需求、计划、评审和验证台账、报告、checkpoint 与总结。</td><td>重点检查。证据和报告可能含敏感数据；shared workflow 必须通过 V3 隐私边界。</td></tr>
+            <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>已确认决策与持久化协调权威。</td><td>只提交有意写给团队的内容。</td></tr>
             <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>安全边界</strong><p><code>mancode manps</code> 默认只扫描和报告，修复必须显式进入 remediation 路径。安装 mancode 也不会赋予 Agent 发布、删除或重写无关工作的权限；不可逆操作仍需人工确认。</p></div>
@@ -171,19 +171,19 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>适配器</span></header><p>初始化后安装或修复一个平台。省略平台名时进入交互选择。</p><ul><li><code>--force</code> 重新生成受控内容。</li><li><code>--minimal</code> 只安装 solo 的必要内容。</li></ul></article>
             <article class="command-card"><header><h3>mancode status [--json]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前 CLI 支持的平台，并标出项目中已经配置的平台。</p></article>
-            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验需求、计划、验证证据、评审、修复与完成状态。完整生命周期见下一节。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;taskId&gt; [--json]</code> 检查。</li><li>使用 <code>clean --older-than &lt;duration&gt; [--dry-run]</code> 清理较早的已完成记录。</li></ul></article>
+            <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 V3 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；V3 workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、框架或验证命令后刷新项目事实，并更新已安装的静态适配器。</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>设计上下文</span></header><p>刷新项目画像和设计 token，之后可用 <code>--force</code> 重装需要更新的静态适配器。</p></article>
-            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个平台；使用 <code>--all</code> 清理项目内全部 mancode 产物，<code>--force</code> 用于非交互确认。</p></article>
+            <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 V3 适配器。V3 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>输出已安装 CLI 版本，便于升级检查和提交问题。</p></article>
           </div>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>深入研究 /man 工作流</h2>
-          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 <code>.mancode/workflows/&lt;taskId&gt;/</code> 下的文件支撑。</p>
-          <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 <code>man</code> skill 会创建任务、把活动指针写入 <code>.mancode/state.json</code>、生成产物，并调用 CLI。下面展示的是供研究、排错或集成使用的机器契约。单独执行一次 <code>workflow create</code> 并不会自动激活该任务指针。</p></div>
+          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 V3 的 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 文件支撑。</p>
+          <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 V3 mode entry 会创建任务并读取 Context Pack。下面展示的是供研究、排错或集成使用的机器契约。V3 使用显式 <code>namespace:ULID</code> TaskRef，不依赖旧的活动指针。</p></div>
 
           <h3>九个步骤与闸门</h3>
           <table class="docs-table workflow-table"><thead><tr><th>步骤</th><th>Agent 工作</th><th>持久化闸门</th></tr></thead><tbody>
@@ -226,78 +226,61 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
     }
   ]
 }</code></pre><button type="button" data-copy-code>复制</button></div>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json</code></pre><button type="button" data-copy-code>复制</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div>
           <p>成功结果会显示 <code>ready</code>。如果结果是 <code>needs_clarification</code>，必须停止推进，先解决 <code>blockingUnknowns</code>，重新生成输入后再次 finalize。</p>
 
           <h3>Step 4 的三种决策</h3>
           <div class="decision-grid">
-            <article class="command-card"><header><h3>交给 solo</h3><span>实施</span></header><p>计划已经稳定，但实现风险属于日常范围。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --to solo
+            <article class="command-card"><header><h3>交给 solo</h3><span>实施</span></header><p>计划已经稳定，但实现风险属于日常范围。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 <span class="command-prompt"># solo 实现并验证后</span>
-<span class="command-prompt">$</span> mancode workflow handoff &lt;taskId&gt; --complete</code></pre><button type="button" data-copy-code>复制</button></div></article>
-            <article class="command-card"><header><h3>治理式执行</h3><span>继续</span></header><p>实现、证据和独立评审都需要保留在九步记录内。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution</code></pre><button type="button" data-copy-code>复制</button></div></article>
-            <article class="command-card"><header><h3>只保留计划</h3><span>停止</span></header><p>用户需要的交付物是计划，而不是代码。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision plan_only</code></pre><button type="button" data-copy-code>复制</button></div></article>
+<span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --complete --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>治理式执行</h3><span>继续</span></header><p>实现、证据和独立评审都需要保留在九步记录内。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>只保留计划</h3><span>停止</span></header><p>用户需要的交付物是计划，而不是代码。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
-          <p>三种选择都要求：活动中的 <code>man</code> 工作流位于 Step 4、需求已 ready，并且 <code>plan.md</code> 存在。选择修订时仍停留在计划闸门，更新文件，并用 <code>--plan-version</code> 从初始 v1 递增到 v2、v3。</p>
+          <p>三种选择都要求活动中的 <code>man</code> 工作流、已确认需求和 <code>plan.md</code>。使用 <code>workflow plan ... revise</code> 修订计划；每次成功写入都会返回下一个命令需要的 revision。</p>
 
-          <h3>一条合法的治理式执行顺序</h3>
-          <p>下面是压缩后的有效顺序。注释表示由 Agent 写入的文件，不是终端命令；只有当前阶段的工作和产物都完成后，Agent 才推进编号步骤。</p>
-          <div class="code-wrap"><pre><code><span class="command-prompt"># Step 1–2：创建、侦察、澄清并冻结需求</span>
-<span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --json
-<span class="command-prompt"># Agent 保存活动 taskId，并写入 scout-report.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 2
-<span class="command-prompt">$</span> mancode workflow requirements &lt;taskId&gt; finalize --file requirements-input.json
+          <h3>一条合法的 V3 顺序</h3>
+          <p>V3 使用显式 TaskRef 和 expected revision。所有持久化变更都由 CLI 完成；不要手工编辑 metadata，也不要使用 legacy <code>--step</code> 协议。</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># 创建 actor 和显式 session</span>
+<span class="command-prompt">$</span> mancode team identity create --name "Your name"
+<span class="command-prompt">$</span> mancode context session new --client codex --json
 
-<span class="command-prompt"># Step 3–4：写入 plan.md，到达用户决策闸门</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 3
-<span class="command-prompt"># Agent 写入 plan.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 4
-<span class="command-prompt">$</span> mancode workflow decide &lt;taskId&gt; --plan-decision governed_execution
+<span class="command-prompt"># 创建、发现并检查任务</span>
+<span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --session &lt;session-id&gt; --json
+<span class="command-prompt">$</span> mancode workflow list --json
+<span class="command-prompt">$</span> mancode workflow show &lt;local:ULID&gt; --json
 
-<span class="command-prompt"># Step 5–6：实现、初始化验证、记录每个必需 AC</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 5
-<span class="command-prompt"># Agent 实现已确认计划</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 6
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; init
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "auth tests passed" --command "npm test -- auth" --exit-code 0
+<span class="command-prompt"># 需求和计划闸门（每次使用上一个命令返回的 revision）</span>
+<span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 
-<span class="command-prompt"># Step 7–9：targeted review、报告、总结、完成</span>
-<span class="command-prompt"># Agent 写入 review-scope.md</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; init --review-depth targeted --review-domain quality
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 7
-<span class="command-prompt"># Agent 写入 film-report-1.md</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
-<span class="command-prompt"># Agent 写入 summary.md</span>
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --status completed</code></pre><button type="button" data-copy-code>复制</button></div>
+<span class="command-prompt"># 记录规范化评审和验证台账</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;local:ULID&gt; apply --file review-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow verify &lt;local:ULID&gt; apply --file verification-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow complete &lt;local:ULID&gt; --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div>
 
           <h3>自动验证、手工确认与修复后重验</h3>
           <table class="docs-table"><thead><tr><th>场景</th><th>必须记录</th><th>闸门行为</th></tr></thead><tbody>
-            <tr><td>自动验证</td><td><code>record</code> 必须包含验收 ID、方法、结果、证据、准确命令和退出码。passed 要求退出码 0，failed 要求非 0。</td><td>所有必需验收标准通过前，Step 7 和 review 都会被阻止。</td></tr>
-            <tr><td>手工验证</td><td><code>require-manual</code> 解释自动化为何不能判断。只有用户亲自执行并确认后，Agent 才能用 <code>confirm-manual</code> 写入观察证据。</td><td>等待确认期间工作流处于 blocked。</td></tr>
-            <tr><td>评审发现</td><td><code>review complete ... --blockers Q1,Q2</code> 保存稳定 ID；用 <code>review remediate --resolved Q1,Q2</code> 进行唯一一轮修复。</td><td>任何 remediation 都会使旧验证失效，Step 9 必须重新运行并记录全部必需验收。</td></tr>
-            <tr><td>用户跳过评审</td><td>在 Step 6 完成验证后，使用 <code>review skip --reason "explicit user request"</code>。</td><td>理由会持久保存，但仍需写 <code>summary.md</code> 并到 Step 9 才能完成。</td></tr>
+            <tr><td>自动验证</td><td>规范化 verification ledger 记录验收项、命令、退出码、证据摘要与结果。</td><td><code>workflow verify ... apply</code> 会拒绝不符合 V3 schema 或 revision 的台账。</td></tr>
+            <tr><td>手工验证</td><td>台账记录自动化不能判断的原因；只有用户明确确认后才能改为 passed。</td><td>必需人工证据未完成时，completion 持续阻塞。</td></tr>
+            <tr><td>评审发现</td><td>规范化 review ledger 保存稳定 blocker ID 及其 remediation 状态。</td><td>应用 review ledger 会使旧验证失效；评审后、完成前必须 apply 当前验证。</td></tr>
+            <tr><td>用户跳过评审</td><td>review ledger 记录用户显式决定和残余风险。</td><td>仍然需要有效 summary 和其余全部门禁。</td></tr>
           </tbody></table>
-          <div class="code-wrap"><pre><code><span class="command-prompt"># 手工验收：require-manual 后必须暂停等待</span>
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; require-manual --acceptance AC-UI --evidence "需要前台浏览器和人工判断"
-<span class="command-prompt"># 只有用户明确确认后才能执行</span>
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; confirm-manual --acceptance AC-UI --evidence "用户确认交互符合预期"
-
-<span class="command-prompt"># 唯一一轮 blocker remediation</span>
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; complete --review-domain quality --report film-report-1.md --blockers Q1
-<span class="command-prompt">$</span> mancode workflow update &lt;taskId&gt; --step 9
-<span class="command-prompt">$</span> mancode workflow review &lt;taskId&gt; remediate --resolved Q1
-<span class="command-prompt">$</span> mancode workflow verify &lt;taskId&gt; record --acceptance AC-LOGIN --method automated --result passed --evidence "修复后测试通过" --command "npm test -- auth" --exit-code 0</code></pre><button type="button" data-copy-code>复制</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt"># remediation 后更新规范化台账</span>
+<span class="command-prompt">$</span> mancode workflow review &lt;local:ULID&gt; apply --file review-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow verify &lt;local:ULID&gt; apply --file verification-ledger.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow complete &lt;local:ULID&gt; --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div>
 
           <h3>workflow 子命令速查</h3>
           <table class="docs-table"><thead><tr><th>命令</th><th>用途</th><th>关键选项</th></tr></thead><tbody>
-            <tr><td><code>create</code></td><td>创建 <code>man</code>、<code>manba</code> 或 <code>manteam</code> 记录。</td><td><code>--parent-task</code> 关联诊断子任务；<code>--json</code> 输出 task ID。</td></tr>
-            <tr><td><code>requirements</code></td><td>从 JSON 完成 Step 2 需求台账。</td><td><code>finalize --file</code>。</td></tr>
-            <tr><td><code>update</code></td><td>推进步骤、状态、计划版本或结果。</td><td><code>--step</code>、<code>--status</code>、<code>--plan-version</code>、<code>--blocking-reason</code>、<code>--outcome</code>。通用 <code>--skipped</code> 只允许记录 clarification。</td></tr>
-            <tr><td><code>decide</code></td><td>解决 Step 4 计划闸门。</td><td><code>--plan-decision governed_execution|plan_only</code>。</td></tr>
-            <tr><td><code>handoff</code></td><td>把已确认计划交给 solo，随后关闭该计划。</td><td><code>--to solo</code>，完成后使用 <code>--complete</code>。</td></tr>
-            <tr><td><code>verify</code></td><td>初始化并记录验收证据。</td><td><code>init</code>、<code>record</code>、<code>require-manual</code>、<code>confirm-manual</code>；证据选项包括 <code>--command</code>、<code>--exit-code</code> 和 <code>--evidence-file</code>。</td></tr>
-            <tr><td><code>review</code></td><td>初始化 targeted/full review、保存报告和 blocker、修复一次，或记录用户显式跳过。</td><td><code>--review-depth</code>、<code>--review-domain</code>、<code>--report</code>、<code>--blockers</code>、<code>--resolved</code>、<code>--reason</code>。</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>检查记录或删除较早的已完成记录。</td><td><code>show --json</code>；<code>clean --older-than 30d --dry-run</code>。</td></tr>
+            <tr><td><code>create</code></td><td>创建 <code>man</code>、<code>manba</code> 或 <code>manteam</code> 记录。</td><td><code>--parent &lt;TaskRef&gt;</code> 关联诊断子任务；<code>--json</code> 输出 TaskRef。</td></tr>
+            <tr><td><code>requirements</code></td><td>完成结构化需求台账。</td><td><code>finalize --file --expected-revision --session</code>。</td></tr>
+            <tr><td><code>plan</code></td><td>修订计划或确认执行决策。</td><td><code>revise --file</code>；<code>confirm --plan-decision</code>；两者都需要 revision 和 session。</td></tr>
+            <tr><td><code>update</code></td><td>改变生命周期状态或阻塞原因。</td><td><code>--status --expected-revision --session</code>；治理字段使用专用命令。</td></tr>
+            <tr><td><code>handoff</code></td><td>把已确认的本地计划交给 solo，随后关闭。</td><td><code>--to solo</code> 或 <code>--complete</code>，并传 revision 与 session。</td></tr>
+            <tr><td><code>verify / review</code></td><td>应用规范化 V3 台账。</td><td><code>apply --file --expected-revision --session</code>。</td></tr>
+            <tr><td><code>list / show / clean</code></td><td>列出或检查 V3 TaskRef；<code>clean</code> 不是删除 V3 权威数据的命令。</td><td><code>show &lt;namespace:ULID&gt; --json</code>；保留清理使用 <code>context compact --dry-run</code>。</td></tr>
           </tbody></table>
         </section>
 
@@ -324,16 +307,14 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
         <section class="doc-section" id="uninstall" data-searchable>
           <h2>安全卸载</h2>
-          <p>卸载会保留用户自己编写的 rules、instructions 和无关的 Claude settings。删除前先检查工作流记录，避免丢失仍然需要的决策或证据。</p>
+          <p>卸载单个平台会保留用户自己编写的 rules、instructions、无关的 Claude settings 和 V3 工作流权威数据。使用 <code>context compact --dry-run</code> 检查可清理的运行时保留记录。</p>
           <h3>移除一个适配器</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>复制</button></div>
-          <h3>完整重装</h3>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
-<span class="command-prompt">$</span> mancode init
-<span class="command-prompt">$</span> mancode install &lt;platform&gt;</code></pre><button type="button" data-copy-code>复制</button></div>
-          <h3>完全移除 mancode</h3>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall --all --force
-<span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>复制</button></div>
+          <h3>重装一个适配器</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall claude-code --force
+<span class="command-prompt">$</span> mancode install claude-code</code></pre><button type="button" data-copy-code>复制</button></div>
+          <h3>移除 CLI</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>复制</button></div>
         </section>
 
         <section class="doc-section" id="troubleshooting" data-searchable>
@@ -347,7 +328,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h3>Cursor rules 没有触发</h3>
           <p>确认 <code>.cursor/rules/mancode-*.mdc</code> 和 <code>.cursor/commands/*.md</code> 都存在。核心上下文与 solo rules 持续生效；高强度规则按描述触发，因此应显式调用生成的模式命令。</p>
           <h3>workflow 命令被拒绝</h3>
-          <p>把拒绝当作流程闸门，而不是元数据损坏。使用 <code>mancode workflow show &lt;taskId&gt; --json</code> 检查步骤、需求就绪状态、计划决策、验证、评审域和 blocker。不要直接编辑 <code>metadata.json</code>。</p>
+          <p>把拒绝当作流程闸门，而不是元数据损坏。先用 <code>mancode workflow list --json</code> 找到 TaskRef，再用 <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> 检查元数据、revision、aggregate 和 blocker。不要手工编辑 V3 metadata。</p>
           <h3>项目事实已经过期</h3>
           <p>添加 Git、manifest、依赖或验证脚本后执行 <code>mancode refresh-project</code>；UI token 改变时执行 <code>refresh-style</code>。只有静态适配器的生成文件需要更新时，才重新安装对应平台。</p>
         </section>
