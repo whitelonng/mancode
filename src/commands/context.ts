@@ -56,6 +56,10 @@ import {
 } from '../runtime/session.js';
 import { readLocalActor } from '../team/actor.js';
 import {
+  capabilitiesFromGitRefCache,
+  readGitRefTeamCache,
+} from '../team/git-ref-cache.js';
+import {
   listGitRefWorkflowRepairs,
   recoverGitRefWorkflowRepair,
 } from '../team/git-ref-workflow-repair.js';
@@ -810,6 +814,16 @@ async function resolveContext(
     projectRoot: project.projectRoot,
     entityHomeStoreContext: project.runtime.entityHomeStoreContext,
   });
+  const capabilities =
+    project.project.config.transport.mode === 'git-ref'
+      ? capabilitiesFromGitRefCache(
+          project.project.config,
+          await readGitRefTeamCache(
+            project.projectRoot,
+            project.project.config,
+          ),
+        )
+      : undefined;
   return resolver.resolve({
     session,
     taskRef: request.taskRef,
@@ -823,6 +837,7 @@ async function resolveContext(
       adapterVersions: project.project.manifest.managedAdapters,
     },
     codeHead: await readCheckoutCodeHead(project.projectRoot),
+    ...(capabilities === undefined ? {} : { capabilities }),
   });
 }
 

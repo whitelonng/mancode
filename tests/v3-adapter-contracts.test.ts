@@ -116,13 +116,16 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain('# mancode bootstrap');
       expect(bootstrap).toContain('mancode context show --purpose orient');
       expect(bootstrap).toContain('--session <id>');
-      expect(bootstrap).toContain('First run `mancode status --json`');
+      expect(bootstrap).toContain('mancode status --brief --json');
+      expect(bootstrap).toContain(
+        'snapshot already obtained in this conversation',
+      );
       expect(bootstrap).toContain(
         'In operator-facing narration, say `mancode`',
       );
       expect(bootstrap).toContain('mancode team identity create --name');
       expect(bootstrap).toContain(
-        '`currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
+        '`task: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
       );
       expect(bootstrap).toContain(
         'Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`',
@@ -175,7 +178,10 @@ describe('V3 adapter bootstrap integration', () => {
         expect(entry).toContain('## Enter through mancode');
         expect(entry).toContain('In operator-facing narration, say `mancode`');
         expect(entry).not.toMatch(/\bV3\b/);
-        expect(entry).toContain('mancode status --json');
+        expect(entry).toContain('mancode status --brief --json');
+        expect(entry).toContain(
+          'snapshot already obtained in this conversation',
+        );
         expect(entry).not.toContain('.mancode/state.json');
         if (mode !== 'manps') {
           const sessionCommands = Array.from(

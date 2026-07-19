@@ -23,5 +23,7 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Verify compiled adapters
+        run: npm run test:dist
       - name: Test
         run: npm test

@@ -13,6 +13,7 @@ import {
   sameTaskRef,
 } from '../context/task-ref.js';
 import { parseWorkflowMetadata } from '../context/workflow-metadata.js';
+import { readOperationJournal } from '../runtime/operation-store.js';
 import { readCheckoutBranch } from '../runtime/project-runtime.js';
 import {
   type OpenedV3TaskOperation,
@@ -203,7 +204,6 @@ export async function syncGitRefTask(
     now,
   });
   try {
-    await assertCleanGitWorktree(context.projectRoot);
     const transport = createGitRefTeamManifestStore(
       context.projectRoot,
       context.project.config,
@@ -211,6 +211,21 @@ export async function syncGitRefTask(
     );
     const snapshot = await transport.pull();
     const bundle = await bundleFromContext(context, now);
+    const remoteTaskPublished =
+      snapshot.manifest?.ownershipFences.some((fence) =>
+        sameTaskRef(fence.taskRef, taskRef),
+      ) === true &&
+      snapshot.manifest.taskBundles.some((remoteBundle) =>
+        sameTaskRef(remoteBundle.taskRef, taskRef),
+      );
+    const taskAuthorityChangesAllowed =
+      remoteTaskPublished &&
+      (remoteBundleMatches(snapshot, bundle) ||
+        (await hasCommittedHandoffCheckpoint(context)));
+    await assertCleanGitWorktree(
+      context.projectRoot,
+      taskAuthorityChangesAllowed ? taskRef : undefined,
+    );
     const result = await synchronizeBundle(
       context,
       transport,
@@ -471,7 +486,7 @@ export async function createGitRefHandoffDraft(
     assertContextMatchesRemoteBundle(context, bundle);
     await Promise.all([
       assertGitRefBundleCodeReachable(context.projectRoot, bundle),
-      assertCleanGitWorktree(context.projectRoot),
+      assertCleanGitWorktree(context.projectRoot, taskRef),
     ]);
     const checkpoint = context.task.latestCheckpoint;
     if (
@@ -571,7 +586,10 @@ export async function mutateGitRefHandoff(
   });
   try {
     if (input.mutation.kind === 'offer') {
-      await assertCleanGitWorktree(opened.context.projectRoot);
+      await assertCleanGitWorktree(
+        opened.context.projectRoot,
+        opened.handoff.taskRef,
+      );
     }
     const kind =
       input.mutation.kind === 'offer'
@@ -848,13 +866,47 @@ function defaultRemoteHandoffSummary(checkpoint: CheckpointV1): HandoffSummary {
   };
 }
 
-async function assertCleanGitWorktree(projectRoot: string): Promise<void> {
-  const { stdout } = await execFile(
-    'git',
-    ['status', '--porcelain=v1', '--untracked-files=all'],
-    { cwd: projectRoot, windowsHide: true },
-  );
+async function assertCleanGitWorktree(
+  projectRoot: string,
+  materializedTaskRef?: TaskRef,
+): Promise<void> {
+  const args = ['status', '--porcelain=v1', '--untracked-files=all'];
+  if (materializedTaskRef !== undefined) {
+    args.push(
+      '--',
+      '.',
+      `:(exclude,top).mancode/shared/workflows/${materializedTaskRef.taskId}/**`,
+    );
+  }
+  const { stdout } = await execFile('git', args, {
+    cwd: projectRoot,
+    windowsHide: true,
+  });
   if (stdout.trim()) throw new Error('MANCODE_HANDOFF_DIRTY_WORKTREE');
+}
+
+async function hasCommittedHandoffCheckpoint(
+  context: OpenedV3TaskOperation,
+): Promise<boolean> {
+  const checkpoint = context.task.latestCheckpoint;
+  if (
+    checkpoint === null ||
+    checkpoint.kind !== 'handoff_offered' ||
+    context.task.metadata.lastOperationId !== checkpoint.operationId ||
+    context.task.aggregate?.latestCheckpointId !== checkpoint.checkpointId
+  ) {
+    return false;
+  }
+  const journal = await readOperationJournal(
+    context.homeStore,
+    checkpoint.operationId,
+  );
+  return (
+    journal?.type === 'checkpoint_create' &&
+    journal.state === 'committed' &&
+    journal.actorId === context.session.actorId &&
+    journal.sessionId === context.session.sessionId
+  );
 }
 
 function assertPositiveRevision(value: number, label: string): void {
@@ -883,10 +935,7 @@ async function synchronizeBundle(
   const fence = manifest.ownershipFences.find((candidate) =>
     sameTaskRef(candidate.taskRef, context.taskRef),
   );
-  if (fence === undefined) {
-    throw new Error('MANCODE_TRANSPORT_MIGRATION_REQUIRED');
-  }
-  if (remoteBundleMatches(snapshot, bundle)) {
+  if (fence !== undefined && remoteBundleMatches(snapshot, bundle)) {
     return {
       remoteRevision: manifest.revision,
       ownershipEpoch: fence.ownershipEpoch,
@@ -900,7 +949,7 @@ async function synchronizeBundle(
     actorId: context.session.actorId,
     taskRef: context.taskRef,
     expectedRemoteRevision: manifest.revision,
-    expectedOwnershipEpoch: fence.ownershipEpoch,
+    expectedOwnershipEpoch: fence?.ownershipEpoch ?? 0,
     taskBundle: bundle,
     now,
   });

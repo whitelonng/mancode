@@ -51,6 +51,11 @@ import { createTaskHeadFence } from '../runtime/task-head-store.js';
 import { readSharedActorProfile } from '../team/actor.js';
 import type { TeamAssessment } from '../team/assessment.js';
 import { createAuthorizationBasis } from '../team/authorization.js';
+import {
+  capabilitiesFromGitRefCache,
+  readGitRefTeamCache,
+} from '../team/git-ref-cache.js';
+import type { ProjectConfigV1 } from '../team/policy.js';
 import { assertTransportCoordinationWriteAllowed } from '../team/transport-migration-freeze.js';
 import { capabilitiesFromProjectConfig } from '../team/transport.js';
 import { VERSION } from '../version.js';
@@ -225,6 +230,7 @@ export async function createV3Workflow(
   if (taskRef.namespace === 'shared') {
     await assertSharedCreationPrerequisites(
       projectRoot,
+      project.config,
       session.actorId,
       input.sharedPrivacyConfirmed === true,
       participants,
@@ -247,6 +253,11 @@ export async function createV3Workflow(
     parent,
     participants,
     explicitScope: input.implementationScope,
+    ownershipEpoch:
+      taskRef.namespace === 'shared' &&
+      project.config.transport.mode === 'git-ref'
+        ? 0
+        : 1,
     timestamp,
   });
   const homeStore = resolveTaskEntityHomeStore(
@@ -527,6 +538,7 @@ async function resolveParentCreationContext(
 
 async function assertSharedCreationPrerequisites(
   projectRoot: string,
+  config: ProjectConfigV1,
   actorId: Ulid,
   privacyConfirmed: boolean,
   participants: readonly Ulid[],
@@ -534,17 +546,38 @@ async function assertSharedCreationPrerequisites(
   if (!privacyConfirmed) {
     throw new Error('MANCODE_PRIVACY_CONFIRMATION_REQUIRED');
   }
-  if ((await readSharedActorProfile(projectRoot, actorId)) === null) {
+  if (!(await actorHasSharedProfile(projectRoot, config, actorId))) {
     throw new Error('MANCODE_JOIN_REQUIRED');
   }
   for (const participantActorId of participants) {
     if (participantActorId === actorId) continue;
     if (
-      (await readSharedActorProfile(projectRoot, participantActorId)) === null
+      !(await actorHasSharedProfile(projectRoot, config, participantActorId))
     ) {
       throw new Error('MANCODE_PARTICIPANT_JOIN_REQUIRED');
     }
   }
+}
+
+async function actorHasSharedProfile(
+  projectRoot: string,
+  config: ProjectConfigV1,
+  actorId: Ulid,
+): Promise<boolean> {
+  if ((await readSharedActorProfile(projectRoot, actorId)) !== null)
+    return true;
+  if (config.transport.mode !== 'git-ref') return false;
+  const cache = await readGitRefTeamCache(projectRoot, config);
+  if (
+    capabilitiesFromGitRefCache(config, cache).transportFreshness !== 'fresh'
+  ) {
+    throw new Error('MANCODE_TRANSPORT_NOT_FRESH');
+  }
+  return (
+    cache?.manifest?.actorProfiles.some(
+      (profile) => profile.actorId === actorId,
+    ) === true
+  );
 }
 
 async function requireSharedCodeHead(projectRoot: string): Promise<string> {
@@ -595,6 +628,7 @@ function buildInitialEntities(input: {
   parent: ParentCreationContext | null;
   participants: Ulid[];
   explicitScope: WorkflowCreateScope | undefined;
+  ownershipEpoch: number;
   timestamp: string;
 }): InitialEntities {
   const scope = initialScope(input.parent, input.explicitScope);
@@ -691,7 +725,7 @@ function buildInitialEntities(input: {
     transitionState: 'stable',
     lastOperationId: input.operationId,
     ownerActorId: input.actorId,
-    ownershipEpoch: 1,
+    ownershipEpoch: input.ownershipEpoch,
     participants: input.participants,
     createdBy: {
       actorId: input.actorId,

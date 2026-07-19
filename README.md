@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.14-orange?style=flat-square" alt="状态：V3 Beta v0.3.14" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.3.16-2f855a?style=flat-square" alt="状态：mancode Continuity v0.3.16" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -35,6 +35,8 @@
 **mancode** 是一个 AI 编码代理工作流调度工具。它给 agent 不同强度的工作模式：
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
+
+**mancode Continuity（连续上下文运行时）**负责把任务、决策和验证证据安全地带到后续对话。
 
 mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
 GitHub Copilot 和 ZCode。每个平台继续使用原来的 `man*` 入口，并通过静态
@@ -92,7 +94,7 @@ mancode 把目标、需求、计划、检查结果和交接信息保存在稳定
 窗口的临时状态误当成另一个窗口的身份。
 
 ```bash
-mancode status --json
+mancode status --brief --json
 mancode context session new --client claude-code
 mancode context resume <namespace:ULID> --session <id> --client claude-code
 mancode context show --purpose orient --session <id> --client claude-code
@@ -305,9 +307,8 @@ src/components/
 
 ## 安装
 
-**状态**：V3 Beta v0.3.14。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
-Codex CLI 和 GitHub Copilot 均已接入；ZCode adapter 已接入。正式稳定发布仍需
-完成五平台真实宿主验收和 `context beta` B1 门禁。
+**状态**：mancode Continuity v0.3.16。Claude Code、Cursor、ChatGPT 桌面端中的
+Codex、Codex CLI、GitHub Copilot 和 ZCode adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
@@ -374,6 +375,7 @@ mancode init
 mancode init --legacy
 mancode status
 mancode status --json
+mancode status --brief --json
 mancode install <claude-code|cursor|codex|copilot|zcode>
 mancode list-platforms
 mancode team identity create --name "<name>"
@@ -402,7 +404,7 @@ mancode version
 以下是简化输出示例：
 
 ```text
-mancode v0.3.14
+mancode v0.3.16
 
 Project:     my-app
 Runtime:     ready
@@ -440,12 +442,14 @@ mancode init
 
 ### `mancode status`
 
-显示 activation、runtime binding、identity/session evidence、transport 和各平台
-bootstrap/原 mode 入口的实际就绪状态。
+默认输出和完整 JSON 显示 activation、runtime binding、identity/session evidence、
+transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 Agent 应组合使用
+`--brief --json`，只读取精简的 Continuity 运行时视图。
 
 ```bash
 mancode status
 mancode status --json
+mancode status --brief --json
 ```
 
 ### `mancode workflow`
@@ -579,7 +583,7 @@ mancode/
 （context、practice、solo）在每次对话加载。模式规则（manba、man、manteam、
 manps）按 description 触发——输入 `/manba` 等关键词即可激活。
 
-### 如何重装 V3 适配器
+### 如何重装 Continuity 适配器
 
 ```bash
 mancode uninstall claude-code --force
@@ -594,7 +598,7 @@ mancode install copilot
 mancode install zcode
 ```
 
-V3 authority 受保护，`mancode uninstall --all` 不会删除工作流权威数据。需要
+Continuity authority 受保护，`mancode uninstall --all` 不会删除工作流权威数据。需要
 清理运行时保留记录时，先用 `mancode context compact --dry-run` 检查候选。
 
 ### 如何移除 CLI
@@ -604,7 +608,7 @@ npm uninstall -g mancode
 ```
 
 逐个平台卸载会移除对应的 mancode bootstrap，并保留用户自定义 rules、instructions
-和 V3 工作流数据。旧项目若明确使用 `mancode init --legacy`，才支持 legacy 的
+和 Continuity 工作流数据。旧项目若明确使用 `mancode init --legacy`，才支持 legacy 的
 `mancode uninstall --all --force`。
 
 ## 常见问题

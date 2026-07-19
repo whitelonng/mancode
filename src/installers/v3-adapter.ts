@@ -581,8 +581,8 @@ export function renderV3Bootstrap(platform: PlatformName): string {
   const sessionArguments = sessionArgumentsFor(platform);
   const sessionCreationGuidance =
     platform === 'codex' || platform === 'zcode'
-      ? 'When status has no `currentSession`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode.'
-      : `When status has no \`currentSession\`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with \`mancode context session new --client ${platform}\`.`;
+      ? 'When status has no `session`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode.'
+      : `When status has no \`session\`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with \`mancode context session new --client ${platform}\`.`;
   const spikePlatform =
     platform === 'codex' || platform === 'zcode'
       ? 'the active Codex or ZCode host'
@@ -597,12 +597,12 @@ export function renderV3Bootstrap(platform: PlatformName): string {
     '',
     `- Platform: ${platformLabel}. This file is a non-authoritative bootstrap.`,
     '- Locate the project root before running mancode commands.',
-    '- First run `mancode status --json` from the project root.',
-    '- Treat status values such as `authority: "v3"` and `v3_active` as internal machine fields. In operator-facing narration, say `mancode`; never prefix a mode or action with a version label.',
+    '- Reuse a `mancode status --brief --json` snapshot already obtained in this conversation. Only when no such snapshot exists, run it once from the project root.',
+    '- The compact status is the public mancode Continuity runtime view. In operator-facing narration, say `mancode` or `mancode Continuity`; never prefix a mode or action with a version label.',
     '- An explicitly invoked original `man`, `manba`, `manteam`, `manps`, or `mansolo` entry supplies its authorized action. Its mode-specific steps override conflicting generic no-task or mutation guidance below.',
     '- In particular, `manps` may run local health scans without an actor, session, or TaskRef. `mansolo` needs them only for an explicit governed handoff.',
-    '- If status has no `localIdentity.actorId`, ask for a display name and run `mancode team identity create --name "<display name>"` before creating a session.',
-    '- If status reports `currentSession`, reuse it. `currentTask: null` and `MANCODE_TASK_REQUIRED` do not make a session stale.',
+    '- If status has no `identity.actorId`, ask for a display name and run `mancode team identity create --name "<display name>"` before creating a session.',
+    '- If status reports `session`, reuse it. `task: null` and `MANCODE_TASK_REQUIRED` do not make a session stale.',
     `- ${sessionCreationGuidance} Pass its returned \`sessionId\` and matching client as \`${sessionArguments}\` to every later session command; an \`export\` inside one command tool does not persist to later command tools.`,
     '- Outside an invoked original mode entry, if no current task and no task is explicitly supplied, report "no task bound" and stop. Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`.',
     '- Bootstrap discovery is read-only: before the operator explicitly requests task work, do not run `mancode init`, `mancode migrate`, `mancode workflow`, or inspect mancode installed package/source.',
@@ -627,6 +627,8 @@ export function renderV3ModeEntry(
   const definition = V3_MODE_DEFINITIONS[mode];
   const sessionArguments = sessionArgumentsFor(platform);
   const sessionClientGuidance = sessionClientGuidanceFor(platform);
+  const statusGuidance =
+    'Reuse a `mancode status --brief --json` snapshot already obtained in this conversation. Only when none exists, run it once from the project root.';
   const sessionCreationGuidance =
     platform === 'codex' || platform === 'zcode'
       ? 'If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode exactly once, then retain the returned session ID.'
@@ -634,31 +636,31 @@ export function renderV3ModeEntry(
   let authoritySteps: string[];
   if (mode === 'manps') {
     authoritySteps = [
-      '1. Run `mancode status --json` from the project root and require active mancode authority.',
+      `1. ${statusGuidance} Require an active, ready mancode Continuity runtime.`,
       '2. Run the health action below directly. A local scan needs no TaskRef, actor identity, or explicit session.',
       '3. Never read or write legacy mode authority before or after the scan.',
     ];
   } else if (mode === 'mansolo') {
     authoritySteps = [
-      '1. Run `mancode status --json` from the project root. Never read or write legacy mode authority.',
+      `1. ${statusGuidance} Never read or write legacy mode authority.`,
       '2. If no governed task is being handed off, continue with focused solo work without creating a persistent mode, actor, session, or TaskRef.',
-      `3. For an explicit governed handoff, ensure \`localIdentity.actorId\`, reuse or create the current session, and bind the existing TaskRef. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `3. For an explicit governed handoff, ensure \`identity.actorId\`, reuse or create the current session, and bind the existing TaskRef. ${sessionCreationGuidance} ${sessionClientGuidance}`,
       `4. For that governed task only, read \`mancode context show --purpose implement ${sessionArguments}\` using the bound or explicit TaskRef.`,
     ];
   } else if (mode === 'man') {
     authoritySteps = [
-      '1. Run `mancode status --json` from the project root. Never read or write the legacy authority file.',
+      `1. ${statusGuidance} Never read or write the legacy authority file.`,
       '2. If the request is only a read-only project orientation, introduction, explanation, or summary, inspect the repository and answer directly without creating an actor, session, TaskRef, or workflow. Do not turn an orientation request into a `plan_only` workflow.',
-      '3. Only for requested governed task work, if `localIdentity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
-      `4. Reuse \`currentSession.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      '3. Only for requested governed task work, if `identity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
+      `4. Reuse \`session.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
       `5. Reuse the current TaskRef. To bind a supplied existing task, run \`mancode context resume <namespace:ULID> ${sessionArguments}\`.`,
       `6. For an existing task, read only the needed Context Pack with \`mancode context show --purpose ${definition.contextPurpose} ${sessionArguments}\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's Context Pack.`,
     ];
   } else {
     authoritySteps = [
-      '1. Run `mancode status --json` from the project root. Never read or write the legacy authority file.',
-      '2. If `localIdentity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
-      `3. Reuse \`currentSession.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `1. ${statusGuidance} Never read or write the legacy authority file.`,
+      '2. If `identity.actorId` is absent, ask for a display name and run `mancode team identity create --name "<display name>"`.',
+      `3. Reuse \`session.sessionId\` when present. ${sessionCreationGuidance} ${sessionClientGuidance}`,
       `4. Reuse the current TaskRef. To bind a supplied existing task, run \`mancode context resume <namespace:ULID> ${sessionArguments}\`.`,
       `5. For an existing task, read only the needed Context Pack with \`mancode context show --purpose ${definition.contextPurpose} ${sessionArguments}\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's Context Pack.`,
     ];
@@ -700,7 +702,7 @@ export function renderV3ModeEntry(
     '',
     ...actions,
     '',
-    'Treat status values such as `authority: "v3"` and `v3_active` as internal machine fields. In operator-facing narration, say `mancode`; never prefix this mode or its actions with a version label.',
+    'Treat the compact status as the public mancode Continuity runtime view. In operator-facing narration, say `mancode` or `mancode Continuity`; never prefix this mode or its actions with a version label.',
     '',
     mutationGuidance,
     '',
@@ -1313,7 +1315,7 @@ function renderRetiredCursorRule(target: V3LegacyAdapterFileTarget): string {
           : legacyName;
   const guidance =
     mode === 'context' || mode === 'practice'
-      ? 'Run `mancode status --json`, then use the matching mancode mode command.'
+      ? 'Run `mancode status --brief --json`, then use the matching mancode mode command.'
       : `Use the \`/${mode}\` mancode mode command.`;
   return [
     '---',

@@ -81,6 +81,8 @@ export interface StatusState {
 export interface StatusOptions {
   /** --json: 输出 JSON（脚本用）*/
   json?: boolean;
+  /** --brief: 输出 Continuity 的紧凑运行时状态 */
+  brief?: boolean;
 }
 
 export interface StatusResult {
@@ -200,6 +202,19 @@ export interface V3StatusResult {
   };
   adapters: Record<PlatformName, V3PlatformAdapterStatus>;
   legacyAuthorityPresent: boolean;
+}
+
+export interface ContinuityStatusResult {
+  schemaVersion: 1;
+  runtime: 'mancode-continuity';
+  state: 'active' | 'unavailable';
+  version: string;
+  project: string;
+  ready: boolean;
+  identity: V3StatusResult['localIdentity'];
+  session: V3StatusResult['currentSession'];
+  task: V3StatusResult['currentTask'];
+  blockers: string[];
 }
 
 interface DetectedTeamStatus {
@@ -452,8 +467,11 @@ async function statusV3(
       adapters,
       legacyAuthorityPresent: legacy.authorityPresent,
     };
+    const output = options.brief ? toContinuityStatus(result) : result;
     if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
+      console.log(JSON.stringify(output, null, 2));
+    } else if (options.brief) {
+      printContinuityText(output as ContinuityStatusResult);
     } else {
       printV3Text(result);
     }
@@ -464,6 +482,30 @@ async function statusV3(
     console.error(`   ${message}`);
     return EXIT_CORRUPT_STATE;
   }
+}
+
+function toContinuityStatus(result: V3StatusResult): ContinuityStatusResult {
+  const blockers = [
+    ...result.compatibility.failures,
+    ...(result.runtime.error === null ? [] : [result.runtime.error]),
+  ];
+  const ready =
+    result.activation.state === 'v3_active' &&
+    result.compatibility.readAllowed &&
+    result.compatibility.writeAllowed &&
+    result.runtime.binding === 'ready';
+  return {
+    schemaVersion: 1,
+    runtime: 'mancode-continuity',
+    state: ready ? 'active' : 'unavailable',
+    version: result.version,
+    project: result.project,
+    ready,
+    identity: result.localIdentity,
+    session: result.currentSession,
+    task: result.currentTask,
+    blockers,
+  };
 }
 
 /** Status is read-only: an invalid ambient session is simply not current. */
@@ -846,7 +888,7 @@ function printText(r: StatusResult): void {
 
 function printV3Text(result: V3StatusResult): void {
   console.log('');
-  console.log(`mancode v${result.version}`);
+  console.log(`mancode Continuity v${result.version}`);
   console.log('');
   console.log(`Project:     ${result.project}`);
   console.log(
@@ -911,6 +953,16 @@ function printV3Text(result: V3StatusResult): void {
     );
   }
   console.log('');
+}
+
+function printContinuityText(result: ContinuityStatusResult): void {
+  console.log(`mancode Continuity v${result.version}`);
+  console.log(`Project:  ${result.project}`);
+  console.log(`State:    ${result.state}`);
+  console.log(`Ready:    ${result.ready ? 'yes' : 'no'}`);
+  if (result.blockers.length > 0) {
+    console.log(`Blockers: ${result.blockers.join('; ')}`);
+  }
 }
 
 function formatActivationState(state: string): string {

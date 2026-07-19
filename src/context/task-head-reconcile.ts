@@ -31,15 +31,18 @@ import {
 } from '../runtime/task-operation.js';
 import type { ClaimV1 } from '../team/claims.js';
 import { deriveClaimValidity } from '../team/conflicts.js';
+import { createGitRefTeamManifestStore } from '../team/git-ref-client.js';
 import type { HandoffV1 } from '../team/handoff.js';
+import type { ProjectConfigV1 } from '../team/policy.js';
 import {
   type TaskAggregateManifestV1,
   taskAggregateDigest,
 } from './aggregate.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
+import type { SchemaManifestV1 } from './manifest.js';
 import { type StoredTaskSnapshot, V3ContextStore } from './store.js';
 import { assertTaskCodeHeadUnchanged } from './task-mutation.js';
-import { type TaskRef, parseTaskRefValue } from './task-ref.js';
+import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 
 const execFile = promisify(execFileCallback);
 
@@ -119,13 +122,19 @@ export async function previewV3TaskHeadReconcile(
     input.projectRoot,
     task.location.taskRoot,
   );
+  const project = await store.readProjectSnapshot();
+  await assertRemoteTaskUnpublished({
+    projectRoot: input.projectRoot,
+    taskRef,
+    config: project.config,
+    manifest: project.manifest,
+  });
   assertReconcileEligible({
     task,
     aggregate,
     previousFence,
     codeHead,
     actorId: input.sessionActorId,
-    transportMode: (await store.readProjectSnapshot()).config.transport.mode,
     claims: coordination.claims,
     handoffs: coordination.handoffs,
     now,
@@ -194,13 +203,18 @@ export async function reconcileV3TaskHead(
     if (reread.fingerprint !== context.task.fingerprint) {
       throw new Error('MANCODE_CONTEXT_STALE');
     }
+    await assertRemoteTaskUnpublished({
+      projectRoot: context.projectRoot,
+      taskRef,
+      config: context.project.config,
+      manifest: context.project.manifest,
+    });
     assertReconcileEligible({
       task: context.task,
       aggregate,
       previousFence,
       codeHead,
       actorId: context.session.actorId,
-      transportMode: context.project.config.transport.mode,
       claims: context.coordination.claims,
       handoffs: context.coordination.handoffs,
       now: context.now,
@@ -396,14 +410,10 @@ function assertReconcileEligible(input: {
   previousFence: TaskHeadFenceV1;
   codeHead: string;
   actorId: Ulid;
-  transportMode: 'local' | 'git-ref';
   claims: ClaimV1[];
   handoffs: HandoffV1[];
   now: Date;
 }): void {
-  if (input.transportMode !== 'local') {
-    throw new Error('MANCODE_GIT_REF_TRANSPORT_NOT_IMPLEMENTED');
-  }
   if (input.task.metadata.ownerActorId !== input.actorId) {
     throw new Error('MANCODE_TASK_OWNER_REQUIRED');
   }
@@ -418,6 +428,31 @@ function assertReconcileEligible(input: {
   }
   assertClaimsConsistent(input.claims, input.task, input.codeHead, input.now);
   assertHandoffsConsistent(input.handoffs);
+}
+
+async function assertRemoteTaskUnpublished(input: {
+  projectRoot: string;
+  taskRef: TaskRef;
+  config: ProjectConfigV1;
+  manifest: SchemaManifestV1;
+}): Promise<void> {
+  if (input.config.transport.mode !== 'git-ref') return;
+  const snapshot = await createGitRefTeamManifestStore(
+    input.projectRoot,
+    input.config,
+    input.manifest,
+  ).pull();
+  const remote = snapshot.manifest;
+  if (remote === null) return;
+  const hasTaskAuthority = [
+    ...remote.ownershipFences,
+    ...remote.taskBundles,
+    ...remote.claims,
+    ...remote.handoffs,
+  ].some((entity) => sameTaskRef(entity.taskRef, input.taskRef));
+  if (hasTaskAuthority) {
+    throw new Error('MANCODE_GIT_REF_TASK_ALREADY_PUBLISHED');
+  }
 }
 
 function assertClaimsConsistent(

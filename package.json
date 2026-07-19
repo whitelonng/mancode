@@ -1,7 +1,7 @@
 {
   "name": "mancode",
-  "version": "0.3.14",
-  "description": "AI coding agent workflow harness. Five modes from practice to playoffs: stop over-engineering, reuse project context, and add multi-agent code review.",
+  "version": "0.3.16",
+  "description": "AI coding agent workflow harness with mancode Continuity for cross-conversation tasks, decisions, verification, and team coordination.",
   "type": "module",
   "license": "AGPL-3.0-only",
   "author": "whitelonng",
@@ -59,13 +59,14 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:dist": "node scripts/verify-dist-adapters.mjs",
     "test:windows-smoke": "node scripts/windows-smoke.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "biome check src tests",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run build && npm test"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run build && npm run test:dist && npm test"
   },
   "dependencies": {
     "commander": "^12.1.0",
