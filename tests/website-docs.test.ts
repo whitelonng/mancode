@@ -145,8 +145,8 @@ describe('website documentation', () => {
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
     expect(chinese).toContain('预览适配器');
-    expect(english).toContain('V3 Beta / v0.3.13');
-    expect(chinese).toContain('V3 Beta / v0.3.13');
+    expect(english).toContain('V3 Beta / v0.3.14');
+    expect(chinese).toContain('V3 Beta / v0.3.14');
   });
 
   it('documents the cross-session boundary in both languages', async () => {
