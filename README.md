@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.13-orange?style=flat-square" alt="状态：V3 Beta v0.3.13" />
+  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.14-orange?style=flat-square" alt="状态：V3 Beta v0.3.14" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -305,7 +305,7 @@ src/components/
 
 ## 安装
 
-**状态**：V3 Beta v0.3.13。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
+**状态**：V3 Beta v0.3.14。Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
 Codex CLI 和 GitHub Copilot 均已接入；ZCode adapter 已接入。正式稳定发布仍需
 完成五平台真实宿主验收和 `context beta` B1 门禁。
 
@@ -402,7 +402,7 @@ mancode version
 以下是简化输出示例：
 
 ```text
-mancode v0.3.13
+mancode v0.3.14
 
 Project:     my-app
 Runtime:     ready

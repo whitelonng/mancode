@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.13-orange?style=flat-square" alt="Status: V3 beta v0.3.13" />
+  <img src="https://img.shields.io/badge/status-V3%20beta%20v0.3.14-orange?style=flat-square" alt="Status: V3 beta v0.3.14" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -350,7 +350,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: V3 beta v0.3.13. Claude Code, Cursor, Codex in the ChatGPT desktop
+**Status**: V3 beta v0.3.14. Claude Code, Cursor, Codex in the ChatGPT desktop
 app and CLI, GitHub Copilot, and ZCode adapters are included. Stable release
 still requires the five-host real-session acceptance and the `context beta` B1 gate.
 
@@ -449,7 +449,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.3.13
+mancode v0.3.14
 
 Project:     my-app
 Runtime:     ready
