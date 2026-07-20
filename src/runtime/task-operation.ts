@@ -1,5 +1,8 @@
+import { execFile as execFileCallback } from 'node:child_process';
 import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { taskAggregateDigest } from '../context/aggregate.js';
 import { assertCompatibilityGate } from '../context/compatibility.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
@@ -78,6 +81,8 @@ import {
 } from './project-runtime.js';
 import { type SessionStateV1, readSession } from './session.js';
 import { assertTaskHeadFenceMatchesAggregate } from './task-head-fence.js';
+
+const execFile = promisify(execFileCallback);
 
 export interface OpenV3TaskOperationInput {
   projectRoot: string;
@@ -216,11 +221,22 @@ export async function openV3TaskOperation(
         throw new Error('MANCODE_TASK_HEAD_FENCE_MISSING');
       }
       if (input.allowTaskHeadFenceMismatch !== true) {
-        assertTaskHeadFenceMatchesAggregate(
-          coordination.taskHeadFence,
-          task.aggregate,
-          codeHead,
-        );
+        try {
+          assertTaskHeadFenceMatchesAggregate(
+            coordination.taskHeadFence,
+            task.aggregate,
+            codeHead,
+          );
+        } catch (error) {
+          await assertOwnerCodeHeadAdvance({
+            projectRoot,
+            task,
+            fence: coordination.taskHeadFence,
+            codeHead,
+            actorId: session.actorId,
+            originalError: error,
+          });
+        }
       }
     }
     return {
@@ -248,6 +264,35 @@ export async function openV3TaskOperation(
     await releaseLocks(locks);
     await recordV3ErrorDiagnostic(projectRoot, error).catch(() => undefined);
     throw error;
+  }
+}
+
+async function assertOwnerCodeHeadAdvance(input: {
+  projectRoot: string;
+  task: StoredTaskSnapshot;
+  fence: NonNullable<StoredCoordinationSnapshot['taskHeadFence']>;
+  codeHead: string;
+  actorId: Ulid;
+  originalError: unknown;
+}): Promise<void> {
+  const { task, fence } = input;
+  if (
+    task.aggregate === null ||
+    task.metadata.ownerActorId !== input.actorId ||
+    fence.taskRevision !== task.metadata.revision ||
+    fence.ownershipEpoch !== task.metadata.ownershipEpoch ||
+    fence.aggregateDigest !== taskAggregateDigest(task.aggregate)
+  ) {
+    throw input.originalError;
+  }
+  try {
+    await execFile(
+      'git',
+      ['merge-base', '--is-ancestor', fence.codeRef.head, input.codeHead],
+      { cwd: input.projectRoot, windowsHide: true },
+    );
+  } catch {
+    throw input.originalError;
   }
 }
 

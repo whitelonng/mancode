@@ -39,6 +39,10 @@ import {
   prepareGitRefCoordinationMutation,
 } from './git-ref-coordination.js';
 import {
+  readGitRefTaskRemoteBase,
+  recordGitRefTaskRemoteBase,
+} from './git-ref-task-base.js';
+import {
   type GitRefTaskBundleV1,
   type GitRefTeamManifestSnapshot,
   type GitRefTeamManifestStore,
@@ -211,6 +215,10 @@ export async function syncGitRefTask(
     );
     const snapshot = await transport.pull();
     const bundle = await bundleFromContext(context, now);
+    const remoteBase = await readGitRefTaskRemoteBase(
+      context.projectRoot,
+      taskRef,
+    );
     const remoteTaskPublished =
       snapshot.manifest?.ownershipFences.some((fence) =>
         sameTaskRef(fence.taskRef, taskRef),
@@ -231,6 +239,7 @@ export async function syncGitRefTask(
       transport,
       snapshot,
       bundle,
+      remoteBase?.bundle ?? null,
       operationId,
       now,
     );
@@ -239,6 +248,12 @@ export async function syncGitRefTask(
       context.projectRoot,
       context.project.config,
       refreshed,
+    );
+    const refreshedManifest = requireRemoteManifest(refreshed);
+    await recordGitRefTaskRemoteBase(
+      context.projectRoot,
+      refreshedManifest.revision,
+      requireRemoteBundle(refreshedManifest, taskRef),
     );
     return { bundle, ...result };
   } finally {
@@ -275,6 +290,10 @@ export async function acquireGitRefClaim(
     );
     let snapshot = await transport.pull();
     const bundle = await bundleFromContext(context, now);
+    const remoteBase = await readGitRefTaskRemoteBase(
+      context.projectRoot,
+      taskRef,
+    );
     if (!remoteBundleMatches(snapshot, bundle)) {
       await assertCleanGitWorktree(context.projectRoot);
       const bootstrapOperationId = createUlid(now.getTime());
@@ -283,6 +302,7 @@ export async function acquireGitRefClaim(
         transport,
         snapshot,
         bundle,
+        remoteBase?.bundle ?? null,
         bootstrapOperationId,
         now,
       );
@@ -290,6 +310,11 @@ export async function acquireGitRefClaim(
     }
     const manifest = requireRemoteManifest(snapshot);
     const fence = requireRemoteFence(manifest, taskRef);
+    await recordGitRefTaskRemoteBase(
+      context.projectRoot,
+      manifest.revision,
+      requireRemoteBundle(manifest, taskRef),
+    );
     const remote = context.project.config.transport.remote;
     if (remote === null) throw new Error('MANCODE_TRANSPORT_UNAVAILABLE');
     const remoteIdentityHash = await resolveGitRefRemoteIdentityHash(
@@ -325,6 +350,11 @@ export async function acquireGitRefClaim(
       context.projectRoot,
       context.project.config,
       refreshed,
+    );
+    await recordGitRefTaskRemoteBase(
+      context.projectRoot,
+      requireRemoteManifest(refreshed).revision,
+      requireRemoteBundle(requireRemoteManifest(refreshed), taskRef),
     );
     const claim = requireRemoteManifest(refreshed).claims.find(
       (candidate) => candidate.claimId === claimId,
@@ -928,6 +958,7 @@ async function synchronizeBundle(
   transport: GitRefTeamManifestStore,
   snapshot: GitRefTeamManifestSnapshot,
   bundle: GitRefTaskBundleV1,
+  remoteBase: GitRefTaskBundleV1 | null,
   operationId: Ulid,
   now: Date,
 ): Promise<Omit<SyncGitRefTaskResult, 'bundle'>> {
@@ -943,6 +974,22 @@ async function synchronizeBundle(
       changed: false,
     };
   }
+  if (fence !== undefined && fence.ownerActorId !== context.session.actorId) {
+    throw new Error('MANCODE_TASK_OWNER_REQUIRED');
+  }
+  const remoteBundle =
+    fence === undefined ? null : requireRemoteBundle(manifest, context.taskRef);
+  if (
+    (remoteBundle === null) !== (remoteBase === null) ||
+    (remoteBundle !== null &&
+      (remoteBase === null ||
+        remoteBundle.bundleDigest !== remoteBase.bundleDigest))
+  ) {
+    throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
+  }
+  if (remoteBundle !== null) {
+    await assertCodeRefFastForward(context.projectRoot, remoteBundle, bundle);
+  }
   const mutation = prepareGitRefCoordinationMutation(manifest, {
     kind: 'ownership_fence',
     operationId,
@@ -950,6 +997,7 @@ async function synchronizeBundle(
     taskRef: context.taskRef,
     expectedRemoteRevision: manifest.revision,
     expectedOwnershipEpoch: fence?.ownershipEpoch ?? 0,
+    expectedPredecessorBundleDigest: remoteBundle?.bundleDigest ?? null,
     taskBundle: bundle,
     now,
   });
@@ -1034,6 +1082,26 @@ function remoteBundleMatches(
     remote.codeRef.branch === bundle.codeRef.branch &&
     remote.codeRef.head === bundle.codeRef.head
   );
+}
+
+async function assertCodeRefFastForward(
+  projectRoot: string,
+  previous: GitRefTaskBundleV1,
+  next: GitRefTaskBundleV1,
+): Promise<void> {
+  if (previous.codeRef.branch !== next.codeRef.branch) {
+    throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
+  }
+  if (previous.codeRef.head === next.codeRef.head) return;
+  try {
+    await execFile(
+      'git',
+      ['merge-base', '--is-ancestor', previous.codeRef.head, next.codeRef.head],
+      { cwd: projectRoot, windowsHide: true },
+    );
+  } catch {
+    throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
+  }
 }
 
 function requireRemoteManifest(snapshot: GitRefTeamManifestSnapshot) {

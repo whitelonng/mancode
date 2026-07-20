@@ -60,6 +60,7 @@ export type PrepareGitRefCoordinationMutationInput = BaseGitRefMutation &
   (
     | {
         kind: 'ownership_fence';
+        expectedPredecessorBundleDigest: string | null;
         taskBundle: GitRefTaskBundleV1;
       }
     | {
@@ -172,7 +173,11 @@ export function prepareGitRefCoordinationMutation(
   const context = openMutationContext(manifest, input);
   switch (input.kind) {
     case 'ownership_fence':
-      return prepareOwnershipFence(context, input.taskBundle);
+      return prepareOwnershipFence(
+        context,
+        input.taskBundle,
+        input.expectedPredecessorBundleDigest,
+      );
     case 'claim_acquire':
       return prepareClaimAcquire(
         context,
@@ -324,12 +329,19 @@ function openMutationContext(
 function prepareOwnershipFence(
   context: MutationContext,
   taskBundle: GitRefTaskBundleV1,
+  expectedPredecessorBundleDigest: string | null,
 ): PreparedGitRefCoordinationMutation {
   const metadata = metadataFromBundle(taskBundle);
   assertRemoteTaskEligible(metadata);
   assertTaskBundleIdentity(taskBundle, context.taskRef);
   if (metadata.ownerActorId === null) {
     throw new Error('MANCODE_TASK_OWNER_REQUIRED');
+  }
+  if (
+    (context.taskBundle?.bundleDigest ?? null) !==
+    expectedPredecessorBundleDigest
+  ) {
+    throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
   }
   if (context.fence === null) {
     if (
@@ -351,17 +363,64 @@ function prepareOwnershipFence(
       throw new Error('MANCODE_TASK_REVISION_CONFLICT');
     }
     if (taskBundle.taskRevision === context.fence.taskRevision) {
-      if (
-        taskBundle.aggregateDigest !== context.fence.aggregateDigest ||
-        taskBundle.codeRef.head !== context.taskBundle?.codeRef.head
-      ) {
+      if (taskBundle.aggregateDigest !== context.fence.aggregateDigest) {
         throw new Error('MANCODE_SPLIT_BRAIN');
       }
-      throw new Error('MANCODE_REMOTE_FENCE_NO_CHANGE');
+      if (
+        taskBundle.codeRef.branch !== context.taskBundle?.codeRef.branch ||
+        taskBundle.codeRef.head === context.taskBundle?.codeRef.head
+      ) {
+        throw new Error('MANCODE_REMOTE_FENCE_NO_CHANGE');
+      }
+      return prepared(
+        context,
+        buildFence(context, taskBundle, metadata.ownerActorId),
+        refreshOwnerClaimsForCodeRef(context, taskBundle, metadata),
+        context.handoffs,
+        taskBundle,
+      );
     }
   }
+  const codeHeadChanged =
+    context.taskBundle !== null &&
+    (taskBundle.codeRef.branch !== context.taskBundle.codeRef.branch ||
+      taskBundle.codeRef.head !== context.taskBundle.codeRef.head);
   const fence = buildFence(context, taskBundle, metadata.ownerActorId);
-  return prepared(context, fence, context.claims, context.handoffs, taskBundle);
+  return prepared(
+    context,
+    fence,
+    codeHeadChanged
+      ? refreshOwnerClaimsForCodeRef(context, taskBundle, metadata)
+      : context.claims,
+    context.handoffs,
+    taskBundle,
+  );
+}
+
+function refreshOwnerClaimsForCodeRef(
+  context: MutationContext,
+  taskBundle: GitRefTaskBundleV1,
+  metadata: WorkflowMetadataV3,
+): ClaimV1[] {
+  return context.claims.map((claim) => {
+    if (
+      claim.state !== 'active' ||
+      claim.ownerActorId !== context.input.actorId ||
+      Date.parse(claim.expiresAt) <= context.now.getTime() ||
+      claim.ownershipEpochAtAcquire !== taskBundle.ownershipEpoch ||
+      claim.implementationScopeDigest !== metadata.implementationScope.digest
+    ) {
+      return claim;
+    }
+    const next = bindClaim(context, {
+      ...claim,
+      revision: claim.revision + 1,
+      lastValidatedTaskRevision: taskBundle.taskRevision,
+      lastValidatedCodeRef: taskBundle.codeRef,
+    });
+    assertClaimTransition(claim, next);
+    return next;
+  });
 }
 
 function prepareClaimAcquire(
@@ -890,6 +949,7 @@ function prepared(
     claims: claims.map(parseClaim).sort(compareClaims),
     handoffs: handoffs.map(parseHandoff).sort(compareHandoffs),
     taskBundle,
+    expectedTaskBundleDigest: context.taskBundle?.bundleDigest ?? null,
     forwardRepair: null,
   };
 }

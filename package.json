@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.3.16",
+  "version": "0.3.18",
   "description": "AI coding agent workflow harness with mancode Continuity for cross-conversation tasks, decisions, verification, and team coordination.",
   "type": "module",
   "license": "AGPL-3.0-only",

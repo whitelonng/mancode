@@ -83,6 +83,7 @@ describe('git-ref coordination domain contracts', () => {
       taskRef: TASK_REF,
       expectedRemoteRevision: 1,
       expectedOwnershipEpoch: 0,
+      expectedPredecessorBundleDigest: null,
       taskBundle: initialBundle,
       now: NOW,
     });
@@ -97,6 +98,90 @@ describe('git-ref coordination domain contracts', () => {
       remoteRevision: 2,
       lastOperationId: id(19),
       updatedAt: NOW.toISOString(),
+    });
+  });
+
+  it('advances an owner code ref and refreshes only the owner claim in one CAS', () => {
+    const current = baseManifest({ claims: [activeClaim()] });
+    const previous = current.taskBundles[0];
+    if (previous === undefined) throw new Error('missing current task bundle');
+    const nextBundle = bundleWithCodeHead(previous, 'def5678');
+
+    const prepared = prepareGitRefCoordinationMutation(current, {
+      kind: 'ownership_fence',
+      operationId: id(24),
+      actorId: OWNER_ID,
+      taskRef: TASK_REF,
+      expectedRemoteRevision: 1,
+      expectedOwnershipEpoch: 1,
+      expectedPredecessorBundleDigest: previous.bundleDigest,
+      taskBundle: nextBundle,
+      now: NOW,
+    });
+
+    expect(prepared.ownershipFence).toMatchObject({
+      taskRevision: previous.taskRevision,
+      aggregateDigest: previous.aggregateDigest,
+      ownerActorId: OWNER_ID,
+    });
+    expect(prepared.claims[0]).toMatchObject({
+      claimId: CLAIM_ID,
+      revision: 2,
+      lastValidatedTaskRevision: nextBundle.taskRevision,
+      lastValidatedCodeRef: nextBundle.codeRef,
+      authority: { remoteRevision: '2' },
+    });
+
+    expect(() =>
+      prepareGitRefCoordinationMutation(current, {
+        kind: 'ownership_fence',
+        operationId: id(25),
+        actorId: OWNER_ID,
+        taskRef: TASK_REF,
+        expectedRemoteRevision: 1,
+        expectedOwnershipEpoch: 1,
+        expectedPredecessorBundleDigest: bundleWithCodeHead(previous, 'fedcba9')
+          .bundleDigest,
+        taskBundle: nextBundle,
+        now: NOW,
+      }),
+    ).toThrow('MANCODE_TASK_BUNDLE_DIVERGED');
+
+    const participantClaim = baseManifest({
+      claims: [activeClaim({ ownerActorId: RECEIVER_ID })],
+    });
+    const participantPrepared = prepareGitRefCoordinationMutation(
+      participantClaim,
+      {
+        kind: 'ownership_fence',
+        operationId: id(26),
+        actorId: OWNER_ID,
+        taskRef: TASK_REF,
+        expectedRemoteRevision: 1,
+        expectedOwnershipEpoch: 1,
+        expectedPredecessorBundleDigest: previous.bundleDigest,
+        taskBundle: nextBundle,
+        now: NOW,
+      },
+    );
+    expect(participantPrepared.claims[0]).toEqual(participantClaim.claims[0]);
+    const participantRevalidated = prepareGitRefCoordinationMutation(
+      commitPrepared(participantClaim, participantPrepared),
+      {
+        kind: 'claim_revalidate',
+        operationId: id(27),
+        actorId: RECEIVER_ID,
+        taskRef: TASK_REF,
+        expectedRemoteRevision: 2,
+        expectedOwnershipEpoch: 1,
+        claimId: CLAIM_ID,
+        expectedClaimRevision: 1,
+        now: NOW,
+      },
+    );
+    expect(participantRevalidated.claims[0]).toMatchObject({
+      revision: 2,
+      lastValidatedCodeRef: nextBundle.codeRef,
     });
   });
 
@@ -171,6 +256,8 @@ describe('git-ref coordination domain contracts', () => {
         taskRef: TASK_REF,
         expectedRemoteRevision: 1,
         expectedOwnershipEpoch: 1,
+        expectedPredecessorBundleDigest:
+          current.taskBundles[0]?.bundleDigest ?? null,
         taskBundle: bundle(
           metadata({ task: 'A divergent task at the same remote revision.' }),
         ),
@@ -223,6 +310,8 @@ describe('git-ref coordination domain contracts', () => {
       taskRef: TASK_REF,
       expectedRemoteRevision: 3,
       expectedOwnershipEpoch: 1,
+      expectedPredecessorBundleDigest:
+        current.taskBundles[0]?.bundleDigest ?? null,
       taskBundle: bundle(metadata({ revision: 8 })),
       now: NOW,
     });
@@ -818,6 +907,18 @@ function bundle(value: WorkflowMetadataV3): GitRefTaskBundleV1 {
     createdAt: '2026-07-18T09:00:00.000Z',
   };
   return { ...body, bundleDigest: digestCanonicalJson(body) };
+}
+
+function bundleWithCodeHead(
+  previous: GitRefTaskBundleV1,
+  head: string,
+): GitRefTaskBundleV1 {
+  const body = { ...previous, codeRef: { ...previous.codeRef, head } };
+  const { bundleDigest: _bundleDigest, ...withoutDigest } = body;
+  return {
+    ...withoutDigest,
+    bundleDigest: digestCanonicalJson(withoutDigest),
+  };
 }
 
 function pendingClaim(overrides: Partial<ClaimV1> = {}): ClaimV1 {

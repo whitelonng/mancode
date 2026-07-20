@@ -9,7 +9,11 @@ import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
+import { resolveCoordinationEntityHomeStore } from '../src/runtime/entity-home-store.js';
+import { acquireEntityLocks } from '../src/runtime/local-lock.js';
+import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
 import { createSession } from '../src/runtime/session.js';
+import { taskEntityKey } from '../src/runtime/task-operation.js';
 import {
   createLocalActor,
   createSharedActorProfile,
@@ -112,6 +116,165 @@ describe('git-ref task bundle materialization', () => {
       }),
     ).rejects.toThrow('MANCODE_SPLIT_BRAIN');
   });
+
+  it('serializes materialization through the canonical task lock', async () => {
+    const source = await bootstrap('source-lock', id(60), id(61));
+    const target = await bootstrap('target-lock', id(62), id(63));
+    await createSharedWorkflow(source.root, source.sessionId);
+    const remote = await bundle(source.root);
+    const runtime = await readProjectRuntimeContext(target.root);
+    const store = resolveCoordinationEntityHomeStore(
+      runtime.entityHomeStoreContext,
+    );
+    const locks = await acquireEntityLocks(store, id(64), [
+      taskEntityKey(remote.taskRef),
+    ]);
+
+    try {
+      await expect(
+        materializeGitRefTaskBundle({
+          projectRoot: target.root,
+          remoteRevision: 1,
+          ownershipFence: remoteFence(remote, 1, id(65)),
+          bundle: remote,
+          operationId: id(66),
+          now: NOW,
+        }),
+      ).rejects.toThrow('MANCODE_LOCK_HELD');
+    } finally {
+      await Promise.all(locks.map((lock) => lock.release()));
+    }
+  });
+
+  it('advances the fence when Git already supplied the target aggregate', async () => {
+    const source = await bootstrap('source-git-update', id(50), id(51));
+    const target = await bootstrap('target-git-update', id(52), id(53));
+    const created = await createSharedWorkflow(source.root, source.sessionId);
+    const first = await bundle(source.root);
+
+    await materializeGitRefTaskBundle({
+      projectRoot: target.root,
+      remoteRevision: 1,
+      ownershipFence: remoteFence(first, 1, id(54)),
+      bundle: first,
+      operationId: id(55),
+      now: NOW,
+    });
+
+    await createV3Checkpoint({
+      projectRoot: source.root,
+      taskRef: created.taskRef,
+      sessionId: source.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Advance the task before the other clone pulls Git.',
+      operationId: id(56),
+      checkpointId: id(57),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+    const second = await bundle(source.root);
+
+    // Simulate a normal Git pull updating tracked task files before team sync.
+    await writeBundleArtifacts(target.root, second);
+    const adopted = await materializeGitRefTaskBundle({
+      projectRoot: target.root,
+      remoteRevision: 2,
+      ownershipFence: remoteFence(second, 2, id(58)),
+      bundle: second,
+      operationId: id(59),
+      now: new Date('2026-07-18T10:02:00.000Z'),
+    });
+    expect(adopted).toMatchObject({
+      status: 'unchanged',
+      taskRevision: second.taskRevision,
+      taskHeadFence: {
+        taskRevision: second.taskRevision,
+        remoteRevision: 2,
+      },
+    });
+
+    const repeated = await materializeGitRefTaskBundle({
+      projectRoot: target.root,
+      remoteRevision: 2,
+      ownershipFence: remoteFence(second, 2, id(58)),
+      bundle: second,
+      operationId: id(67),
+      now: new Date('2026-07-18T10:03:00.000Z'),
+    });
+    expect(repeated.taskHeadFence).toEqual(adopted.taskHeadFence);
+
+    const refreshed = await materializeGitRefTaskBundle({
+      projectRoot: target.root,
+      remoteRevision: 3,
+      ownershipFence: remoteFence(second, 2, id(58)),
+      bundle: second,
+      operationId: id(68),
+      now: new Date('2026-07-18T10:04:00.000Z'),
+    });
+    expect(refreshed.taskHeadFence).toMatchObject({
+      fenceRevision: adopted.taskHeadFence.fenceRevision + 1,
+      remoteRevision: 3,
+    });
+  });
+
+  it('does not treat an unsynced local revision as a cached remote predecessor', async () => {
+    const source = await bootstrap('source-base', id(30), id(31));
+    const target = await bootstrap('target-base', id(30), id(32));
+    const created = await createSharedWorkflow(source.root, source.sessionId);
+    const first = await bundle(source.root);
+
+    await expect(
+      materializeGitRefTaskBundle({
+        projectRoot: target.root,
+        remoteRevision: 1,
+        ownershipFence: remoteFence(first, 1, id(33)),
+        bundle: first,
+        operationId: id(34),
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+    await execFile('git', ['fetch', source.root, 'HEAD'], { cwd: target.root });
+    await execFile('git', ['checkout', '--detach', 'FETCH_HEAD'], {
+      cwd: target.root,
+    });
+    await createV3Checkpoint({
+      projectRoot: target.root,
+      taskRef: created.taskRef,
+      sessionId: target.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Create an unsynced local predecessor.',
+      operationId: id(35),
+      checkpointId: id(36),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+
+    await createV3Checkpoint({
+      projectRoot: source.root,
+      taskRef: created.taskRef,
+      sessionId: source.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Advance the remote task independently.',
+      operationId: id(37),
+      checkpointId: id(38),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+    const second = await bundle(source.root);
+
+    await expect(
+      materializeGitRefTaskBundle({
+        projectRoot: target.root,
+        remoteRevision: 2,
+        ownershipFence: remoteFence(second, 2, id(39)),
+        bundle: second,
+        // Simulates a quarantine pull that cached the target before code was reachable.
+        predecessorBundle: second,
+        operationId: id(40),
+        now: new Date('2026-07-18T10:02:00.000Z'),
+      }),
+    ).rejects.toThrow('MANCODE_SPLIT_BRAIN');
+  });
 });
 
 async function bootstrap(label: string, actorId: Ulid, sessionId: Ulid) {
@@ -186,6 +349,29 @@ async function bundle(root: string): Promise<GitRefTaskBundleV1> {
     codeRef: { branch: 'main', head: stdout.trim() },
     now: NOW,
   });
+}
+
+async function writeBundleArtifacts(
+  root: string,
+  bundle: GitRefTaskBundleV1,
+): Promise<void> {
+  const taskRoot = path.join(
+    root,
+    '.mancode',
+    'shared',
+    'workflows',
+    bundle.taskRef.taskId,
+  );
+  for (const artifact of bundle.artifacts) {
+    const target = path.join(taskRoot, artifact.relativePath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(
+      target,
+      typeof artifact.content === 'string'
+        ? artifact.content
+        : `${JSON.stringify(artifact.content, null, 2)}\n`,
+    );
+  }
 }
 
 function remoteFence(
