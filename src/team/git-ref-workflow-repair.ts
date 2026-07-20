@@ -243,6 +243,7 @@ export async function recoverGitRefWorkflowRepair(
       bundle: targetBundle,
       predecessorBundle: journal.prepared.predecessorBundle,
       pendingMetadata: journal.pendingMetadata,
+      taskLockHeld: true,
       operationId: createUlid(),
     });
     journal = await transitionJournal(

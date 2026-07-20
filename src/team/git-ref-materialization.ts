@@ -31,6 +31,7 @@ import {
   readTaskHeadFence,
   replaceTaskHeadFence,
 } from '../runtime/task-head-store.js';
+import { taskEntityKey } from '../runtime/task-operation.js';
 import { readQuarantinedGitRefTaskBundle } from './git-ref-bundle.js';
 import {
   readGitRefTaskRemoteBase,
@@ -67,6 +68,8 @@ export interface MaterializeGitRefTaskBundleInput {
   bundle: GitRefTaskBundleV1;
   predecessorBundle?: GitRefTaskBundleV1 | null;
   pendingMetadata?: WorkflowMetadataV3 | null;
+  /** The caller already holds the canonical task lock. */
+  taskLockHeld?: boolean;
   operationId?: Ulid;
   now?: Date;
 }
@@ -119,12 +122,14 @@ export async function materializeGitRefTaskBundle(
   const store = resolveCoordinationEntityHomeStore(
     runtime.entityHomeStoreContext,
   );
-  const locks = await acquireEntityLocks(
-    store,
-    operationId,
-    [`remote_task:${bundle.taskRef.taskId}`],
-    { now },
-  );
+  const locks = input.taskLockHeld
+    ? []
+    : await acquireEntityLocks(
+        store,
+        operationId,
+        [taskEntityKey(bundle.taskRef)],
+        { now },
+      );
   try {
     await recoverTaskMaterializationsWhileLocked(
       projectRoot,
@@ -165,6 +170,20 @@ export async function materializeGitRefTaskBundle(
     }
     const materializedPredecessor =
       status === 'created' ? null : effectivePredecessor;
+    if (
+      status === 'unchanged' &&
+      currentFence !== null &&
+      taskHeadFenceMatchesTarget({
+        currentFence,
+        runtime,
+        remoteRevision,
+        ownershipFence,
+        bundle,
+      })
+    ) {
+      await recordGitRefTaskRemoteBase(projectRoot, remoteRevision, bundle);
+      return result(status, bundle, null, currentFence);
+    }
     const targetFence = buildTargetFence({
       runtime,
       remoteRevision,
@@ -237,7 +256,7 @@ export async function recoverGitRefTaskMaterializations(
     if (journal.state === 'committed') continue;
     const recoveryOperationId = createUlid();
     const locks = await acquireEntityLocks(store, recoveryOperationId, [
-      `remote_task:${journal.targetBundle.taskRef.taskId}`,
+      taskEntityKey(journal.targetBundle.taskRef),
     ]);
     try {
       repaired += await recoverTaskMaterializationsWhileLocked(
@@ -435,6 +454,26 @@ function buildTargetFence(input: {
     lastOperationId: input.ownershipFence.lastOperationId,
     updatedAt: input.now.toISOString(),
   });
+}
+
+function taskHeadFenceMatchesTarget(input: {
+  currentFence: TaskHeadFenceV1;
+  runtime: Awaited<ReturnType<typeof readProjectRuntimeContext>>;
+  remoteRevision: number;
+  ownershipFence: GitRefOwnershipFenceV1;
+  bundle: GitRefTaskBundleV1;
+}): boolean {
+  return (
+    input.currentFence.workspaceId === input.runtime.workspaceId &&
+    sameTaskRef(input.currentFence.taskRef, input.bundle.taskRef) &&
+    input.currentFence.taskRevision === input.bundle.taskRevision &&
+    input.currentFence.aggregateDigest === input.bundle.aggregateDigest &&
+    input.currentFence.ownershipEpoch === input.bundle.ownershipEpoch &&
+    input.currentFence.codeRef.head === input.bundle.codeRef.head &&
+    input.currentFence.checkoutId === input.runtime.checkoutId &&
+    input.currentFence.remoteRevision === input.remoteRevision &&
+    input.currentFence.lastOperationId === input.ownershipFence.lastOperationId
+  );
 }
 
 async function writeTargetFence(
