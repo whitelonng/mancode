@@ -175,7 +175,12 @@ export async function materializeGitRefTaskBundle(
       now,
     });
     if (status === 'unchanged') {
-      await writeTargetFence(store, currentFence, targetFence, predecessor);
+      await writeTargetFence(
+        store,
+        currentFence,
+        targetFence,
+        materializedPredecessor,
+      );
       await recordGitRefTaskRemoteBase(projectRoot, remoteRevision, bundle);
       return result(status, bundle, null, targetFence);
     }

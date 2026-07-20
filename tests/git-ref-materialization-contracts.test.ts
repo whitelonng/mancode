@@ -113,6 +113,55 @@ describe('git-ref task bundle materialization', () => {
     ).rejects.toThrow('MANCODE_SPLIT_BRAIN');
   });
 
+  it('advances the fence when Git already supplied the target aggregate', async () => {
+    const source = await bootstrap('source-git-update', id(50), id(51));
+    const target = await bootstrap('target-git-update', id(52), id(53));
+    const created = await createSharedWorkflow(source.root, source.sessionId);
+    const first = await bundle(source.root);
+
+    await materializeGitRefTaskBundle({
+      projectRoot: target.root,
+      remoteRevision: 1,
+      ownershipFence: remoteFence(first, 1, id(54)),
+      bundle: first,
+      operationId: id(55),
+      now: NOW,
+    });
+
+    await createV3Checkpoint({
+      projectRoot: source.root,
+      taskRef: created.taskRef,
+      sessionId: source.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Advance the task before the other clone pulls Git.',
+      operationId: id(56),
+      checkpointId: id(57),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+    const second = await bundle(source.root);
+
+    // Simulate a normal Git pull updating tracked task files before team sync.
+    await writeBundleArtifacts(target.root, second);
+    await expect(
+      materializeGitRefTaskBundle({
+        projectRoot: target.root,
+        remoteRevision: 2,
+        ownershipFence: remoteFence(second, 2, id(58)),
+        bundle: second,
+        operationId: id(59),
+        now: new Date('2026-07-18T10:02:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      status: 'unchanged',
+      taskRevision: second.taskRevision,
+      taskHeadFence: {
+        taskRevision: second.taskRevision,
+        remoteRevision: 2,
+      },
+    });
+  });
+
   it('does not treat an unsynced local revision as a cached remote predecessor', async () => {
     const source = await bootstrap('source-base', id(30), id(31));
     const target = await bootstrap('target-base', id(30), id(32));
@@ -245,6 +294,29 @@ async function bundle(root: string): Promise<GitRefTaskBundleV1> {
     codeRef: { branch: 'main', head: stdout.trim() },
     now: NOW,
   });
+}
+
+async function writeBundleArtifacts(
+  root: string,
+  bundle: GitRefTaskBundleV1,
+): Promise<void> {
+  const taskRoot = path.join(
+    root,
+    '.mancode',
+    'shared',
+    'workflows',
+    bundle.taskRef.taskId,
+  );
+  for (const artifact of bundle.artifacts) {
+    const target = path.join(taskRoot, artifact.relativePath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(
+      target,
+      typeof artifact.content === 'string'
+        ? artifact.content
+        : `${JSON.stringify(artifact.content, null, 2)}\n`,
+    );
+  }
 }
 
 function remoteFence(
