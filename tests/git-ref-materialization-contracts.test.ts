@@ -112,6 +112,65 @@ describe('git-ref task bundle materialization', () => {
       }),
     ).rejects.toThrow('MANCODE_SPLIT_BRAIN');
   });
+
+  it('does not treat an unsynced local revision as a cached remote predecessor', async () => {
+    const source = await bootstrap('source-base', id(30), id(31));
+    const target = await bootstrap('target-base', id(30), id(32));
+    const created = await createSharedWorkflow(source.root, source.sessionId);
+    const first = await bundle(source.root);
+
+    await expect(
+      materializeGitRefTaskBundle({
+        projectRoot: target.root,
+        remoteRevision: 1,
+        ownershipFence: remoteFence(first, 1, id(33)),
+        bundle: first,
+        operationId: id(34),
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+    await execFile('git', ['fetch', source.root, 'HEAD'], { cwd: target.root });
+    await execFile('git', ['checkout', '--detach', 'FETCH_HEAD'], {
+      cwd: target.root,
+    });
+    await createV3Checkpoint({
+      projectRoot: target.root,
+      taskRef: created.taskRef,
+      sessionId: target.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Create an unsynced local predecessor.',
+      operationId: id(35),
+      checkpointId: id(36),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+
+    await createV3Checkpoint({
+      projectRoot: source.root,
+      taskRef: created.taskRef,
+      sessionId: source.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Advance the remote task independently.',
+      operationId: id(37),
+      checkpointId: id(38),
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+    const second = await bundle(source.root);
+
+    await expect(
+      materializeGitRefTaskBundle({
+        projectRoot: target.root,
+        remoteRevision: 2,
+        ownershipFence: remoteFence(second, 2, id(39)),
+        bundle: second,
+        // Simulates a quarantine pull that cached the target before code was reachable.
+        predecessorBundle: second,
+        operationId: id(40),
+        now: new Date('2026-07-18T10:02:00.000Z'),
+      }),
+    ).rejects.toThrow('MANCODE_SPLIT_BRAIN');
+  });
 });
 
 async function bootstrap(label: string, actorId: Ulid, sessionId: Ulid) {

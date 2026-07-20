@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -52,6 +52,7 @@ import {
   mutateGitRefHandoff,
   syncGitRefTask,
 } from '../src/team/git-ref-operation.js';
+import { readGitRefTaskRemoteBase } from '../src/team/git-ref-task-base.js';
 import type {
   GitRefOwnershipFenceV1,
   GitRefTaskBundleV1,
@@ -308,6 +309,297 @@ describe('git-ref coordination across independent clones', () => {
           {
             status: 'updated',
             taskRevision: checkpoint.metadata.revision,
+          },
+        ],
+      },
+    });
+  }, 20_000);
+
+  it('lets the owner checkpoint and sync after a claimed code commit', async () => {
+    const fixture = await createFixture();
+    const created = await createRemoteTask(fixture.cloneA, fixture.codeHead);
+    const storeA = await strictStore(fixture.cloneA);
+    const initialBundle = await taskBundle(fixture.cloneA);
+    const establishOperationId = id(80);
+    await storeA.establishCoordinationAuthority({
+      operationId: establishOperationId,
+      actorId: ACTOR_A,
+      expectedRemoteRevision: 0,
+      expectedPriorTransportEpoch: null,
+      targetTransportEpoch: 2,
+      actorProfiles: fixture.profiles,
+      ownershipFences: [
+        ownershipFence(initialBundle, ACTOR_A, 1, establishOperationId),
+      ],
+      claims: [],
+      handoffs: [],
+      taskBundles: [initialBundle],
+    });
+    const acquired = await acquireGitRefClaim({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      scope: scope('src/auth/**'),
+      claimId: id(81),
+      operationId: id(82),
+      now: at(2),
+    });
+
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    await git(fixture.cloneB, ['fetch', 'origin']);
+    await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    await git(fixture.cloneB, ['merge', '--ff-only', 'origin/main']);
+    await rm(
+      path.join(
+        fixture.cloneB,
+        '.mancode',
+        'local',
+        'cache',
+        'git-ref',
+        'remote-bases',
+        `${created.taskRef.taskId}.json`,
+      ),
+    );
+    await expect(
+      acquireGitRefClaim({
+        projectRoot: fixture.cloneB,
+        taskRef: created.taskRef,
+        sessionId: SESSION_B,
+        expectedTaskRevision: created.metadata.revision,
+        scope: scope('src/auth/**'),
+        claimId: id(86),
+        operationId: id(87),
+        now: at(2),
+      }),
+    ).rejects.toThrow('MANCODE_SCOPE_CONFLICT');
+
+    await mkdir(path.join(fixture.cloneA, 'src', 'auth'), { recursive: true });
+    await writeFile(
+      path.join(fixture.cloneA, 'src', 'auth', 'token.ts'),
+      "export const token = 'ready';\n",
+    );
+    await git(fixture.cloneA, ['add', 'src/auth/token.ts']);
+    await git(fixture.cloneA, ['commit', '-m', 'implement claimed code']);
+    const codeHead = await gitOutput(fixture.cloneA, ['rev-parse', 'HEAD']);
+
+    const checkpoint = await createV3Checkpoint({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'handoff_offered',
+      summary: 'The claimed implementation is committed and ready to hand off.',
+      nextAction: 'Pull the commit and accept the handoff.',
+      checkpointId: id(83),
+      operationId: id(84),
+      now: at(3),
+    });
+    expect(checkpoint.taskHeadFence?.codeRef.head).toBe(codeHead);
+
+    const synced = await syncGitRefTask({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: checkpoint.metadata.revision,
+      operationId: id(85),
+      now: at(4),
+    });
+    expect(synced).toMatchObject({
+      changed: true,
+      remoteRevision: 3,
+      bundle: { codeRef: { head: codeHead } },
+    });
+    await expect(storeA.pull()).resolves.toMatchObject({
+      manifest: {
+        claims: [
+          {
+            claimId: acquired.claim.claimId,
+            revision: acquired.claim.revision + 1,
+            lastValidatedTaskRevision: checkpoint.metadata.revision,
+            lastValidatedCodeRef: { head: codeHead },
+          },
+        ],
+      },
+    });
+
+    const unchanged = await syncGitRefTask({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: checkpoint.metadata.revision,
+      operationId: id(115),
+      now: at(5),
+    });
+    expect(unchanged.changed).toBe(false);
+    const exactRemoteBase = await readGitRefTaskRemoteBase(
+      fixture.cloneA,
+      created.taskRef,
+    );
+    const remoteAfterUnchangedSync = await storeA.pull();
+    expect(exactRemoteBase?.bundle.bundleDigest).toBe(
+      remoteAfterUnchangedSync.manifest?.taskBundles[0]?.bundleDigest,
+    );
+
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    const drafted = await createGitRefHandoffDraft({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: checkpoint.metadata.revision,
+      toActorId: ACTOR_B,
+      handoffId: id(88),
+      operationId: id(89),
+      now: at(5),
+    });
+    const offered = await mutateGitRefHandoff({
+      projectRoot: fixture.cloneA,
+      handoffId: drafted.handoff.handoffId,
+      sessionId: SESSION_A,
+      expectedHandoffRevision: drafted.handoff.revision,
+      mutation: { kind: 'offer' },
+      operationId: id(90),
+      now: at(6),
+    });
+
+    const stalePull = await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    expect(stalePull.value).toMatchObject({
+      materializedBundles: [{ status: 'quarantined', codeReachable: false }],
+    });
+    await expect(
+      acceptGitRefHandoffWithRepair({
+        projectRoot: fixture.cloneB,
+        handoffId: drafted.handoff.handoffId,
+        sessionId: SESSION_B,
+        expectedHandoffRevision: offered.handoff.revision,
+        operationId: id(91),
+        now: at(7),
+      }),
+    ).rejects.toThrow('MANCODE_EXPECTED_REVISION_CONFLICT');
+
+    await git(fixture.cloneB, ['pull', '--ff-only']);
+    const currentPull = await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    expect(currentPull.value).toMatchObject({
+      materializedBundles: [
+        {
+          status: 'updated',
+          codeReachable: true,
+          taskRevision: checkpoint.metadata.revision,
+        },
+      ],
+    });
+    const accepted = await acceptGitRefHandoffWithRepair({
+      projectRoot: fixture.cloneB,
+      handoffId: drafted.handoff.handoffId,
+      sessionId: SESSION_B,
+      expectedHandoffRevision: offered.handoff.revision,
+      operationId: id(92),
+      now: at(8),
+    });
+    expect(accepted).toMatchObject({
+      ownershipEpoch: 1,
+      handoff: { state: 'accepted' },
+      taskBundle: { ownershipEpoch: 1 },
+      forwardRepair: { ownerActorId: ACTOR_B },
+    });
+  }, 20_000);
+
+  it('rejects a stale owner clone instead of overwriting a newer code ref', async () => {
+    const fixture = await createFixture();
+    const created = await createRemoteTask(fixture.cloneA, fixture.codeHead);
+    const storeA = await strictStore(fixture.cloneA);
+    const initialBundle = await taskBundle(fixture.cloneA);
+    const establishOperationId = id(100);
+    await storeA.establishCoordinationAuthority({
+      operationId: establishOperationId,
+      actorId: ACTOR_A,
+      expectedRemoteRevision: 0,
+      expectedPriorTransportEpoch: null,
+      targetTransportEpoch: 2,
+      actorProfiles: fixture.profiles,
+      ownershipFences: [
+        ownershipFence(initialBundle, ACTOR_A, 1, establishOperationId),
+      ],
+      claims: [],
+      handoffs: [],
+      taskBundles: [initialBundle],
+    });
+    await captureJson(() =>
+      teamSyncPull(fixture.cloneA, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    await git(fixture.cloneB, ['fetch', 'origin']);
+    await captureJson(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    await git(fixture.cloneB, ['merge', '--ff-only', 'origin/main']);
+    await createSession(fixture.cloneB, {
+      actorId: ACTOR_A,
+      sessionId: id(101),
+      client: 'vitest-a-stale',
+      identitySource: 'explicit',
+      now: NOW,
+    });
+
+    await writeFile(
+      path.join(fixture.cloneA, 'src-a.ts'),
+      'export const a = 1;\n',
+    );
+    await git(fixture.cloneA, ['add', 'src-a.ts']);
+    await git(fixture.cloneA, ['commit', '-m', 'advance owner code ref']);
+    await syncGitRefTask({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      operationId: id(102),
+      now: at(2),
+    });
+
+    await writeFile(
+      path.join(fixture.cloneB, 'src-b.ts'),
+      'export const b = 1;\n',
+    );
+    await git(fixture.cloneB, ['add', 'src-b.ts']);
+    await git(fixture.cloneB, ['commit', '-m', 'diverge stale owner code']);
+    await expect(
+      syncGitRefTask({
+        projectRoot: fixture.cloneB,
+        taskRef: created.taskRef,
+        sessionId: id(101),
+        expectedTaskRevision: created.metadata.revision,
+        operationId: id(103),
+        now: at(3),
+      }),
+    ).rejects.toThrow('MANCODE_TASK_BUNDLE_DIVERGED');
+    await expect(storeA.pull()).resolves.toMatchObject({
+      manifest: {
+        taskBundles: [
+          {
+            codeRef: {
+              head: await gitOutput(fixture.cloneA, ['rev-parse', 'HEAD']),
+            },
           },
         ],
       },

@@ -31,6 +31,11 @@ import {
   readTaskHeadFence,
   replaceTaskHeadFence,
 } from '../runtime/task-head-store.js';
+import { readQuarantinedGitRefTaskBundle } from './git-ref-bundle.js';
+import {
+  readGitRefTaskRemoteBase,
+  recordGitRefTaskRemoteBase,
+} from './git-ref-task-base.js';
 import {
   type GitRefOwnershipFenceV1,
   type GitRefTaskBundleArtifactV1,
@@ -127,16 +132,39 @@ export async function materializeGitRefTaskBundle(
     );
     const current = await readLocalTaskOrNull(projectRoot, bundle);
     const currentFence = await readTaskHeadFence(store, bundle.taskRef);
+    const recordedBase = await readGitRefTaskRemoteBase(
+      projectRoot,
+      bundle.taskRef,
+    );
+    const quarantinedBase =
+      recordedBase === null &&
+      currentFence !== null &&
+      currentFence.remoteRevision !== null
+        ? await readQuarantinedGitRefTaskBundle(
+            projectRoot,
+            currentFence.remoteRevision,
+            bundle.taskRef,
+            {
+              taskRevision: currentFence.taskRevision,
+              aggregateDigest: currentFence.aggregateDigest,
+              ownershipEpoch: currentFence.ownershipEpoch,
+              codeRefHead: currentFence.codeRef.head,
+            },
+          )
+        : null;
+    const effectivePredecessor =
+      recordedBase?.bundle ?? quarantinedBase ?? predecessor;
     const status = classifyMaterialization(
       current,
       bundle,
-      predecessor,
+      effectivePredecessor,
       pendingMetadata,
     );
     if (status === 'created' && currentFence !== null) {
       throw new Error('MANCODE_SPLIT_BRAIN');
     }
-    const materializedPredecessor = status === 'created' ? null : predecessor;
+    const materializedPredecessor =
+      status === 'created' ? null : effectivePredecessor;
     const targetFence = buildTargetFence({
       runtime,
       remoteRevision,
@@ -148,6 +176,7 @@ export async function materializeGitRefTaskBundle(
     });
     if (status === 'unchanged') {
       await writeTargetFence(store, currentFence, targetFence, predecessor);
+      await recordGitRefTaskRemoteBase(projectRoot, remoteRevision, bundle);
       return result(status, bundle, null, targetFence);
     }
     const timestamp = now.toISOString();
@@ -168,6 +197,7 @@ export async function materializeGitRefTaskBundle(
     journal = { ...journal, state: 'applying', updatedAt: timestamp };
     await replaceJournal(projectRoot, journal);
     await applyJournal(projectRoot, journal);
+    await recordGitRefTaskRemoteBase(projectRoot, remoteRevision, bundle);
     journal = {
       ...journal,
       state: 'committed',
@@ -231,6 +261,11 @@ async function recoverTaskMaterializationsWhileLocked(
       continue;
     }
     await applyJournal(projectRoot, journal);
+    await recordGitRefTaskRemoteBase(
+      projectRoot,
+      journal.remoteRevision,
+      journal.targetBundle,
+    );
     await replaceJournal(projectRoot, {
       ...journal,
       state: 'committed',

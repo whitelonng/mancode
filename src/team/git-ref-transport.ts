@@ -207,6 +207,7 @@ export interface MutateGitRefCoordinationInput {
   taskRef: TaskRef;
   expectedRemoteRevision: number;
   expectedOwnershipEpoch: number;
+  expectedTaskBundleDigest: string | null;
   ownershipFence: GitRefOwnershipFenceV1;
   claims: ClaimV1[];
   handoffs: HandoffV1[];
@@ -511,6 +512,15 @@ export class GitRefTeamManifestStore {
     const previousFence = base.ownershipFences.find((candidate) =>
       sameTaskRef(candidate.taskRef, taskRef),
     );
+    const previousTaskBundle = base.taskBundles.find((bundle) =>
+      sameTaskRef(bundle.taskRef, taskRef),
+    );
+    if (
+      (previousTaskBundle?.bundleDigest ?? null) !==
+      input.expectedTaskBundleDigest
+    ) {
+      throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
+    }
     if (
       !base.actorProfiles.some((profile) => profile.actorId === input.actorId)
     ) {
@@ -547,9 +557,7 @@ export class GitRefTeamManifestStore {
       previousHandoffs: base.handoffs.filter((handoff) =>
         sameTaskRef(handoff.taskRef, taskRef),
       ),
-      previousTaskBundle: base.taskBundles.find((bundle) =>
-        sameTaskRef(bundle.taskRef, taskRef),
-      ),
+      previousTaskBundle,
       expectedOwnershipEpoch,
       nextRevision,
       fence,

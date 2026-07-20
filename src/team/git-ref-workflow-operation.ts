@@ -580,6 +580,10 @@ async function publishTaskMutation(
       taskRef: input.context.taskRef,
       expectedRemoteRevision: input.manifest.revision,
       expectedOwnershipEpoch: input.fence.ownershipEpoch,
+      expectedTaskBundleDigest:
+        input.manifest.taskBundles.find((bundle) =>
+          sameTaskRef(bundle.taskRef, input.context.taskRef),
+        )?.bundleDigest ?? null,
       ownershipFence: fence,
       claims: input.claims,
       handoffs,

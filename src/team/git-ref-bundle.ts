@@ -1,10 +1,15 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { lstat, mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { digestCanonicalJson } from '../context/canonical.js';
 import type { StoredTaskSnapshot } from '../context/store.js';
-import { formatTaskRef } from '../context/task-ref.js';
+import {
+  type TaskRef,
+  formatTaskRef,
+  parseTaskRefValue,
+  sameTaskRef,
+} from '../context/task-ref.js';
 import {
   type GitRefJsonValue,
   type GitRefTaskBundleArtifactKind,
@@ -139,6 +144,81 @@ export async function quarantineGitRefTaskBundle(
   return target;
 }
 
+export async function readQuarantinedGitRefTaskBundle(
+  projectRoot: string,
+  remoteRevision: number,
+  taskRef: TaskRef,
+  expected: {
+    taskRevision: number;
+    aggregateDigest: string;
+    ownershipEpoch: number;
+    codeRefHead: string;
+  },
+): Promise<GitRefTaskBundleV1 | null> {
+  if (!Number.isSafeInteger(remoteRevision) || remoteRevision < 1) {
+    throw new Error('MANCODE_TRANSPORT_REVISION_INVALID');
+  }
+  const parsedTaskRef = parseTaskRefValue(taskRef);
+  const directory = path.join(
+    path.resolve(projectRoot),
+    '.mancode',
+    'local',
+    'quarantine',
+    'git-ref',
+    parsedTaskRef.taskId,
+    String(remoteRevision),
+  );
+  let entries: string[];
+  try {
+    await assertFixedDirectory(projectRoot, [
+      '.mancode',
+      'local',
+      'quarantine',
+      'git-ref',
+      parsedTaskRef.taskId,
+      String(remoteRevision),
+    ]);
+    entries = await readdir(directory);
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+  const matches: GitRefTaskBundleV1[] = [];
+  for (const entry of entries.sort()) {
+    if (!/^[a-f0-9]{64}\.json$/.test(entry)) continue;
+    const target = path.join(directory, entry);
+    const before = await lstat(target);
+    if (!before.isFile() || before.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+    const bundle = parseGitRefTaskBundle(
+      JSON.parse(await readFile(target, 'utf8')),
+    );
+    const after = await lstat(target);
+    if (
+      !after.isFile() ||
+      after.isSymbolicLink() ||
+      before.dev !== after.dev ||
+      before.ino !== after.ino
+    ) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+    if (
+      sameTaskRef(bundle.taskRef, parsedTaskRef) &&
+      bundle.taskRevision === expected.taskRevision &&
+      bundle.aggregateDigest === expected.aggregateDigest &&
+      bundle.ownershipEpoch === expected.ownershipEpoch &&
+      bundle.codeRef.head === expected.codeRefHead
+    ) {
+      matches.push(bundle);
+    }
+  }
+  if (matches.length > 1) {
+    throw new Error('MANCODE_TRANSPORT_CACHE_CORRUPT');
+  }
+  return matches[0] ?? null;
+}
+
 function artifact(
   kind: GitRefTaskBundleArtifactKind,
   relativePath: string,
@@ -185,11 +265,34 @@ async function ensureFixedDirectory(
   }
 }
 
+async function assertFixedDirectory(
+  projectRoot: string,
+  segments: string[],
+): Promise<void> {
+  let current = path.resolve(projectRoot);
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const entry = await lstat(current);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  }
+}
+
 function isAlreadyExists(error: unknown): error is NodeJS.ErrnoException {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === 'EEXIST'
+  );
+}
+
+function isNotFound(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
   );
 }
