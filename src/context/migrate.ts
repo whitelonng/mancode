@@ -97,7 +97,7 @@ import {
   type SchemaManifestV1,
   assertActivationRollbackManifestTransition,
   assertSchemaManifestTransition,
-  parseSchemaManifest,
+  parseSchemaManifestV1 as parseSchemaManifest,
 } from './manifest.js';
 import type { ManagedAdapter } from './manifest.js';
 import {

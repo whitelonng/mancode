@@ -15,6 +15,7 @@ import type { TaskAggregateManifestV1 } from './aggregate.js';
 import { digestCanonicalJson } from './canonical.js';
 import {
   type CompatibilityFailureCode,
+  type WriterCapability,
   evaluateCompatibilityGate,
 } from './compatibility.js';
 import {
@@ -69,7 +70,8 @@ export interface ContextResolverCompatibility {
   expectedSchemaEpoch: string;
   readerVersion: string;
   writerVersion: string;
-  adapterVersions: Record<ManagedAdapter, string>;
+  writerCapabilities: readonly WriterCapability[];
+  adapterVersions: Partial<Record<ManagedAdapter, string>>;
 }
 
 export interface ContextResolveRequest {
@@ -205,6 +207,7 @@ export class ContextResolver {
       expectedSchemaEpoch: request.compatibility.expectedSchemaEpoch,
       readerVersion: request.compatibility.readerVersion,
       writerVersion: request.compatibility.writerVersion,
+      writerCapabilities: request.compatibility.writerCapabilities,
       adapterVersions: request.compatibility.adapterVersions,
       currentLegacyBaseline: snapshot.legacy.baseline,
       legacyAuthorityPresent: snapshot.legacy.authorityPresent,

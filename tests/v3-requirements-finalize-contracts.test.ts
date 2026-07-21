@@ -36,7 +36,8 @@ import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js
 import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
 import { readOperationJournal } from '../src/runtime/operation-store.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
-import { createSession } from '../src/runtime/session.js';
+import { listProjectionIntents } from '../src/runtime/projection-outbox.js';
+import { createSession, readSession } from '../src/runtime/session.js';
 import { readTaskHeadFence } from '../src/runtime/task-head-store.js';
 import {
   createLocalActor,
@@ -362,6 +363,92 @@ describe('V3 requirements finalization operation', () => {
       type: 'task_complete',
       expectedRevisions: { [`task:local:${created.taskRef.taskId}`]: 5 },
     });
+  });
+
+  it('does not create a new plan version when confirming the existing plan', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Confirm an existing plan without invalidating its evidence.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(100),
+      operationId: id(101),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: 1,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(102),
+      now: NOW,
+    });
+    const plan = '# Plan\n\n1. Confirm the existing plan.\n';
+    const revised = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      operationId: id(103),
+      now: NOW,
+    });
+    const beforeConfirmation = await new V3ContextStore(root).readTaskSnapshot(
+      created.taskRef,
+    );
+
+    const confirmed = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: revised.metadata.revision,
+      plan,
+      planDecision: 'plan_only',
+      operationId: id(104),
+      now: NOW,
+    });
+
+    expect(confirmed.metadata).toMatchObject({
+      revision: revised.metadata.revision + 1,
+      status: 'planned',
+      currentStep: 4,
+      governance: {
+        planVersion: revised.metadata.governance.planVersion,
+        planDecision: 'plan_only',
+      },
+    });
+    expect(confirmed.planDigest).toBe(revised.planDigest);
+    expect(confirmed.review).toEqual(beforeConfirmation.review);
+    expect(confirmed.verification).toEqual(beforeConfirmation.verification);
+    expect(confirmed.metadata.governance.reviewLedgerDigest).toBe(
+      beforeConfirmation.metadata.governance.reviewLedgerDigest,
+    );
+    expect(confirmed.metadata.governance.verificationLedgerDigest).toBe(
+      beforeConfirmation.metadata.governance.verificationLedgerDigest,
+    );
+    await expect(readSession(root, sessionId)).resolves.toMatchObject({
+      activeTaskRef: null,
+      activeMode: null,
+      lastSeenRevision: null,
+    });
+    await expect(listProjectionIntents(root)).resolves.toEqual([]);
+    await expect(
+      listProjectionIntents(root, {
+        operationId: id(104),
+        includeTerminal: true,
+      }),
+    ).resolves.toMatchObject([
+      {
+        state: 'completed',
+        target: { action: 'clear', taskRef: created.taskRef },
+      },
+    ]);
   });
 
   it('releases every active shared claim before committing a completed task and fence', async () => {

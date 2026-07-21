@@ -22,6 +22,7 @@ export type AuthorizationAction =
   | 'handoff_offer_cancel'
   | 'handoff_accept_reject'
   | 'review_skip_or_waiver'
+  | 'project_maintenance'
   | 'team_policy_config_transport'
   | 'actor_profile_publish'
   | 'confirmed_decision_publish';
@@ -156,6 +157,7 @@ const AUTHORIZATION_ACTIONS = new Set<AuthorizationAction>([
   'handoff_offer_cancel',
   'handoff_accept_reject',
   'review_skip_or_waiver',
+  'project_maintenance',
   'team_policy_config_transport',
   'actor_profile_publish',
   'confirmed_decision_publish',
@@ -225,6 +227,11 @@ export const AUTHORIZATION_MATRIX: readonly AuthorizationMatrixEntry[] = [
     requiredGuards: ['reason', 'P0/legacy_unknown waiver prohibition'],
   },
   {
+    action: 'project_maintenance',
+    actorRule: 'active local session actor',
+    requiredGuards: ['expected revision', 'explicit confirmation'],
+  },
+  {
     action: 'team_policy_config_transport',
     actorRule: 'joined actor',
     requiredGuards: ['expected revision', 'explicit confirmation'],
@@ -251,7 +258,10 @@ export function evaluateAuthorization(
   validateRequest(input);
   const failures: AuthorizationFailureCode[] = [];
   requireActiveSession(input, failures);
-  if (input.action !== 'local_workflow_mutation') {
+  if (
+    input.action !== 'local_workflow_mutation' &&
+    input.action !== 'project_maintenance'
+  ) {
     if (input.action !== 'actor_profile_publish' && !input.joined) {
       failures.push('MANCODE_JOIN_REQUIRED');
     }
@@ -422,6 +432,15 @@ export function evaluateAuthorization(
       ) {
         failures.push('MANCODE_WAIVER_FORBIDDEN');
       }
+      break;
+    case 'project_maintenance':
+      requireExpectedRevision(input, failures);
+      requireCondition(
+        input,
+        'explicitConfirmation',
+        'MANCODE_EXPLICIT_CONFIRMATION_REQUIRED',
+        failures,
+      );
       break;
     case 'team_policy_config_transport':
       requireExpectedRevision(input, failures);

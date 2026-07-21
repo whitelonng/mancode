@@ -28,10 +28,13 @@ export type OperationType =
   | 'claim_revalidation'
   | 'checkpoint_create'
   | 'solo_handoff'
+  | 'reframe'
   | 'child_result_merge'
   | 'task_head_reconcile'
   | 'transport_migrate'
   | 'greenfield_initialize'
+  | 'adapter_upgrade'
+  | 'project_policy_upgrade'
   | 'v3_activate';
 
 export type OperationState =
@@ -98,10 +101,13 @@ const OPERATION_TYPES = new Set<OperationType>([
   'claim_revalidation',
   'checkpoint_create',
   'solo_handoff',
+  'reframe',
   'child_result_merge',
   'task_head_reconcile',
   'transport_migrate',
   'greenfield_initialize',
+  'adapter_upgrade',
+  'project_policy_upgrade',
   'v3_activate',
 ]);
 const OPERATION_STATES = new Set<OperationState>([

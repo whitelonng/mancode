@@ -210,6 +210,22 @@ describe('mancode status', () => {
     expect(output).not.toContain('v3_active');
   });
 
+  it('--brief keeps an unregistered checkout in registration-required state', async () => {
+    await silentInit(dir, { v3: true, platform: 'codex' });
+    await rm(path.join(dir, '.mancode', 'local', 'runtime', 'checkout.json'));
+
+    const logs = await captureLog(() =>
+      status(dir, { brief: true, json: true }),
+    );
+    const result: ContinuityStatusResult = JSON.parse(logs.join('\n'));
+
+    expect(result).toMatchObject({
+      state: 'unavailable',
+      ready: false,
+      blockers: expect.arrayContaining(['MANCODE_WORKSPACE_BINDING_MISMATCH']),
+    });
+  });
+
   it('omits top-level Hooks section for non-Claude Code projects', async () => {
     await silentInit(dir, { platform: 'codex' });
 

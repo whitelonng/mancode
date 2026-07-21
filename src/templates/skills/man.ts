@@ -19,7 +19,7 @@ export const MAN_SKILL: SkillSpec = {
 
 ### Step 1: Scout 调研
 
-调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”。运行 \`mancode workflow update <taskId> --step 2\`。
+调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”，并按可验证事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；字段不相关或无法验证时可以省略，不能编造。Current Behavior Evidence 至少有一个可复现观察和仓库路径、测试或命令证据；owner 写置信度与冲突；source of truth 区分 authority 和 derived copy；兼容影响覆盖旧 workflow、legacy fixture、transport、迁移和 rollback。运行 \`mancode workflow update <taskId> --step 2\`。
 
 ### Step 2: 需求澄清
 
@@ -38,7 +38,9 @@ export const MAN_SKILL: SkillSpec = {
 
 调用只读 \`plan-coach\`，输入 task、scout-report、\`requirements.json\` 和渲染后的 \`requirements.md\`。Plan Coach 先返回 \`READY_FOR_PLAN\` 或 \`NEEDS_CLARIFICATION\`。后者只列缺失决策、影响、推荐和问题；主 skill 将 workflow 退回 Step 2 并重新 finalize requirements，不得强行补全计划。前者返回计划文本，由主 skill 写入 \`plan.md\`。
 
-计划必须含需求摘要、任务分级、技术选择及理由、模块索引、复用资源与 scout 行号、核心行为、最小策略、不做什么、步骤、风险/回退、完成定义、真实验证与 smoke test、预估和非阻塞默认值。首次计划写入成功后运行 \`mancode workflow update <taskId> --step 4\`；重写计划时保持 Step 4，运行 \`--plan-version <当前版本+1>\`，不得直接编辑 planVersion。
+Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope；逐项写明 complexity bearer 及可观察成本；给出且只给出一个 recommendation、拒绝其他方向的主要理由和 stop conditions。简单任务没有真实替代时只列一个方向并说明原因，不制造伪选项。两个同等 owner 候选或 authority writer 未决时返回 \`NEEDS_CLARIFICATION\`。
+
+计划必须含需求摘要、任务分级、技术选择及理由、模块索引、复用资源与 scout 行号、核心行为、最小策略、不做什么、步骤、风险/回退、完成定义、真实验证与 smoke test、预估和非阻塞默认值。入口/流程跨平台不一致、owner/source of truth 不清、状态或 contract 语义变化、跨 workflow/child/team/transport，或迁移/兼容影响超过一个版本时，在 \`plan.md\` 内加入可选 Domain Matrix，列出 Domain、当前行为/证据、候选 owner、source of truth、contract/state 影响、compatibility/history、validation 和 rollback/stop；它不是新的 authority。首次计划写入成功后运行 \`mancode workflow update <taskId> --step 4\`；重写计划时保持 Step 4，运行 \`--plan-version <当前版本+1>\`，不得直接编辑 planVersion。
 
 ### Step 4: 计划关卡
 
@@ -51,6 +53,12 @@ export const MAN_SKILL: SkillSpec = {
 根据风险明确推荐理由，不把完整 \`/man\` 永远标为推荐。鉴权、支付、敏感数据、迁移/删除、公开 API、未可信输入、并发、跨服务或基础设施默认推荐完整 \`/man\`；普通原型、内部工具和低风险功能默认推荐 solo。
 
 确认执行后、修改业务文件前输出开工回执：计划版本、执行方式、目标与交付物、技术方案、包含范围、排除范围、验证方式和残余假设。仍有 blocking 未知项时不得声称开始实施。
+
+### 实施期间停止与重新对齐
+
+以下任一情况出现时立即停止当前代理执行：新证据推翻已确认的目标、owner、source of truth 或验收；平台入口/流程会产生不同语义；需要改变 status、contract、policy 或 workflow transition 的含义；发现 adapter stale、writer 不兼容、未完成 operation、active child、open handoff 或 active solo assignment；用户变化超出当前 requirements/plan scope。
+
+只返回 \`NEEDS_REALIGNMENT\`、原因 \`MANCODE_REFRAME_REQUIRED\` 和具体 trigger。该诊断只读：保留 requirements、plan、review/verification ledger、claims、handoff 和 metadata；不得调用通用 \`workflow update\` 写 blocked，不得手改 currentStep/planning，不归档旧文件，不释放 claim，不取消 handoff，也不宣称已回到 Step 2。等待用户显式选择新的 \`/man\` workflow 或受支持的 reframe operation。
 
 ### Step 5: 实施
 

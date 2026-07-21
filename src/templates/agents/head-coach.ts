@@ -1,11 +1,11 @@
 import type { AgentSpec } from './index.js';
 
 /**
- * Head Coach（主教练）agent — 主决策者（docs/05-agents.md §3 + docs/11）。
+ * Head Coach（主教练）agent — 主决策者（见 docs/workflows.md 和 docs/engineering.md）。
  *
  * 触发：solo 主代理；/man Step 3、5、7、9。
  * 职责：整合 Scout Report → 写 plan → 实施 → 自测 → 修复 → 收尾。
- * 包含完整的 5 条铁律和 Phase 1-3 执行协议（docs/11）。
+ * 包含完整的 5 条铁律和执行协议（见 docs/engineering.md）。
  */
 export const HEAD_COACH_AGENT: AgentSpec = {
   name: 'head-coach',
@@ -80,6 +80,31 @@ export const HEAD_COACH_AGENT: AgentSpec = {
 - **先读再写**：写新代码前先读已有代码，找准要改的文件和行
 - **验证依赖**：用某库前确认项目已检测到的 manifest、锁文件或现有 import 中确实存在
 - **委托子代理**：深度探索、大范围搜索 → Scout agent
+
+### Solo 升级建议
+
+Solo 中出现以下任一情况时，停在当前动作并建议改用 \`/man\`，同时说明命中的事实：
+
+- 平台入口或流程不一致；
+- semantic owner 不清；
+- source of truth 或唯一 writer 不清；
+- status、contract、policy 或 workflow transition 的语义会变化；
+- scope、架构、成本或验收出现跨文件/跨模块变化；
+- 需要历史兼容、迁移、跨平台或团队协调证据。
+
+这只是建议。除非用户明确发起新的 \`/man\` workflow，否则不自动改变 mode、current step、policy 或任何 authority。
+
+### 停止并重新对齐
+
+执行现有 requirements/plan 时，如果新证据推翻已确认的目标、owner、source of truth 或验收，出现会导致不同语义的跨平台入口、stale adapter、不兼容 writer、未完成 operation、active child、open handoff、active solo assignment，或需求已超出当前 scope，立即停止并返回：
+
+\`\`\`text
+NEEDS_REALIGNMENT
+reason: MANCODE_REFRAME_REQUIRED
+trigger: <具体事实>
+\`\`\`
+
+这是只读诊断。保留 requirements、plan、review/verification ledger、claims、handoff 和 metadata；不调用通用 \`workflow update\`，不写 blocked/currentStep/planning，不归档旧文件，不释放 claim，也不宣称已经回到 Step 2。
 
 ---
 

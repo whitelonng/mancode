@@ -72,6 +72,7 @@ export const OPERATION_AUTHORIZATION_ACTIONS: Record<
     'shared_metadata_plan_mutation',
   ],
   solo_handoff: ['local_workflow_mutation'],
+  reframe: ['local_workflow_mutation', 'shared_metadata_plan_mutation'],
   child_result_merge: [
     'local_workflow_mutation',
     'task_complete_scope_change_child_merge',
@@ -79,6 +80,8 @@ export const OPERATION_AUTHORIZATION_ACTIONS: Record<
   task_head_reconcile: ['task_head_reconcile'],
   transport_migrate: ['team_policy_config_transport'],
   greenfield_initialize: ['team_policy_config_transport'],
+  adapter_upgrade: ['project_maintenance'],
+  project_policy_upgrade: ['project_maintenance'],
   v3_activate: ['team_policy_config_transport'],
 };
 
@@ -448,6 +451,49 @@ export const OPERATION_DEFINITIONS: Record<
       commit('commit', ['task:'], ['task:']),
     ],
   ),
+  reframe: definition('reframe', 'commit-reframed-metadata', true, false, [
+    prepare(
+      'validate',
+      [
+        'task:',
+        'requirements:',
+        'plan:',
+        'review:',
+        'verification:',
+        'archive:',
+        'checkpoint:',
+      ],
+      ['task:', 'archive:', 'checkpoint:'],
+      {
+        expectedRevisionPrefixes: ['claim:'],
+        requiredLockPrefixes: ['claim:'],
+      },
+    ),
+    write('mark-task-operation-pending', ['task:'], ['task:']),
+    write(
+      'archive-requirements-plan',
+      ['archive:', 'requirements:', 'plan:', 'task:'],
+      ['archive:', 'task:'],
+    ),
+    write('release-active-claims', ['task:'], ['task:'], {
+      expectedRevisionPrefixes: ['claim:'],
+      requiredLockPrefixes: ['claim:'],
+    }),
+    write('write-requirements-draft', ['requirements:', 'task:'], ['task:']),
+    write(
+      'mark-review-verification-stale',
+      ['review:', 'verification:', 'task:'],
+      ['task:'],
+    ),
+    write(
+      'write-reframe-checkpoint',
+      ['checkpoint:', 'task:'],
+      ['checkpoint:', 'task:'],
+    ),
+    write('commit-reframed-metadata', ['task:'], ['task:']),
+    write('update-task-head-fence', ['task_head:', 'task:'], ['task:']),
+    commit('commit', ['task_head:', 'task:'], ['task:']),
+  ]),
   child_result_merge: definition(
     'child_result_merge',
     'update-parent-metadata',
@@ -537,7 +583,45 @@ export const OPERATION_DEFINITIONS: Record<
       ),
       write('publish-v3-root', ['schema:', 'config:'], ['schema:']),
       write('register-workspace-binding', ['binding:'], ['binding:']),
+      write('publish-managed-adapters', ['adapter:'], ['adapter:']),
       write('activate-v3-manifest', ['schema:'], ['schema:']),
+      commit('commit', ['schema:'], ['schema:']),
+    ],
+  ),
+  adapter_upgrade: definition(
+    'adapter_upgrade',
+    'replace-managed-adapters',
+    false,
+    false,
+    [
+      prepare('validate', ['adapter:'], ['adapter:'], {
+        expectedRevisionPrefixes: ['schema:'],
+        requiredLockPrefixes: ['schema:'],
+      }),
+      write('replace-managed-adapters', ['adapter:'], ['adapter:']),
+      write('update-adapter-inventory', [], [], {
+        expectedRevisionPrefixes: ['schema:'],
+        requiredLockPrefixes: ['schema:'],
+      }),
+      commit('verify', ['adapter:'], ['adapter:'], {
+        expectedRevisionPrefixes: ['schema:'],
+        requiredLockPrefixes: ['schema:'],
+      }),
+      commit('commit', ['adapter:'], ['adapter:'], {
+        expectedRevisionPrefixes: ['schema:'],
+        requiredLockPrefixes: ['schema:'],
+      }),
+    ],
+  ),
+  project_policy_upgrade: definition(
+    'project_policy_upgrade',
+    'write-manifest',
+    false,
+    false,
+    [
+      prepare('validate', ['schema:'], ['schema:']),
+      write('write-manifest', ['schema:'], ['schema:']),
+      write('verify-manifest', ['schema:'], ['schema:']),
       commit('commit', ['schema:'], ['schema:']),
     ],
   ),

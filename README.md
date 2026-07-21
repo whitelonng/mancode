@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.3.18-2f855a?style=flat-square" alt="状态：mancode Continuity v0.3.18" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.4.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -117,6 +117,16 @@ mancode team identity create --name "Your name"
 mancode context session new --client claude-code
 mancode list-platforms
 ```
+
+要只读检查一个 session（例如确认 Codex 续接时仍使用同一身份），使用：
+
+```bash
+mancode context session show --session <session-id> --client <client> --json
+```
+
+在项目同时安装 mancode 时，整项任务应固定使用项目本地 CLI：优先
+`./node_modules/.bin/mancode`，否则再使用 PATH 中的 `mancode`；先运行一次
+`--version`，后续不要混用不同版本。
 
 普通 `mancode init` 会生成原来的 `man`、`manba`、`manteam`、`manps`、
 `mansolo` 平台命令，不需要改用另一套命令名。确实需要旧 `state.json` 架构时才使用
@@ -307,7 +317,7 @@ src/components/
 
 ## 安装
 
-**状态**：mancode Continuity v0.3.18。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.4.0。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot 和 ZCode adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -346,8 +356,9 @@ mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,c
 mancode init --empty      # 非交互脚本中允许安全的空目录
 mancode init --lang zh-CN # 显式指定初始化语言（zh-CN 或 en）
 mancode refresh-project   # 后续加入 Git 或项目文件后刷新项目事实
-mancode install --force   # 修复或重装所选 adapter
-mancode install --minimal # bootstrap 已是最小形态；保留兼容参数
+mancode adapter status --json # 检查实际 managed content digest
+mancode adapter upgrade --platform codex --dry-run # 只生成 staging 预览
+mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 ## Agent Modes
@@ -376,10 +387,16 @@ mancode init --legacy
 mancode status
 mancode status --json
 mancode status --brief --json
-mancode install <claude-code|cursor|codex|copilot|zcode>
+mancode install <claude-code|cursor|codex|copilot|zcode> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode adapter status [--platform <platform>] --json
+mancode adapter upgrade <--all|--platform <platform>> --dry-run
+mancode adapter upgrade <--all|--platform <platform>> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode project upgrade --policy 2 --dry-run
+mancode project upgrade --policy 2 --operation-id <operationId> --session <id> --client <client>
 mancode list-platforms
 mancode team identity create --name "<name>"
 mancode context session new --client <platform>
+mancode context session show --session <id> --client <client> --json
 mancode workflow create <man|manba|manteam> "<task>" --session <id>
 mancode workflow list --json
 mancode workflow show <namespace:ULID> --json
@@ -390,6 +407,7 @@ mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|govern
 mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
+mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
 mancode refresh-project
@@ -404,7 +422,7 @@ mancode version
 以下是简化输出示例：
 
 ```text
-mancode v0.3.18
+mancode v0.4.0
 
 Project:     my-app
 Runtime:     ready
@@ -537,14 +555,14 @@ mancode/
 - `/manps` 默认只扫描；进入整改前应明确确认代码改动。
 - force push、schema migration、批量删除等不可逆操作需要明确人工确认。
 
-## 路线图
+## 仍在推进
 
-| 阶段 | 重点 |
-|---|---|
-| MVP-1 | solo 模式、审美扫描、Claude Code hooks |
-| MVP-2 | `/manba`、`/man`、`/manteam`、`/manps` 和教练组 subagents |
-| MVP-3 | Cursor、Codex（ChatGPT 桌面端/CLI）、GitHub Copilot 适配 |
-| 公开发布 | npm 稳定版、marketplace 分发、文档和演示 |
+- 在同一发布候选上完成 Claude Code、Codex、Cursor、GitHub Copilot 和 ZCode 的真实宿主 session 验收。
+- 完成跨真实宿主恢复与双 clone git-ref 人工验收。
+- 确认 ZCode 项目级 skill 发现和 workspace command 路径；完成前继续标记为 provisional。
+- 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
+
+完整发布条件见 [V3 发布验收](./docs/release-acceptance.md)。
 
 ## 故障排查
 
@@ -557,18 +575,24 @@ mancode/
 ### Claude Code hooks 不生效
 
 `mancode init` 后需要重启 Claude Code 以重新加载 `.claude/settings.json`。
-运行 `mancode status` 确认 hooks 已注册。如果仍不生效，运行
-`mancode install claude-code --force` 重写配置。
+运行 `mancode status` 确认 hooks 已注册。V3 adapter 内容异常时，先运行
+`mancode adapter upgrade --platform claude-code --dry-run`，再用该预览返回的
+`--operation-id`、active session 和 `--confirm` 完成修复。legacy hook 架构仍使用
+`mancode init --legacy --force`。
 
 ### `mancode status` 显示某平台 "not ready"
 
-该平台的目标文件缺失。运行 `mancode install <platform> --force` 重新生成。
+该平台的目标文件缺失或 digest 不匹配。先运行
+`mancode adapter upgrade --platform <platform> --dry-run`，确认 staging 结果后再用
+该预览返回的 `--operation-id` 和 active session 执行 `--confirm`。
 对于 Codex、ZCode 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
 中的受控区可能被手动编辑或删除了。
 
 ### AGENTS.md 或 copilot-instructions.md 受控区被误删
 
-运行 `mancode install codex --force`（或 `zcode`、`copilot`）重新插入受控区。
+运行 `mancode adapter upgrade --platform codex --dry-run`（或 `zcode`、`copilot`）
+检查差异，再用该预览返回的 `--operation-id` 和 active session 执行 `--confirm`
+重新插入受控区。
 对应 mancode 受控标记外的用户内容会被保留。
 
 ### ZCode skills 未出现
@@ -586,16 +610,8 @@ manps）按 description 触发——输入 `/manba` 等关键词即可激活。
 ### 如何重装 Continuity 适配器
 
 ```bash
-mancode uninstall claude-code --force
-mancode uninstall cursor --force
-mancode uninstall codex --force
-mancode uninstall copilot --force
-mancode uninstall zcode --force
-mancode install claude-code
-mancode install cursor
-mancode install codex
-mancode install copilot
-mancode install zcode
+mancode adapter upgrade --all --dry-run
+mancode adapter upgrade --all --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 Continuity authority 受保护，`mancode uninstall --all` 不会删除工作流权威数据。需要

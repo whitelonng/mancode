@@ -1,7 +1,7 @@
 import type { AgentSpec } from './index.js';
 
 /**
- * Film Analyst #1（录像分析师·进攻）agent — 代码质量审查（docs/05-agents.md §4）。
+ * Film Analyst #1（录像分析师·进攻）agent — 代码质量审查（见 docs/workflows.md）。
  *
  * 触发：/man Step 7、/manteam Step 7。
  * 审查维度：可读性、可维护性、风格一致性、DRY、YAGNI、复杂度、错误处理；UI 任务还要审查交互与视觉层级。

@@ -7,6 +7,7 @@ import { assertKnownKeys, assertRecord } from '../context/validation.js';
 export type CheckpointKind =
   | 'plan_confirmed'
   | 'scope_changed'
+  | 'requirements_reframed'
   | 'diagnostic_started'
   | 'base_changed'
   | 'verification_completed'
@@ -46,6 +47,7 @@ export interface CheckpointV1 {
 const CHECKPOINT_KINDS = new Set<CheckpointKind>([
   'plan_confirmed',
   'scope_changed',
+  'requirements_reframed',
   'diagnostic_started',
   'base_changed',
   'verification_completed',

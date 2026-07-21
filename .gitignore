@@ -2,27 +2,27 @@
 # mancode .gitignore
 # ===================================
 
-# 内部开发文档（包含借鉴对象名，不公开）
-DEVELOPMENT.md
+# 内部法律文档（包含借鉴对象名，不公开）
 LEGAL.md
 *.backup
 
-# 设计文档（内部参考，不公开）
+# 历史设计文档默认不公开；当前文档白名单见下方
 docs/
 
 # Claude Code 开发配置（本地测试用）
 .claude/
 
-# 技术实现文档（包含借鉴对象名和完整实现细节，不公开）
-docs/12-lifecycle.md
-docs/13-scanning.md
-docs/14-orchestration.md
-docs/15-adapters.md
-
-# 公开优化决策文档：PostToolUse P0 设计决策需要随代码提交
+# 当前维护文档
 !docs/
 docs/*
+!docs/README.md
+!docs/architecture.md
+!docs/workflows.md
+!docs/project-intelligence.md
+!docs/platform-adapters.md
+!docs/engineering.md
 !docs/12-lifecycle.md
+!docs/release-acceptance.md
 
 # Node.js
 node_modules/
@@ -94,6 +94,5 @@ output/
 # Demo projects (local only, not published)
 examples/
 
-# Local-only publishing and planning documents
+# Local-only publishing configuration
 .npmrc
-CONTEXT_TEAM_REFACTOR_PLAN.md

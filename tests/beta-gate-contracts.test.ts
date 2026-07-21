@@ -26,6 +26,13 @@ describe('V3 Beta gate', () => {
     await mkdir(root, { recursive: true });
     await initializeV3Project({
       projectRoot: root,
+      managedAdapters: {
+        'claude-code': '3',
+        codex: '3',
+        cursor: '3',
+        copilot: '3',
+        zcode: '3',
+      },
       operationId: id(1),
       workspaceId: id(2),
       schemaEpoch: id(3),
@@ -38,6 +45,7 @@ describe('V3 Beta gate', () => {
   });
 
   it('refuses Beta while real-host spike evidence and adapters are missing', async () => {
+    await rm(path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'));
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       expect(

@@ -1,4 +1,7 @@
+import { CURRENT_WRITER_CAPABILITIES } from '../context/compatibility.js';
 import type { ContextLevel, ContextPurpose } from '../context/context-pack.js';
+import { isUlid } from '../context/ids.js';
+import { managedAdapterNames } from '../context/manifest.js';
 import {
   previewV3TaskPromotion,
   promoteV3Task,
@@ -10,6 +13,7 @@ import {
   reconcileV3TaskHead,
 } from '../context/task-head-reconcile.js';
 import { parseTaskRef } from '../context/task-ref.js';
+import { inspectV3AdapterVersions } from '../installers/v3-adapter.js';
 import { evaluateV3BetaGate } from '../runtime/beta-gate.js';
 import {
   readLocalDiagnostics,
@@ -52,6 +56,7 @@ import {
   type SessionStateV1,
   closeSession,
   createBootstrapSession,
+  readSession,
   resumeSession,
 } from '../runtime/session.js';
 import { readLocalActor } from '../team/actor.js';
@@ -78,6 +83,12 @@ import {
 } from './v3-support.js';
 
 export interface ContextSessionNewOptions {
+  client?: string;
+  json?: boolean;
+}
+
+export interface ContextSessionShowOptions {
+  session?: string;
   client?: string;
   json?: boolean;
 }
@@ -176,6 +187,49 @@ export async function contextSessionNew(
       options.json,
       v3ErrorCode(error, 'MANCODE_CONTEXT_SESSION_CREATE_FAILED'),
       error instanceof Error ? error.message : 'Unable to create a session.',
+    );
+  }
+}
+
+/** Implements `mancode context session show --session <id> ...`. */
+export async function contextSessionShow(
+  rootDir: string,
+  options: ContextSessionShowOptions,
+): Promise<number> {
+  if (options.session === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SESSION_REQUIRED',
+      'context session show requires --session <id>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  if (!isUlid(options.session)) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SESSION_INVALID',
+      'context session show requires a canonical ULID in --session <id>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await readSession(project.projectRoot, options.session);
+    if (session === null) {
+      throw new Error('MANCODE_SESSION_NOT_FOUND');
+    }
+    if (
+      options.client !== undefined &&
+      session.client !== commandClient(options.client)
+    ) {
+      throw new Error('MANCODE_SESSION_NOT_FOUND');
+    }
+    return printV3Result(options.json, { schemaVersion: 1, session });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_CONTEXT_SESSION_SHOW_FAILED'),
+      error instanceof Error ? error.message : 'Unable to show the session.',
     );
   }
 }
@@ -824,6 +878,10 @@ async function resolveContext(
           ),
         )
       : undefined;
+  const adapterVersions = await inspectV3AdapterVersions(
+    project.projectRoot,
+    managedAdapterNames(project.project.manifest.managedAdapters),
+  );
   return resolver.resolve({
     session,
     taskRef: request.taskRef,
@@ -834,7 +892,8 @@ async function resolveContext(
       expectedSchemaEpoch: project.project.manifest.epoch,
       readerVersion: VERSION,
       writerVersion: VERSION,
-      adapterVersions: project.project.manifest.managedAdapters,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      adapterVersions,
     },
     codeHead: await readCheckoutCodeHead(project.projectRoot),
     ...(capabilities === undefined ? {} : { capabilities }),

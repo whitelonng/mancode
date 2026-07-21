@@ -8,6 +8,7 @@ import {
   previewV3TaskPromotion,
   promoteV3Task,
 } from '../context/publish-promote.js';
+import { reframeV3Workflow } from '../context/reframe.js';
 import { finalizeV3Requirements } from '../context/requirements-finalize.js';
 import { applyV3ReviewLedger } from '../context/review-remediation.js';
 import { changeV3WorkflowScope } from '../context/scope-change.js';
@@ -129,6 +130,7 @@ export interface WorkflowOptions {
   exitCode?: string;
   evidenceFile?: string;
   reason?: string;
+  checkpointId?: string;
 }
 
 interface WorkflowView extends WorkflowMeta {
@@ -249,6 +251,9 @@ async function workflowV3(
   }
   if (subcommand === 'scope') {
     return workflowScopeChangeV3(rootDir, args, options);
+  }
+  if (subcommand === 'reframe') {
+    return workflowReframeV3(rootDir, args, options);
   }
   if (subcommand === 'child') {
     return workflowChildResultMergeV3(rootDir, args, options);
@@ -842,6 +847,75 @@ async function workflowScopeChangeV3(
       error instanceof Error
         ? error.message
         : 'Unable to change the mancode workflow scope.',
+    );
+  }
+}
+
+async function workflowReframeV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (!task || args.length !== 1) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REFRAME_ARGUMENT_INVALID',
+      'Use: workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <ULID>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Workflow reframe requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (!options.checkpointId) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REFRAME_CHECKPOINT_REQUIRED',
+      'Workflow reframe requires --checkpoint-id <ULID>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    assertUlid(options.checkpointId, 'checkpointId');
+    const result = await reframeV3Workflow({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      checkpointId: options.checkpointId,
+      summary: options.summary,
+      nextAction: options.nextAction,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      requirements: result.requirements,
+      review: result.review,
+      verification: result.verification,
+      checkpoint: result.checkpoint,
+      releasedClaims: result.releasedClaims,
+      archive: result.archive,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_REFRAME_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to reframe the mancode workflow.',
     );
   }
 }

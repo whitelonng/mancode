@@ -15,6 +15,8 @@ export type ManagedAdapter =
   | 'copilot'
   | 'zcode';
 
+export type ManagedAdapterInventory = Partial<Record<ManagedAdapter, string>>;
+
 export interface LegacyBaseline {
   stateDigest: string;
   workflowIndexDigest: string;
@@ -29,9 +31,27 @@ export interface SchemaManifestV1 {
   minWriterVersion: string;
   activatedAt: string | null;
   legacyBaseline: LegacyBaseline | null;
-  managedAdapters: Record<ManagedAdapter, string>;
+  managedAdapters: ManagedAdapterInventory;
   lastOperationId: Ulid | null;
 }
+
+export interface SchemaManifestV2 {
+  manifestVersion: 2;
+  layoutVersion: 3;
+  epoch: Ulid;
+  activationState: ActivationState;
+  minReaderVersion: string;
+  minWriterVersion: string;
+  activatedAt: string | null;
+  legacyBaseline: LegacyBaseline | null;
+  managedAdapters: ManagedAdapterInventory;
+  lastOperationId: Ulid | null;
+  workflowPolicyDefaults: {
+    planning: 2;
+  };
+}
+
+export type SchemaManifest = SchemaManifestV1 | SchemaManifestV2;
 
 const ACTIVATION_STATES = new Set<ActivationState>([
   'initializing',
@@ -50,8 +70,14 @@ const MANAGED_ADAPTERS: ManagedAdapter[] = [
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
-export function parseSchemaManifest(value: unknown): SchemaManifestV1 {
+export function parseSchemaManifest(value: unknown): SchemaManifest {
   assertRecord(value, 'schema manifest');
+  if (value.manifestVersion !== 1 && value.manifestVersion !== 2) {
+    throw new Error(
+      `MANCODE_MANIFEST_VERSION_UNSUPPORTED: observed=${String(value.manifestVersion)} supported=1,2 requiredWriter=0.4.0`,
+    );
+  }
+  const manifestVersion = value.manifestVersion;
   assertKnownKeys(
     value,
     [
@@ -65,13 +91,12 @@ export function parseSchemaManifest(value: unknown): SchemaManifestV1 {
       'legacyBaseline',
       'managedAdapters',
       'lastOperationId',
+      ...(manifestVersion === 2 ? ['workflowPolicyDefaults'] : []),
     ],
     'schema manifest',
   );
-  if (value.manifestVersion !== 1 || value.layoutVersion !== 3) {
-    throw new Error(
-      'schema manifest must use manifestVersion 1 and layoutVersion 3',
-    );
+  if (value.layoutVersion !== 3) {
+    throw new Error('schema manifest must use layoutVersion 3');
   }
   assertUlid(value.epoch, 'schema manifest epoch');
   if (
@@ -80,9 +105,8 @@ export function parseSchemaManifest(value: unknown): SchemaManifestV1 {
   ) {
     throw new Error('schema manifest activationState is invalid');
   }
-  const manifest: SchemaManifestV1 = {
-    manifestVersion: 1,
-    layoutVersion: 3,
+  const common = {
+    layoutVersion: 3 as const,
     epoch: value.epoch,
     activationState: value.activationState as ActivationState,
     minReaderVersion: parseVersion(value.minReaderVersion, 'minReaderVersion'),
@@ -92,19 +116,70 @@ export function parseSchemaManifest(value: unknown): SchemaManifestV1 {
     managedAdapters: parseManagedAdapters(value.managedAdapters),
     lastOperationId: parseUlidOrNull(value.lastOperationId, 'lastOperationId'),
   };
+  const manifest: SchemaManifest =
+    manifestVersion === 1
+      ? { manifestVersion: 1, ...common }
+      : {
+          manifestVersion: 2,
+          ...common,
+          workflowPolicyDefaults: parseWorkflowPolicyDefaults(
+            value.workflowPolicyDefaults,
+          ),
+        };
   assertManifestStateShape(manifest);
+  if (
+    manifest.manifestVersion === 2 &&
+    (compareVersions(manifest.minReaderVersion, '0.4.0') < 0 ||
+      compareVersions(manifest.minWriterVersion, '0.4.0') < 0)
+  ) {
+    throw new Error(
+      'schema manifest V2 requires minReaderVersion and minWriterVersion 0.4.0 or newer',
+    );
+  }
+  return manifest;
+}
+
+export function serializeSchemaManifest(value: unknown): string {
+  return `${JSON.stringify(parseSchemaManifest(value), null, 2)}\n`;
+}
+
+export function managedAdapterNames(
+  inventory: ManagedAdapterInventory,
+): ManagedAdapter[] {
+  return MANAGED_ADAPTERS.filter((adapter) => inventory[adapter] !== undefined);
+}
+
+export function parseSchemaManifestV1(value: unknown): SchemaManifestV1 {
+  const manifest = parseSchemaManifest(value);
+  if (manifest.manifestVersion !== 1) {
+    throw new Error(
+      `MANCODE_MANIFEST_VERSION_UNSUPPORTED: observed=${manifest.manifestVersion} supported=1 requiredWriter=0.3.x`,
+    );
+  }
+  return manifest;
+}
+
+export function parseSchemaManifestV2(value: unknown): SchemaManifestV2 {
+  const manifest = parseSchemaManifest(value);
+  if (manifest.manifestVersion !== 2) {
+    throw new Error(
+      `MANCODE_MANIFEST_VERSION_UNSUPPORTED: observed=${manifest.manifestVersion} supported=2 requiredWriter=0.4.0`,
+    );
+  }
   return manifest;
 }
 
 export function assertSchemaManifestTransition(
-  previous: SchemaManifestV1,
-  next: SchemaManifestV1,
+  previous: SchemaManifest,
+  next: SchemaManifest,
 ): void {
   if (
     previous.manifestVersion !== next.manifestVersion ||
     previous.layoutVersion !== next.layoutVersion ||
     previous.epoch !== next.epoch ||
-    !sameLegacyBaseline(previous.legacyBaseline, next.legacyBaseline)
+    !sameLegacyBaseline(previous.legacyBaseline, next.legacyBaseline) ||
+    compareVersions(next.minReaderVersion, previous.minReaderVersion) < 0 ||
+    compareVersions(next.minWriterVersion, previous.minWriterVersion) < 0
   ) {
     throw new Error(
       'schema manifest identity and legacy baseline are immutable',
@@ -122,14 +197,38 @@ export function assertSchemaManifestTransition(
   }
 }
 
+export function assertSchemaManifestPolicyUpgrade(
+  previous: SchemaManifest,
+  next: SchemaManifest,
+): asserts next is SchemaManifestV2 {
+  if (
+    previous.manifestVersion !== 1 ||
+    next.manifestVersion !== 2 ||
+    previous.layoutVersion !== next.layoutVersion ||
+    previous.epoch !== next.epoch ||
+    previous.activationState !== 'v3_active' ||
+    next.activationState !== 'v3_active' ||
+    previous.activatedAt !== next.activatedAt ||
+    !sameLegacyBaseline(previous.legacyBaseline, next.legacyBaseline) ||
+    !sameManagedAdapters(previous.managedAdapters, next.managedAdapters) ||
+    compareVersions(next.minReaderVersion, previous.minReaderVersion) < 0 ||
+    compareVersions(next.minWriterVersion, previous.minWriterVersion) < 0 ||
+    next.workflowPolicyDefaults.planning !== 2 ||
+    next.lastOperationId === null ||
+    next.lastOperationId === previous.lastOperationId
+  ) {
+    throw new Error('invalid schema manifest Policy 2 upgrade');
+  }
+}
+
 /**
  * Activation rollback is intentionally not a general manifest transition.
  * The caller must separately prove that the activation's exact targets have
  * not been followed by a V3 business write.
  */
 export function assertActivationRollbackManifestTransition(
-  previous: SchemaManifestV1,
-  next: SchemaManifestV1,
+  previous: SchemaManifest,
+  next: SchemaManifest,
 ): void {
   if (
     previous.manifestVersion !== next.manifestVersion ||
@@ -143,6 +242,23 @@ export function assertActivationRollbackManifestTransition(
   ) {
     throw new Error('invalid activation rollback manifest transition');
   }
+}
+
+function parseWorkflowPolicyDefaults(
+  value: unknown,
+): SchemaManifestV2['workflowPolicyDefaults'] {
+  assertRecord(value, 'schema manifest workflowPolicyDefaults');
+  assertKnownKeys(
+    value,
+    ['planning'],
+    'schema manifest workflowPolicyDefaults',
+  );
+  if (value.planning !== 2) {
+    throw new Error(
+      `MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=${String(value.planning)} supported=2 requiredWriter=0.4.0`,
+    );
+  }
+  return { planning: 2 };
 }
 
 function parseVersion(value: unknown, label: string): string {
@@ -186,15 +302,19 @@ function parseLegacyBaseline(value: unknown): LegacyBaseline | null {
   };
 }
 
-function parseManagedAdapters(value: unknown): Record<ManagedAdapter, string> {
+function parseManagedAdapters(value: unknown): ManagedAdapterInventory {
   assertRecord(value, 'schema manifest managedAdapters');
   assertKnownKeys(value, MANAGED_ADAPTERS, 'schema manifest managedAdapters');
-  const adapters = {} as Record<ManagedAdapter, string>;
+  const adapters: ManagedAdapterInventory = {};
   for (const adapter of MANAGED_ADAPTERS) {
-    if (typeof value[adapter] !== 'string' || !value[adapter].trim()) {
-      throw new Error(`schema manifest managedAdapters.${adapter} is required`);
+    const version = value[adapter];
+    if (version === undefined) continue;
+    if (typeof version !== 'string' || !version.trim()) {
+      throw new Error(
+        `schema manifest managedAdapters.${adapter} must be a non-empty version`,
+      );
     }
-    adapters[adapter] = value[adapter];
+    adapters[adapter] = version;
   }
   return adapters;
 }
@@ -205,7 +325,7 @@ function parseUlidOrNull(value: unknown, label: string): Ulid | null {
   return value;
 }
 
-function assertManifestStateShape(manifest: SchemaManifestV1): void {
+function assertManifestStateShape(manifest: SchemaManifest): void {
   if (
     manifest.activationState === 'initializing' &&
     manifest.legacyBaseline !== null
@@ -239,6 +359,60 @@ function assertManifestStateShape(manifest: SchemaManifestV1): void {
       `${manifest.activationState} manifests must not have activatedAt`,
     );
   }
+}
+
+function sameManagedAdapters(
+  left: ManagedAdapterInventory,
+  right: ManagedAdapterInventory,
+): boolean {
+  const leftKeys = managedAdapterNames(left);
+  const rightKeys = managedAdapterNames(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (adapter, index) =>
+        adapter === rightKeys[index] && left[adapter] === right[adapter],
+    )
+  );
+}
+
+function compareVersions(left: string, right: string): number {
+  const [leftCore = '', leftPrerelease] = left.split('-', 2);
+  const [rightCore = '', rightPrerelease] = right.split('-', 2);
+  const leftParts = leftCore.split('.').map(Number);
+  const rightParts = rightCore.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (delta !== 0) return delta;
+  }
+  if (leftPrerelease === rightPrerelease) return 0;
+  if (leftPrerelease === undefined) return 1;
+  if (rightPrerelease === undefined) return -1;
+  return comparePrerelease(leftPrerelease, rightPrerelease);
+}
+
+function comparePrerelease(left: string, right: string): number {
+  const leftParts = left.split('.');
+  const rightParts = right.split('.');
+  for (
+    let index = 0;
+    index < Math.max(leftParts.length, rightParts.length);
+    index += 1
+  ) {
+    const leftPart = leftParts[index];
+    const rightPart = rightParts[index];
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+    const leftNumeric = /^\d+$/.test(leftPart);
+    const rightNumeric = /^\d+$/.test(rightPart);
+    if (leftNumeric && rightNumeric)
+      return Number(leftPart) - Number(rightPart);
+    if (leftNumeric) return -1;
+    if (rightNumeric) return 1;
+    return leftPart.localeCompare(rightPart, 'en');
+  }
+  return 0;
 }
 
 function sameLegacyBaseline(

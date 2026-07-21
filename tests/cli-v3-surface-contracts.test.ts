@@ -17,14 +17,21 @@ describe('V3 CLI command surface', () => {
           'operation',
           'team',
           'migrate',
+          'adapter',
         ]),
       );
       expect(commandAt(cliProgram, 'context', 'session', 'new')).toBeDefined();
+      expect(commandAt(cliProgram, 'context', 'session', 'show')).toBeDefined();
+      expect(
+        requiredOptions(commandAt(cliProgram, 'context', 'session', 'show')),
+      ).toEqual(['--session']);
       expect(
         commandAt(cliProgram, 'context', 'session', 'spike'),
       ).toBeDefined();
       expect(commandAt(cliProgram, 'operation', 'repair')).toBeDefined();
       expect(commandAt(cliProgram, 'operation', 'abort')).toBeDefined();
+      expect(commandAt(cliProgram, 'adapter', 'status')).toBeDefined();
+      expect(commandAt(cliProgram, 'adapter', 'upgrade')).toBeDefined();
       expect(commandAt(cliProgram, 'team', 'sync', 'pull')).toBeDefined();
       expect(commandAt(cliProgram, 'team', 'sync', 'push')).toBeDefined();
       expect(commandAt(cliProgram, 'team', 'handoff', 'accept')).toBeDefined();

@@ -7,6 +7,14 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  type V3AdapterFilePlan,
+  type V3AdapterFileTarget,
+  V3_ADAPTER_FILE_TARGETS,
+  applyV3AdapterFilePlan,
+  inspectV3AdapterVersions,
+  planV3AdapterUpgradeFiles,
+} from '../installers/v3-adapter.js';
 import { throwIfOperationCrashInjected } from '../runtime/operation-crash-injection.js';
 import {
   type ProjectConfigV1,
@@ -16,13 +24,17 @@ import {
   parseTeamPolicy,
 } from '../team/policy.js';
 import { digestCanonicalJson } from './canonical.js';
+import { compareSemver } from './compatibility.js';
 import { type Ulid, assertUlid } from './ids.js';
 import { assertGreenfieldInitializationPreflight } from './layout.js';
 import {
-  type ManagedAdapter,
-  type SchemaManifestV1,
+  type ManagedAdapterInventory,
+  type SchemaManifest,
+  type SchemaManifestV2,
   assertSchemaManifestTransition,
+  managedAdapterNames,
   parseSchemaManifest,
+  parseSchemaManifestV2,
 } from './manifest.js';
 import {
   type ProjectFactsV1,
@@ -49,6 +61,7 @@ export interface GreenfieldInitializationJournalV1 {
   configDigest: string;
   policyDigest: string;
   projectFactsDigest: string;
+  adapterPlans: V3AdapterFilePlan[];
   bindingRegistered: boolean;
   createdAt: string;
   updatedAt: string;
@@ -61,7 +74,7 @@ export interface GreenfieldInitializationInput {
   schemaEpoch: Ulid;
   minReaderVersion: string;
   minWriterVersion: string;
-  managedAdapters: Record<ManagedAdapter, string>;
+  managedAdapters: ManagedAdapterInventory;
   projectConfig: ProjectConfigV1;
   teamPolicy: TeamPolicyV1;
   /** Optional detected facts; omitted inputs receive a safe unknown record. */
@@ -122,6 +135,14 @@ export async function stageGreenfieldInitialization(
 
   const now = (normalized.now ?? new Date()).toISOString();
   const manifest = initializationManifest(normalized, now);
+  const requiredAdapters = managedAdapterNames(normalized.managedAdapters);
+  const adapterPlans =
+    requiredAdapters.length === 0
+      ? []
+      : await planV3AdapterUpgradeFiles(
+          normalized.projectRoot,
+          requiredAdapters,
+        );
   const config = initializationConfig(
     normalized.projectConfig,
     normalized,
@@ -140,6 +161,7 @@ export async function stageGreenfieldInitialization(
     configDigest: digestCanonicalJson(config),
     policyDigest: digestCanonicalJson(policy),
     projectFactsDigest: digestCanonicalJson(projectFacts),
+    adapterPlans,
     bindingRegistered: false,
     createdAt: now,
     updatedAt: now,
@@ -180,6 +202,12 @@ export async function publishGreenfieldInitialization(
     throw new Error('MANCODE_GREENFIELD_STAGING_STATE_INVALID');
   }
   await assertStageMatchesJournal(stagingRoot, journal);
+  const stagedManifest = await readManifest(stagingRoot);
+  await assertAdapterPlansAtBeforeState(
+    root,
+    managedAdapterNames(stagedManifest.managedAdapters),
+    journal.adapterPlans,
+  );
   if ((await lstatOrNull(targetRoot)) !== null) {
     throw new Error('MANCODE_V3_TARGET_EXISTS');
   }
@@ -320,6 +348,7 @@ export function parseGreenfieldInitializationJournal(
       'configDigest',
       'policyDigest',
       'projectFactsDigest',
+      'adapterPlans',
       'bindingRegistered',
       'createdAt',
       'updatedAt',
@@ -374,6 +403,7 @@ export function parseGreenfieldInitializationJournal(
       value.projectFactsDigest,
       'projectFactsDigest',
     ),
+    adapterPlans: parseAdapterPlans(value.adapterPlans),
     bindingRegistered: value.bindingRegistered,
     createdAt: parseTimestamp(value.createdAt, 'createdAt'),
     updatedAt: parseTimestamp(value.updatedAt, 'updatedAt'),
@@ -407,7 +437,41 @@ async function finishPublishedInitialization(
     'register-workspace-binding',
   );
   const manifest = await readManifest(targetRoot);
-  const activeManifest: SchemaManifestV1 = {
+  try {
+    for (const plan of published.adapterPlans) {
+      await applyV3AdapterFilePlan(input.projectRoot, plan);
+      throwIfOperationCrashInjected(
+        'greenfield_initialize',
+        `publish-managed-adapters:${plan.target}`,
+      );
+    }
+    const requiredAdapters = managedAdapterNames(manifest.managedAdapters);
+    const actualAdapters = await inspectV3AdapterVersions(
+      input.projectRoot,
+      requiredAdapters,
+    );
+    if (
+      requiredAdapters.some(
+        (adapter) =>
+          actualAdapters[adapter] !== manifest.managedAdapters[adapter],
+      )
+    ) {
+      throw new Error('MANCODE_GREENFIELD_ADAPTER_VERIFY_FAILED');
+    }
+  } catch (error) {
+    await writeJournalAt(targetRoot, {
+      ...published,
+      state: 'repair_required',
+      bindingRegistered: true,
+      updatedAt: (input.now ?? new Date()).toISOString(),
+    });
+    throw error;
+  }
+  throwIfOperationCrashInjected(
+    'greenfield_initialize',
+    'publish-managed-adapters',
+  );
+  const activeManifest: SchemaManifest = {
     ...manifest,
     activationState: 'v3_active',
     activatedAt: (input.now ?? new Date()).toISOString(),
@@ -430,7 +494,7 @@ async function finishPublishedInitialization(
 
 async function writeGreenfieldLayout(
   stagingRoot: string,
-  manifest: SchemaManifestV1,
+  manifest: SchemaManifest,
   config: ProjectConfigV1,
   policy: TeamPolicyV1,
   projectFacts: ProjectFactsV1,
@@ -502,7 +566,7 @@ async function readGreenfieldJournal(
   }
 }
 
-async function readManifest(root: string): Promise<SchemaManifestV1> {
+async function readManifest(root: string): Promise<SchemaManifest> {
   try {
     return parseSchemaManifest(
       JSON.parse(await readFile(path.join(root, 'schema.json'), 'utf8')),
@@ -679,19 +743,83 @@ function normalizeInput(
 function initializationManifest(
   input: GreenfieldInitializationInput,
   _now: string,
-): SchemaManifestV1 {
-  return parseSchemaManifest({
-    manifestVersion: 1,
+): SchemaManifestV2 {
+  return parseSchemaManifestV2({
+    manifestVersion: 2,
     layoutVersion: 3,
     epoch: input.schemaEpoch,
     activationState: 'initializing',
-    minReaderVersion: input.minReaderVersion,
-    minWriterVersion: input.minWriterVersion,
+    minReaderVersion: minimumVersion(input.minReaderVersion, '0.4.0'),
+    minWriterVersion: minimumVersion(input.minWriterVersion, '0.4.0'),
     activatedAt: null,
     legacyBaseline: null,
     managedAdapters: input.managedAdapters,
     lastOperationId: input.operationId,
+    workflowPolicyDefaults: { planning: 2 },
   });
+}
+
+function minimumVersion(observed: string, required: string): string {
+  return compareSemver(observed, required) >= 0 ? observed : required;
+}
+
+function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      'greenfield initialization journal adapterPlans is invalid',
+    );
+  }
+  const seen = new Set<V3AdapterFileTarget>();
+  return value.map((candidate) => {
+    assertRecord(candidate, 'greenfield initialization adapter plan');
+    assertKnownKeys(
+      candidate,
+      ['target', 'beforeContent', 'targetContent'],
+      'greenfield initialization adapter plan',
+    );
+    if (
+      typeof candidate.target !== 'string' ||
+      !V3_ADAPTER_FILE_TARGETS.includes(
+        candidate.target as V3AdapterFileTarget,
+      ) ||
+      seen.has(candidate.target as V3AdapterFileTarget) ||
+      (candidate.beforeContent !== null &&
+        typeof candidate.beforeContent !== 'string') ||
+      typeof candidate.targetContent !== 'string' ||
+      !candidate.targetContent.trim()
+    ) {
+      throw new Error(
+        'greenfield initialization journal adapterPlans is invalid',
+      );
+    }
+    const target = candidate.target as V3AdapterFileTarget;
+    seen.add(target);
+    return {
+      target,
+      beforeContent: candidate.beforeContent as string | null,
+      targetContent: candidate.targetContent,
+    };
+  });
+}
+
+async function assertAdapterPlansAtBeforeState(
+  projectRoot: string,
+  requiredAdapters: ReturnType<typeof managedAdapterNames>,
+  plans: readonly V3AdapterFilePlan[],
+): Promise<void> {
+  if (requiredAdapters.length === 0) {
+    if (plans.length !== 0) {
+      throw new Error('MANCODE_GREENFIELD_ADAPTER_TARGET_CONFLICT');
+    }
+    return;
+  }
+  const currentPlans = await planV3AdapterUpgradeFiles(
+    projectRoot,
+    requiredAdapters,
+  );
+  if (JSON.stringify(currentPlans) !== JSON.stringify(plans)) {
+    throw new Error('MANCODE_GREENFIELD_ADAPTER_TARGET_CONFLICT');
+  }
 }
 
 function initializationConfig(

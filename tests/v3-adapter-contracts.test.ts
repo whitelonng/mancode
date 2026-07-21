@@ -2,15 +2,19 @@ import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { contextSessionNew } from '../src/commands/context.js';
 import { init } from '../src/commands/init.js';
 import { install } from '../src/commands/install.js';
 import { listPlatforms } from '../src/commands/list-platforms.js';
 import { refreshProject } from '../src/commands/refresh-project.js';
 import { type V3StatusResult, status } from '../src/commands/status.js';
+import { teamIdentityCreate } from '../src/commands/team.js';
 import {
   EXIT_V3_AUTHORITY_PROTECTED,
   uninstall,
 } from '../src/commands/uninstall.js';
+import { parseSchemaManifest } from '../src/context/manifest.js';
+import { upgradeV3Adapters } from '../src/installers/adapter-upgrade.js';
 import type { PlatformName } from '../src/installers/registry.js';
 import {
   V3_MODE_NAMES,
@@ -80,12 +84,45 @@ describe('V3 adapter bootstrap integration', () => {
       expect(textOutput).toContain('codex');
       expect(textOutput).not.toContain('explicit required ()');
 
-      expect(await install(root, 'cursor')).toBe(0);
+      expect(
+        await teamIdentityCreate(root, {
+          name: 'Adapter Maintainer',
+          json: true,
+        }),
+      ).toBe(0);
+      expect(
+        await contextSessionNew(root, { client: 'fixture', json: true }),
+      ).toBe(0);
+      const sessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      const preview = await upgradeV3Adapters({
+        projectRoot: root,
+        platforms: ['cursor'],
+        dryRun: true,
+      });
+      expect(
+        await install(root, 'cursor', {
+          confirm: true,
+          operationId: preview.operationId,
+          session: sessionId,
+          client: 'fixture',
+        }),
+      ).toBe(0);
       const cursorRule = await readFile(
         path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
         'utf8',
       );
       expect(cursorRule).toContain('# mancode bootstrap');
+      expect(
+        parseSchemaManifest(
+          JSON.parse(
+            await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+          ),
+        ).managedAdapters,
+      ).toMatchObject({ codex: '3', cursor: '3' });
       await expect(
         readFile(path.join(root, '.mancode', 'config.json'), 'utf8'),
       ).rejects.toThrow();
@@ -115,6 +152,15 @@ describe('V3 adapter bootstrap integration', () => {
       const bootstrap = await readFile(target, 'utf8');
       expect(bootstrap).toContain('# mancode bootstrap');
       expect(bootstrap).toContain('mancode context show --purpose orient');
+      expect(bootstrap).toContain(
+        './node_modules/.bin/mancode` when it exists, otherwise use `mancode',
+      );
+      expect(bootstrap).toContain(
+        'In every command below, `mancode` means that selected binary',
+      );
+      expect(bootstrap).toContain(
+        'mancode context session show --session <id> --client <client> --json',
+      );
       expect(bootstrap).toContain('--session <id>');
       expect(bootstrap).toContain('mancode status --brief --json');
       expect(bootstrap).toContain(
@@ -175,6 +221,10 @@ describe('V3 adapter bootstrap integration', () => {
         expect(description).toContain('mancode');
         expect(description).not.toContain('V3');
         expect(entry).toContain('# mancode mode');
+        expect(entry).toContain('./node_modules/.bin/mancode` when it exists');
+        expect(entry).toContain(
+          'replace the literal `mancode` with that selected binary path',
+        );
         expect(entry).toContain('## Enter through mancode');
         expect(entry).toContain('In operator-facing narration, say `mancode`');
         expect(entry).not.toMatch(/\bV3\b/);
@@ -199,6 +249,23 @@ describe('V3 adapter bootstrap integration', () => {
             'without creating an actor, session, TaskRef, or workflow',
           );
           expect(entry).toContain('internal IDs and digests');
+          expect(entry).toContain(
+            'must contain exactly one item for each dimension',
+          );
+          expect(entry).toContain('platform');
+          expect(entry).toContain('core_scope');
+          expect(entry).toContain('technical_stack');
+          expect(entry).toContain('data_and_persistence');
+          expect(entry).toContain('performance');
+          expect(entry).toContain('compatibility');
+          expect(entry).toContain('security');
+          expect(entry).toContain('"status": "confirmed"');
+          expect(entry).toContain('"rationale": "..."');
+          expect(entry).toContain('acceptanceCriteria');
+          expect(entry).toContain('"method": "automated"');
+          expect(entry).toContain(
+            "clears this session's active workflow pointer",
+          );
         }
         if (mode === 'manps') {
           expect(entry).toContain(
@@ -244,11 +311,10 @@ describe('V3 adapter bootstrap integration', () => {
   );
 
   it('preserves user instructions outside the V3 managed block', async () => {
-    await init(root, { v3: true });
     await writeFile(path.join(root, 'AGENTS.md'), '# User instructions\n');
 
-    expect(await install(root, 'codex')).toBe(0);
-    expect(await install(root, 'codex')).toBe(0);
+    expect(await init(root, { v3: true, platform: 'codex' })).toBe(0);
+    expect(await init(root, { v3: true, platform: 'codex' })).toBe(1);
     const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
     expect(agents).toContain('# User instructions');
     expect(agents.match(/mancode:v3:codex:start/g)).toHaveLength(1);

@@ -8,6 +8,7 @@ import {
   contextReconcileTaskHead,
   contextResume,
   contextSessionNew,
+  contextSessionShow,
   contextSessionSpike,
   contextShow,
   contextWorktreeRegister,
@@ -91,6 +92,44 @@ describe('V3 CLI command contracts', () => {
       expect(await readSession(root, payload.session.sessionId)).toMatchObject({
         client: 'fixture',
         status: 'active',
+      });
+
+      expect(
+        await contextSessionShow(root, {
+          session: payload.session.sessionId,
+          client: 'fixture',
+          json: true,
+        }),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        session: {
+          sessionId: payload.session.sessionId,
+          client: 'fixture',
+          activeTaskRef: null,
+          activeMode: null,
+          lastSeenRevision: null,
+        },
+      });
+
+      expect(
+        await contextSessionShow(root, {
+          session: payload.session.sessionId,
+          client: 'other-client',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_SESSION_NOT_FOUND' },
+      });
+
+      expect(
+        await contextSessionShow(root, {
+          session: 'not-a-session-id',
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_SESSION_INVALID' },
       });
     } finally {
       errors.mockRestore();
@@ -705,6 +744,110 @@ describe('V3 CLI command contracts', () => {
       expect(planResult.operation).toMatchObject({
         type: 'plan_revision',
         state: 'committed',
+      });
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  it('requires reframe concurrency inputs and returns the committed JSON contract', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const sessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(root, 'create', ['man', 'Reframe through the CLI.'], {
+        session: sessionId,
+        client: 'fixture',
+        json: true,
+      });
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: TaskRef;
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+      const checkpointId = id(60);
+
+      expect(
+        await workflow(root, 'reframe', [task], {
+          session: sessionId,
+          client: 'fixture',
+          checkpointId,
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_EXPECTED_REVISION_REQUIRED' },
+      });
+
+      expect(
+        await workflow(root, 'reframe', [task], {
+          session: sessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_REFRAME_CHECKPOINT_REQUIRED' },
+      });
+
+      const snapshot = await new V3ContextStore(root).readTaskSnapshot(
+        created.taskRef,
+      );
+      const requirementsPath = path.join(root, 'reframe-requirements.json');
+      await writeFile(
+        requirementsPath,
+        `${JSON.stringify(finalizedRequirements(snapshot.requirements), null, 2)}\n`,
+      );
+      expect(
+        await workflow(root, 'requirements', [task, 'finalize'], {
+          session: sessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          file: requirementsPath,
+          json: true,
+        }),
+      ).toBe(0);
+
+      const reframeCode = await workflow(root, 'reframe', [task], {
+        session: sessionId,
+        client: 'fixture',
+        expectedRevision: '2',
+        checkpointId,
+        summary: 'New evidence changes the requirements.',
+        nextAction: 'Clarify the replacement requirements.',
+        json: true,
+      });
+      const reframeOutput = String(logs.mock.calls.at(-1)?.[0]);
+      expect(reframeCode, reframeOutput).toBe(0);
+      const result = JSON.parse(reframeOutput) as {
+        schemaVersion: number;
+        metadata: { revision: number; currentStep: number };
+        requirements: { revision: number; status: string };
+        checkpoint: { checkpointId: string; kind: string };
+        archive: { archiveId: string; sourceTaskRevision: number };
+        operation: { operationId: string; type: string; state: string };
+      };
+      expect(result).toMatchObject({
+        schemaVersion: 1,
+        metadata: { revision: 4, currentStep: 2 },
+        requirements: { revision: 3, status: 'draft' },
+        checkpoint: { checkpointId, kind: 'requirements_reframed' },
+        archive: { sourceTaskRevision: 2 },
+        operation: { type: 'reframe', state: 'committed' },
+      });
+      expect(result.archive.archiveId).toBe(result.operation.operationId);
+      await expect(
+        new V3ContextStore(root).readTaskSnapshot(created.taskRef),
+      ).resolves.toMatchObject({
+        metadata: { revision: 4, currentStep: 2 },
+        requirements: { revision: 3, status: 'draft' },
       });
     } finally {
       logs.mockRestore();

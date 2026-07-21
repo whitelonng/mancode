@@ -1,4 +1,4 @@
-import type { SchemaManifestV1 } from '../context/manifest.js';
+import type { SchemaManifest } from '../context/manifest.js';
 import { GitRefTeamManifestStore } from './git-ref-transport.js';
 import { type ProjectConfigV1, projectConfigDigest } from './policy.js';
 
@@ -6,7 +6,7 @@ import { type ProjectConfigV1, projectConfigDigest } from './policy.js';
 export function createGitRefTeamManifestStore(
   projectRoot: string,
   config: ProjectConfigV1,
-  manifest: SchemaManifestV1,
+  manifest: SchemaManifest,
 ): GitRefTeamManifestStore {
   if (config.transport.mode !== 'git-ref' || config.transport.remote === null) {
     throw new Error('MANCODE_TRANSPORT_UNAVAILABLE');

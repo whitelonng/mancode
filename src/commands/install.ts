@@ -1,22 +1,25 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { assertUlid } from '../context/ids.js';
 import { V3ContextStore } from '../context/store.js';
+import { upgradeV3Adapters } from '../installers/adapter-upgrade.js';
 import { checkPlatformStatus } from '../installers/platform-status.js';
 import {
   formatPlatformName,
   getPlatformInstaller,
   getPlatformInstallers,
 } from '../installers/registry.js';
-import { installV3Adapter, stageV3Adapter } from '../installers/v3-adapter.js';
+import { stageV3Adapter } from '../installers/v3-adapter.js';
 import {
   detectProjectProfile,
   primaryUiLibrary,
 } from '../system/project-profile.js';
 import { DEFAULT_CONFIG } from '../templates/defaults.js';
+import { readV3CommandProject, resolveV3CommandSession } from './v3-support.js';
 
 /**
- * 退出码契约 — 见 docs/08-cli-spec.md §3
+ * 退出码契约见 docs/workflows.md。
  */
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -35,12 +38,17 @@ export interface InstallOptions {
   minimal?: boolean;
   /** Render a V3 adapter candidate under staging without changing live files. */
   shadow?: boolean;
+  /** Confirm a journaled V3 adapter install or repair. */
+  confirm?: boolean;
+  operationId?: string;
+  session?: string;
+  client?: string;
 }
 
 /**
  * `mancode install <platform>` 命令。
  *
- * 职责（docs/08-cli-spec.md §3 + docs/15-adapters.md §8）：
+ * 职责见 docs/workflows.md 和 docs/platform-adapters.md：
  * 1. 检查项目已初始化（state.json 存在）
  * 2. 验证平台名
  * 3. 调用对应适配器安装
@@ -205,11 +213,35 @@ async function installV3(
         'ℹ️  mancode adapters are already bootstrap-only; --minimal has no additional effect.',
       );
     }
-    const installed = await installV3Adapter(rootDir, installer.name);
+    let sessionId: string | undefined;
+    if (options.operationId !== undefined) {
+      assertUlid(options.operationId, 'adapter install operationId');
+    }
+    if (options.confirm === true) {
+      const commandProject = await readV3CommandProject(rootDir);
+      sessionId = (
+        await resolveV3CommandSession(commandProject, {
+          session: options.session,
+          client: options.client,
+        })
+      ).sessionId;
+    }
+    const installed = await upgradeV3Adapters({
+      projectRoot: rootDir,
+      platforms: [installer.name],
+      explicitConfirmation: options.confirm,
+      ...(options.operationId === undefined
+        ? {}
+        : { operationId: options.operationId }),
+      ...(sessionId === undefined ? {} : { sessionId }),
+    });
     console.log(
-      `✓  ${formatPlatformName(platform)} mancode bootstrap installed.`,
+      installed.state === 'already_ready'
+        ? `ℹ️  ${formatPlatformName(platform)} mancode bootstrap is already ready.`
+        : `✓  ${formatPlatformName(platform)} mancode bootstrap installed.`,
     );
-    console.log(`   ${installed.target}`);
+    for (const target of installed.filePlans)
+      console.log(`   ${target.target}`);
     return EXIT_OK;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

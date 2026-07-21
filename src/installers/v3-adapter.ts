@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -8,7 +9,9 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import { TextDecoder } from 'node:util';
 import {
+  extractManagedBlock,
   hasManagedBlock,
   removeManagedBlock,
   replaceManagedBlock,
@@ -27,6 +30,8 @@ export const V3_ADAPTER_MANAGED_MARKER =
 
 export const V3_MODE_ENTRY_MANAGED_MARKER =
   '<!-- Managed by mancode:v3-mode-entry. Do not edit this marker. -->';
+
+export const V3_ADAPTER_DIGEST_DOMAIN = 'mancode-adapter-digest-v1';
 
 export const V3_MODE_NAMES = [
   'manba',
@@ -90,9 +95,36 @@ export interface V3PlatformAdapterStatus {
   version: string;
   installed: boolean;
   ready: boolean;
+  status: V3AdapterContentStatus;
   target: string;
   detail: string;
+  targets: V3AdapterManagedTargetStatus[];
   capabilities: V3AdapterCapabilities;
+}
+
+export type V3AdapterContentStatus =
+  | 'ready'
+  | 'missing'
+  | 'stale'
+  | 'unreadable';
+
+export interface V3AdapterManagedTargetStatus {
+  identity: string;
+  target: string;
+  status: V3AdapterContentStatus;
+  actualDigest: string | null;
+  expectedDigest: string;
+  rendererVersion: string;
+  repair: string;
+  detail: string;
+}
+
+interface V3AdapterManagedTargetSpec {
+  identity: string;
+  target: string;
+  fileTarget: V3AdapterFileTarget;
+  expectedManagedContent: string;
+  blockMarkers: readonly [string, string] | null;
 }
 
 /**
@@ -136,10 +168,23 @@ export type V3AdapterFileTarget =
   | V3ModeEntryFileTarget
   | V3LegacyAdapterFileTarget;
 
+export const V3_ADAPTER_PLATFORMS: readonly PlatformName[] = [
+  'claude-code',
+  'codex',
+  'cursor',
+  'copilot',
+  'zcode',
+];
+
 export interface V3AdapterFilePlan {
   target: V3AdapterFileTarget;
   beforeContent: string | null;
   targetContent: string;
+}
+
+export interface V3StagedAdapterFilePlan {
+  target: V3AdapterFileTarget;
+  stagingTarget: string;
 }
 
 export interface V3StagedAdapter {
@@ -191,6 +236,28 @@ export const V3_ADAPTER_FILE_TARGETS: readonly V3AdapterFileTarget[] = [
   ...V3_MODE_ENTRY_FILE_TARGETS,
   ...V3_LEGACY_ADAPTER_FILE_TARGETS,
 ];
+
+/** Computes the content digest for one logical managed target. */
+export function adapterManagedContentDigest(
+  targetIdentity: string,
+  managedContent: string | Uint8Array,
+): string {
+  if (!targetIdentity.trim() || targetIdentity.includes('\0')) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_IDENTITY_INVALID');
+  }
+  const content =
+    typeof managedContent === 'string'
+      ? Buffer.from(managedContent, 'utf8')
+      : Buffer.from(managedContent);
+  const digest = createHash('sha256')
+    .update(Buffer.from(V3_ADAPTER_DIGEST_DOMAIN, 'utf8'))
+    .update(Buffer.from([0]))
+    .update(Buffer.from(targetIdentity, 'utf8'))
+    .update(Buffer.from([0]))
+    .update(content)
+    .digest('hex');
+  return `sha256:${digest}`;
+}
 
 /**
  * Calculates exact file replacements without publishing them. This lets a
@@ -256,6 +323,88 @@ export async function planV3AdapterFiles(
   return plans;
 }
 
+/** Plans a selected-platform repair while composing shared AGENTS targets once. */
+export async function planV3AdapterUpgradeFiles(
+  projectRoot: string,
+  platforms: readonly PlatformName[],
+): Promise<V3AdapterFilePlan[]> {
+  const root = path.resolve(projectRoot);
+  const selected = normalizeUpgradePlatforms(platforms);
+  const targetSet = new Set<V3AdapterFileTarget>();
+  for (const platform of selected) {
+    targetSet.add(primaryFileTarget(platform));
+    for (const mode of V3_MODE_NAMES) {
+      targetSet.add(modeEntryFileTarget(platform, mode));
+    }
+    for (const target of legacyAdapterTargetsForPlatform(platform, true)) {
+      targetSet.add(target);
+    }
+  }
+  const existing = new Map<V3AdapterFileTarget, string | null>();
+  for (const target of targetSet) {
+    existing.set(target, await readAdapterTarget(root, target));
+  }
+  const desired = new Map(existing);
+  for (const platform of selected) {
+    planPlatformBootstrapUpgrade(desired, platform);
+    for (const mode of V3_MODE_NAMES) {
+      const target = modeEntryFileTarget(platform, mode);
+      const current = desired.get(target) ?? null;
+      desired.set(
+        target,
+        managedModeEntryPlan(target, current, renderV3ModeEntry(mode, platform))
+          .targetContent,
+      );
+    }
+  }
+  const plans = [...desired.entries()]
+    .filter(([target, targetContent]) => existing.get(target) !== targetContent)
+    .map(([target, targetContent]) => ({
+      target,
+      beforeContent: existing.get(target) ?? null,
+      targetContent: targetContent ?? '',
+    }));
+  const legacyPlans = planLegacyAdapterRetirement(existing).filter(
+    (legacyPlan) =>
+      !plans.some((candidate) => candidate.target === legacyPlan.target),
+  );
+  return [...plans, ...legacyPlans];
+}
+
+/** Writes immutable upgrade candidates below .mancode staging, never live targets. */
+export async function stageV3AdapterUpgradeFiles(
+  projectRoot: string,
+  operationId: string,
+  plans: readonly V3AdapterFilePlan[],
+): Promise<V3StagedAdapterFilePlan[]> {
+  if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(operationId)) {
+    throw new Error('MANCODE_ADAPTER_UPGRADE_OPERATION_ID_INVALID');
+  }
+  const root = path.resolve(projectRoot);
+  const staged: V3StagedAdapterFilePlan[] = [];
+  for (const plan of plans) {
+    const liveTarget = v3AdapterTargetPath(root, plan.target);
+    const relative = relativeAdapterPath(root, liveTarget);
+    const stagingTarget = path.join(
+      '.mancode',
+      'staging',
+      'adapters',
+      'upgrade',
+      operationId,
+      relative,
+    );
+    const destination = path.join(root, stagingTarget);
+    await assertAdapterPathSafe(root, destination);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await atomicWrite(destination, plan.targetContent);
+    staged.push({
+      target: plan.target,
+      stagingTarget: relativeAdapterPath(root, destination),
+    });
+  }
+  return staged;
+}
+
 /** Publishes one precomputed fixed-target replacement with atomic rename. */
 export async function applyV3AdapterFilePlan(
   projectRoot: string,
@@ -270,6 +419,11 @@ export async function applyV3AdapterFilePlan(
   }
   const target = v3AdapterTargetPath(root, plan.target);
   await assertAdapterPathSafe(root, target);
+  const current = await readAdapterTarget(root, plan.target);
+  if (current === plan.targetContent) return;
+  if (current !== plan.beforeContent) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
   await mkdir(path.dirname(target), { recursive: true });
   await atomicWrite(target, plan.targetContent);
 }
@@ -474,25 +628,29 @@ export async function inspectV3Adapter(
   platform: PlatformName,
 ): Promise<V3PlatformAdapterStatus> {
   const root = path.resolve(projectRoot);
-  await assertPlatformAdapterPathsSafe(root, platform);
   const target = targetFor(platform);
-  const bootstrapInstalled = await adapterTargetPresent(root, platform);
-  const modeEntriesInstalled = (
-    await Promise.all(
-      V3_MODE_NAMES.map((mode) =>
-        v3ModeEntryPresent(v3ModeEntryPath(root, platform, mode)),
-      ),
-    )
-  ).every(Boolean);
-  const installed = bootstrapInstalled && modeEntriesInstalled;
+  const targets: V3AdapterManagedTargetStatus[] = [];
+  for (const spec of managedTargetSpecs(root, platform)) {
+    targets.push(await inspectManagedTarget(root, platform, spec));
+  }
+  const ready = targets.every((item) => item.status === 'ready');
+  const installed = targets.every((item) => item.status !== 'missing');
+  const status = aggregateAdapterStatus(targets);
   return {
     version: V3_ADAPTER_VERSION,
     installed,
-    ready: installed,
+    ready,
+    status,
     target,
-    detail: installed
-      ? 'mancode bootstrap and original mode entries are present; session identity is explicit-required.'
-      : 'mancode bootstrap or one of its original mode entries is not installed.',
+    detail:
+      status === 'ready'
+        ? 'Managed adapter content matches the current renderer.'
+        : status === 'missing'
+          ? 'One or more managed adapter targets are missing.'
+          : status === 'stale'
+            ? 'Managed adapter content differs from the current renderer.'
+            : 'One or more managed adapter targets cannot be read safely.',
+    targets,
     capabilities: capabilitiesFor(platform),
   };
 }
@@ -500,7 +658,8 @@ export async function inspectV3Adapter(
 /** Actual on-disk inventory for compatibility gates; never trust manifest echo. */
 export async function inspectV3AdapterVersions(
   projectRoot: string,
-): Promise<Record<PlatformName, string>> {
+  requiredPlatforms: readonly PlatformName[] = [],
+): Promise<Partial<Record<PlatformName, string>>> {
   const platforms: PlatformName[] = [
     'claude-code',
     'codex',
@@ -508,13 +667,21 @@ export async function inspectV3AdapterVersions(
     'copilot',
     'zcode',
   ];
+  const required = new Set(requiredPlatforms);
   const entries = await Promise.all(
     platforms.map(async (platform) => {
       const status = await inspectV3Adapter(projectRoot, platform);
-      return [platform, status.ready ? status.version : 'missing'] as const;
+      const primaryPresent = status.targets[0]?.status !== 'missing';
+      return required.has(platform) || primaryPresent
+        ? ([platform, status.ready ? status.version : status.status] as const)
+        : null;
     }),
   );
-  return Object.fromEntries(entries) as Record<PlatformName, string>;
+  return Object.fromEntries(
+    entries.filter(
+      (entry): entry is NonNullable<typeof entry> => entry !== null,
+    ),
+  ) as Partial<Record<PlatformName, string>>;
 }
 
 /** Removes only the V3 bootstrap owned by this renderer, never V3 authority. */
@@ -597,7 +764,10 @@ export function renderV3Bootstrap(platform: PlatformName): string {
     '',
     `- Platform: ${platformLabel}. This file is a non-authoritative bootstrap.`,
     '- Locate the project root before running mancode commands.',
+    '- Before the first command, choose one CLI binary for the entire task: use `./node_modules/.bin/mancode` when it exists, otherwise use `mancode`. Run that selected binary with `--version` once and never mix binaries or versions.',
+    '- In every command below, `mancode` means that selected binary; when the local binary exists, invoke the command as `./node_modules/.bin/mancode ...` rather than falling back to a global executable.',
     '- Reuse a `mancode status --brief --json` snapshot already obtained in this conversation. Only when no such snapshot exists, run it once from the project root.',
+    '- Inspect a session read-only with `mancode context session show --session <id> --client <client> --json`; do not invent other session subcommands.',
     '- The compact status is the public mancode Continuity runtime view. In operator-facing narration, say `mancode` or `mancode Continuity`; never prefix a mode or action with a version label.',
     '- An explicitly invoked original `man`, `manba`, `manteam`, `manps`, or `mansolo` entry supplies its authorized action. Its mode-specific steps override conflicting generic no-task or mutation guidance below.',
     '- In particular, `manps` may run local health scans without an actor, session, or TaskRef. `mansolo` needs them only for an explicit governed handoff.',
@@ -629,6 +799,8 @@ export function renderV3ModeEntry(
   const sessionClientGuidance = sessionClientGuidanceFor(platform);
   const statusGuidance =
     'Reuse a `mancode status --brief --json` snapshot already obtained in this conversation. Only when none exists, run it once from the project root.';
+  const cliSelectionGuidance =
+    'Before the first command, use `./node_modules/.bin/mancode` when it exists, otherwise `mancode`; check that selected binary with `--version` once and never mix binaries or versions. In every command below, replace the literal `mancode` with that selected binary path when the local binary exists.';
   const sessionCreationGuidance =
     platform === 'codex' || platform === 'zcode'
       ? 'If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode exactly once, then retain the returned session ID.'
@@ -696,6 +868,7 @@ export function renderV3ModeEntry(
     '',
     '## Enter through mancode',
     '',
+    cliSelectionGuidance,
     ...authoritySteps,
     '',
     '## Mode action',
@@ -743,9 +916,13 @@ const V3_MODE_DEFINITIONS: Record<
     actions: [
       '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
       '- For a new task, run `mancode workflow create man "<task>" --session <id>`.',
-      '- Write requirements as semantic JSON with `version: 1`, `goal`, `confirmedScope`, `excludedScope`, `technicalDecisions`, `defaults`, `blockingUnknowns`, all seven `coverage` dimensions, and `acceptanceCriteria`; mancode generates canonical internal IDs and digests.',
+      '- Write requirements as semantic JSON with `version: 1`, a non-empty `goal`, non-empty `confirmedScope`, and the arrays `excludedScope`, `technicalDecisions`, `defaults`, and `blockingUnknowns`. Every array item must be a non-empty string; an array may be empty except `confirmedScope`, and `technicalDecisions` must be non-empty whenever `technical_stack` applies.',
+      '- `coverage` must contain exactly one item for each dimension: `platform`, `core_scope`, `technical_stack`, `data_and_persistence`, `performance`, `compatibility`, and `security`. Each item has the shape `{ "dimension": "platform", "status": "confirmed", "rationale": "..." }`; `status` is exactly `confirmed`, `defaulted`, or `not_applicable`, and `rationale` is non-empty.',
+      '- `acceptanceCriteria` must contain at least one required item shaped as `{ "id": "AC-1", "description": "...", "required": true, "method": "automated" }`; `method` is exactly `automated`, `manual`, or `hybrid`.',
       '- Finalize requirements with `mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>`.',
+      '- Let mancode assign internal IDs and digests; do not invent canonical IDs or digests in the semantic input.',
       '- Revise or confirm the plan with `mancode workflow plan <namespace:ULID> revise|confirm --expected-revision <n> ... --session <id>`.',
+      "- Confirming with `--plan-decision plan_only` keeps the plan as planned authority and clears this session's active workflow pointer. Resume the TaskRef explicitly before any later governed mutation.",
       '- Apply verification and review ledgers with their mancode `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
     ],
   },
@@ -868,38 +1045,320 @@ function renderCursorRule(content: string): string {
   ].join('\n');
 }
 
-async function adapterTargetPresent(
+function managedTargetSpecs(
   root: string,
   platform: PlatformName,
-): Promise<boolean> {
+): V3AdapterManagedTargetSpec[] {
+  const primary = primaryManagedTargetSpec(platform);
+  const modes = V3_MODE_NAMES.map((mode) => {
+    const fileTarget = modeEntryFileTarget(platform, mode);
+    return {
+      identity: fileTarget,
+      target: relativeAdapterPath(root, v3ModeEntryPath(root, platform, mode)),
+      fileTarget,
+      expectedManagedContent: renderV3ModeEntry(mode, platform),
+      blockMarkers: null,
+    } satisfies V3AdapterManagedTargetSpec;
+  });
+  return [primary, ...modes];
+}
+
+function normalizeUpgradePlatforms(
+  platforms: readonly PlatformName[],
+): PlatformName[] {
+  if (!Array.isArray(platforms) || platforms.length === 0) {
+    throw new Error('MANCODE_ADAPTER_UPGRADE_PLATFORM_REQUIRED');
+  }
+  const selected = new Set<PlatformName>();
+  for (const platform of platforms) {
+    if (!V3_ADAPTER_PLATFORMS.includes(platform)) {
+      throw new Error('MANCODE_ADAPTER_UPGRADE_PLATFORM_INVALID');
+    }
+    selected.add(platform);
+  }
+  return V3_ADAPTER_PLATFORMS.filter((platform) => selected.has(platform));
+}
+
+function primaryFileTarget(platform: PlatformName): V3AdapterFileTarget {
   switch (platform) {
     case 'claude-code':
-      return managedFilePresent(
-        path.join(root, '.claude', 'skills', 'mancode-v3', 'SKILL.md'),
-      );
+      return 'claude-skill';
     case 'cursor':
-      return managedFilePresent(
-        path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
-      );
+      return 'cursor-rule';
     case 'codex':
-      return managedBlockPresent(
-        path.join(root, 'AGENTS.md'),
-        V3_CODEX_START_MARKER,
-        V3_CODEX_END_MARKER,
-      );
-    case 'copilot':
-      return managedBlockPresent(
-        path.join(root, '.github', 'copilot-instructions.md'),
-        V3_COPILOT_START_MARKER,
-        V3_COPILOT_END_MARKER,
-      );
     case 'zcode':
-      return managedBlockPresent(
-        path.join(root, 'AGENTS.md'),
-        V3_ZCODE_START_MARKER,
-        V3_ZCODE_END_MARKER,
+      return 'agents';
+    case 'copilot':
+      return 'copilot-instructions';
+  }
+}
+
+function planPlatformBootstrapUpgrade(
+  desired: Map<V3AdapterFileTarget, string | null>,
+  platform: PlatformName,
+): void {
+  const target = primaryFileTarget(platform);
+  const current = desired.get(target) ?? null;
+  switch (platform) {
+    case 'claude-code':
+      desired.set(
+        target,
+        managedFilePlan(
+          target,
+          current,
+          renderClaudeSkill(renderV3Bootstrap(platform)),
+        ).targetContent,
+      );
+      return;
+    case 'cursor':
+      desired.set(
+        target,
+        managedFilePlan(
+          target,
+          current,
+          renderCursorRule(renderV3Bootstrap(platform)),
+        ).targetContent,
+      );
+      return;
+    case 'codex':
+      desired.set(
+        target,
+        replaceManagedV3BlockText(
+          removeLegacyAgentsBlocks(current ?? ''),
+          V3_CODEX_START_MARKER,
+          V3_CODEX_END_MARKER,
+          renderV3Bootstrap(platform),
+        ),
+      );
+      return;
+    case 'zcode':
+      desired.set(
+        target,
+        replaceManagedV3BlockText(
+          removeLegacyAgentsBlocks(current ?? ''),
+          V3_ZCODE_START_MARKER,
+          V3_ZCODE_END_MARKER,
+          renderV3Bootstrap(platform),
+        ),
+      );
+      return;
+    case 'copilot':
+      desired.set(
+        target,
+        replaceManagedV3BlockText(
+          removeManagedBlock(current ?? ''),
+          V3_COPILOT_START_MARKER,
+          V3_COPILOT_END_MARKER,
+          renderV3Bootstrap(platform),
+        ),
       );
   }
+}
+
+function primaryManagedTargetSpec(
+  platform: PlatformName,
+): V3AdapterManagedTargetSpec {
+  const target = targetFor(platform);
+  switch (platform) {
+    case 'claude-code':
+      return {
+        identity: 'claude-skill',
+        target,
+        fileTarget: 'claude-skill',
+        expectedManagedContent: renderClaudeSkill(renderV3Bootstrap(platform)),
+        blockMarkers: null,
+      };
+    case 'cursor':
+      return {
+        identity: 'cursor-rule',
+        target,
+        fileTarget: 'cursor-rule',
+        expectedManagedContent: renderCursorRule(renderV3Bootstrap(platform)),
+        blockMarkers: null,
+      };
+    case 'codex':
+      return embeddedManagedTargetSpec(
+        target,
+        'agents#codex',
+        'agents',
+        V3_CODEX_START_MARKER,
+        V3_CODEX_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'copilot':
+      return embeddedManagedTargetSpec(
+        target,
+        'copilot-instructions#copilot',
+        'copilot-instructions',
+        V3_COPILOT_START_MARKER,
+        V3_COPILOT_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'zcode':
+      return embeddedManagedTargetSpec(
+        target,
+        'agents#zcode',
+        'agents',
+        V3_ZCODE_START_MARKER,
+        V3_ZCODE_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+  }
+}
+
+function embeddedManagedTargetSpec(
+  target: string,
+  identity: string,
+  fileTarget: V3AdapterFileTarget,
+  startMarker: string,
+  endMarker: string,
+  content: string,
+): V3AdapterManagedTargetSpec {
+  return {
+    identity,
+    target,
+    fileTarget,
+    expectedManagedContent: [startMarker, content, endMarker].join('\n'),
+    blockMarkers: [startMarker, endMarker],
+  };
+}
+
+function modeEntryFileTarget(
+  platform: PlatformName,
+  mode: V3ModeName,
+): V3ModeEntryFileTarget {
+  const family =
+    platform === 'claude-code'
+      ? 'claude'
+      : platform === 'codex' || platform === 'zcode'
+        ? 'agents'
+        : platform;
+  return `${family}-mode-${mode}` as V3ModeEntryFileTarget;
+}
+
+async function inspectManagedTarget(
+  root: string,
+  platform: PlatformName,
+  spec: V3AdapterManagedTargetSpec,
+): Promise<V3AdapterManagedTargetStatus> {
+  const expectedDigest = adapterManagedContentDigest(
+    spec.identity,
+    spec.expectedManagedContent,
+  );
+  const repair = [
+    `Preview with \`mancode adapter upgrade --platform ${platform} --dry-run\`.`,
+    `Confirm that exact preview with \`mancode adapter upgrade --platform ${platform} --confirm --operation-id <operationId> --session <id>\`.`,
+  ].join(' ');
+  try {
+    const bytes = await readAdapterBytesIfExists(
+      root,
+      v3AdapterTargetPath(root, spec.fileTarget),
+    );
+    if (bytes === null) {
+      return managedTargetStatus(
+        spec,
+        'missing',
+        null,
+        expectedDigest,
+        repair,
+        'Managed target does not exist.',
+      );
+    }
+    const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    let managedContent: string;
+    if (spec.blockMarkers === null) {
+      managedContent = content;
+    } else {
+      try {
+        const extracted = extractManagedBlock(
+          content,
+          spec.blockMarkers[0],
+          spec.blockMarkers[1],
+        );
+        if (extracted === null) {
+          return managedTargetStatus(
+            spec,
+            'missing',
+            null,
+            expectedDigest,
+            repair,
+            'Managed block is absent from the target file.',
+          );
+        }
+        managedContent = extracted;
+      } catch (error) {
+        return managedTargetStatus(
+          spec,
+          'stale',
+          null,
+          expectedDigest,
+          repair,
+          error instanceof Error
+            ? error.message
+            : 'Managed block is malformed.',
+        );
+      }
+    }
+    const actualDigest = adapterManagedContentDigest(
+      spec.identity,
+      managedContent,
+    );
+    const status = actualDigest === expectedDigest ? 'ready' : 'stale';
+    return managedTargetStatus(
+      spec,
+      status,
+      actualDigest,
+      expectedDigest,
+      status === 'ready' ? 'none' : repair,
+      status === 'ready'
+        ? 'Managed content matches the current renderer.'
+        : 'Managed content differs from the current renderer.',
+    );
+  } catch (error) {
+    return managedTargetStatus(
+      spec,
+      'unreadable',
+      null,
+      expectedDigest,
+      `Resolve the filesystem or UTF-8 error, then ${repair}`,
+      error instanceof Error ? error.message : 'Managed target is unreadable.',
+    );
+  }
+}
+
+function managedTargetStatus(
+  spec: V3AdapterManagedTargetSpec,
+  status: V3AdapterContentStatus,
+  actualDigest: string | null,
+  expectedDigest: string,
+  repair: string,
+  detail: string,
+): V3AdapterManagedTargetStatus {
+  return {
+    identity: spec.identity,
+    target: spec.target,
+    status,
+    actualDigest,
+    expectedDigest,
+    rendererVersion: V3_ADAPTER_VERSION,
+    repair,
+    detail,
+  };
+}
+
+function aggregateAdapterStatus(
+  targets: V3AdapterManagedTargetStatus[],
+): V3AdapterContentStatus {
+  if (targets.every((target) => target.status === 'ready')) return 'ready';
+  if (targets.some((target) => target.status === 'unreadable')) {
+    return 'unreadable';
+  }
+  if (targets.some((target) => target.status === 'stale')) return 'stale';
+  return 'missing';
+}
+
+function relativeAdapterPath(root: string, target: string): string {
+  return path.relative(root, target).split(path.sep).join('/');
 }
 
 async function writeManagedFile(
@@ -958,11 +1417,6 @@ async function removeV3ModeEntry(filePath: string): Promise<void> {
     await rm(filePath, { force: true });
     await removeDirectoryIfEmpty(path.dirname(filePath));
   }
-}
-
-async function v3ModeEntryPresent(filePath: string): Promise<boolean> {
-  const existing = await readTextIfExists(filePath);
-  return existing?.includes(V3_MODE_ENTRY_MANAGED_MARKER) ?? false;
 }
 
 async function removeDirectoryIfEmpty(directory: string): Promise<void> {
@@ -1536,11 +1990,6 @@ async function removeManagedV3Block(
   }
 }
 
-async function managedFilePresent(filePath: string): Promise<boolean> {
-  const content = await readTextIfExists(filePath);
-  return content?.includes(V3_ADAPTER_MANAGED_MARKER) ?? false;
-}
-
 async function managedBlockPresent(
   filePath: string,
   startMarker: string,
@@ -1548,6 +1997,37 @@ async function managedBlockPresent(
 ): Promise<boolean> {
   const content = await readTextIfExists(filePath);
   return content !== null && hasManagedBlock(content, startMarker, endMarker);
+}
+
+async function readAdapterBytesIfExists(
+  root: string,
+  filePath: string,
+): Promise<Buffer | null> {
+  await assertAdapterPathSafe(root, filePath);
+  try {
+    const entry = await lstat(filePath);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  }
+  for (let attempt = 1; attempt <= ADAPTER_READ_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await readFile(filePath);
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return null;
+      if (
+        !isRetriableAdapterReadError(error) ||
+        attempt === ADAPTER_READ_MAX_ATTEMPTS
+      ) {
+        throw error;
+      }
+      await delay(ADAPTER_READ_RETRY_DELAY_MS * attempt);
+    }
+  }
+  throw new Error('MANCODE_V3_ADAPTER_READ_RETRY_EXHAUSTED');
 }
 
 async function readTextIfExists(filePath: string): Promise<string | null> {

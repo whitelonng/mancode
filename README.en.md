@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.3.18-2f855a?style=flat-square" alt="Status: mancode Continuity v0.3.18" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -107,9 +107,14 @@ one window's temporary state as another window's identity.
 ```bash
 mancode status --brief --json
 mancode context session new --client claude-code
+mancode context session show --session <id> --client claude-code --json
 mancode context resume <namespace:ULID> --session <id> --client claude-code
 mancode context show --purpose orient --session <id> --client claude-code
 ```
+
+When the project has a local mancode install, pin one CLI binary for the whole
+task: prefer `./node_modules/.bin/mancode`, otherwise use `mancode`. Check the
+selected binary with `--version` once and do not mix versions afterward.
 
 The original `/man`, `/manba`, and `/manteam` entries handle these steps. The
 CLI form above is useful for diagnostics, automation, or manual recovery.
@@ -353,7 +358,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: mancode Continuity v0.3.18. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.4.0. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -394,8 +399,9 @@ mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilo
 mancode init --empty      # Allow a safe empty directory in non-interactive scripts
 mancode init --lang zh-CN # Explicit initialization language (zh-CN or en)
 mancode refresh-project   # Refresh facts after Git or project files are added
-mancode install --force   # Repair or reinstall the selected adapter
-mancode install --minimal # The bootstrap is already minimal; retained for compatibility
+mancode adapter status --json # Inspect actual managed-content digests
+mancode adapter upgrade --platform codex --dry-run # Stage a preview only
+mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 ## Agent Modes
@@ -424,10 +430,16 @@ mancode init --legacy
 mancode status
 mancode status --json
 mancode status --brief --json
-mancode install <claude-code|cursor|codex|copilot|zcode>
+mancode install <claude-code|cursor|codex|copilot|zcode> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode adapter status [--platform <platform>] --json
+mancode adapter upgrade <--all|--platform <platform>> --dry-run
+mancode adapter upgrade <--all|--platform <platform>> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode project upgrade --policy 2 --dry-run
+mancode project upgrade --policy 2 --operation-id <operationId> --session <id> --client <client>
 mancode list-platforms
 mancode team identity create --name "<name>"
 mancode context session new --client <platform>
+mancode context session show --session <id> --client <client> --json
 mancode workflow create <man|manba|manteam> "<task>" --session <id>
 mancode workflow list --json
 mancode workflow show <namespace:ULID> --json
@@ -438,6 +450,7 @@ mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|govern
 mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
+mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
 mancode refresh-project
@@ -452,7 +465,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.3.18
+mancode v0.4.0
 
 Project:     my-app
 Runtime:     ready
@@ -594,14 +607,16 @@ mancode/
 - Irreversible operations such as force pushes, schema migrations, and bulk
   deletes require explicit human confirmation.
 
-## Roadmap
+## Remaining Work
 
-| Phase | Focus |
-|---|---|
-| MVP-1 | solo mode, aesthetics, and Claude Code hooks |
-| MVP-2 | `/manba`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
-| MVP-3 | Cursor, Codex (ChatGPT desktop/CLI), and GitHub Copilot adapters |
-| Public Release | stable npm release, marketplace distribution, docs, and demos |
+- Complete real-host session acceptance for Claude Code, Codex, Cursor,
+  GitHub Copilot, and ZCode on one release candidate.
+- Complete cross-host recovery and two-clone git-ref manual acceptance.
+- Confirm ZCode project-skill discovery and workspace-command paths; keep the
+  adapter provisional until then.
+- Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
+
+See [V3 Release Acceptance](./docs/release-acceptance.md) for the complete gate.
 
 ## Troubleshooting
 
@@ -616,21 +631,26 @@ a deliberately empty directory.
 ### Claude Code hooks not triggering
 
 After `mancode init`, restart Claude Code so it reloads `.claude/settings.json`.
-Run `mancode status` to verify hooks are registered. If hooks are still missing,
-run `mancode install claude-code --force` to rewrite the settings.
+Run `mancode status` to verify hooks are registered. For V3 adapter drift, preview
+`mancode adapter upgrade --platform claude-code --dry-run`, then repair that
+preview with its `--operation-id`, an active session, and `--confirm`. The legacy
+hook architecture still uses `mancode init --legacy --force`.
 
 ### `mancode status` shows a platform as "not ready"
 
-This means the platform's target files are missing. Run
-`mancode install <platform> --force` to regenerate them. For managed-block
+This means the platform's target files are missing or their digest is stale.
+Preview `mancode adapter upgrade --platform <platform> --dry-run`, inspect the
+staged result, then run it with the returned `--operation-id`, an active session,
+and `--confirm`. For managed-block
 platforms (Codex, ZCode, Copilot), the managed block in `AGENTS.md` or
 `.github/copilot-instructions.md` may have been manually edited or deleted.
 
 ### AGENTS.md or copilot-instructions.md managed block was accidentally deleted
 
-Run `mancode install codex --force` (or `zcode`, or `copilot`) to reinsert the
-managed block. User-authored content outside the relevant mancode managed
-markers is preserved.
+Preview `mancode adapter upgrade --platform codex --dry-run` (or `zcode`, or
+`copilot`), then run it with the returned `--operation-id`, an active session,
+and `--confirm` to reinsert the managed block. User-authored content outside the
+relevant markers is preserved.
 
 ### ZCode skills not appearing
 
@@ -648,16 +668,8 @@ description field — invoke them by asking for `/manba` or similar.
 ### How to reinstall Continuity adapters
 
 ```bash
-mancode uninstall claude-code --force
-mancode uninstall cursor --force
-mancode uninstall codex --force
-mancode uninstall copilot --force
-mancode uninstall zcode --force
-mancode install claude-code
-mancode install cursor
-mancode install codex
-mancode install copilot
-mancode install zcode
+mancode adapter upgrade --all --dry-run
+mancode adapter upgrade --all --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 Continuity authority is protected, so `mancode uninstall --all` does not delete workflow

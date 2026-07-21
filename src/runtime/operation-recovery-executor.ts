@@ -12,6 +12,7 @@ import path from 'node:path';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import {
+  assertSchemaManifestPolicyUpgrade,
   assertSchemaManifestTransition,
   parseSchemaManifest,
 } from '../context/manifest.js';
@@ -74,8 +75,10 @@ import { assertRecoveryActor, planOperationRecovery } from './reconciler.js';
 import { readSession } from './session.js';
 import { readTaskHeadFence, replaceTaskHeadFence } from './task-head-store.js';
 import {
+  readTaskArchiveDigestAtRoot,
   readTaskAuthorityFileAtRoot,
   readTaskCheckpointAtRoot,
+  writeTaskArchiveAtRoot,
   writeTaskAuthorityFileAtRoot,
   writeTaskCheckpointAtRoot,
 } from './task-operation.js';
@@ -466,6 +469,7 @@ async function applyPayload(
       stores,
       journal.operationId,
       journal.actorId,
+      journal.type,
       action,
     );
   }
@@ -516,6 +520,7 @@ async function applyAction(
   stores: EntityHomeStore[],
   operationId: Ulid,
   actorId: Ulid,
+  operationType: OperationJournalV1['type'],
   action: OperationRecoveryActionV1,
 ): Promise<void> {
   switch (action.kind) {
@@ -529,6 +534,11 @@ async function applyAction(
       );
       return;
     }
+    case 'task_archive': {
+      const root = await taskRoot(projectRoot, action.taskRef);
+      await writeTaskArchiveAtRoot(root, operationId, action);
+      return;
+    }
     case 'workflow_task_directory':
       await publishWorkflowDirectory(projectRoot, operationId, action);
       return;
@@ -536,7 +546,7 @@ async function applyAction(
       await publishMigrationDirectory(projectRoot, operationId, action);
       return;
     case 'project_authority_file':
-      assertProjectAuthorityTransition(action);
+      assertProjectAuthorityTransition(action, operationType);
       await writeProjectAuthorityFile(
         projectRoot,
         operationId,
@@ -599,17 +609,22 @@ function assertProjectAuthorityTransition(
     OperationRecoveryActionV1,
     { kind: 'project_authority_file' }
   >,
+  operationType: OperationJournalV1['type'],
 ): void {
   if (action.beforeContent === null) {
     throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
   }
   switch (action.fileName) {
-    case 'schema.json':
-      assertSchemaManifestTransition(
-        parseSchemaManifest(JSON.parse(action.beforeContent)),
-        parseSchemaManifest(JSON.parse(action.targetContent)),
-      );
+    case 'schema.json': {
+      const previous = parseSchemaManifest(JSON.parse(action.beforeContent));
+      const next = parseSchemaManifest(JSON.parse(action.targetContent));
+      if (operationType === 'project_policy_upgrade') {
+        assertSchemaManifestPolicyUpgrade(previous, next);
+      } else {
+        assertSchemaManifestTransition(previous, next);
+      }
       return;
+    }
     case 'shared/config.json':
       assertProjectConfigTransition(
         parseProjectConfig(JSON.parse(action.beforeContent)),
@@ -663,6 +678,11 @@ async function currentActionDigest(
         ? null
         : taskAuthorityContentDigest(action.fileName, content);
     }
+    case 'task_archive':
+      return readTaskArchiveDigestAtRoot(
+        await taskRoot(projectRoot, action.taskRef),
+        action,
+      );
     case 'workflow_task_directory':
       return currentWorkflowDirectoryDigest(projectRoot, action);
     case 'migration_task_directory':

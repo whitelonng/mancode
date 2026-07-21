@@ -277,7 +277,7 @@ function metadata(
       requirementsDigest: requirements.contentDigest,
       planVersion: 2,
       planDecision: 'governed_execution',
-      policyVersions: { planning: 2, review: 2, verification: 1 },
+      policyVersions: { planning: 2, review: 1, verification: 1 },
       reviewStatus: review.status,
       reviewLedgerDigest: review.contentDigest,
       verificationStatus: verification.status,

@@ -46,7 +46,7 @@ const LEGACY_MVP2_SKILL_NAMES = ['mamba', 'man8'] as const;
 /**
  * Claude Code 平台安装器。
  *
- * 职责（docs/08-cli-spec.md §2.4）：
+ * 职责见 docs/platform-adapters.md：
  * 1. 创建/修复平台无关的 .mancode/ 文件（通过 installMancodeCore）
  * 2. 创建 .claude/settings.json（幂等合并，不覆盖用户已有配置）
  * 3. 创建 .claude/skills/<name>/SKILL.md
@@ -163,7 +163,7 @@ async function installSoloSkill(
 }
 
 /**
- * 写入 MVP-2 skill 目录（/man /manba /mansolo，docs/03）。
+ * 写入 mode skill 目录（/man /manba /mansolo，见 docs/workflows.md）。
  *
  * 目录：.claude/skills/<name>/SKILL.md（Claude Code 通过目录名识别命令）。
  * `--force` 重装时只覆盖可识别的 mancode 生成文件。

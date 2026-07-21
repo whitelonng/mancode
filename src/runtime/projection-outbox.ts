@@ -621,15 +621,15 @@ async function inspectSessionProjection(
     return 'conflict';
   }
   if (task.metadata.revision < target.taskRevision) return 'conflict';
-  const terminal = isTerminalWorkflowStatus(task.metadata.status);
+  const clearsPointer = workflowRequiresClearedSession(task.metadata);
   if (target.action === 'clear') {
-    if (!terminal) return 'conflict';
+    if (!clearsPointer) return 'conflict';
     if (session.activeTaskRef === null) return 'present';
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
       : 'not_applicable';
   }
-  if (terminal) {
+  if (clearsPointer) {
     if (session.activeTaskRef === null) return 'not_applicable';
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
@@ -668,7 +668,7 @@ async function applySessionProjection(
   if (task.metadata.revision < target.taskRevision) return;
   if (
     target.action === 'clear' ||
-    isTerminalWorkflowStatus(task.metadata.status)
+    workflowRequiresClearedSession(task.metadata)
   ) {
     await clearSessionTaskPointer(projectRoot, target.sessionId, {
       expectedTaskRef: target.taskRef,
@@ -840,6 +840,17 @@ function sameNullableTaskRef(
 function isTerminalWorkflowStatus(status: string): boolean {
   return (
     status === 'completed' || status === 'abandoned' || status === 'superseded'
+  );
+}
+
+function workflowRequiresClearedSession(metadata: {
+  status: string;
+  governance: { planDecision: string | null };
+}): boolean {
+  return (
+    isTerminalWorkflowStatus(metadata.status) ||
+    (metadata.status === 'planned' &&
+      metadata.governance.planDecision === 'plan_only')
   );
 }
 

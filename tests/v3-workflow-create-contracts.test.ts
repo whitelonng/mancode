@@ -65,6 +65,7 @@ describe('V3 workflow create operation', () => {
     expect(created.metadata.governance.requirementsStatus).toBe(
       'needs_clarification',
     );
+    expect(created.metadata.governance.policyVersions.planning).toBe(2);
     expect(created.operation.state).toBe('committed');
     expect(
       created.operation.steps.every((step) => step.state === 'completed'),

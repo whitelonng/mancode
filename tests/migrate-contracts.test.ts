@@ -551,7 +551,7 @@ async function writeLegacyFixture(root: string): Promise<void> {
         status: 'in_progress',
         planVersion: 2,
         planningPolicyVersion: 2,
-        reviewPolicyVersion: 2,
+        reviewPolicyVersion: 1,
         verificationPolicyVersion: 1,
         requirementsStatus: 'ready',
         requirementsDigest:

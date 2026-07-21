@@ -5,7 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contextDoctor } from '../src/commands/context.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
+import { CURRENT_WRITER_CAPABILITIES } from '../src/context/compatibility.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
+import { reviseV3Plan } from '../src/context/plan-revision.js';
+import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
+import {
+  REQUIREMENT_DIMENSIONS,
+  type RequirementsLedgerV1,
+  parseRequirementsLedger,
+  requirementsLedgerDigest,
+} from '../src/context/requirements-ledger.js';
 import { ContextResolver } from '../src/context/resolver.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { taskRootPath } from '../src/context/task-locator.js';
@@ -15,6 +24,7 @@ import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
 import {
   type CacheInvalidationProjectionTargetV1,
+  enqueueSessionPointerProjection,
   listProjectionIntents,
   projectionCachePath,
 } from '../src/runtime/projection-outbox.js';
@@ -162,6 +172,107 @@ describe('eventual projection filesystem E2E', () => {
       committedMetadata,
     );
     await expect(listProjectionIntents(root)).resolves.toEqual([]);
+  });
+
+  it('repairs a failed plan-only clear and never lets an older resume projection rebind it', async () => {
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Keep plan-only authority detached from the active session.',
+      workflowMode: 'man',
+      sessionId: SESSION_ID,
+      client: 'vitest',
+      taskId: id(40),
+      operationId: id(41),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: SESSION_ID,
+      expectedTaskRevision: created.metadata.revision,
+      requirements: confirmedRequirements(created.requirements),
+      operationId: id(42),
+      now: NOW,
+    });
+    const plan = '# Plan\n\n1. Keep this plan without executing it.\n';
+    const revised = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: SESSION_ID,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      operationId: id(43),
+      now: NOW,
+    });
+    const staleResumeOperationId = id(44);
+    await enqueueSessionPointerProjection(root, {
+      operationId: staleResumeOperationId,
+      action: 'resume',
+      sessionId: SESSION_ID,
+      expectedPreviousTaskRef: null,
+      taskRef: created.taskRef,
+      workflowMode: created.metadata.workflowMode,
+      taskRevision: revised.metadata.revision,
+      now: NOW,
+    });
+    const planOnlyOperationId = id(45);
+    const sessionLock = path.join(
+      root,
+      '.mancode',
+      'local',
+      'sessions',
+      `.${SESSION_ID}.lock`,
+    );
+    await mkdir(sessionLock);
+
+    const planned = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: SESSION_ID,
+      expectedTaskRevision: revised.metadata.revision,
+      plan,
+      planDecision: 'plan_only',
+      operationId: planOnlyOperationId,
+      now: NOW,
+    });
+    expect(planned).toMatchObject({
+      metadata: {
+        status: 'planned',
+        governance: {
+          planDecision: 'plan_only',
+          planVersion: revised.metadata.governance.planVersion,
+        },
+      },
+      operation: { state: 'committed' },
+    });
+    await expect(readSession(root, SESSION_ID)).resolves.toMatchObject({
+      activeTaskRef: created.taskRef,
+    });
+    await expect(listProjectionIntents(root)).resolves.toHaveLength(2);
+
+    await rm(sessionLock, { recursive: true });
+    await expect(runDoctorRepair(root, planOnlyOperationId)).resolves.toBe(0);
+    await expect(readSession(root, SESSION_ID)).resolves.toMatchObject({
+      activeTaskRef: null,
+      activeMode: null,
+      lastSeenRevision: null,
+    });
+
+    await expect(runDoctorRepair(root, staleResumeOperationId)).resolves.toBe(
+      0,
+    );
+    await expect(readSession(root, SESSION_ID)).resolves.toMatchObject({
+      activeTaskRef: null,
+      activeMode: null,
+      lastSeenRevision: null,
+    });
+    await expect(listProjectionIntents(root)).resolves.toEqual([]);
+    await expect(
+      listProjectionIntents(root, {
+        operationId: staleResumeOperationId,
+        includeTerminal: true,
+      }),
+    ).resolves.toMatchObject([{ state: 'superseded' }]);
   });
 
   it.each(['closed', 'missing'] as const)(
@@ -359,7 +470,8 @@ async function resolveTask(
       expectedSchemaEpoch: project.manifest.epoch,
       readerVersion: project.manifest.minReaderVersion,
       writerVersion: project.manifest.minWriterVersion,
-      adapterVersions: project.manifest.managedAdapters,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      adapterVersions: {},
     },
     generatedAt: NOW,
   });
@@ -383,6 +495,49 @@ async function runDoctorRepair(
     logs.mockRestore();
     errors.mockRestore();
   }
+}
+
+function confirmedRequirements(
+  previous: RequirementsLedgerV1,
+): RequirementsLedgerV1 {
+  const draft: RequirementsLedgerV1 = {
+    ...previous,
+    revision: 99,
+    status: 'confirmed',
+    goal: 'Preserve a plan without retaining an active workflow pointer.',
+    functionalScope: {
+      inScope: ['Plan-only session projection'],
+      outOfScope: [],
+    },
+    technicalDecisions: [],
+    defaults: [],
+    coverage: REQUIREMENT_DIMENSIONS.map((dimension, index) => ({
+      coverageId: id(60 + index),
+      dimension,
+      status: dimension === 'technical_stack' ? 'not_applicable' : 'confirmed',
+      rationale: `Confirmed ${dimension} coverage.`,
+    })),
+    requirements: [],
+    acceptanceCriteria: [
+      {
+        displayId: 'AC-1',
+        legacyId: null,
+        criterionId: id(68),
+        requirementIds: [],
+        statement: 'The active session pointer is cleared after plan-only.',
+        required: true,
+        verificationRequirement: 'automated',
+      },
+    ],
+    blockingUnknowns: [],
+    contentDigest: '',
+    lastOperationId: id(69),
+    updatedAt: NOW.toISOString(),
+  };
+  return parseRequirementsLedger({
+    ...draft,
+    contentDigest: requirementsLedgerDigest(draft),
+  });
 }
 
 function id(offset: number): Ulid {

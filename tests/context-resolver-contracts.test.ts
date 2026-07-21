@@ -7,6 +7,7 @@ import {
   taskAggregateDigest,
 } from '../src/context/aggregate.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
+import { CURRENT_WRITER_CAPABILITIES } from '../src/context/compatibility.js';
 import {
   type RequirementsLedgerV1,
   requirementsLedgerDigest,
@@ -297,6 +298,7 @@ async function createFixture() {
       expectedSchemaEpoch: EPOCH,
       readerVersion: '1.0.0',
       writerVersion: '1.0.0',
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
       adapterVersions: adapters(),
     },
     resolver: new ContextResolver({

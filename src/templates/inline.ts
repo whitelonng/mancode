@@ -307,8 +307,30 @@ export const SOLO_SKILL = `# mancode · solo mode
 1. 读取对应 workflow 的 \`requirements.md\` 和 \`plan.md\`，确认 taskId 与 planVersion。
 2. 开工前回执目标、技术方案、包含范围、排除范围、验证方式和残余假设。
 3. 只按计划轻量实施；不重新规划、不调用 Film Reviewer、不创建新的 /man workflow。
-4. 发现会改变架构、范围或验收的缺口时暂停并询问，不自行扩大计划。
+4. 发现会改变架构、范围或验收的缺口时按下方 realignment 契约停止，不自行扩大计划。
 5. 完成最窄有效验证和一次受限 diff 自检后，运行 \`mancode workflow handoff <taskId> --complete\`；由 CLI 原子清理 \`activeSoloPlan\`、把 workflow 标记 completed 并移出 Active Plans，保留计划文件。
+
+### 何时建议升级到 /man
+以下任一情况出现时，停止当前动作并建议 \`/man\`，说明具体原因：
+1. 平台入口或流程不一致
+2. semantic owner 不清
+3. source of truth 或唯一 writer 不清
+4. status、contract、policy 或 workflow transition 的语义会变化
+5. scope、架构、成本或验收出现跨文件/跨模块变化
+6. 需要历史兼容、迁移、跨平台或团队协调证据
+
+这只是建议；用户未明确发起新的 \`/man\` workflow 时，不自动改变 mode、current step、policy 或 authority。
+
+### 停止并重新对齐
+执行已有 requirements/plan 时，如果新证据推翻已确认的目标、owner、source of truth 或验收，平台入口会产生不同语义，发现 stale adapter、不兼容 writer、未完成 operation、active child、open handoff、active solo assignment，或变化已超出当前 scope，只返回：
+
+\`\`\`text
+NEEDS_REALIGNMENT
+reason: MANCODE_REFRAME_REQUIRED
+trigger: <具体事实>
+\`\`\`
+
+这是只读诊断。保留 requirements、plan、review/verification ledger、claims、handoff 和 metadata；不调用通用 \`workflow update\`，不写 blocked/currentStep/planning，不归档旧文件，不释放 claim，不取消 handoff，也不宣称已回到 Step 2。
 
 ### UI 任务（条件执行）
 仅当 project-profile 确认有 UI 资产且任务确实涉及界面时：
@@ -330,7 +352,7 @@ export const SOLO_SKILL = `# mancode · solo mode
 - 只做一次，只看本次 diff、需求和直接受影响路径；不调用额外 reviewer，不生成审查报告，不重复巡检。
 - 验证失败、行为回归或遗留 debug 可直接修复并复验；复验不是新一轮 review。
 - 命名、可读性、DRY、loading/error 形式等建议不自动扩大改动；与需求无关时不输出。
-- 只有鉴权、支付、敏感数据、迁移/删除、公开 API、未可信输入、并发或基础设施等硬风险出现时，才用一句话建议 \`/man\`；用户说“继续 solo”即可继续。
+- 鉴权、支付、敏感数据、删除、公开 API、未可信输入、并发或基础设施等硬风险同样属于升级信号；若没有触发 realignment，用户明确选择继续 solo 后可以继续。
 
 ## 你的风格
 

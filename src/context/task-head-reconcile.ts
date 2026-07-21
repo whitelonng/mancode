@@ -39,7 +39,7 @@ import {
   taskAggregateDigest,
 } from './aggregate.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
-import type { SchemaManifestV1 } from './manifest.js';
+import type { SchemaManifest } from './manifest.js';
 import { type StoredTaskSnapshot, V3ContextStore } from './store.js';
 import { assertTaskCodeHeadUnchanged } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
@@ -434,7 +434,7 @@ async function assertRemoteTaskUnpublished(input: {
   projectRoot: string;
   taskRef: TaskRef;
   config: ProjectConfigV1;
-  manifest: SchemaManifestV1;
+  manifest: SchemaManifest;
 }): Promise<void> {
   if (input.config.transport.mode !== 'git-ref') return;
   const snapshot = await createGitRefTeamManifestStore(

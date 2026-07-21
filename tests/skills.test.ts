@@ -66,6 +66,18 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/workflow decide/);
     expect(MAN_SKILL.body).toMatch(/solo 轻量执行/);
     expect(MAN_SKILL.body).toMatch(/开工回执/);
+    expect(MAN_SKILL.body).toMatch(/Current Behavior Evidence/);
+    expect(MAN_SKILL.body).toMatch(/Candidate Semantic Owner/);
+    expect(MAN_SKILL.body).toMatch(/Source of Truth/);
+    expect(MAN_SKILL.body).toMatch(/Historical \/ Compatibility Impact/);
+    expect(MAN_SKILL.body).toMatch(/complexity bearer/);
+    expect(MAN_SKILL.body).toMatch(/一个 recommendation/);
+    expect(MAN_SKILL.body).toMatch(/简单任务.*只列一个方向/);
+    expect(MAN_SKILL.body).toMatch(/stop conditions/);
+    expect(MAN_SKILL.body).toMatch(/Domain Matrix/);
+    expect(MAN_SKILL.body).toContain('NEEDS_REALIGNMENT');
+    expect(MAN_SKILL.body).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(MAN_SKILL.body).toMatch(/不得调用通用.*workflow update.*blocked/);
   });
 
   it('keeps solo review bounded and lightweight', () => {
@@ -77,6 +89,22 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).toMatch(/activeSoloPlan/);
     expect(SOLO_SKILL).toMatch(/不重新规划/);
     expect(SOLO_SKILL).toMatch(/handoff <taskId> --complete/);
+    for (const signal of [
+      /平台入口或流程不一致/,
+      /semantic owner 不清/,
+      /source of truth.*不清/,
+      /status、contract、policy.*语义会变化/,
+      /scope、架构、成本或验收.*跨文件\/跨模块/,
+      /历史兼容/,
+      /迁移、跨平台/,
+      /团队协调证据/,
+    ]) {
+      expect(SOLO_SKILL).toMatch(signal);
+    }
+    expect(SOLO_SKILL).toMatch(/不自动改变 mode/);
+    expect(SOLO_SKILL).toContain('NEEDS_REALIGNMENT');
+    expect(SOLO_SKILL).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(SOLO_SKILL).toMatch(/这是只读诊断/);
   });
 
   it('defines manba diagnosis and real browser validation boundaries', () => {
@@ -122,6 +150,14 @@ describe('mvp-2 skills', () => {
     expect(man).toMatch(/targeted review/);
     expect(man).toMatch(/one remediation round/);
     expect(man).toMatch(/workflow review/);
+    expect(man).toMatch(/Current Behavior Evidence/);
+    expect(man).toMatch(/complexity bearer/);
+    expect(man).toMatch(/exactly one recommendation/);
+    expect(man).toMatch(/one real direction/);
+    expect(man).toMatch(/Domain Matrix/);
+    expect(man).toContain('NEEDS_REALIGNMENT');
+    expect(man).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(man).toMatch(/Do not call generic workflow update/);
 
     const manba = renderModeSkill('manba', '/');
     expect(manba).toMatch(/workflow create manba/);
@@ -142,6 +178,10 @@ describe('mvp-2 skills', () => {
     const mansolo = renderModeSkill('mansolo', '/');
     expect(mansolo).toMatch(/workflow show/);
     expect(mansolo).toMatch(/active children before their\s+parent/);
+    expect(mansolo).toMatch(/semantic owner or source of truth is unclear/);
+    expect(mansolo).toContain('NEEDS_REALIGNMENT');
+    expect(mansolo).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(mansolo).toMatch(/This is read-only/);
   });
 
   it('renders skill frontmatter', () => {

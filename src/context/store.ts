@@ -40,7 +40,7 @@ import {
   listConfirmedDecisions,
 } from './confirmed-decision.js';
 import { assertUlid } from './ids.js';
-import { type SchemaManifestV1, parseSchemaManifest } from './manifest.js';
+import { type SchemaManifest, parseSchemaManifest } from './manifest.js';
 import {
   type ParentSnapshotSource,
   parentSnapshotStaleReasons,
@@ -88,7 +88,7 @@ export interface StoredTaskSnapshot {
 }
 
 export interface StoredProjectSnapshot {
-  manifest: SchemaManifestV1;
+  manifest: SchemaManifest;
   config: ProjectConfigV1;
   policy: TeamPolicyV1;
   projectFacts: ProjectFactsV1 | null;

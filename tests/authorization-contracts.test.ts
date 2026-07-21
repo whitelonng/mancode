@@ -14,7 +14,7 @@ const SESSION_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7K';
 
 describe('cooperative authorization matrix', () => {
   it('freezes all documented mutating actor rules and keeps the trust boundary explicit', () => {
-    expect(AUTHORIZATION_MATRIX).toHaveLength(15);
+    expect(AUTHORIZATION_MATRIX).toHaveLength(16);
     const decision = evaluateAuthorization(baseRequest());
     expect(decision).toEqual({
       allowed: true,
@@ -45,6 +45,29 @@ describe('cooperative authorization matrix', () => {
         },
       }),
     ).toThrow('MANCODE_SCOPE_OUTSIDE_IMPLEMENTATION_SCOPE');
+  });
+
+  it('authorizes explicit project maintenance without requiring team join', () => {
+    const maintenance: AuthorizationRequest = {
+      ...baseRequest(),
+      action: 'project_maintenance',
+      joined: false,
+      sharedWriteGuard: 'unavailable',
+      task: null,
+    };
+    expect(evaluateAuthorization(maintenance)).toMatchObject({
+      allowed: true,
+      failures: [],
+    });
+    expect(() =>
+      assertAuthorized({
+        ...maintenance,
+        conditions: {
+          ...maintenance.conditions,
+          explicitConfirmation: false,
+        },
+      }),
+    ).toThrow('MANCODE_EXPLICIT_CONFIRMATION_REQUIRED');
   });
 
   it('forbids P0 waivers and binds repair to the original actor/session authorization', () => {

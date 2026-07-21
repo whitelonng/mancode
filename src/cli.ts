@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Option, program } from 'commander';
+import { adapterStatus, adapterUpgrade } from './commands/adapter.js';
 import {
   contextBeta,
   contextClose,
@@ -10,6 +11,7 @@ import {
   contextReconcileTaskHead,
   contextResume,
   contextSessionNew,
+  contextSessionShow,
   contextSessionSpike,
   contextShow,
   contextWorktreeRegister,
@@ -24,6 +26,7 @@ import {
   operationRepair,
   operationShow,
 } from './commands/operation.js';
+import { projectUpgrade } from './commands/project.js';
 import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { status } from './commands/status.js';
@@ -99,6 +102,10 @@ program
     '--shadow',
     'Stage a mancode bootstrap candidate without changing live files',
   )
+  .option('--confirm', 'Confirm a journaled adapter install or repair')
+  .option('--operation-id <id>', 'Operation ID returned by adapter dry-run')
+  .option('--session <id>', 'mancode session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
   .action(async (platform, options) => {
     const code = await install(
       process.cwd(),
@@ -106,6 +113,34 @@ program
       options,
     );
     process.exitCode = code;
+  });
+
+const adapterProgram = program
+  .command('adapter')
+  .description('Inspect and explicitly upgrade managed platform adapters');
+
+adapterProgram
+  .command('status')
+  .description('Inspect managed adapter content on disk')
+  .option('--platform <platform>', 'Inspect one platform adapter')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await adapterStatus(process.cwd(), options);
+  });
+
+adapterProgram
+  .command('upgrade')
+  .description('Preview or repair managed adapter content')
+  .option('--all', 'Upgrade all platform adapters')
+  .option('--platform <platform>', 'Upgrade one platform adapter')
+  .option('--dry-run', 'Stage and report changes without writing live targets')
+  .option('--confirm', 'Confirm the journaled adapter upgrade')
+  .option('--operation-id <id>', 'Operation ID returned by adapter dry-run')
+  .option('--session <id>', 'mancode session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await adapterUpgrade(process.cwd(), options);
   });
 
 program
@@ -116,6 +151,23 @@ program
   .action(async (options) => {
     const code = await status(process.cwd(), options);
     process.exitCode = code;
+  });
+
+const projectProgram = program
+  .command('project')
+  .description('Manage project-level mancode policy and compatibility');
+
+projectProgram
+  .command('upgrade')
+  .description('Upgrade project governance policy explicitly')
+  .requiredOption('--policy <version>', 'Target planning policy version (2)')
+  .option('--dry-run', 'Preview the upgrade without writing')
+  .option('--operation-id <id>', 'Operation ID returned by project dry-run')
+  .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await projectUpgrade(process.cwd(), options);
   });
 
 program
@@ -159,6 +211,7 @@ program
   .option('--session <id>', 'mancode session ID (otherwise MANCODE_SESSION_ID)')
   .option('--client <name>', 'Client identity (default: mancode-cli)')
   .option('--expected-revision <n>', 'Expected task revision for mutations')
+  .option('--checkpoint-id <id>', 'Checkpoint ID for a requirements reframe')
   .option('--child-revision <n>', 'Expected child task revision for merge')
   .option('--summary <text>', 'Privacy-screened child result summary')
   .option('--next-action <text>', 'Next parent action after a child merge')
@@ -248,6 +301,16 @@ contextSessionProgram
   .option('--json', 'Output as JSON (for scripts)')
   .action(async (options) => {
     process.exitCode = await contextSessionNew(process.cwd(), options);
+  });
+
+contextSessionProgram
+  .command('show')
+  .description('Show one explicit session without changing it')
+  .requiredOption('--session <id>', 'Session ID')
+  .option('--client <name>', 'Expected client identity')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await contextSessionShow(process.cwd(), options);
   });
 
 contextSessionProgram
