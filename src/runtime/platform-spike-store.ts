@@ -73,7 +73,7 @@ export async function writePlatformSessionSpike(
   spike: PlatformSessionSpike,
 ): Promise<PlatformSessionSpike> {
   const parsed = parsePlatformSessionSpike(spike);
-  if (parsed.schemaVersion !== 2) {
+  if (parsed.schemaVersion !== 3) {
     throw new Error('MANCODE_PLATFORM_SPIKE_RECAPTURE_REQUIRED');
   }
   const directory = await safeEvidenceDirectory(projectRoot, true);

@@ -11,6 +11,7 @@ export const SESSION_SPIKE_PLATFORMS = [
 
 export type SessionSpikePlatform = (typeof SESSION_SPIKE_PLATFORMS)[number];
 export type HostSessionSource = 'hook_stdin' | 'environment' | 'api' | 'none';
+export type SessionEvidenceMode = 'host' | 'explicit';
 export type SpikeEvidenceStatus =
   | 'proven'
   | 'not_proven'
@@ -65,18 +66,40 @@ export interface PlatformSessionSpikeV2 {
   evidence: PlatformSessionEvidenceBindingV1;
 }
 
+/**
+ * Distinguishes trusted host identity from verified explicit sessions. Both
+ * can satisfy release evidence, but only host evidence may enable automatic
+ * host identity at runtime.
+ */
+export interface PlatformSessionSpikeV3 {
+  schemaVersion: 3;
+  platform: SessionSpikePlatform;
+  observedAt: string;
+  sessionMode: SessionEvidenceMode;
+  hostSessionSource: HostSessionSource;
+  hostSessionObserved: boolean;
+  distinctClientWindows: SpikeEvidenceStatus;
+  commandPropagation: SpikeEvidenceStatus;
+  subagentInheritance: SpikeEvidenceStatus;
+  subagentInheritanceReason: string | null;
+  hookApproval: HookApprovalStatus;
+  evidence: PlatformSessionEvidenceBindingV1;
+}
+
 export type PlatformSessionSpike =
   | PlatformSessionSpikeV1
-  | PlatformSessionSpikeV2;
+  | PlatformSessionSpikeV2
+  | PlatformSessionSpikeV3;
 
 export interface PlatformSessionSpikeInput {
   platform: SessionSpikePlatform;
   observedAt: string;
+  sessionMode: SessionEvidenceMode;
   hostSessionSource: HostSessionSource;
-  /** Ephemeral only; never copied into PlatformSessionSpikeV2. */
-  firstWindowHostSessionKey: string | null;
+  /** Ephemeral host key or explicit session ID; never persisted. */
+  firstWindowSessionKey: string | null;
   /** Ephemeral only; proves two same-client windows do not collide. */
-  secondWindowHostSessionKey: string | null;
+  secondWindowSessionKey: string | null;
   /** Operator-attested result from a real host child command. */
   commandPropagation: SpikeEvidenceStatus;
   /** Operator-attested result from a real host child agent, if applicable. */
@@ -98,6 +121,11 @@ export type PlatformSessionEvidenceState =
   | 'release_candidate_mismatch'
   | 'mancode_version_mismatch';
 
+export type PlatformReleaseEvidence =
+  | 'host_session_verified'
+  | 'explicit_session_verified'
+  | 'unverified';
+
 export interface PlatformSessionCapability {
   platform: SessionSpikePlatform;
   hostIdentity: HostIdentityCapability;
@@ -106,61 +134,62 @@ export interface PlatformSessionCapability {
   subagentInheritance: SpikeEvidenceStatus;
   hookApproval: HookApprovalStatus;
   evidenceState: PlatformSessionEvidenceState;
+  releaseEvidence: PlatformReleaseEvidence;
   reason: string;
 }
 
 export interface PlatformSpikeFreezeStatus {
   missingPlatforms: SessionSpikePlatform[];
+  /** Informational runtime policy; verified explicit evidence may still be release-ready. */
   explicitRequiredPlatforms: SessionSpikePlatform[];
+  unverifiedPlatforms: SessionSpikePlatform[];
   evidenceMismatchPlatforms: SessionSpikePlatform[];
   ready: boolean;
 }
 
 export function createPlatformSessionSpike(
   input: PlatformSessionSpikeInput,
-): PlatformSessionSpikeV2 {
+): PlatformSessionSpikeV3 {
   assertSessionSpikePlatform(input.platform);
   assertTimestamp(input.observedAt, 'platform session spike observedAt');
+  assertSessionEvidenceMode(input.sessionMode);
   assertHostSessionSource(input.hostSessionSource);
   assertSpikeStatus(input.commandPropagation, 'commandPropagation');
   assertSpikeStatus(input.subagentInheritance, 'subagentInheritance');
   assertHookApproval(input.hookApproval);
   const evidence = parseEvidenceBinding(input.evidence);
-  const first = normalizeEphemeralHostKey(input.firstWindowHostSessionKey);
-  const second = normalizeEphemeralHostKey(input.secondWindowHostSessionKey);
+  const first = normalizeEphemeralSessionKey(input.firstWindowSessionKey);
+  const second = normalizeEphemeralSessionKey(input.secondWindowSessionKey);
   const subagentInheritanceReason = parseSubagentInheritanceReason(
     input.subagentInheritance,
     input.subagentInheritanceReason ?? null,
   );
-  if (input.hostSessionSource === 'none' && first !== null) {
+  if (input.sessionMode === 'host' && input.hostSessionSource === 'none') {
     throw new Error(
-      'platform session spike source none cannot carry a host key',
+      'platform host session spike requires a host session source',
     );
   }
-  if (input.hostSessionSource !== 'none' && first === null) {
-    throw new Error(
-      'platform session spike host source requires an observed key',
-    );
+  if (input.sessionMode === 'explicit' && input.hostSessionSource !== 'none') {
+    throw new Error('platform explicit session spike host source must be none');
   }
-  if (second !== null && first === null) {
-    throw new Error(
-      'platform session spike second window requires a first window',
-    );
+  if (first === null) {
+    throw new Error('platform session spike requires a first window key');
   }
   if (
-    input.hostSessionSource === 'none' &&
-    input.commandPropagation === 'proven'
+    input.sessionMode === 'explicit' &&
+    input.hookApproval !== 'not_applicable'
   ) {
     throw new Error(
-      'platform session spike cannot prove propagation without a host key',
+      'platform explicit session spike hook approval must be not_applicable',
     );
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     platform: input.platform,
     observedAt: input.observedAt,
+    sessionMode: input.sessionMode,
     hostSessionSource: input.hostSessionSource,
-    hostSessionObserved: first !== null,
+    hostSessionObserved: input.sessionMode === 'host',
     distinctClientWindows:
       second === null
         ? 'not_tested'
@@ -181,7 +210,8 @@ export function parsePlatformSessionSpike(
   assertRecord(value, 'platform session spike');
   if (value.schemaVersion === 1) return parsePlatformSessionSpikeV1(value);
   if (value.schemaVersion === 2) return parsePlatformSessionSpikeV2(value);
-  throw new Error('platform session spike schemaVersion must be 1 or 2');
+  if (value.schemaVersion === 3) return parsePlatformSessionSpikeV3(value);
+  throw new Error('platform session spike schemaVersion must be 1, 2, or 3');
 }
 
 /** Missing evidence is deliberately indistinguishable from insufficient evidence. */
@@ -195,18 +225,33 @@ export function evaluatePlatformSessionCapability(
     parsed.hostSessionSource !== 'hook_stdin' ||
     parsed.hookApproval === 'approved';
   const childInheritanceVerified =
-    parsed.schemaVersion === 2 &&
+    parsed.schemaVersion !== 1 &&
     (parsed.subagentInheritance === 'proven' ||
       (parsed.subagentInheritance === 'not_applicable' &&
         parsed.subagentInheritanceReason !== null));
-  const hostVerified =
+  const commonEvidenceVerified =
     evidenceState === 'current' &&
-    parsed.hostSessionObserved &&
-    parsed.hostSessionSource !== 'none' &&
     parsed.distinctClientWindows === 'proven' &&
     parsed.commandPropagation === 'proven' &&
-    childInheritanceVerified &&
+    childInheritanceVerified;
+  const sessionMode = parsed.schemaVersion === 3 ? parsed.sessionMode : 'host';
+  const hostVerified =
+    commonEvidenceVerified &&
+    sessionMode === 'host' &&
+    parsed.hostSessionObserved &&
+    parsed.hostSessionSource !== 'none' &&
     hostSourceApproved;
+  const explicitVerified =
+    commonEvidenceVerified &&
+    parsed.schemaVersion === 3 &&
+    sessionMode === 'explicit' &&
+    parsed.hostSessionSource === 'none' &&
+    !parsed.hostSessionObserved;
+  const releaseEvidence: PlatformReleaseEvidence = hostVerified
+    ? 'host_session_verified'
+    : explicitVerified
+      ? 'explicit_session_verified'
+      : 'unverified';
   return {
     platform: parsed.platform,
     hostIdentity: hostVerified ? 'host_verified' : 'explicit_required',
@@ -215,9 +260,12 @@ export function evaluatePlatformSessionCapability(
     subagentInheritance: parsed.subagentInheritance,
     hookApproval: parsed.hookApproval,
     evidenceState,
+    releaseEvidence,
     reason: hostVerified
       ? 'host identity, distinct windows, command propagation, and child inheritance are proven'
-      : capabilityReason(parsed, evidenceState, childInheritanceVerified),
+      : explicitVerified
+        ? 'explicit session isolation, command propagation, and child inheritance are proven'
+        : capabilityReason(parsed, evidenceState, childInheritanceVerified),
   };
 }
 
@@ -255,6 +303,9 @@ export function platformSpikeFreezeStatus(
     (platform) =>
       capabilities.get(platform)?.hostIdentity === 'explicit_required',
   );
+  const unverifiedPlatforms = SESSION_SPIKE_PLATFORMS.filter(
+    (platform) => capabilities.get(platform)?.releaseEvidence === 'unverified',
+  );
   const evidenceMismatchPlatforms = SESSION_SPIKE_PLATFORMS.filter(
     (platform) => {
       const capability = capabilities.get(platform);
@@ -264,9 +315,9 @@ export function platformSpikeFreezeStatus(
   return {
     missingPlatforms,
     explicitRequiredPlatforms,
+    unverifiedPlatforms,
     evidenceMismatchPlatforms,
-    ready:
-      missingPlatforms.length === 0 && explicitRequiredPlatforms.length === 0,
+    ready: missingPlatforms.length === 0 && unverifiedPlatforms.length === 0,
   };
 }
 
@@ -324,6 +375,52 @@ function parsePlatformSessionSpikeV2(
   };
 }
 
+function parsePlatformSessionSpikeV3(
+  value: Record<string, unknown>,
+): PlatformSessionSpikeV3 {
+  assertKnownKeys(
+    value,
+    [
+      'schemaVersion',
+      'platform',
+      'observedAt',
+      'sessionMode',
+      'hostSessionSource',
+      'hostSessionObserved',
+      'distinctClientWindows',
+      'commandPropagation',
+      'subagentInheritance',
+      'subagentInheritanceReason',
+      'hookApproval',
+      'evidence',
+    ],
+    'platform session spike',
+  );
+  const common = parseCommonSpikeFields(value, 3);
+  assertSessionEvidenceMode(value.sessionMode);
+  if (value.sessionMode === 'host') {
+    if (common.hostSessionSource === 'none' || !common.hostSessionObserved) {
+      throw new Error('platform host session spike evidence is inconsistent');
+    }
+  } else if (
+    common.hostSessionSource !== 'none' ||
+    common.hostSessionObserved ||
+    common.hookApproval !== 'not_applicable'
+  ) {
+    throw new Error('platform explicit session spike evidence is inconsistent');
+  }
+  return {
+    ...common,
+    schemaVersion: 3,
+    sessionMode: value.sessionMode,
+    subagentInheritanceReason: parseSubagentInheritanceReason(
+      common.subagentInheritance,
+      value.subagentInheritanceReason,
+    ),
+    evidence: parseEvidenceBinding(value.evidence),
+  };
+}
+
 function parseCommonSpikeFields(
   value: Record<string, unknown>,
   schemaVersion: 1,
@@ -334,10 +431,21 @@ function parseCommonSpikeFields(
 ): Omit<PlatformSessionSpikeV2, 'subagentInheritanceReason' | 'evidence'>;
 function parseCommonSpikeFields(
   value: Record<string, unknown>,
-  schemaVersion: 1 | 2,
+  schemaVersion: 3,
+): Omit<
+  PlatformSessionSpikeV3,
+  'sessionMode' | 'subagentInheritanceReason' | 'evidence'
+>;
+function parseCommonSpikeFields(
+  value: Record<string, unknown>,
+  schemaVersion: 1 | 2 | 3,
 ):
   | PlatformSessionSpikeV1
-  | Omit<PlatformSessionSpikeV2, 'subagentInheritanceReason' | 'evidence'> {
+  | Omit<PlatformSessionSpikeV2, 'subagentInheritanceReason' | 'evidence'>
+  | Omit<
+      PlatformSessionSpikeV3,
+      'sessionMode' | 'subagentInheritanceReason' | 'evidence'
+    > {
   if (value.schemaVersion !== schemaVersion) {
     throw new Error(
       `platform session spike schemaVersion must be ${schemaVersion}`,
@@ -370,7 +478,11 @@ function parseCommonSpikeFields(
     hookApproval: value.hookApproval,
   } as
     | PlatformSessionSpikeV1
-    | Omit<PlatformSessionSpikeV2, 'subagentInheritanceReason' | 'evidence'>;
+    | Omit<PlatformSessionSpikeV2, 'subagentInheritanceReason' | 'evidence'>
+    | Omit<
+        PlatformSessionSpikeV3,
+        'sessionMode' | 'subagentInheritanceReason' | 'evidence'
+      >;
 }
 
 function evidenceStateFor(
@@ -407,6 +519,13 @@ function capabilityReason(
   }
   if (spike.commandPropagation !== 'proven') {
     return 'command propagation is not proven; require --session or MANCODE_SESSION_ID';
+  }
+  if (
+    spike.schemaVersion === 3 &&
+    spike.sessionMode === 'explicit' &&
+    spike.distinctClientWindows !== 'proven'
+  ) {
+    return 'explicit session isolation is not proven; require distinct active sessions';
   }
   return 'host identity is not fully proven; require --session or MANCODE_SESSION_ID';
 }
@@ -473,12 +592,20 @@ function parseSubagentInheritanceReason(
   return parseEvidenceText(value, 'subagentInheritanceReason');
 }
 
-function normalizeEphemeralHostKey(value: string | null): string | null {
+function normalizeEphemeralSessionKey(value: string | null): string | null {
   if (value === null) return null;
   if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
-    throw new Error('platform session spike host key is invalid');
+    throw new Error('platform session spike window key is invalid');
   }
   return value.trim();
+}
+
+function assertSessionEvidenceMode(
+  value: unknown,
+): asserts value is SessionEvidenceMode {
+  if (value !== 'host' && value !== 'explicit') {
+    throw new Error('platform session spike sessionMode is invalid');
+  }
 }
 
 function assertSessionSpikePlatform(

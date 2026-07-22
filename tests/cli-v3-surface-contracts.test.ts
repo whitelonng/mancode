@@ -52,6 +52,7 @@ describe('V3 CLI command surface', () => {
         requiredOptions(commandAt(cliProgram, 'context', 'session', 'spike')),
       ).toEqual([
         '--platform',
+        '--session-mode',
         '--host-session-source',
         '--command-propagation',
         '--subagent-inheritance',

@@ -63,6 +63,7 @@
     "test:windows-smoke": "node scripts/windows-smoke.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "release:check": "node scripts/release-check.mjs",
     "lint": "biome check src tests",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",

@@ -149,6 +149,7 @@ describe('V3 CLI command contracts', () => {
       expect(
         await contextSessionSpike(root, {
           platform: 'codex',
+          sessionMode: 'host',
           hostSessionSource: 'api',
           subagentInheritance: 'proven',
           hostVersion: 'fixture-host-1.0.0',
@@ -178,6 +179,7 @@ describe('V3 CLI command contracts', () => {
       expect(
         await contextSessionSpike(root, {
           platform: 'codex',
+          sessionMode: 'host',
           hostSessionSource: 'api',
           commandPropagation: 'proven',
           subagentInheritance: 'proven',
@@ -213,6 +215,102 @@ describe('V3 CLI command contracts', () => {
         identitySource: 'host',
       });
       expect(JSON.stringify(session)).not.toContain('private-key');
+    } finally {
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      logs.mockRestore();
+    }
+  });
+
+  it('records real explicit-session isolation without granting host trust', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'codex', json: true });
+      const first = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      await contextSessionNew(root, { client: 'codex', json: true });
+      const second = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', first.session.sessionId);
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', second.session.sessionId);
+
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'not_applicable',
+          subagentInheritanceReason: 'This host exposes no child-agent API.',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(0);
+      const evidence = String(logs.mock.calls.at(-1)?.[0]);
+      expect(evidence).toContain('explicit_session_verified');
+      expect(evidence).toContain('explicit_required');
+      expect(evidence).not.toContain(first.session.sessionId);
+      expect(evidence).not.toContain(second.session.sessionId);
+    } finally {
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      logs.mockRestore();
+    }
+  });
+
+  it('rejects fabricated or wrong-client explicit session evidence', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', id(40));
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', id(41));
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(logs.mock.calls.flat().join(' ')).toContain(
+        'MANCODE_PLATFORM_SPIKE_SESSION_NOT_FOUND',
+      );
+
+      await contextSessionNew(root, { client: 'cursor', json: true });
+      const first = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      await contextSessionNew(root, { client: 'cursor', json: true });
+      const second = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', first.session.sessionId);
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', second.session.sessionId);
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(logs.mock.calls.flat().join(' ')).toContain(
+        'MANCODE_PLATFORM_SPIKE_SESSION_CLIENT_MISMATCH',
+      );
     } finally {
       vi.unstubAllEnvs();
       errors.mockRestore();

@@ -320,9 +320,10 @@ contextSessionProgram
     '--platform <platform>',
     'claude-code, codex, cursor, copilot, or zcode',
   )
+  .requiredOption('--session-mode <mode>', 'Evidence path: host or explicit')
   .requiredOption(
     '--host-session-source <source>',
-    'hook_stdin, environment, or api',
+    'hook_stdin, environment, api, or none for explicit sessions',
   )
   .requiredOption(
     '--command-propagation <status>',

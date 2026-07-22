@@ -617,8 +617,11 @@ mancode/
 ## Remaining Work
 
 - Complete real-host session acceptance for Claude Code, Codex, Cursor,
-  GitHub Copilot, and ZCode on one release candidate.
-- Complete cross-host recovery and two-clone git-ref manual acceptance.
+  GitHub Copilot, and ZCode on one release candidate; verified host sessions
+  and isolated explicit sessions are both valid evidence paths.
+- Run `npm run release:check -- --candidate <full-commit-sha>` for the clean
+  checkout, automated two-clone/legacy checks, tarball SHA-256, and install
+  smoke; complete cross-host recovery separately.
 - Confirm ZCode project-skill discovery and workspace-command paths; keep the
   adapter provisional until then.
 - Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.

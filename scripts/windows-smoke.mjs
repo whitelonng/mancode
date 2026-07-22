@@ -215,6 +215,8 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
     'spike',
     '--platform',
     'codex',
+    '--session-mode',
+    'host',
     '--host-session-source',
     'api',
     '--command-propagation',

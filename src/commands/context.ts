@@ -33,6 +33,7 @@ import {
   type HookApprovalStatus,
   type HostSessionSource,
   SESSION_SPIKE_PLATFORMS,
+  type SessionEvidenceMode,
   type SessionSpikePlatform,
   type SpikeEvidenceStatus,
   createPlatformSessionSpike,
@@ -95,6 +96,7 @@ export interface ContextSessionShowOptions {
 
 export interface ContextSessionSpikeOptions {
   platform?: string;
+  sessionMode?: string;
   hostSessionSource?: string;
   commandPropagation?: string;
   subagentInheritance?: string;
@@ -245,10 +247,8 @@ export async function contextSessionSpike(
 ): Promise<number> {
   try {
     const platform = parseSpikePlatform(options.platform);
+    const sessionMode = parseSessionEvidenceMode(options.sessionMode);
     const hostSessionSource = parseHostSessionSource(options.hostSessionSource);
-    if (hostSessionSource === 'none') {
-      throw new Error('MANCODE_PLATFORM_SPIKE_HOST_SOURCE_REQUIRED');
-    }
     const releaseCandidate = parseReleaseCandidate(options.releaseCandidate);
     const hostVersion = parseHostVersion(options.hostVersion);
     const commandPropagation = parseRequiredSpikeEvidenceStatus(
@@ -259,23 +259,35 @@ export async function contextSessionSpike(
       options.subagentInheritance,
       'subagent inheritance',
     );
-    const firstWindowHostSessionKey =
-      process.env.MANCODE_SPIKE_HOST_SESSION_KEY ?? null;
-    const secondWindowHostSessionKey =
-      process.env.MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY ?? null;
-    if (
-      firstWindowHostSessionKey === null ||
-      secondWindowHostSessionKey === null
-    ) {
+    const project = await readV3CommandProject(rootDir);
+    const [firstWindowSessionKey, secondWindowSessionKey] =
+      sessionMode === 'host'
+        ? [
+            process.env.MANCODE_SPIKE_HOST_SESSION_KEY ?? null,
+            process.env.MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY ?? null,
+          ]
+        : [
+            process.env.MANCODE_SPIKE_SESSION_ID ?? null,
+            process.env.MANCODE_SPIKE_SECOND_SESSION_ID ?? null,
+          ];
+    if (firstWindowSessionKey === null || secondWindowSessionKey === null) {
       throw new Error('MANCODE_PLATFORM_SPIKE_WINDOW_EVIDENCE_REQUIRED');
     }
-    const project = await readV3CommandProject(rootDir);
+    if (sessionMode === 'explicit') {
+      await assertExplicitSpikeSessions(
+        project.projectRoot,
+        platform,
+        firstWindowSessionKey,
+        secondWindowSessionKey,
+      );
+    }
     const spike = createPlatformSessionSpike({
       platform,
       observedAt: new Date().toISOString(),
+      sessionMode,
       hostSessionSource,
-      firstWindowHostSessionKey,
-      secondWindowHostSessionKey,
+      firstWindowSessionKey,
+      secondWindowSessionKey,
       commandPropagation,
       subagentInheritance,
       subagentInheritanceReason: options.subagentInheritanceReason ?? null,
@@ -312,6 +324,32 @@ export async function contextSessionSpike(
         ? error.message
         : 'Unable to record platform session evidence.',
     );
+  }
+}
+
+async function assertExplicitSpikeSessions(
+  projectRoot: string,
+  platform: SessionSpikePlatform,
+  firstSessionId: string,
+  secondSessionId: string,
+): Promise<void> {
+  if (firstSessionId === secondSessionId) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_COLLISION');
+  }
+  const [first, second] = await Promise.all([
+    readSession(projectRoot, firstSessionId),
+    readSession(projectRoot, secondSessionId),
+  ]);
+  if (
+    first === null ||
+    second === null ||
+    first.status !== 'active' ||
+    second.status !== 'active'
+  ) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_NOT_FOUND');
+  }
+  if (first.client !== platform || second.client !== platform) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_CLIENT_MISMATCH');
   }
 }
 
@@ -945,6 +983,15 @@ function parseSpikePlatform(value: string | undefined): SessionSpikePlatform {
     throw new Error('MANCODE_PLATFORM_SPIKE_PLATFORM_REQUIRED');
   }
   return value as SessionSpikePlatform;
+}
+
+function parseSessionEvidenceMode(
+  value: string | undefined,
+): SessionEvidenceMode {
+  if (value !== 'host' && value !== 'explicit') {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_MODE_REQUIRED');
+  }
+  return value;
 }
 
 function parseHostSessionSource(value: string | undefined): HostSessionSource {

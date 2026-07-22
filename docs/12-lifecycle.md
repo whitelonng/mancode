@@ -54,6 +54,8 @@ session 是本地便利状态。关闭一个 session 不会关闭任务，也不
 
 ## 发布证据
 
-`context session spike` 记录真实宿主的窗口隔离、子命令传播、子 agent 继承和 hook approval，但不保存原始宿主 session key。内部 `context beta` 要求所有证据绑定同一个 immutable release candidate。
+`context session spike` 记录真实宿主的窗口隔离、子命令传播、子 agent 继承和 hook approval，但不保存原始宿主 session key 或显式 session ID。证据模式为 `host` 或 `explicit`：前者通过后可授权受信宿主身份，后者只证明两个已存在、active、client 匹配的显式 session 隔离，不改变运行时的 `explicit_required` 策略。内部 `context beta` 接受与平台能力匹配的任一路径，并要求所有证据绑定同一个 immutable release candidate。
+
+`npm run release:check -- --candidate <完整提交 SHA>` 从 `origin/develop` 创建干净 checkout，运行完整自动化、真实双 clone/legacy fixture、audit、pack 与 tarball 安装 smoke，并把报告和候选 tarball 保存在 `.mancode/local/release-evidence/`。该命令不会执行 `npm publish` 或修改 dist-tag。
 
 尚未完成的验收见 [release-acceptance.md](./release-acceptance.md)。

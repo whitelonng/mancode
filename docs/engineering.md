@@ -36,7 +36,7 @@ npm run build
 npm run test:dist
 ```
 
-发布前运行 `npm run prepublishOnly`。涉及 Windows 原子文件行为时追加 `npm run test:windows-smoke`；涉及网站时运行对应网站测试和浏览器检查。
+发布候选先运行 `npm run prepublishOnly`。提交并推送最终 `develop` 后，运行 `npm run release:check -- --candidate <完整提交 SHA>`，由远端候选的干净 checkout 重跑完整门禁、跨 clone、legacy、audit、pack 和 tarball 安装 smoke，并生成本地 SHA-256 证据。涉及 Windows 原子文件行为时追加 `npm run test:windows-smoke`；涉及网站时运行对应网站测试和浏览器检查。
 
 不要把历史测试数量写入长期文档。报告当前命令、退出码和失败原因即可。
 

@@ -562,8 +562,8 @@ mancode/
 
 ## 仍在推进
 
-- 在同一发布候选上完成 Claude Code、Codex、Cursor、GitHub Copilot 和 ZCode 的真实宿主 session 验收。
-- 完成跨真实宿主恢复与双 clone git-ref 人工验收。
+- 在同一发布候选上完成 Claude Code、Codex、Cursor、GitHub Copilot 和 ZCode 的真实宿主 session 验收；宿主自动 session 和显式双 session 都是合法证据路径。
+- 使用 `npm run release:check -- --candidate <完整提交 SHA>` 完成干净 checkout、自动双 clone/legacy、tarball SHA-256 和安装 smoke；另完成跨真实宿主恢复。
 - 确认 ZCode 项目级 skill 发现和 workspace command 路径；完成前继续标记为 provisional。
 - 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
 

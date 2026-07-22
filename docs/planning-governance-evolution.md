@@ -14,13 +14,13 @@
 
 | 类别 | 状态 | 证据 |
 | --- | --- | --- |
-| A–F 实现工作包 | 工作树生产加固完成 | `4dc2e7e` 包含 Policy 2 mode scope、resolver 短路和 adapter target recovery 修复；本轮又补齐 required adapter readiness、真实 reframe 并发、已发布旧 CLI 黑盒证据、条件式 decision-readiness、跨会话 requirements draft 和 Continuity 命名迁移，等待形成下一候选 |
-| 本地发布前检查 | 工作树通过 | 本轮 `npm run prepublishOnly` 通过：lint、typecheck、build、dist adapter 验证、119 个测试文件/833 个测试；`npm audit --omit=dev`、`npm pack --dry-run` 和实际 tarball/Claude Code smoke 均通过，形成候选后仍需在干净 checkout 重跑 |
-| GitHub Quality gate | 候选通过 | `4dc2e7e` 的 [Quality gate run 29896302856](https://github.com/whitelonng/mancode/actions/runs/29896302856) 成功；候选变化后必须重跑 |
-| GitHub Windows gate | 候选通过 | `4dc2e7e` 的 [Windows gate run 29896302904](https://github.com/whitelonng/mancode/actions/runs/29896302904) 在 CMD、PowerShell、Git Bash 全部成功；候选变化后必须重跑 |
-| `develop` 远程一致性 | 候选已对齐 | `4dc2e7e` 已与 `origin/develop` 对齐；后续工作树修复形成新候选后需重新推送和对齐，`main` 未修改 |
+| A–F 实现工作包 | 工作树生产加固完成 | Policy 2、adapter recovery、reframe、旧 CLI 黑盒、decision-readiness、requirements draft 和 Continuity 命名已经完成；本轮继续修正平台发布证据与最终 release-check |
+| 本地发布前检查 | 新候选待重跑 | 最终候选必须通过 `npm run prepublishOnly`，并由 `npm run release:check -- --candidate <SHA>` 从远端干净 checkout 重跑跨 clone、legacy、audit、pack 和 tarball 安装 smoke |
+| GitHub Quality gate | 历史候选通过 | `2c9d697` 的 [Quality gate run 29930349142](https://github.com/whitelonng/mancode/actions/runs/29930349142) 成功；本轮形成新候选后必须重跑 |
+| GitHub Windows gate | 历史候选通过 | `2c9d697` 的 [Windows gate run 29930353690](https://github.com/whitelonng/mancode/actions/runs/29930353690) 在 CMD、PowerShell、Git Bash 全部成功；本轮形成新候选后必须重跑 |
+| `develop` 远程一致性 | 新候选待形成 | `2c9d697` 当前与 `origin/develop` 对齐；本轮工作树形成新候选后需重新推送和对齐，`main` 不得修改 |
 | Claude Code 条件式澄清实测 | 工作树通过 | Claude Code 2.1.142 使用本地 0.4.0 tarball：清晰请求直接执行，需求不清晰时提问等待，明确但与证据冲突的请求被拦截；真实测试同时发现并修复了隐藏 bootstrap skill 未稳定加载的问题，最终改为 `CLAUDE.md` 受控区，候选形成后仍需重跑 |
-| 最终发布验收 | 未完成 | 五平台真实宿主、跨 clone/legacy 人工验收、最终 Beta gate 和干净 checkout tarball 验收仍待完成 |
+| 最终发布验收 | 未完成 | 五平台真实宿主与跨宿主恢复、自动 release-check、最终 Beta gate 和候选 tarball 验收仍待完成 |
 | npm 发布 | 未执行 | 在上项全部完成前保持禁止 |
 
 ## 2. 目标、不变量与非目标
@@ -379,6 +379,8 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - [x] local transport 的完整原子 reframe、recovery、archive retention，以及与 child create、handoff create/start、solo handoff start 的真实并发竞争通过；没有复用 scope-change，也没有部分 authority 或 eligibility 绕过路径。
 - [x] 已升级/未升级项目、旧/新 workflow、local/git-ref transport 的自动化兼容矩阵通过；git-ref reframe 稳定返回 `MANCODE_REFRAME_GIT_REF_UNSUPPORTED`。
 - [x] 5 个 adapter renderer、Windows path、line ending、用户托管区和每个 target 写前/写后中断恢复在 `4dc2e7e` 通过；后续候选仍需重跑 dist/Windows/recovery gate。
+- [x] 平台证据区分 `host_session_verified` 与 `explicit_session_verified`；显式路径验证两个 active、不同且 client 匹配的 session，只满足发布证据，不提升运行时宿主信任。
+- [x] release-check 从远端候选创建干净 checkout，自动运行完整门禁、双 clone、legacy、audit、pack、tarball CLI/module smoke，并输出提交绑定的 SHA-256 证据；脚本不包含 npm publish 或 dist-tag 操作。
 - [ ] Claude Code、Codex、Cursor、GitHub Copilot、ZCode 的最终候选真实宿主验收，以及 [`docs/release-acceptance.md`](./release-acceptance.md) 要求的跨 clone、legacy、Beta gate 和干净 checkout tarball 验收。
 - [x] 按开发集成要求将候选 `4dc2e7e` 推送到远程 `develop`，且 Quality 与 Windows gate 均通过；这不等同于 release gate 通过。
 - [ ] 完成剩余发布验收后才允许进入 npm 发布检查；任何条件失败都不得发布 npm。
@@ -404,7 +406,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 2. [x] 完成 A–F 工作包；工作包可以独立合并，但不发布中间 npm 版本。
 3. [x] 完成 adapter digest/upgrade 和 parser/capability gate；当前工作树已通过 0.3.x + V2 manifest reader/writer fixture，新候选仍需重跑。
 4. [x] 完成 project upgrade 和 local reframe 的独立 operation/recovery；只在 upgraded marker 下打开 Policy 2 create default。
-5. [ ] 在同一个 release candidate 上通过第 10.2 节和 [`docs/release-acceptance.md`](./release-acceptance.md) 的全部真实宿主、跨 clone、legacy、Beta gate 和 tarball 检查。
+5. [ ] 在同一个 release candidate 上通过第 10.2 节和 [`docs/release-acceptance.md`](./release-acceptance.md) 的全部真实宿主、release-check、Beta gate 和 tarball 检查。
 6. [ ] 将本轮加固后的唯一候选提交推送到远程 `develop`；`4dc2e7e` 的历史推送不替代新候选，且禁止推送、合并或创建以 `main` 为目标的发布操作。
 7. [ ] 确认远程 `develop` 与完整验收证据完全一致后，才允许发布唯一的 npm 版本 0.4.0。git-ref reframe 始终拒绝，不进入本计划范围。
 
@@ -435,12 +437,12 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 0.4.0 只允许按以下顺序发布：
 
-`4dc2e7e` 是当前已验证的开发集成候选，其 [Quality gate](https://github.com/whitelonng/mancode/actions/runs/29896302856) 和 [Windows gate](https://github.com/whitelonng/mancode/actions/runs/29896302904) 均成功。候选后的任何实现、测试或发布文档修改都会使这些证据不再适用于新候选；新的唯一候选必须重新完成第 1–3 步并推送到 `origin/develop`，第 4–6 步必须在任何 `npm publish` 前补齐。
+`2c9d697` 是上一已验证开发候选，其 [Quality gate](https://github.com/whitelonng/mancode/actions/runs/29930349142) 和 [Windows gate](https://github.com/whitelonng/mancode/actions/runs/29930353690) 均成功。候选后的任何实现、测试或发布文档修改都会使这些证据不再适用于新候选；新的唯一候选必须重新完成第 1–3 步并推送到 `origin/develop`，第 4–6 步必须在任何正式 npm 发布前补齐。
 
 1. 所有实现、修复和文档进入本地 `develop`，形成唯一 release candidate commit。
 2. 在该提交上完成第 10.2 节的全部自动化、恢复、跨平台和真实宿主验收。任何失败都必须修复并从头重跑受影响的 release gate。
 3. [ ] 对本轮形成的新候选只执行 `git push origin develop`。禁止直接或间接更新远程 `main`，包括 push、merge、rebase、以 `main` 为目标的 PR 或自动化发布工作流。
-4. 从远程 `develop` 的同一提交创建干净 checkout，运行 `npm ci`、`npm run prepublishOnly`、要求的平台 smoke tests 和 `npm pack --dry-run`；随后执行实际 `npm pack`，验证生成 tarball 可安装、CLI 可启动。
+4. 从远程 `develop` 的同一提交运行 `npm run release:check -- --candidate <完整 SHA>`；使用其保留的 tarball 完成真实宿主证据，再运行最终 Beta gate。
 5. 确认 release candidate commit、远程 `develop` commit、测试证据和待发布 package version 完全一致。
 6. 前五步全部成功后才允许执行 `npm publish`。不发布 `0.4.0-beta`、`0.4.0-rc` 或其他中间 npm 版本。
 

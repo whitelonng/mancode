@@ -41,6 +41,21 @@ Continuity 的 Claude Code bootstrap 位于根目录 `CLAUDE.md` 的 `mancode:co
 
 Windows 上的脚本与文件替换不能依赖 Bash、jq 或 Unix rename 行为。发布流程包含 CMD、PowerShell 和 Git Bash smoke test。
 
+## Session 发布证据
+
+真实宿主证据必须显式选择 `--session-mode host` 或 `--session-mode explicit`。`host` 模式使用一次性宿主 key 比较双窗口，并且只有完整证明传播、继承和必要 hook approval 后才允许 `host_verified`。`explicit` 模式读取 `MANCODE_SPIKE_SESSION_ID` 与 `MANCODE_SPIKE_SECOND_SESSION_ID`，验证两个 session 已存在、active、互不相同且 client 与平台一致；写入证据前丢弃原始 ID。它可以得到 `explicit_session_verified` 发布证据，但运行时继续要求显式 `--session`。
+
+```bash
+MANCODE_SPIKE_SESSION_ID=<window-a-session> \
+MANCODE_SPIKE_SECOND_SESSION_ID=<window-b-session> \
+./node_modules/.bin/mancode context session spike \
+  --platform cursor --session-mode explicit --host-session-source none \
+  --command-propagation proven \
+  --subagent-inheritance not_applicable \
+  --subagent-inheritance-reason "Host has no child-agent API" \
+  --host-version <version> --release-candidate <full-commit> --json
+```
+
 ## 发布声明
 
 “文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode 在完成该验证前保持 provisional 描述。
