@@ -52,6 +52,11 @@ describe('generateSharedContent', () => {
     expect(content).toContain('Platform Downgrade');
     expect(content).toContain('Simulate the coaching staff');
     expect(content).toContain('Scout, Plan Coach, Head Coach');
+    expect(content).toContain('semantic owner or source of truth is unclear');
+    expect(content).toContain('historical compatibility');
+    expect(content).toContain('NEEDS_REALIGNMENT');
+    expect(content).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(content).toContain('do not call generic workflow update');
   });
 
   it('renders the public manba name for legacy workflow state', async () => {

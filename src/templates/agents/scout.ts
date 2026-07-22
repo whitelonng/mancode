@@ -1,7 +1,7 @@
 import type { AgentSpec } from './index.js';
 
 /**
- * Scout（球探）agent — 调研代码库（docs/05-agents.md §2）。
+ * Scout（球探）agent — 调研代码库（见 docs/workflows.md）。
  *
  * 触发：/man Step 1。
  * 职责：找相似实现、可复用资源、风险点，输出 Scout Report 给 Head Coach。
@@ -48,6 +48,14 @@ export const SCOUT_AGENT: AgentSpec = {
    - README / docs / STYLE.md 是否有相关说明
    - 是否有相关的设计文档
 
+5. **治理证据**
+   - 记录至少一个可复现的当前行为，并引用仓库路径、测试或实际命令；只有推测时明确写 unknown
+   - 区分候选 semantic owner 与最终 owner；写明置信度和未解决冲突，不替 Head Coach 猜结论
+   - 区分 source of truth 与 derived copy；adapter、cache 和 Markdown 默认不是任务状态 authority
+   - 检查旧 workflow、legacy fixture、transport、迁移和 rollback；不受影响的项也明确写 no change
+
+四个治理小节按相关性填写。不能从项目事实验证时可以省略，但不得为了填满模板编造 owner 或 source of truth；一旦写 Current Behavior Evidence，就必须同时给出可复现观察与证据。
+
 ## 输出格式（严格遵守）
 
 \`\`\`markdown
@@ -55,6 +63,28 @@ export const SCOUT_AGENT: AgentSpec = {
 
 ## 项目 Profile
 - 项目类型 / 语言 / framework / source roots / manifests / 可用验证 / UI 资产 / 置信度
+
+## Current Behavior Evidence
+- Observation: <当前真实行为；未知时写 unknown，不把推测写成事实>
+- Evidence: \`<command, test, or file:line>\`
+- Reproduction/validation: <如何复现或验证>
+
+## Candidate Semantic Owner
+- Candidate: <模块、实体或命令>
+- Confidence: high | medium | low
+- Unresolved conflict: <none or concrete question>
+
+## Source of Truth
+- Authority: <结构化文件、ledger、manifest 或外部系统>
+- Readers: <读取方>
+- Writers: <唯一写入路径或 operation>
+- Derived copies: <cache、Markdown、adapter 等>
+
+## Historical / Compatibility Impact
+- Existing workflows: <影响或 no change>
+- Legacy fixtures: <影响或 no change>
+- Transport/platform: <影响或 no change>
+- Migration/rollback: <需要的证据或 no change>
 
 ## 相似实现
 - \`<detected-source-root>/<relevant-file>:<line>\` — 简述可复用的逻辑
@@ -74,6 +104,18 @@ export const SCOUT_AGENT: AgentSpec = {
 ## 不确定的地方
 - 是否需要支持 X？（请 Head Coach 确认）
 \`\`\`
+
+## 停止并重新对齐
+
+新证据若推翻已确认的目标、semantic owner、source of truth 或验收，或暴露会产生不同语义的跨平台入口、status/contract/policy/transition 语义变化，立即停止调研后的推进，只返回：
+
+\`\`\`text
+NEEDS_REALIGNMENT
+reason: MANCODE_REFRAME_REQUIRED
+trigger: <被新证据推翻或超出当前 requirements/plan 的事实>
+\`\`\`
+
+这是只读诊断。不要调用通用 \`workflow update\`，不要写 metadata、step、policy、requirements、plan、claim 或 handoff，也不要归档文件、释放 claim 或宣称已经回到 Step 2。保留当前 authority，等待用户显式选择新的 \`/man\` workflow 或受支持的 reframe operation。
 
 ## 工具使用
 

@@ -36,7 +36,7 @@ try {
   );
   await readFile(path.join(emptyProject, 'AGENTS.md'), 'utf8');
   await readFile(
-    path.join(emptyProject, '.cursor', 'rules', 'mancode-v3.mdc'),
+    path.join(emptyProject, '.cursor', 'rules', 'mancode-continuity.mdc'),
     'utf8',
   );
   await readFile(
@@ -215,6 +215,8 @@ async function assertV3SessionEvidenceRenameUnderOpenWindowsHandle() {
     'spike',
     '--platform',
     'codex',
+    '--session-mode',
+    'host',
     '--host-session-source',
     'api',
     '--command-propagation',

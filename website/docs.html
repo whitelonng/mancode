@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.3.18</span>
+      <span class="docs-wordmark">Documentation / v0.4.0</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -91,7 +91,7 @@
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status
 <span class="command-prompt">$</span> mancode status --json</code></pre><button type="button" data-copy-code>Copy</button></div>
           <p>The human-readable result names the project, current mode, team state, installed adapters, and each adapter's <strong>ready</strong> or <strong>not ready</strong> status. JSON is the stable choice for scripts; <code>mancode status --brief --json</code> returns the compact public Continuity view used by coding agents. A ready adapter means its required generated files are present; it does not guarantee that an already-open agent session has reloaded them.</p>
-          <div class="docs-admonition"><strong>Reload after setup</strong><p>Restart or reload the coding agent after initialization. Then start a small request in <code>solo</code>. If an adapter remains <em>not ready</em>, repair it with <code>mancode install &lt;platform&gt; --force</code>.</p></div>
+          <div class="docs-admonition"><strong>Reload after setup</strong><p>Restart or reload the coding agent after initialization. Then start a small request in <code>solo</code>. If an adapter remains <em>not ready</em>, preview <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>, then repair that exact preview from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>.</p></div>
         </section>
 
         <section class="doc-section" id="files" data-searchable>
@@ -113,9 +113,10 @@
           <div class="docs-note"><strong>What is carried forward</strong><p>This is task continuity, not a copy of raw chat history. Sessions from different clients remain isolated; the new session must identify its own client and explicitly resume the existing TaskRef.</p></div>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode status --brief --json
 <span class="command-prompt">$</span> mancode context session new --client claude-code
+<span class="command-prompt">$</span> mancode context session show --session &lt;id&gt; --client claude-code --json
 <span class="command-prompt">$</span> mancode context resume &lt;namespace:ULID&gt; --session &lt;id&gt; --client claude-code
 <span class="command-prompt">$</span> mancode context show --purpose orient --session &lt;id&gt; --client claude-code</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <p>The generated <code>/man</code>, <code>/manba</code>, and <code>/manteam</code> entries use the same records. Use the CLI form for diagnostics, automation, or manual recovery.</p>
+          <p>The generated <code>/man</code>, <code>/manba</code>, and <code>/manteam</code> entries use the same records. Use the CLI form for diagnostics, automation, or manual recovery. When a project-local install exists, prefer <code>./node_modules/.bin/mancode</code>, check its <code>--version</code> once, and do not mix it with a global CLI during the task.</p>
         </section>
 
         <section class="doc-section" id="recommend" data-searchable>
@@ -168,13 +169,15 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <p>The CLI installs adapters and enforces durable workflow state. Run state-reading commands from an initialized project. Invalid transitions fail safely instead of silently editing workflow metadata.</p>
           <div class="command-list">
             <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project, scans style tokens where relevant, and installs adapters.</p><ul><li>Options: <code>--force</code>, <code>--yes</code>, <code>--team</code>, <code>--no-team</code>, <code>--style &lt;name&gt;</code>, <code>--platform &lt;list&gt;</code>, <code>--empty</code>, <code>--lang &lt;locale&gt;</code>.</li></ul></article>
-            <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs or repairs an adapter after initialization. Omit the platform for interactive selection.</p><ul><li><code>--force</code> regenerates managed content.</li><li><code>--minimal</code> installs solo-mode essentials only.</li></ul></article>
+            <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs one adapter through the journaled upgrade path after initialization.</p><ul><li><code>--confirm --operation-id &lt;operationId&gt;</code> and an active session authorize the previewed managed writes.</li><li><code>--minimal</code> remains available for legacy compatibility.</li></ul></article>
+            <article class="command-card"><header><h3>mancode adapter status | upgrade</h3><span>Repair</span></header><p>Compares managed-content digests, stages changes with <code>--dry-run</code>, and publishes that exact preview only with <code>--confirm --operation-id &lt;operationId&gt;</code>.</p></article>
+            <article class="command-card"><header><h3>mancode project upgrade --policy 2</h3><span>Policy</span></header><p>Previews or commits the project Policy 2 default without rewriting existing workflows. A commit requires the preview's operation ID and an active session.</p></article>
             <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>Inspect</span></header><p>Reports project facts, current mode and workflow, adapter readiness, and Claude hook registration where applicable. Combine <code>--brief --json</code> for the compact Continuity runtime view.</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists adapters known to the installed CLI and marks those already configured in the project.</p></article>
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates Continuity requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; Continuity workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic health scan for <code>all</code>, <code>deps</code>, <code>security</code>, <code>dead-code</code>, <code>config</code>.</p><ul><li><code>--json</code> emits machine-readable output.</li><li><code>--remediate</code> enters the explicit remediation path; the default is scan-only.</li></ul></article>
-            <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then updates installed static adapters.</p></article>
-            <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Reinstall static adapters with <code>--force</code> afterward.</p></article>
+            <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then reports stale adapters.</p></article>
+            <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Preview any adapter repair with <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>.</p></article>
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one Continuity adapter. Continuity protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version for upgrade checks and issue reports.</p></article>
           </div>
@@ -244,6 +247,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <div class="code-wrap"><pre><code><span class="command-prompt"># Bootstrap an actor and explicit session</span>
 <span class="command-prompt">$</span> mancode team identity create --name "Your name"
 <span class="command-prompt">$</span> mancode context session new --client codex --json
+<span class="command-prompt">$</span> mancode context session show --session &lt;session-id&gt; --client codex --json
 
 <span class="command-prompt"># Create, discover, and inspect a task</span>
 <span class="command-prompt">$</span> mancode workflow create man "refactor auth module" --session &lt;session-id&gt; --json
@@ -280,6 +284,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <tr><td><code>update</code></td><td>Change lifecycle status or a blocking reason.</td><td><code>--status --expected-revision --session</code>; governed fields use dedicated commands.</td></tr>
             <tr><td><code>handoff</code></td><td>Transfer a confirmed local plan to solo and later close it.</td><td><code>--to solo</code> or <code>--complete</code>, with revision and session.</td></tr>
             <tr><td><code>verify / review</code></td><td>Apply canonical Continuity ledgers.</td><td><code>apply --file --expected-revision --session</code>.</td></tr>
+            <tr><td><code>reframe</code></td><td>Archive confirmed local planning authority and return to requirements alignment.</td><td><code>--expected-revision --checkpoint-id --session</code>; active child, handoff, solo assignment, and git-ref are rejected.</td></tr>
             <tr><td><code>list / show / clean</code></td><td>List or inspect Continuity TaskRefs. <code>clean</code> is not a Continuity authority deletion command.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
           </tbody></table>
         </section>
@@ -301,8 +306,8 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <p>Use <code>refresh-project</code> when the stack or project structure changes. Use <code>refresh-style</code> after a design-system migration, a substantial UI change, or when a non-UI project gains an interface.</p>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-project
 <span class="command-prompt">$</span> mancode refresh-style
-<span class="command-prompt">$</span> mancode install cursor --force</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <ul class="docs-checklist"><li><code>refresh-project</code> updates detected project facts and installed static adapters.</li><li>Claude Code reads refreshed context through hooks.</li><li>Cursor, Codex, Copilot, and ZCode use static files; reinstall a specific adapter with <code>--force</code> if you need to repair or regenerate it.</li><li>Only UI projects receive design-token-specific guidance.</li></ul>
+<span class="command-prompt">$</span> mancode adapter upgrade --platform cursor --dry-run</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <ul class="docs-checklist"><li><code>refresh-project</code> updates detected project facts and reports stale adapters.</li><li>Claude Code reads refreshed context through hooks.</li><li>Cursor, Codex, Copilot, and ZCode use static files; publish a staged repair from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>.</li><li>Only UI projects receive design-token-specific guidance.</li></ul>
         </section>
 
         <section class="doc-section" id="uninstall" data-searchable>
@@ -311,8 +316,8 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3>Remove one adapter</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall cursor --force</code></pre><button type="button" data-copy-code>Copy</button></div>
           <h3>Reinstall one adapter</h3>
-          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode uninstall claude-code --force
-<span class="command-prompt">$</span> mancode install claude-code</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode adapter upgrade --platform claude-code --dry-run
+<span class="command-prompt">$</span> mancode adapter upgrade --platform claude-code --confirm --operation-id &lt;operationId&gt; --session &lt;id&gt; --client &lt;client&gt;</code></pre><button type="button" data-copy-code>Copy</button></div>
           <h3>Remove the CLI</h3>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> npm uninstall -g mancode</code></pre><button type="button" data-copy-code>Copy</button></div>
         </section>
@@ -322,9 +327,9 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3><code>mancode init</code> rejects the directory</h3>
           <p>A safely empty directory is supported interactively, or explicitly with <code>--empty</code>. A non-empty directory still needs a recognized project marker or Git metadata so mancode does not initialize an arbitrary folder by accident.</p>
           <h3>The agent does not see a newly installed mode</h3>
-          <p>Reload or restart the agent so it rereads repository instructions. Run <code>mancode status</code>; if the adapter is not ready, run <code>mancode install &lt;platform&gt; --force</code>. For ZCode and Copilot, also confirm that the installed client release supports repository skills or prompt files.</p>
+          <p>Reload or restart the agent so it rereads repository instructions. Run <code>mancode status</code>; if the adapter is not ready, preview <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>, then repair it from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>. For ZCode and Copilot, also confirm that the installed client release supports repository skills or prompt files.</p>
           <h3>Claude Code hooks do not run</h3>
-          <p>Restart Claude Code after initialization, then check <code>mancode status</code> for both hook files and registration in <code>.claude/settings.json</code>. Repair with <code>mancode install claude-code --force</code>. The hooks use Node.js and do not require Bash or jq.</p>
+          <p>Restart Claude Code after initialization, then check <code>mancode status</code>. Repair V3 managed content through the adapter preview and confirmation flow above; the legacy hook architecture uses <code>mancode init --legacy --force</code>. The hooks use Node.js and do not require Bash or jq.</p>
           <h3>Cursor rules do not trigger</h3>
           <p>Confirm that <code>.cursor/rules/mancode-*.mdc</code> and <code>.cursor/commands/*.md</code> exist. Core context and solo rules are persistent; higher-intensity rules are description-triggered, so invoke the generated mode command explicitly.</p>
           <h3>A workflow command is rejected</h3>

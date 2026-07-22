@@ -1,5 +1,9 @@
-import { evaluateCompatibilityGate } from '../context/compatibility.js';
+import {
+  CURRENT_WRITER_CAPABILITIES,
+  evaluateCompatibilityGate,
+} from '../context/compatibility.js';
 import { scanLegacyAuthority } from '../context/layout.js';
+import { managedAdapterNames } from '../context/manifest.js';
 import { V3ContextStore } from '../context/store.js';
 import type { PlatformName } from '../installers/registry.js';
 import {
@@ -55,8 +59,8 @@ export async function evaluateV3BetaGate(
     throw new Error('MANCODE_BETA_RELEASE_CANDIDATE_REQUIRED');
   }
   const store = new V3ContextStore(projectRoot);
+  const snapshot = await store.readProjectSnapshot();
   const [
-    snapshot,
     legacy,
     adapterVersions,
     adapterEntries,
@@ -64,9 +68,11 @@ export async function evaluateV3BetaGate(
     unfinished,
     unfinishedGitRefWorkflowRepairs,
   ] = await Promise.all([
-    store.readProjectSnapshot(),
     scanLegacyAuthority(projectRoot),
-    inspectV3AdapterVersions(projectRoot),
+    inspectV3AdapterVersions(
+      projectRoot,
+      managedAdapterNames(snapshot.manifest.managedAdapters),
+    ),
     Promise.all(
       BETA_PLATFORMS.map(
         async (platform) =>
@@ -82,6 +88,7 @@ export async function evaluateV3BetaGate(
     expectedSchemaEpoch: snapshot.manifest.epoch,
     readerVersion: VERSION,
     writerVersion: VERSION,
+    writerCapabilities: CURRENT_WRITER_CAPABILITIES,
     adapterVersions,
     currentLegacyBaseline: legacy.baseline,
     legacyAuthorityPresent: legacy.authorityPresent,

@@ -27,6 +27,7 @@ import {
   writeTeamEvent,
 } from '../team/events.js';
 import { replaceFileAtomically } from './atomic-file.js';
+import type { OperationProjectionState } from './reconciler.js';
 import {
   clearSessionTaskPointer,
   readSession,
@@ -265,6 +266,35 @@ export async function listProjectionIntents(
       compareUtf8(left.operationId, right.operationId) ||
       compareUtf8(left.projectionId, right.projectionId),
   );
+}
+
+/**
+ * Inspects the projections actually declared for one operation. An operation
+ * with no projection intents has no projection repair work.
+ */
+export async function inspectOperationProjectionState(
+  projectRoot: string,
+  operationId: Ulid,
+): Promise<OperationProjectionState> {
+  assertUlid(operationId, 'projection operationId');
+  const state: OperationProjectionState = {
+    auditEvent: 'not_applicable',
+    sessionPointer: 'not_applicable',
+    cache: 'not_applicable',
+  };
+  const intents = await listProjectionIntents(projectRoot, {
+    operationId,
+    includeTerminal: true,
+  });
+  for (const intent of intents) {
+    const key = projectionStateKey(intent.target.kind);
+    const availability =
+      intent.state === 'superseded'
+        ? 'not_applicable'
+        : await inspectProjection(projectRoot, intent.target);
+    state[key] = mergeProjectionAvailability(state[key], availability);
+  }
+  return state;
 }
 
 /** Applies only durable, fully specified targets and leaves conflicts pending. */
@@ -521,6 +551,32 @@ async function inspectProjection(
   }
 }
 
+function projectionStateKey(
+  kind: ProjectionTargetV1['kind'],
+): keyof OperationProjectionState {
+  switch (kind) {
+    case 'audit_event':
+      return 'auditEvent';
+    case 'session_pointer':
+      return 'sessionPointer';
+    case 'cache_invalidation':
+      return 'cache';
+  }
+}
+
+function mergeProjectionAvailability(
+  left: ProjectionAvailability,
+  right: ProjectionAvailability,
+): ProjectionAvailability {
+  const priority: Record<ProjectionAvailability, number> = {
+    not_applicable: 0,
+    present: 1,
+    missing: 2,
+    conflict: 3,
+  };
+  return priority[right] > priority[left] ? right : left;
+}
+
 async function applyProjection(
   projectRoot: string,
   target: ProjectionTargetV1,
@@ -621,15 +677,15 @@ async function inspectSessionProjection(
     return 'conflict';
   }
   if (task.metadata.revision < target.taskRevision) return 'conflict';
-  const terminal = isTerminalWorkflowStatus(task.metadata.status);
+  const clearsPointer = workflowRequiresClearedSession(task.metadata);
   if (target.action === 'clear') {
-    if (!terminal) return 'conflict';
+    if (!clearsPointer) return 'conflict';
     if (session.activeTaskRef === null) return 'present';
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
       : 'not_applicable';
   }
-  if (terminal) {
+  if (clearsPointer) {
     if (session.activeTaskRef === null) return 'not_applicable';
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
@@ -668,7 +724,7 @@ async function applySessionProjection(
   if (task.metadata.revision < target.taskRevision) return;
   if (
     target.action === 'clear' ||
-    isTerminalWorkflowStatus(task.metadata.status)
+    workflowRequiresClearedSession(task.metadata)
   ) {
     await clearSessionTaskPointer(projectRoot, target.sessionId, {
       expectedTaskRef: target.taskRef,
@@ -840,6 +896,17 @@ function sameNullableTaskRef(
 function isTerminalWorkflowStatus(status: string): boolean {
   return (
     status === 'completed' || status === 'abandoned' || status === 'superseded'
+  );
+}
+
+function workflowRequiresClearedSession(metadata: {
+  status: string;
+  governance: { planDecision: string | null };
+}): boolean {
+  return (
+    isTerminalWorkflowStatus(metadata.status) ||
+    (metadata.status === 'planned' &&
+      metadata.governance.planDecision === 'plan_only')
   );
 }
 

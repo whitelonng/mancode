@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.3.18",
+  "version": "0.4.0",
   "description": "AI coding agent workflow harness with mancode Continuity for cross-conversation tasks, decisions, verification, and team coordination.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -63,6 +63,7 @@
     "test:windows-smoke": "node scripts/windows-smoke.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "release:check": "node scripts/release-check.mjs",
     "lint": "biome check src tests",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",

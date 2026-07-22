@@ -3,9 +3,8 @@ import {
   initializeGreenfield,
 } from '../context/greenfield-init.js';
 import { type Ulid, createUlid } from '../context/ids.js';
-import type { ManagedAdapter } from '../context/manifest.js';
+import type { ManagedAdapterInventory } from '../context/manifest.js';
 import { createProjectFacts } from '../context/project-facts.js';
-import { V3_ADAPTER_VERSION } from '../installers/v3-adapter.js';
 import {
   type ProjectRuntimeContext,
   ensureProjectRuntimeContext,
@@ -23,7 +22,7 @@ export interface InitializeV3ProjectInput {
   operationId?: Ulid;
   workspaceId?: Ulid;
   schemaEpoch?: Ulid;
-  managedAdapters?: Record<ManagedAdapter, string>;
+  managedAdapters?: ManagedAdapterInventory;
   /** Explicit init preference; omitted keeps V3's evidence-based auto mode. */
   teamPolicy?: TeamRecommendationPolicy;
   now?: Date;
@@ -84,7 +83,7 @@ export async function initializeV3Project(
       schemaEpoch,
       minReaderVersion: VERSION,
       minWriterVersion: VERSION,
-      managedAdapters: input.managedAdapters ?? defaultManagedAdapters(),
+      managedAdapters: input.managedAdapters ?? {},
       projectConfig,
       teamPolicy,
       projectFacts,
@@ -101,14 +100,4 @@ export async function initializeV3Project(
     throw new Error('MANCODE_WORKSPACE_BINDING_MISMATCH');
   }
   return { journal, runtime };
-}
-
-function defaultManagedAdapters(): Record<ManagedAdapter, string> {
-  return {
-    'claude-code': V3_ADAPTER_VERSION,
-    codex: V3_ADAPTER_VERSION,
-    cursor: V3_ADAPTER_VERSION,
-    copilot: V3_ADAPTER_VERSION,
-    zcode: V3_ADAPTER_VERSION,
-  };
 }

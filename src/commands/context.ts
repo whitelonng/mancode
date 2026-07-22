@@ -1,4 +1,7 @@
+import { CURRENT_WRITER_CAPABILITIES } from '../context/compatibility.js';
 import type { ContextLevel, ContextPurpose } from '../context/context-pack.js';
+import { isUlid } from '../context/ids.js';
+import { managedAdapterNames } from '../context/manifest.js';
 import {
   previewV3TaskPromotion,
   promoteV3Task,
@@ -10,6 +13,7 @@ import {
   reconcileV3TaskHead,
 } from '../context/task-head-reconcile.js';
 import { parseTaskRef } from '../context/task-ref.js';
+import { inspectV3AdapterVersions } from '../installers/v3-adapter.js';
 import { evaluateV3BetaGate } from '../runtime/beta-gate.js';
 import {
   readLocalDiagnostics,
@@ -29,6 +33,7 @@ import {
   type HookApprovalStatus,
   type HostSessionSource,
   SESSION_SPIKE_PLATFORMS,
+  type SessionEvidenceMode,
   type SessionSpikePlatform,
   type SpikeEvidenceStatus,
   createPlatformSessionSpike,
@@ -52,6 +57,7 @@ import {
   type SessionStateV1,
   closeSession,
   createBootstrapSession,
+  readSession,
   resumeSession,
 } from '../runtime/session.js';
 import { readLocalActor } from '../team/actor.js';
@@ -82,8 +88,15 @@ export interface ContextSessionNewOptions {
   json?: boolean;
 }
 
+export interface ContextSessionShowOptions {
+  session?: string;
+  client?: string;
+  json?: boolean;
+}
+
 export interface ContextSessionSpikeOptions {
   platform?: string;
+  sessionMode?: string;
   hostSessionSource?: string;
   commandPropagation?: string;
   subagentInheritance?: string;
@@ -180,6 +193,49 @@ export async function contextSessionNew(
   }
 }
 
+/** Implements `mancode context session show --session <id> ...`. */
+export async function contextSessionShow(
+  rootDir: string,
+  options: ContextSessionShowOptions,
+): Promise<number> {
+  if (options.session === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SESSION_REQUIRED',
+      'context session show requires --session <id>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  if (!isUlid(options.session)) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SESSION_INVALID',
+      'context session show requires a canonical ULID in --session <id>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await readSession(project.projectRoot, options.session);
+    if (session === null) {
+      throw new Error('MANCODE_SESSION_NOT_FOUND');
+    }
+    if (
+      options.client !== undefined &&
+      session.client !== commandClient(options.client)
+    ) {
+      throw new Error('MANCODE_SESSION_NOT_FOUND');
+    }
+    return printV3Result(options.json, { schemaVersion: 1, session });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_CONTEXT_SESSION_SHOW_FAILED'),
+      error instanceof Error ? error.message : 'Unable to show the session.',
+    );
+  }
+}
+
 /**
  * Records one real-host session spike without accepting or persisting host
  * keys as command-line arguments. Operators supply the two window values via
@@ -191,10 +247,8 @@ export async function contextSessionSpike(
 ): Promise<number> {
   try {
     const platform = parseSpikePlatform(options.platform);
+    const sessionMode = parseSessionEvidenceMode(options.sessionMode);
     const hostSessionSource = parseHostSessionSource(options.hostSessionSource);
-    if (hostSessionSource === 'none') {
-      throw new Error('MANCODE_PLATFORM_SPIKE_HOST_SOURCE_REQUIRED');
-    }
     const releaseCandidate = parseReleaseCandidate(options.releaseCandidate);
     const hostVersion = parseHostVersion(options.hostVersion);
     const commandPropagation = parseRequiredSpikeEvidenceStatus(
@@ -205,23 +259,35 @@ export async function contextSessionSpike(
       options.subagentInheritance,
       'subagent inheritance',
     );
-    const firstWindowHostSessionKey =
-      process.env.MANCODE_SPIKE_HOST_SESSION_KEY ?? null;
-    const secondWindowHostSessionKey =
-      process.env.MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY ?? null;
-    if (
-      firstWindowHostSessionKey === null ||
-      secondWindowHostSessionKey === null
-    ) {
+    const project = await readV3CommandProject(rootDir);
+    const [firstWindowSessionKey, secondWindowSessionKey] =
+      sessionMode === 'host'
+        ? [
+            process.env.MANCODE_SPIKE_HOST_SESSION_KEY ?? null,
+            process.env.MANCODE_SPIKE_SECOND_WINDOW_HOST_SESSION_KEY ?? null,
+          ]
+        : [
+            process.env.MANCODE_SPIKE_SESSION_ID ?? null,
+            process.env.MANCODE_SPIKE_SECOND_SESSION_ID ?? null,
+          ];
+    if (firstWindowSessionKey === null || secondWindowSessionKey === null) {
       throw new Error('MANCODE_PLATFORM_SPIKE_WINDOW_EVIDENCE_REQUIRED');
     }
-    const project = await readV3CommandProject(rootDir);
+    if (sessionMode === 'explicit') {
+      await assertExplicitSpikeSessions(
+        project.projectRoot,
+        platform,
+        firstWindowSessionKey,
+        secondWindowSessionKey,
+      );
+    }
     const spike = createPlatformSessionSpike({
       platform,
       observedAt: new Date().toISOString(),
+      sessionMode,
       hostSessionSource,
-      firstWindowHostSessionKey,
-      secondWindowHostSessionKey,
+      firstWindowSessionKey,
+      secondWindowSessionKey,
       commandPropagation,
       subagentInheritance,
       subagentInheritanceReason: options.subagentInheritanceReason ?? null,
@@ -258,6 +324,32 @@ export async function contextSessionSpike(
         ? error.message
         : 'Unable to record platform session evidence.',
     );
+  }
+}
+
+async function assertExplicitSpikeSessions(
+  projectRoot: string,
+  platform: SessionSpikePlatform,
+  firstSessionId: string,
+  secondSessionId: string,
+): Promise<void> {
+  if (firstSessionId === secondSessionId) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_COLLISION');
+  }
+  const [first, second] = await Promise.all([
+    readSession(projectRoot, firstSessionId),
+    readSession(projectRoot, secondSessionId),
+  ]);
+  if (
+    first === null ||
+    second === null ||
+    first.status !== 'active' ||
+    second.status !== 'active'
+  ) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_NOT_FOUND');
+  }
+  if (first.client !== platform || second.client !== platform) {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_CLIENT_MISMATCH');
   }
 }
 
@@ -301,7 +393,7 @@ export async function contextResume(
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
     const taskRef = parseTaskRef(task);
-    const resolution = await resolveContext(project, session, {
+    let resolution = await resolveContext(project, session, {
       taskRef,
       level: 'bootstrap',
       purpose: 'orient',
@@ -310,15 +402,29 @@ export async function contextResume(
     if (resolution.metadata === null || resolution.aggregate === null) {
       throw new Error('MANCODE_CONTEXT_WRITE_BLOCKED');
     }
-    const resumed = await resumeSession(
-      project.projectRoot,
-      session.sessionId,
-      {
+    let resumed = session;
+    let packIsCurrent = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      resumed = await resumeSession(project.projectRoot, session.sessionId, {
         taskRef: resolution.taskRef,
         workflowMode: resolution.metadata.workflowMode,
         taskRevision: resolution.aggregate.taskRevision,
-      },
-    );
+      });
+      resolution = await resolveContext(project, resumed, {
+        taskRef,
+        level: 'bootstrap',
+        purpose: 'orient',
+        intent: 'mutate',
+      });
+      if (resolution.metadata === null || resolution.aggregate === null) {
+        throw new Error('MANCODE_CONTEXT_WRITE_BLOCKED');
+      }
+      if (resolution.aggregate.taskRevision === resumed.lastSeenRevision) {
+        packIsCurrent = true;
+        break;
+      }
+    }
+    if (!packIsCurrent) throw new Error('MANCODE_CONTEXT_CHANGED');
     return printV3Result(options.json, {
       schemaVersion: 1,
       session: resumed,
@@ -824,6 +930,10 @@ async function resolveContext(
           ),
         )
       : undefined;
+  const adapterVersions = await inspectV3AdapterVersions(
+    project.projectRoot,
+    managedAdapterNames(project.project.manifest.managedAdapters),
+  );
   return resolver.resolve({
     session,
     taskRef: request.taskRef,
@@ -834,7 +944,8 @@ async function resolveContext(
       expectedSchemaEpoch: project.project.manifest.epoch,
       readerVersion: VERSION,
       writerVersion: VERSION,
-      adapterVersions: project.project.manifest.managedAdapters,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      adapterVersions,
     },
     codeHead: await readCheckoutCodeHead(project.projectRoot),
     ...(capabilities === undefined ? {} : { capabilities }),
@@ -872,6 +983,15 @@ function parseSpikePlatform(value: string | undefined): SessionSpikePlatform {
     throw new Error('MANCODE_PLATFORM_SPIKE_PLATFORM_REQUIRED');
   }
   return value as SessionSpikePlatform;
+}
+
+function parseSessionEvidenceMode(
+  value: string | undefined,
+): SessionEvidenceMode {
+  if (value !== 'host' && value !== 'explicit') {
+    throw new Error('MANCODE_PLATFORM_SPIKE_SESSION_MODE_REQUIRED');
+  }
+  return value;
 }
 
 function parseHostSessionSource(value: string | undefined): HostSessionSource {

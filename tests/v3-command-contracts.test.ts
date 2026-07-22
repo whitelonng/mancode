@@ -8,6 +8,7 @@ import {
   contextReconcileTaskHead,
   contextResume,
   contextSessionNew,
+  contextSessionShow,
   contextSessionSpike,
   contextShow,
   contextWorktreeRegister,
@@ -92,6 +93,44 @@ describe('V3 CLI command contracts', () => {
         client: 'fixture',
         status: 'active',
       });
+
+      expect(
+        await contextSessionShow(root, {
+          session: payload.session.sessionId,
+          client: 'fixture',
+          json: true,
+        }),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        session: {
+          sessionId: payload.session.sessionId,
+          client: 'fixture',
+          activeTaskRef: null,
+          activeMode: null,
+          lastSeenRevision: null,
+        },
+      });
+
+      expect(
+        await contextSessionShow(root, {
+          session: payload.session.sessionId,
+          client: 'other-client',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_SESSION_NOT_FOUND' },
+      });
+
+      expect(
+        await contextSessionShow(root, {
+          session: 'not-a-session-id',
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_SESSION_INVALID' },
+      });
     } finally {
       errors.mockRestore();
       logs.mockRestore();
@@ -110,6 +149,7 @@ describe('V3 CLI command contracts', () => {
       expect(
         await contextSessionSpike(root, {
           platform: 'codex',
+          sessionMode: 'host',
           hostSessionSource: 'api',
           subagentInheritance: 'proven',
           hostVersion: 'fixture-host-1.0.0',
@@ -139,6 +179,7 @@ describe('V3 CLI command contracts', () => {
       expect(
         await contextSessionSpike(root, {
           platform: 'codex',
+          sessionMode: 'host',
           hostSessionSource: 'api',
           commandPropagation: 'proven',
           subagentInheritance: 'proven',
@@ -174,6 +215,102 @@ describe('V3 CLI command contracts', () => {
         identitySource: 'host',
       });
       expect(JSON.stringify(session)).not.toContain('private-key');
+    } finally {
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      logs.mockRestore();
+    }
+  });
+
+  it('records real explicit-session isolation without granting host trust', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'codex', json: true });
+      const first = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      await contextSessionNew(root, { client: 'codex', json: true });
+      const second = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', first.session.sessionId);
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', second.session.sessionId);
+
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'not_applicable',
+          subagentInheritanceReason: 'This host exposes no child-agent API.',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(0);
+      const evidence = String(logs.mock.calls.at(-1)?.[0]);
+      expect(evidence).toContain('explicit_session_verified');
+      expect(evidence).toContain('explicit_required');
+      expect(evidence).not.toContain(first.session.sessionId);
+      expect(evidence).not.toContain(second.session.sessionId);
+    } finally {
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      logs.mockRestore();
+    }
+  });
+
+  it('rejects fabricated or wrong-client explicit session evidence', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', id(40));
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', id(41));
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(logs.mock.calls.flat().join(' ')).toContain(
+        'MANCODE_PLATFORM_SPIKE_SESSION_NOT_FOUND',
+      );
+
+      await contextSessionNew(root, { client: 'cursor', json: true });
+      const first = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      await contextSessionNew(root, { client: 'cursor', json: true });
+      const second = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        session: { sessionId: string };
+      };
+      vi.stubEnv('MANCODE_SPIKE_SESSION_ID', first.session.sessionId);
+      vi.stubEnv('MANCODE_SPIKE_SECOND_SESSION_ID', second.session.sessionId);
+      expect(
+        await contextSessionSpike(root, {
+          platform: 'codex',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          commandPropagation: 'proven',
+          subagentInheritance: 'proven',
+          hostVersion: 'fixture-host-1.0.0',
+          releaseCandidate: '5c40d6b',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(logs.mock.calls.flat().join(' ')).toContain(
+        'MANCODE_PLATFORM_SPIKE_SESSION_CLIENT_MISMATCH',
+      );
     } finally {
       vi.unstubAllEnvs();
       errors.mockRestore();
@@ -349,6 +486,8 @@ describe('V3 CLI command contracts', () => {
       expect(await operationShow(root, operationId, { json: true })).toBe(0);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         journal: { operationId, state: 'committed' },
+        recoveryAction: 'none',
+        recoveryReason: 'terminal',
         payloadBound: true,
       });
       expect(
@@ -403,6 +542,20 @@ describe('V3 CLI command contracts', () => {
           json: true,
         }),
       ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        session: {
+          activeTaskRef: createPayload.taskRef,
+          activeMode: 'man',
+          lastSeenRevision: 1,
+        },
+        pack: {
+          session: {
+            activeTaskRef: createPayload.taskRef,
+            activeMode: 'man',
+          },
+          snapshot: { taskRevision: 1 },
+        },
+      });
       expect(
         await contextShow(root, {
           task,
@@ -705,6 +858,275 @@ describe('V3 CLI command contracts', () => {
       expect(planResult.operation).toMatchObject({
         type: 'plan_revision',
         state: 'committed',
+      });
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  it('persists incomplete clarification and resumes it from another session', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const firstSessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(
+        root,
+        'create',
+        ['man', 'Choose the durable notification owner.'],
+        {
+          session: firstSessionId,
+          client: 'fixture',
+          json: true,
+        },
+      );
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: TaskRef;
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+      const draftPath = path.join(root, 'requirements-draft.json');
+      await writeFile(
+        draftPath,
+        `${JSON.stringify(
+          {
+            version: 1,
+            goal: 'Deliver durable notifications.',
+            confirmedScope: [],
+            excludedScope: [],
+            technicalDecisions: [],
+            defaults: [],
+            blockingUnknowns: [
+              'Choose whether the database or queue owns delivery state.',
+            ],
+            coverage: [],
+            acceptanceCriteria: [],
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      expect(
+        await workflow(root, 'requirements', [task, 'draft'], {
+          session: firstSessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          file: draftPath,
+          json: true,
+        }),
+      ).toBe(0);
+      const saved = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        metadata: {
+          revision: number;
+          governance: { requirementsStatus: string };
+        };
+        requirements: RequirementsLedgerV1;
+        operation: { type: string; state: string };
+      };
+      expect(saved).toMatchObject({
+        metadata: {
+          revision: 2,
+          governance: { requirementsStatus: 'needs_clarification' },
+        },
+        requirements: {
+          status: 'draft',
+          blockingUnknowns: [
+            {
+              statement:
+                'Choose whether the database or queue owns delivery state.',
+              status: 'open',
+            },
+          ],
+        },
+        operation: { type: 'requirements_draft', state: 'committed' },
+      });
+
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const secondSessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      expect(secondSessionId).not.toBe(firstSessionId);
+      expect(
+        await contextResume(root, task, {
+          session: secondSessionId,
+          client: 'fixture',
+          json: true,
+        }),
+      ).toBe(0);
+      expect(
+        await contextShow(root, {
+          task,
+          session: secondSessionId,
+          client: 'fixture',
+          purpose: 'plan',
+          level: 'task',
+          json: true,
+        }),
+      ).toBe(0);
+      const resumed = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        pack: {
+          governance: {
+            requirements: RequirementsLedgerV1;
+          };
+        };
+      };
+      expect(resumed.pack.governance.requirements).toMatchObject({
+        status: 'draft',
+        blockingUnknowns: [
+          {
+            statement:
+              'Choose whether the database or queue owns delivery state.',
+            status: 'open',
+          },
+        ],
+      });
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  it('requires reframe concurrency inputs and returns the committed JSON contract', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const sessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(root, 'create', ['man', 'Reframe through the CLI.'], {
+        session: sessionId,
+        client: 'fixture',
+        json: true,
+      });
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: TaskRef;
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+      const checkpointId = id(60);
+
+      expect(
+        await workflow(root, 'reframe', [task], {
+          session: sessionId,
+          client: 'fixture',
+          checkpointId,
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_EXPECTED_REVISION_REQUIRED' },
+      });
+
+      expect(
+        await workflow(root, 'reframe', [task], {
+          session: sessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_REFRAME_CHECKPOINT_REQUIRED' },
+      });
+
+      const snapshot = await new V3ContextStore(root).readTaskSnapshot(
+        created.taskRef,
+      );
+      const requirementsPath = path.join(root, 'reframe-requirements.json');
+      await writeFile(
+        requirementsPath,
+        `${JSON.stringify(finalizedRequirements(snapshot.requirements), null, 2)}\n`,
+      );
+      expect(
+        await workflow(root, 'requirements', [task, 'finalize'], {
+          session: sessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          file: requirementsPath,
+          json: true,
+        }),
+      ).toBe(0);
+
+      const reframeCode = await workflow(root, 'reframe', [task], {
+        session: sessionId,
+        client: 'fixture',
+        expectedRevision: '2',
+        checkpointId,
+        summary: 'New evidence changes the requirements.',
+        nextAction: 'Clarify the replacement requirements.',
+        json: true,
+      });
+      const reframeOutput = String(logs.mock.calls.at(-1)?.[0]);
+      expect(reframeCode, reframeOutput).toBe(0);
+      const result = JSON.parse(reframeOutput) as {
+        schemaVersion: number;
+        metadata: { revision: number; currentStep: number };
+        requirements: { revision: number; status: string };
+        checkpoint: { checkpointId: string; kind: string };
+        archive: { archiveId: string; sourceTaskRevision: number };
+        operation: { operationId: string; type: string; state: string };
+      };
+      expect(result).toMatchObject({
+        schemaVersion: 1,
+        metadata: { revision: 4, currentStep: 2 },
+        requirements: { revision: 3, status: 'draft' },
+        checkpoint: { checkpointId, kind: 'requirements_reframed' },
+        archive: { sourceTaskRevision: 2 },
+        operation: { type: 'reframe', state: 'committed' },
+      });
+      expect(result.archive.archiveId).toBe(result.operation.operationId);
+      expect(
+        await workflow(
+          root,
+          'archive',
+          [task, 'show', result.archive.archiveId],
+          { json: true },
+        ),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        taskRef: created.taskRef,
+        archive: {
+          archiveId: result.archive.archiveId,
+          sourceTaskRevision: 2,
+          sourceRequirementsRevision: 2,
+        },
+        requirements: { status: 'confirmed', revision: 2 },
+        plan: null,
+      });
+      expect(
+        await workflow(root, 'checkpoint', [task, 'show', checkpointId], {
+          json: true,
+        }),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        taskRef: created.taskRef,
+        checkpoint: {
+          checkpointId,
+          kind: 'requirements_reframed',
+          taskRevision: 4,
+        },
+      });
+      await expect(
+        new V3ContextStore(root).readTaskSnapshot(created.taskRef),
+      ).resolves.toMatchObject({
+        metadata: { revision: 4, currentStep: 2 },
+        requirements: { revision: 3, status: 'draft' },
+      });
+      await expect(readSession(root, sessionId)).resolves.toMatchObject({
+        activeTaskRef: created.taskRef,
+        activeMode: 'man',
+        lastSeenRevision: 4,
       });
     } finally {
       logs.mockRestore();

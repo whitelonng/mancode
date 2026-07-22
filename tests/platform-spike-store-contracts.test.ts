@@ -52,9 +52,10 @@ function fixtureSpike() {
   return createPlatformSessionSpike({
     platform: 'codex',
     observedAt: '2026-07-18T12:00:00.000Z',
+    sessionMode: 'host',
     hostSessionSource: 'api',
-    firstWindowHostSessionKey: 'window-a',
-    secondWindowHostSessionKey: 'window-b',
+    firstWindowSessionKey: 'window-a',
+    secondWindowSessionKey: 'window-b',
     commandPropagation: 'proven',
     subagentInheritance: 'proven',
     hookApproval: 'not_applicable',

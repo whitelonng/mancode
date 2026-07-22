@@ -124,6 +124,40 @@ describe('workflow metadata V3 contract', () => {
     });
     expect(metadata.skippedSteps).toEqual(['review', 'clarification']);
   });
+
+  it('rejects unknown policy versions with stable component details', () => {
+    expect(() =>
+      parseWorkflowMetadata({
+        ...rawMetadata(),
+        governance: {
+          ...rawMetadata().governance,
+          policyVersions: { planning: 2, review: 2, verification: 1 },
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseWorkflowMetadata({
+        ...rawMetadata(),
+        governance: {
+          ...rawMetadata().governance,
+          policyVersions: { planning: 3, review: 1, verification: 1 },
+        },
+      }),
+    ).toThrow(
+      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=3 supported=1,2 requiredWriter=>0.4.0/,
+    );
+    expect(() =>
+      parseWorkflowMetadata({
+        ...rawMetadata(),
+        governance: {
+          ...rawMetadata().governance,
+          policyVersions: { planning: 2, review: 3, verification: 1 },
+        },
+      }),
+    ).toThrow(
+      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=review observed=3 supported=1,2 requiredWriter=>0.4.0/,
+    );
+  });
 });
 
 function rawMetadata(): WorkflowMetadataV3 {
@@ -170,7 +204,7 @@ function rawMetadata(): WorkflowMetadataV3 {
       requirementsDigest: DIGEST,
       planVersion: 2,
       planDecision: 'governed_execution',
-      policyVersions: { planning: 2, review: 2, verification: 1 },
+      policyVersions: { planning: 2, review: 1, verification: 1 },
       reviewStatus: 'passed',
       reviewLedgerDigest: DIGEST,
       verificationStatus: 'passed',

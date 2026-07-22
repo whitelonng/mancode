@@ -7,13 +7,18 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import { inspectV3AdapterVersions } from '../installers/v3-adapter.js';
 import {
   type EntityHomeStore,
   resolveTaskEntityHomeStore,
 } from '../runtime/entity-home-store.js';
-import { acquireEntityLocks } from '../runtime/local-lock.js';
+import {
+  type LocalLockHandle,
+  acquireEntityLocks,
+} from '../runtime/local-lock.js';
 import {
   armOperationCrashAfterVisibleWrite,
+  pauseIfOperationLockInjectedForTesting,
   throwIfDeferredOperationCrashInjected,
   throwIfOperationCrashInjected,
 } from '../runtime/operation-crash-injection.js';
@@ -41,6 +46,7 @@ import {
   readCheckoutCodeHead,
   readProjectRuntimeContext,
 } from '../runtime/project-runtime.js';
+import { acquireProjectWriteBarrier } from '../runtime/project-write-barrier.js';
 import {
   completeProjectionIntent,
   enqueueSessionPointerProjection,
@@ -65,13 +71,17 @@ import {
   taskAggregateDigest,
 } from './aggregate.js';
 import { digestCanonicalJson, sortUtf8StringSet } from './canonical.js';
-import { assertCompatibilityGate } from './compatibility.js';
+import {
+  CURRENT_WRITER_CAPABILITIES,
+  assertCompatibilityGate,
+} from './compatibility.js';
 import {
   type WorkflowCreationResolution,
   resolveWorkflowCreation,
 } from './creation-resolution.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
 import { scanLegacyAuthority } from './layout.js';
+import { managedAdapterNames } from './manifest.js';
 import type { ParentSnapshot } from './parent-snapshot.js';
 import {
   type RequirementsLedgerV1,
@@ -178,16 +188,21 @@ export async function createV3Workflow(
 
   const runtime = await readProjectRuntimeContext(projectRoot);
   const contextStore = new V3ContextStore(projectRoot);
-  const [project, legacy] = await Promise.all([
-    contextStore.readProjectSnapshot(),
+  const project = await contextStore.readProjectSnapshot();
+  const [legacy, adapterVersions] = await Promise.all([
     scanLegacyAuthority(projectRoot),
+    inspectV3AdapterVersions(
+      projectRoot,
+      managedAdapterNames(project.manifest.managedAdapters),
+    ),
   ]);
   assertCompatibilityGate({
     manifest: project.manifest,
     expectedSchemaEpoch: project.manifest.epoch,
     readerVersion: VERSION,
     writerVersion: VERSION,
-    adapterVersions: project.manifest.managedAdapters,
+    writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+    adapterVersions,
     currentLegacyBaseline: legacy.baseline,
     legacyAuthorityPresent: legacy.authorityPresent,
     operation: 'v3_business_write',
@@ -259,6 +274,12 @@ export async function createV3Workflow(
         ? 0
         : 1,
     timestamp,
+    planningPolicyVersion:
+      parent === null
+        ? project.manifest.manifestVersion === 2 && workflowMode === 'man'
+          ? project.manifest.workflowPolicyDefaults.planning
+          : 1
+        : parent.metadata.governance.policyVersions.planning,
   });
   const homeStore = resolveTaskEntityHomeStore(
     runtime.entityHomeStoreContext,
@@ -341,22 +362,34 @@ export async function createV3Workflow(
   assertOperationRecoveryPayloadCoversJournal(operation, recoveryPayload);
   assertOperationJournalMatchesDefinition(operation);
 
-  const taskParent = await ensureSafeTaskParent(projectRoot, taskRef);
-  const targetDirectory = path.join(taskParent, taskRef.taskId);
-  const stagingDirectory = path.join(
-    taskParent,
-    `.${taskRef.taskId}.${operationId}.staging`,
-  );
-  const locks = await acquireEntityLocks(
-    homeStore,
+  const projectBarrier = await acquireProjectWriteBarrier(
+    runtime,
     operationId,
-    operation.entityLocks,
-    { now },
+    now,
   );
+  let projectBarrierReleased = false;
+  let locks: LocalLockHandle[] = [];
+  let stagingDirectory: string | null = null;
   let journal = operation;
   let journalCreated = false;
   let sessionProjectionId: string | null = null;
   try {
+    const lockedProject = await contextStore.readProjectSnapshot();
+    if (lockedProject.fingerprint !== project.fingerprint) {
+      throw new Error('MANCODE_REVISION_CONFLICT');
+    }
+    const taskParent = await ensureSafeTaskParent(projectRoot, taskRef);
+    const targetDirectory = path.join(taskParent, taskRef.taskId);
+    stagingDirectory = path.join(
+      taskParent,
+      `.${taskRef.taskId}.${operationId}.staging`,
+    );
+    locks = await acquireEntityLocks(
+      homeStore,
+      operationId,
+      operation.entityLocks,
+      { now },
+    );
     if (taskRef.namespace === 'shared') {
       await assertTransportCoordinationWriteAllowed(homeStore, project.config);
     }
@@ -396,7 +429,14 @@ export async function createV3Workflow(
     await writeOperationRecoveryPayload(homeStore, recoveryPayload);
     journal = await createPreparedOperationJournal(homeStore, journal);
     journalCreated = true;
+    await projectBarrier.release();
+    projectBarrierReleased = true;
     throwIfOperationCrashInjected('workflow_create', 'prepared');
+    const lockPause = pauseIfOperationLockInjectedForTesting(
+      operationId,
+      'entity_locks_held',
+    );
+    if (lockPause !== null) await lockPause;
 
     journal = await advanceJournal(homeStore, journal, 'validate', now, true);
     // Mark write intent before the visible effect. This makes a crash in the
@@ -441,7 +481,7 @@ export async function createV3Workflow(
       try {
         if (hasBusinessWriteIntent(journal)) {
           await markRepairRequired(homeStore, journal, now);
-        } else {
+        } else if (stagingDirectory !== null) {
           await abortPreparedCreate(homeStore, journal, stagingDirectory, now);
         }
       } catch {
@@ -451,9 +491,10 @@ export async function createV3Workflow(
     }
     throw error;
   } finally {
-    await Promise.allSettled(
-      [...locks].reverse().map((lock) => lock.release()),
-    );
+    await Promise.allSettled([
+      ...[...locks].reverse().map((lock) => lock.release()),
+      ...(projectBarrierReleased ? [] : [projectBarrier.release()]),
+    ]);
   }
 
   let sessionResumed = true;
@@ -630,6 +671,7 @@ function buildInitialEntities(input: {
   explicitScope: WorkflowCreateScope | undefined;
   ownershipEpoch: number;
   timestamp: string;
+  planningPolicyVersion: number | null;
 }): InitialEntities {
   const scope = initialScope(input.parent, input.explicitScope);
   const requirementsDraft: RequirementsLedgerV1 = {
@@ -739,7 +781,11 @@ function buildInitialEntities(input: {
       requirementsDigest: requirements.contentDigest,
       planVersion: 1,
       planDecision: null,
-      policyVersions: { planning: 1, review: 1, verification: 1 },
+      policyVersions: {
+        planning: input.planningPolicyVersion,
+        review: 1,
+        verification: 1,
+      },
       reviewStatus: review.status,
       reviewLedgerDigest: review.contentDigest,
       verificationStatus: verification.status,

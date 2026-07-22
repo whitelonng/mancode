@@ -66,6 +66,10 @@ describe('Cursor adapter', () => {
     expect(solo).toContain('read `.mancode/aesthetics/style-tokens.json`');
     expect(solo).toContain('one bounded self-check');
     expect(solo).toContain('Do not start another reviewer');
+    expect(solo).toContain('semantic owner or source of truth is unclear');
+    expect(solo).toContain('NEEDS_REALIGNMENT');
+    expect(solo).toContain('MANCODE_REFRAME_REQUIRED');
+    expect(solo).toContain('do not call generic workflow update');
 
     const man = await readRule('mancode-man.mdc');
     expect(man).toContain('alwaysApply: false');

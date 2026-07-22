@@ -8,7 +8,10 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
-import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
+import {
+  finalizeV3Requirements,
+  saveV3RequirementsDraft,
+} from '../src/context/requirements-finalize.js';
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
 import {
   type RequirementsLedgerV1,
@@ -36,7 +39,8 @@ import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js
 import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
 import { readOperationJournal } from '../src/runtime/operation-store.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
-import { createSession } from '../src/runtime/session.js';
+import { listProjectionIntents } from '../src/runtime/projection-outbox.js';
+import { createSession, readSession } from '../src/runtime/session.js';
 import { readTaskHeadFence } from '../src/runtime/task-head-store.js';
 import {
   createLocalActor,
@@ -154,6 +158,116 @@ describe('V3 requirements finalization operation', () => {
         now: NOW,
       }),
     ).rejects.toThrow('MANCODE_EXPECTED_REVISION_CONFLICT');
+  });
+
+  it('requires an open blocker for an incomplete clarification draft', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Persist an incomplete clarification safely.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(14),
+      operationId: id(15),
+      now: NOW,
+    });
+    const invalid = {
+      ...clarificationDraft(created.requirements, created.taskRef),
+      blockingUnknowns: [],
+    };
+
+    await expect(
+      saveV3RequirementsDraft({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: 1,
+        requirements: {
+          ...invalid,
+          contentDigest: requirementsLedgerDigest(invalid),
+        },
+        operationId: id(16),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REQUIREMENTS_DRAFT_BLOCKER_REQUIRED');
+  });
+
+  it('repairs or aborts an actual requirements draft at every declared crash point', async () => {
+    const fixtures = OPERATION_CRASH_FIXTURES.requirements_draft;
+    for (const [index, fixture] of fixtures.entries()) {
+      const caseRoot = path.join(root, `requirements-draft-crash-${index}`);
+      await mkdir(caseRoot);
+      const { sessionId } = await bootstrap(caseRoot, false, false);
+      const created = await createV3Workflow({
+        projectRoot: caseRoot,
+        task: 'Resume clarification after an interrupted draft write.',
+        workflowMode: 'man',
+        sessionId,
+        client: 'vitest',
+        taskId: id(17),
+        operationId: id(18),
+        now: NOW,
+      });
+      const operationId = id(120 + index);
+
+      await expect(
+        withOperationCrashInjectionForTesting(fixture, () =>
+          saveV3RequirementsDraft({
+            projectRoot: caseRoot,
+            taskRef: created.taskRef,
+            sessionId,
+            expectedTaskRevision: created.metadata.revision,
+            requirements: clarificationDraft(
+              created.requirements,
+              created.taskRef,
+            ),
+            operationId,
+            now: NOW,
+          }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+      const recovered = await executeOperationRecovery({
+        projectRoot: caseRoot,
+        operationId,
+        actorId: id(4),
+        sessionId,
+        now: NOW,
+      });
+      if (fixture.expectedRecovery === 'safe_abort') {
+        expect(recovered).toMatchObject({
+          state: 'aborted',
+          journal: { state: 'aborted' },
+        });
+      } else if (fixture.crashAfter === 'commit') {
+        expect(recovered).toMatchObject({
+          state: 'already_terminal',
+          journal: { state: 'committed' },
+        });
+      } else {
+        expect(recovered).toMatchObject({
+          state: 'repaired',
+          journal: { state: 'committed' },
+        });
+      }
+
+      const persisted = await new V3ContextStore(caseRoot).readTaskSnapshot(
+        created.taskRef,
+      );
+      if (fixture.expectedRecovery === 'safe_abort') {
+        expect(persisted.requirements.revision).toBe(1);
+      } else {
+        expect(persisted).toMatchObject({
+          metadata: {
+            revision: 2,
+            governance: { requirementsStatus: 'needs_clarification' },
+          },
+          requirements: { revision: 2, status: 'draft' },
+        });
+        expect(persisted.aggregateError).toBeNull();
+      }
+    }
   });
 
   it('requires the shared task-head fence and advances it with the aggregate', async () => {
@@ -362,6 +476,92 @@ describe('V3 requirements finalization operation', () => {
       type: 'task_complete',
       expectedRevisions: { [`task:local:${created.taskRef.taskId}`]: 5 },
     });
+  });
+
+  it('does not create a new plan version when confirming the existing plan', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Confirm an existing plan without invalidating its evidence.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(100),
+      operationId: id(101),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: 1,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(102),
+      now: NOW,
+    });
+    const plan = '# Plan\n\n1. Confirm the existing plan.\n';
+    const revised = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      operationId: id(103),
+      now: NOW,
+    });
+    const beforeConfirmation = await new V3ContextStore(root).readTaskSnapshot(
+      created.taskRef,
+    );
+
+    const confirmed = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: revised.metadata.revision,
+      plan,
+      planDecision: 'plan_only',
+      operationId: id(104),
+      now: NOW,
+    });
+
+    expect(confirmed.metadata).toMatchObject({
+      revision: revised.metadata.revision + 1,
+      status: 'planned',
+      currentStep: 4,
+      governance: {
+        planVersion: revised.metadata.governance.planVersion,
+        planDecision: 'plan_only',
+      },
+    });
+    expect(confirmed.planDigest).toBe(revised.planDigest);
+    expect(confirmed.review).toEqual(beforeConfirmation.review);
+    expect(confirmed.verification).toEqual(beforeConfirmation.verification);
+    expect(confirmed.metadata.governance.reviewLedgerDigest).toBe(
+      beforeConfirmation.metadata.governance.reviewLedgerDigest,
+    );
+    expect(confirmed.metadata.governance.verificationLedgerDigest).toBe(
+      beforeConfirmation.metadata.governance.verificationLedgerDigest,
+    );
+    await expect(readSession(root, sessionId)).resolves.toMatchObject({
+      activeTaskRef: null,
+      activeMode: null,
+      lastSeenRevision: null,
+    });
+    await expect(listProjectionIntents(root)).resolves.toEqual([]);
+    await expect(
+      listProjectionIntents(root, {
+        operationId: id(104),
+        includeTerminal: true,
+      }),
+    ).resolves.toMatchObject([
+      {
+        state: 'completed',
+        target: { action: 'clear', taskRef: created.taskRef },
+      },
+    ]);
   });
 
   it('releases every active shared claim before committing a completed task and fence', async () => {
@@ -803,6 +1003,41 @@ function finalizedRequirements(
     blockingUnknowns: [],
     contentDigest: '',
     lastOperationId: id(62),
+    updatedAt: NOW.toISOString(),
+  };
+  return parseRequirementsLedger({
+    ...draft,
+    contentDigest: requirementsLedgerDigest(draft),
+  });
+}
+
+function clarificationDraft(
+  previous: RequirementsLedgerV1,
+  taskRef: RequirementsLedgerV1['taskRef'],
+): RequirementsLedgerV1 {
+  const draft: RequirementsLedgerV1 = {
+    ...previous,
+    taskRef,
+    revision: 99,
+    status: 'draft',
+    goal: 'Preserve the known goal while clarification remains open.',
+    functionalScope: { inScope: [], outOfScope: [] },
+    technicalDecisions: [],
+    defaults: [],
+    coverage: [],
+    requirements: [],
+    acceptanceCriteria: [],
+    blockingUnknowns: [
+      {
+        displayId: 'U-1',
+        legacyId: null,
+        unknownId: id(63),
+        statement: 'Choose the semantic owner before implementation.',
+        status: 'open',
+      },
+    ],
+    contentDigest: '',
+    lastOperationId: id(64),
     updatedAt: NOW.toISOString(),
   };
   return parseRequirementsLedger({

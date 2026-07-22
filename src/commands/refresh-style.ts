@@ -13,7 +13,7 @@ import {
 import { scanAesthetics } from '../system/scan-aesthetics.js';
 
 /**
- * 退出码契约 — 见 docs/08-cli-spec.md §7
+ * 退出码契约见 docs/workflows.md。
  */
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -22,13 +22,13 @@ export const EXIT_V3_REFRESH_FAILED = 2;
 /**
  * `mancode refresh-style` 命令。
  *
- * 职责（docs/08-cli-spec.md §7 + docs/06-aesthetics.md §9.2）：
+ * 职责见 docs/project-intelligence.md：
  * 1. 检查项目已初始化
  * 2. 重新扫描项目审美 token
  * 3. 覆盖 .mancode/aesthetics/style-tokens.json
  * 4. 输出扫描结果摘要
  *
- * 触发场景（docs/06-aesthetics.md §9.2）：
+ * 触发场景见 docs/project-intelligence.md：
  * - 用户改了 tailwind.config.js
  * - 用户改了 package.json dependencies
  * - 用户手动执行

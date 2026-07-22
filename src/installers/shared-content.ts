@@ -116,7 +116,9 @@ function renderPracticeRules(): string {
     '',
     'For every task, consider: why this change, what already exists, and what is the smallest useful diff?',
     '',
-    'In solo mode, use the narrowest meaningful validation and one bounded self-check limited to the current diff. Do not start another reviewer or repeat the review. Only recommend man for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, or infrastructure risk.',
+    'In solo mode, use the narrowest meaningful validation and one bounded self-check limited to the current diff. Do not start another reviewer or repeat the review.',
+    'Recommend man and explain the trigger when platform entry/flow differs, the semantic owner or source of truth is unclear, status/contract/policy semantics change, scope/architecture/cost/acceptance crosses files or modules, or historical compatibility, migration, cross-platform, or team evidence is required. Auth, payment, sensitive data, deletion, public APIs, untrusted input, concurrency, and infrastructure remain hard-risk signals. Advice alone never changes mode, step, policy, or authority.',
+    'While executing confirmed requirements/plan, new evidence that invalidates its goal, owner, source of truth, acceptance, or scope, or a stale adapter/incompatible writer/unfinished operation/active child/open handoff/active solo assignment, requires the read-only diagnostic `NEEDS_REALIGNMENT` with reason `MANCODE_REFRAME_REQUIRED`. Preserve metadata, requirements, plan, ledgers, claims, and handoffs; do not call generic workflow update, write blocked/currentStep/planning, archive files, release claims, or claim to be back at Step 2.',
   ].join('\n');
 }
 

@@ -1,20 +1,39 @@
 import type {
   LegacyBaseline,
   ManagedAdapter,
-  SchemaManifestV1,
+  SchemaManifest,
 } from './manifest.js';
+import { managedAdapterInventoriesMatch } from './manifest.js';
 
 export type CompatibilityOperation =
   | 'read'
   | 'v3_business_write'
+  | 'reframe'
   | 'migration_stage'
   | 'activation_repair'
-  | 'greenfield_initialize';
+  | 'greenfield_initialize'
+  | 'adapter_upgrade'
+  | 'project_policy_upgrade';
+
+export type WriterCapability =
+  | 'planning-policy:1'
+  | 'planning-policy:2'
+  | 'adapter-digest:1'
+  | 'reframe-local:1';
+
+export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
+  'planning-policy:1',
+  'planning-policy:2',
+  'adapter-digest:1',
+  'reframe-local:1',
+];
 
 export type CompatibilityFailureCode =
   | 'MANCODE_SCHEMA_EPOCH_MISMATCH'
   | 'MANCODE_READER_VERSION_TOO_OLD'
   | 'MANCODE_WRITER_VERSION_TOO_OLD'
+  | 'MANCODE_WRITER_CAPABILITY_MISSING'
+  | 'MANCODE_ADAPTER_CONTENT_STALE'
   | 'MANCODE_ADAPTER_VERSION_MISMATCH'
   | 'MANCODE_LEGACY_BASELINE_CHANGED'
   | 'MANCODE_LEGACY_AUTHORITY_PRESENT'
@@ -23,14 +42,25 @@ export type CompatibilityFailureCode =
   | 'MANCODE_REPAIR_REQUIRED';
 
 export interface CompatibilityGateInput {
-  manifest: SchemaManifestV1;
+  manifest: SchemaManifest;
   expectedSchemaEpoch: string;
   readerVersion: string;
   writerVersion: string;
+  writerCapabilities: readonly WriterCapability[];
   adapterVersions: Partial<Record<ManagedAdapter, string>>;
   currentLegacyBaseline: LegacyBaseline | null;
   legacyAuthorityPresent: boolean;
   operation: CompatibilityOperation;
+}
+
+export class CompatibilityGateError extends Error {
+  constructor(
+    readonly code: CompatibilityFailureCode,
+    readonly details: Record<string, unknown>,
+  ) {
+    super(`${code}: ${JSON.stringify(details)}`);
+    this.name = 'CompatibilityGateError';
+  }
 }
 
 export interface CompatibilityGateResult {
@@ -60,8 +90,12 @@ export function evaluateCompatibilityGate(
   ) {
     failures.push('MANCODE_WRITER_VERSION_TOO_OLD');
   }
-  if (!adaptersMatch(input.manifest, input.adapterVersions)) {
-    failures.push('MANCODE_ADAPTER_VERSION_MISMATCH');
+  if (missingWriterCapabilities(input).length > 0) {
+    failures.push('MANCODE_WRITER_CAPABILITY_MISSING');
+  }
+  const adapterFailure = adapterFailureFor(input);
+  if (adapterFailure !== null) {
+    failures.push(adapterFailure);
   }
   const baselineFailure = baselineFailureFor(input);
   if (baselineFailure !== null) failures.push(baselineFailure);
@@ -79,7 +113,12 @@ export function assertCompatibilityGate(input: CompatibilityGateInput): void {
   const allowed =
     input.operation === 'read' ? result.readAllowed : result.writeAllowed;
   if (!allowed) {
-    throw new Error(result.failures[0] ?? 'MANCODE_COMPATIBILITY_BLOCKED');
+    const code = result.failures[0];
+    if (code === undefined) throw new Error('MANCODE_COMPATIBILITY_BLOCKED');
+    throw new CompatibilityGateError(
+      code,
+      compatibilityFailureDetails(input, code),
+    );
   }
 }
 
@@ -157,13 +196,103 @@ function stateFailureFor(
   }
 }
 
-function adaptersMatch(
-  manifest: SchemaManifestV1,
-  actual: Partial<Record<ManagedAdapter, string>>,
-): boolean {
-  return (Object.keys(manifest.managedAdapters) as ManagedAdapter[]).every(
-    (adapter) => actual[adapter] === manifest.managedAdapters[adapter],
+function adapterFailureFor(
+  input: CompatibilityGateInput,
+): CompatibilityFailureCode | null {
+  if (input.operation === 'adapter_upgrade') return null;
+  const entries = Object.entries(input.adapterVersions) as Array<
+    [ManagedAdapter, string]
+  >;
+  if (
+    entries.some(
+      ([, version]) =>
+        version === 'missing' ||
+        version === 'stale' ||
+        version === 'unreadable',
+    )
+  ) {
+    return 'MANCODE_ADAPTER_CONTENT_STALE';
+  }
+  return managedAdapterInventoriesMatch(
+    input.manifest.managedAdapters,
+    input.adapterVersions,
+  )
+    ? null
+    : 'MANCODE_ADAPTER_VERSION_MISMATCH';
+}
+
+function requiredWriterCapabilities(
+  input: CompatibilityGateInput,
+): readonly WriterCapability[] {
+  if (input.operation === 'read') return [];
+  if (input.operation === 'adapter_upgrade') {
+    return ['planning-policy:1', 'adapter-digest:1'];
+  }
+  if (input.operation === 'reframe') {
+    return [
+      'planning-policy:1',
+      ...(input.manifest.manifestVersion === 2
+        ? (['planning-policy:2'] as const)
+        : []),
+      'adapter-digest:1',
+      'reframe-local:1',
+    ];
+  }
+  if (
+    input.operation === 'project_policy_upgrade' ||
+    input.manifest.manifestVersion === 2
+  ) {
+    return ['planning-policy:1', 'planning-policy:2', 'adapter-digest:1'];
+  }
+  return ['planning-policy:1'];
+}
+
+function missingWriterCapabilities(
+  input: CompatibilityGateInput,
+): WriterCapability[] {
+  const declared = new Set(input.writerCapabilities);
+  return requiredWriterCapabilities(input).filter(
+    (capability) => !declared.has(capability),
   );
+}
+
+function compatibilityFailureDetails(
+  input: CompatibilityGateInput,
+  code: CompatibilityFailureCode,
+): Record<string, unknown> {
+  switch (code) {
+    case 'MANCODE_WRITER_VERSION_TOO_OLD':
+      return {
+        observedVersion: input.writerVersion,
+        requiredWriter: input.manifest.minWriterVersion,
+      };
+    case 'MANCODE_WRITER_CAPABILITY_MISSING':
+      return {
+        missingCapabilities: missingWriterCapabilities(input),
+        declaredCapabilities: [...input.writerCapabilities],
+        requiredWriter: input.manifest.minWriterVersion,
+      };
+    case 'MANCODE_ADAPTER_CONTENT_STALE': {
+      const adapters = Object.fromEntries(
+        Object.entries(input.adapterVersions).filter(
+          ([, version]) =>
+            version === 'missing' ||
+            version === 'stale' ||
+            version === 'unreadable',
+        ),
+      );
+      return {
+        adapters,
+        repair: Object.keys(adapters).map((platform) => ({
+          platform,
+          previewCommand: `mancode adapter upgrade --platform ${platform} --dry-run`,
+          confirmCommand: `mancode adapter upgrade --platform ${platform} --confirm --operation-id <operationId> --session <id>`,
+        })),
+      };
+    }
+    default:
+      return {};
+  }
 }
 
 function sameBaseline(left: LegacyBaseline, right: LegacyBaseline): boolean {

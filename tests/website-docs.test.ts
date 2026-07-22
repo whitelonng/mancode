@@ -66,7 +66,9 @@ describe('website documentation', () => {
         '.github/prompts/',
         'ZCode',
         'context session new --client',
+        'context session show --session',
         'context resume &lt;namespace:ULID&gt;',
+        '--confirm --operation-id &lt;operationId&gt; --session',
       ]) {
         expect(html, `${name} is missing ${requiredText}`).toContain(
           requiredText,

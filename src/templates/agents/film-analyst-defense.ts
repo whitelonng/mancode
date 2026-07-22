@@ -1,7 +1,7 @@
 import type { AgentSpec } from './index.js';
 
 /**
- * Film Analyst #2（录像分析师·防守）agent — 边界/安全审查（docs/05-agents.md §5）。
+ * Film Analyst #2（录像分析师·防守）agent — 边界/安全审查（见 docs/workflows.md）。
  *
  * 触发：/man Step 8、/manteam Step 8。
  * 审查维度：边界条件、安全（XSS/SQL/越权/敏感信息）、性能、资源管理、错误恢复；UI 任务还要审查可访问性与失败路径。

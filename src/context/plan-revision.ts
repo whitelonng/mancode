@@ -3,6 +3,10 @@ import {
   createTaskAuthorityFileRecoveryAction,
   createTaskHeadFenceRecoveryAction,
 } from '../runtime/operation-recovery-payload.js';
+import {
+  enqueueSessionPointerProjection,
+  reconcileProjectionIntents,
+} from '../runtime/projection-outbox.js';
 import type { TaskHeadFenceV1 } from '../runtime/task-head-fence.js';
 import { replaceTaskHeadFence } from '../runtime/task-head-store.js';
 import {
@@ -69,8 +73,8 @@ export interface RevisedV3Plan {
 }
 
 /**
- * Writes a new plan version and makes every prior review and verification
- * result explicitly stale before the task becomes stable again.
+ * Writes a new plan version when content changes, or records a plan decision
+ * against the existing content without invalidating its evidence.
  */
 export async function reviseV3Plan(
   input: ReviseV3PlanInput,
@@ -106,26 +110,33 @@ export async function reviseV3Plan(
     if (context.task.plan?.content === plan && planDecision === null) {
       throw new Error('MANCODE_PLAN_CONTENT_UNCHANGED');
     }
+    const planChanged = context.task.plan?.content !== plan;
     const timestamp = context.now.toISOString();
-    const planDigest = digestCanonicalJson({
-      artifactRef: { taskRef, kind: 'plan' },
-      content: plan,
-    });
-    const review = markTaskReviewStale(
-      context.task.review,
-      context.operationId,
-      timestamp,
-    );
-    const verification = markTaskVerificationStale(
-      context.task.verification,
-      context.operationId,
-      timestamp,
-    );
+    const planDigest = planChanged
+      ? digestCanonicalJson({
+          artifactRef: { taskRef, kind: 'plan' },
+          content: plan,
+        })
+      : context.task.plan?.digest;
+    if (planDigest === undefined) {
+      throw new Error('MANCODE_PLAN_FILE_REQUIRED');
+    }
+    const review = planChanged
+      ? markTaskReviewStale(context.task.review, context.operationId, timestamp)
+      : context.task.review;
+    const verification = planChanged
+      ? markTaskVerificationStale(
+          context.task.verification,
+          context.operationId,
+          timestamp,
+        )
+      : context.task.verification;
     const metadata = updateMetadata(
       context.task.metadata,
       context.task.requirements,
       review,
       verification,
+      planChanged,
       planDecision,
       context.operationId,
       timestamp,
@@ -140,6 +151,19 @@ export async function reviseV3Plan(
     });
     const taskHeadFence = nextTaskHeadFence(context, aggregate, timestamp);
 
+    if (planDecision === 'plan_only') {
+      await enqueueSessionPointerProjection(context.projectRoot, {
+        operationId: context.operationId,
+        action: 'clear',
+        sessionId: context.session.sessionId,
+        expectedPreviousTaskRef: context.session.activeTaskRef,
+        taskRef,
+        workflowMode: metadata.workflowMode,
+        taskRevision: metadata.revision,
+        now: context.now,
+      });
+    }
+
     journal = await createTaskOperationJournal(context, {
       type: 'plan_revision',
       action:
@@ -153,13 +177,17 @@ export async function reviseV3Plan(
       ]),
       recovery: {
         actions: [
-          createTaskAuthorityFileRecoveryAction({
-            stepId: 'write-plan',
-            taskRef,
-            fileName: 'plan.md',
-            beforeContent: context.task.plan?.content ?? null,
-            targetContent: plan,
-          }),
+          ...(planChanged
+            ? [
+                createTaskAuthorityFileRecoveryAction({
+                  stepId: 'write-plan',
+                  taskRef,
+                  fileName: 'plan.md',
+                  beforeContent: context.task.plan?.content ?? null,
+                  targetContent: plan,
+                }),
+              ]
+            : []),
           createTaskAuthorityFileRecoveryAction({
             stepId: 'update-metadata',
             taskRef,
@@ -167,20 +195,26 @@ export async function reviseV3Plan(
             beforeContent: serializeTaskAuthority(context.task.metadata),
             targetContent: serializeTaskAuthority(metadata),
           }),
-          createTaskAuthorityFileRecoveryAction({
-            stepId: 'mark-review-verification-stale',
-            taskRef,
-            fileName: 'review-ledger.json',
-            beforeContent: serializeTaskAuthority(context.task.review),
-            targetContent: serializeTaskAuthority(review),
-          }),
-          createTaskAuthorityFileRecoveryAction({
-            stepId: 'mark-review-verification-stale',
-            taskRef,
-            fileName: 'verification-ledger.json',
-            beforeContent: serializeTaskAuthority(context.task.verification),
-            targetContent: serializeTaskAuthority(verification),
-          }),
+          ...(planChanged
+            ? [
+                createTaskAuthorityFileRecoveryAction({
+                  stepId: 'mark-review-verification-stale',
+                  taskRef,
+                  fileName: 'review-ledger.json',
+                  beforeContent: serializeTaskAuthority(context.task.review),
+                  targetContent: serializeTaskAuthority(review),
+                }),
+                createTaskAuthorityFileRecoveryAction({
+                  stepId: 'mark-review-verification-stale',
+                  taskRef,
+                  fileName: 'verification-ledger.json',
+                  beforeContent: serializeTaskAuthority(
+                    context.task.verification,
+                  ),
+                  targetContent: serializeTaskAuthority(verification),
+                }),
+              ]
+            : []),
           ...(taskHeadFence === null
             ? []
             : [
@@ -191,13 +225,20 @@ export async function reviseV3Plan(
                 }),
               ]),
         ],
-        noOpStepIds: taskHeadFence === null ? ['update-task-head-fence'] : [],
+        noOpStepIds: [
+          ...(planChanged
+            ? []
+            : ['write-plan', 'mark-review-verification-stale']),
+          ...(taskHeadFence === null ? ['update-task-head-fence'] : []),
+        ],
       },
     });
     journal = await advanceTaskOperation(context, journal, 'validate', true);
 
     journal = await advanceTaskOperation(context, journal, 'write-plan', false);
-    await writeTaskAuthorityFile(context, 'plan.md', plan);
+    if (planChanged) {
+      await writeTaskAuthorityFile(context, 'plan.md', plan);
+    }
 
     journal = await advanceTaskOperation(
       context,
@@ -217,16 +258,18 @@ export async function reviseV3Plan(
       'mark-review-verification-stale',
       false,
     );
-    await writeTaskAuthorityFile(
-      context,
-      'review-ledger.json',
-      `${JSON.stringify(review, null, 2)}\n`,
-    );
-    await writeTaskAuthorityFile(
-      context,
-      'verification-ledger.json',
-      `${JSON.stringify(verification, null, 2)}\n`,
-    );
+    if (planChanged) {
+      await writeTaskAuthorityFile(
+        context,
+        'review-ledger.json',
+        `${JSON.stringify(review, null, 2)}\n`,
+      );
+      await writeTaskAuthorityFile(
+        context,
+        'verification-ledger.json',
+        `${JSON.stringify(verification, null, 2)}\n`,
+      );
+    }
 
     journal = await advanceTaskOperation(
       context,
@@ -239,6 +282,17 @@ export async function reviseV3Plan(
       await replaceTaskHeadFence(context.homeStore, taskHeadFence);
     }
     const operation = await commitTaskOperation(context, journal);
+    if (planDecision === 'plan_only') {
+      try {
+        await reconcileProjectionIntents(
+          context.projectRoot,
+          context.operationId,
+          context.now,
+        );
+      } catch {
+        // Planned authority is committed; doctor can finish the projection.
+      }
+    }
     return {
       metadata,
       review,
@@ -306,6 +360,7 @@ function updateMetadata(
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
   verification: VerificationLedgerV1,
+  planChanged: boolean,
   planDecision: V3PlanDecision | null,
   operationId: Ulid,
   updatedAt: string,
@@ -323,11 +378,13 @@ function updateMetadata(
       ...previous.governance,
       requirementsStatus: 'ready',
       requirementsDigest: requirements.contentDigest,
-      planVersion: previous.governance.planVersion + 1,
+      planVersion: previous.governance.planVersion + (planChanged ? 1 : 0),
       planDecision,
-      reviewStatus: 'stale',
+      reviewStatus: planChanged ? 'stale' : previous.governance.reviewStatus,
       reviewLedgerDigest: review.contentDigest,
-      verificationStatus: 'stale',
+      verificationStatus: planChanged
+        ? 'stale'
+        : previous.governance.verificationStatus,
       verificationLedgerDigest: verification.contentDigest,
     },
     updatedAt,

@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CURRENT_WRITER_CAPABILITIES,
   type CompatibilityFailureCode,
   type CompatibilityGateInput,
   assertCompatibilityGate,
   compareSemver,
   evaluateCompatibilityGate,
 } from '../src/context/compatibility.js';
-import type { SchemaManifestV1 } from '../src/context/manifest.js';
+import type {
+  SchemaManifestV1,
+  SchemaManifestV2,
+} from '../src/context/manifest.js';
 
 const EPOCH = '01JZ4B6W5Z0A1B2C3D4E5F6G7H';
 const BASELINE = {
@@ -65,13 +69,65 @@ describe('schema compatibility gate', () => {
     );
   });
 
-  it('blocks writes for both missing and mismatched managed adapters', () => {
+  it('requires the registered adapter inventory to match disk exactly', () => {
     const active = activeInput();
+    const codexOnly = activeInput({ managedAdapters: { codex: '3' } });
 
+    expect(
+      evaluateCompatibilityGate({
+        ...codexOnly,
+        operation: 'v3_business_write',
+      }),
+    ).toMatchObject({ writeAllowed: true, failures: [] });
+    expectWriteBlocked(
+      {
+        ...active,
+        adapterVersions: {
+          ...active.adapterVersions,
+          codex: 'missing',
+        },
+        operation: 'v3_business_write',
+      },
+      ['MANCODE_ADAPTER_CONTENT_STALE'],
+      true,
+    );
+    try {
+      assertCompatibilityGate({
+        ...codexOnly,
+        adapterVersions: { codex: 'stale' },
+        operation: 'v3_business_write',
+      });
+      throw new Error('expected stale adapter compatibility failure');
+    } catch (error) {
+      expect(error).toMatchObject({
+        details: {
+          repair: [
+            {
+              platform: 'codex',
+              previewCommand:
+                'mancode adapter upgrade --platform codex --dry-run',
+              confirmCommand: expect.stringContaining(
+                '--platform codex --confirm --operation-id <operationId>',
+              ),
+            },
+          ],
+        },
+      });
+      expect(JSON.stringify(error)).not.toContain('--all');
+    }
     expectWriteBlocked(
       {
         ...active,
         adapterVersions: withoutCodex(active.adapterVersions),
+        operation: 'v3_business_write',
+      },
+      ['MANCODE_ADAPTER_VERSION_MISMATCH'],
+      true,
+    );
+    expectWriteBlocked(
+      {
+        ...codexOnly,
+        adapterVersions: { ...codexOnly.adapterVersions, cursor: '3' },
         operation: 'v3_business_write',
       },
       ['MANCODE_ADAPTER_VERSION_MISMATCH'],
@@ -86,6 +142,96 @@ describe('schema compatibility gate', () => {
       ['MANCODE_ADAPTER_VERSION_MISMATCH'],
       true,
     );
+  });
+
+  it('requires explicit writer capabilities before any Policy 2 write', () => {
+    const base = activeInput();
+    const manifest: SchemaManifestV2 = {
+      ...base.manifest,
+      manifestVersion: 2,
+      workflowPolicyDefaults: { planning: 2 },
+    };
+    const input = { ...base, manifest };
+    expectWriteBlocked(
+      {
+        ...input,
+        writerCapabilities: ['planning-policy:1'],
+        operation: 'v3_business_write',
+      },
+      ['MANCODE_WRITER_CAPABILITY_MISSING'],
+      true,
+    );
+    expect(() =>
+      assertCompatibilityGate({
+        ...input,
+        writerCapabilities: ['planning-policy:1'],
+        operation: 'v3_business_write',
+      }),
+    ).toThrow(/planning-policy:2/);
+  });
+
+  it('evaluates the declared 0.3.18 version and capability tuple at the V2 boundary', () => {
+    const base = activeInput({
+      minReaderVersion: '0.4.0',
+      minWriterVersion: '0.4.0',
+    });
+    const manifest: SchemaManifestV2 = {
+      ...base.manifest,
+      manifestVersion: 2,
+      workflowPolicyDefaults: { planning: 2 },
+    };
+    const result = evaluateCompatibilityGate({
+      ...base,
+      manifest,
+      readerVersion: '0.3.18',
+      writerVersion: '0.3.18',
+      writerCapabilities: ['planning-policy:1'],
+      operation: 'v3_business_write',
+    });
+
+    expect(result).toEqual({
+      readAllowed: false,
+      writeAllowed: false,
+      failures: [
+        'MANCODE_READER_VERSION_TOO_OLD',
+        'MANCODE_WRITER_VERSION_TOO_OLD',
+        'MANCODE_WRITER_CAPABILITY_MISSING',
+      ],
+    });
+    expect(() =>
+      assertCompatibilityGate({
+        ...base,
+        manifest,
+        readerVersion: '0.3.18',
+        writerVersion: '0.3.18',
+        writerCapabilities: ['planning-policy:1'],
+        operation: 'v3_business_write',
+      }),
+    ).toThrow(/^MANCODE_READER_VERSION_TOO_OLD:/);
+  });
+
+  it('requires the adapter digest and local reframe capabilities for reframe', () => {
+    const input = activeInput();
+    expectWriteBlocked(
+      {
+        ...input,
+        writerCapabilities: ['planning-policy:1', 'adapter-digest:1'],
+        operation: 'reframe',
+      },
+      ['MANCODE_WRITER_CAPABILITY_MISSING'],
+      true,
+    );
+    expect(
+      evaluateCompatibilityGate({
+        ...input,
+        writerCapabilities: [
+          'planning-policy:1',
+          'adapter-digest:1',
+          'reframe-local:1',
+        ],
+        operation: 'reframe',
+      }),
+    ).toMatchObject({ writeAllowed: true, failures: [] });
   });
 
   it('blocks writes when the legacy authority drifts from its baseline', () => {
@@ -113,7 +259,7 @@ describe('schema compatibility gate', () => {
       {
         ...active,
         expectedSchemaEpoch: '01JZ4B6W5Z0A1B2C3D4E5F6G7J',
-        adapterVersions: withoutCodex(active.adapterVersions),
+        adapterVersions: { ...active.adapterVersions, codex: '2' },
         currentLegacyBaseline: {
           ...BASELINE,
           workflowIndexDigest: `sha256:${'c'.repeat(64)}`,
@@ -168,19 +314,16 @@ function expectWriteBlocked(
     failures,
   });
   expect(() => assertCompatibilityGate(input)).toThrowError(
-    new RegExp(`^${failures[0]}$`),
+    new RegExp(`^${failures[0]}:`),
   );
 }
 
 function withoutCodex(
   adapters: SchemaManifestV1['managedAdapters'],
 ): CompatibilityGateInput['adapterVersions'] {
-  return {
-    'claude-code': adapters['claude-code'],
-    cursor: adapters.cursor,
-    copilot: adapters.copilot,
-    zcode: adapters.zcode,
-  };
+  return Object.fromEntries(
+    Object.entries(adapters).filter(([adapter]) => adapter !== 'codex'),
+  );
 }
 
 function baseInput(overrides: Partial<SchemaManifestV1>) {
@@ -208,6 +351,7 @@ function baseInput(overrides: Partial<SchemaManifestV1>) {
     expectedSchemaEpoch: EPOCH,
     readerVersion: '0.4.0',
     writerVersion: '0.4.0',
+    writerCapabilities: CURRENT_WRITER_CAPABILITIES,
     adapterVersions: { ...manifest.managedAdapters },
     currentLegacyBaseline: manifest.legacyBaseline,
     legacyAuthorityPresent: manifest.legacyBaseline !== null,

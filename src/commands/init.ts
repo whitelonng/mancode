@@ -15,8 +15,9 @@ import {
   getPlatformInstallers,
 } from '../installers/registry.js';
 import {
+  V3_ADAPTER_VERSION,
   assertV3AdapterInstallable,
-  installV3Adapter,
+  inspectV3Adapter,
 } from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
@@ -39,7 +40,7 @@ import { VERSION } from '../version.js';
 import { initializeV3Project } from './v3-init.js';
 
 /**
- * 退出码契约 — 见 docs/08-cli-spec.md §2.5
+ * 退出码契约见 docs/workflows.md。
  */
 export const EXIT_OK = 0;
 export const EXIT_ALREADY_INITIALIZED = 1;
@@ -123,7 +124,7 @@ export function resolveInitAuthority(options: InitOptions): 'legacy' | 'v3' {
 /**
  * `mancode init` 命令（完整版）。
  *
- * 职责（docs/08-cli-spec.md §2.1-2.4）：
+ * 职责见 docs/12-lifecycle.md：
  * 1. 检测可选系统依赖（git）
  * 2. 检测中立 project profile（类型、语言、框架与验证能力）
  * 3. 创建 8 个文件/目录（.mancode/ + .claude/）
@@ -698,6 +699,7 @@ async function initializeV3(
   }
   const schemaPath = path.join(rootDir, '.mancode', 'schema.json');
   let existingV3 = false;
+  let registeredAdapters = new Set<PlatformName>();
   if (await pathExists(schemaPath)) {
     try {
       const manifest = parseSchemaManifest(
@@ -709,6 +711,9 @@ async function initializeV3(
         );
       }
       existingV3 = true;
+      registeredAdapters = new Set(
+        Object.keys(manifest.managedAdapters) as PlatformName[],
+      );
       if (options.platform === undefined) {
         console.log('ℹ️  mancode is already initialized.');
         return EXIT_ALREADY_INITIALIZED;
@@ -744,29 +749,39 @@ async function initializeV3(
     return EXIT_INIT_FAILED;
   }
   try {
+    if (
+      existingV3 &&
+      selectedPlatforms.some((platform) => !registeredAdapters.has(platform))
+    ) {
+      throw new Error(
+        'MANCODE_ADAPTER_REGISTRATION_REQUIRED: run `mancode adapter upgrade --platform <platform> --dry-run`, then confirm that operation with an active session.',
+      );
+    }
     for (const platform of selectedPlatforms) {
       await assertV3AdapterInstallable(rootDir, platform);
     }
     if (existingV3) {
-      for (const platform of selectedPlatforms) {
-        await installV3Adapter(rootDir, platform);
-      }
-      console.log('ℹ️  mancode is already initialized.');
-      if (selectedPlatforms.length > 0) {
-        console.log(
-          `   mancode bootstrap repaired: ${selectedPlatforms.join(', ')}`,
+      const statuses = await Promise.all(
+        selectedPlatforms.map((platform) =>
+          inspectV3Adapter(rootDir, platform),
+        ),
+      );
+      if (statuses.some((status) => !status.ready)) {
+        throw new Error(
+          'MANCODE_ADAPTER_REPAIR_REQUIRED: run `mancode adapter status --json`, then preview and confirm the required platform upgrade with an active session.',
         );
       }
+      console.log('ℹ️  mancode is already initialized.');
       return EXIT_ALREADY_INITIALIZED;
     }
     const result = await initializeV3Project({
       projectRoot: rootDir,
+      managedAdapters: Object.fromEntries(
+        selectedPlatforms.map((platform) => [platform, V3_ADAPTER_VERSION]),
+      ),
       teamPolicy:
         options.team === undefined ? 'auto' : options.team ? 'on' : 'off',
     });
-    for (const platform of selectedPlatforms) {
-      await installV3Adapter(rootDir, platform);
-    }
     console.log('✓  Initialized mancode project.');
     console.log(`   workspace: ${result.runtime.workspaceId}`);
     console.log(`   operation: ${result.journal.operationId}`);
@@ -777,7 +792,7 @@ async function initializeV3(
     }
     if (selectedPlatforms.length === 0) {
       console.log(
-        '   No platform bootstrap selected. Run `mancode install <platform>`.',
+        '   No platform bootstrap selected. Run `mancode adapter upgrade --platform <platform> --dry-run`, then confirm that operation with an active session.',
       );
     } else {
       console.log(`   mancode bootstrap: ${selectedPlatforms.join(', ')}`);

@@ -15,9 +15,10 @@ describe('platform session identity spike contract', () => {
     const spike = createPlatformSessionSpike({
       platform: 'codex',
       observedAt: '2026-07-17T12:00:00.000Z',
+      sessionMode: 'host',
       hostSessionSource: 'api',
-      firstWindowHostSessionKey: 'desktop-window-a-private-key',
-      secondWindowHostSessionKey: 'desktop-window-b-private-key',
+      firstWindowSessionKey: 'desktop-window-a-private-key',
+      secondWindowSessionKey: 'desktop-window-b-private-key',
       commandPropagation: 'proven',
       subagentInheritance: 'not_tested',
       hookApproval: 'not_applicable',
@@ -44,9 +45,10 @@ describe('platform session identity spike contract', () => {
     const collision = createPlatformSessionSpike({
       platform: 'cursor',
       observedAt: '2026-07-17T12:00:00.000Z',
+      sessionMode: 'host',
       hostSessionSource: 'environment',
-      firstWindowHostSessionKey: 'same-window-key',
-      secondWindowHostSessionKey: 'same-window-key',
+      firstWindowSessionKey: 'same-window-key',
+      secondWindowSessionKey: 'same-window-key',
       commandPropagation: 'not_proven',
       subagentInheritance: 'proven',
       hookApproval: 'not_applicable',
@@ -59,6 +61,50 @@ describe('platform session identity spike contract', () => {
       ready: false,
       missingPlatforms: expect.arrayContaining(['codex']),
       explicitRequiredPlatforms: expect.arrayContaining(['cursor']),
+      unverifiedPlatforms: expect.arrayContaining(['cursor']),
+    });
+  });
+
+  it('accepts proven explicit-session isolation without trusting host identity', () => {
+    const spikes = ['claude-code', 'codex', 'cursor', 'copilot', 'zcode'].map(
+      (platform, index) =>
+        createPlatformSessionSpike({
+          platform: platform as
+            | 'claude-code'
+            | 'codex'
+            | 'cursor'
+            | 'copilot'
+            | 'zcode',
+          observedAt: '2026-07-17T12:00:00.000Z',
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          firstWindowSessionKey: `session-${index}-a`,
+          secondWindowSessionKey: `session-${index}-b`,
+          commandPropagation: 'proven',
+          subagentInheritance: 'not_applicable',
+          subagentInheritanceReason: 'This host exposes no child-agent API.',
+          hookApproval: 'not_applicable',
+          evidence: evidence(),
+        }),
+    );
+
+    const firstSpike = spikes[0];
+    if (firstSpike === undefined) throw new Error('missing platform spike');
+    expect(evaluatePlatformSessionCapability(firstSpike)).toMatchObject({
+      hostIdentity: 'explicit_required',
+      releaseEvidence: 'explicit_session_verified',
+    });
+    expect(platformSpikeFreezeStatus(spikes)).toMatchObject({
+      ready: true,
+      missingPlatforms: [],
+      unverifiedPlatforms: [],
+      explicitRequiredPlatforms: [
+        'claude-code',
+        'codex',
+        'cursor',
+        'copilot',
+        'zcode',
+      ],
     });
   });
 
@@ -67,9 +113,10 @@ describe('platform session identity spike contract', () => {
       createPlatformSessionSpike({
         platform: 'claude-code',
         observedAt: '2026-07-17T12:00:00.000Z',
+        sessionMode: 'host',
         hostSessionSource: 'api',
-        firstWindowHostSessionKey: 'window-a',
-        secondWindowHostSessionKey: 'window-b',
+        firstWindowSessionKey: 'window-a',
+        secondWindowSessionKey: 'window-b',
         commandPropagation: 'proven',
         subagentInheritance: 'not_applicable',
         hookApproval: 'not_applicable',
@@ -80,9 +127,10 @@ describe('platform session identity spike contract', () => {
     const documented = createPlatformSessionSpike({
       platform: 'claude-code',
       observedAt: '2026-07-17T12:00:00.000Z',
+      sessionMode: 'host',
       hostSessionSource: 'api',
-      firstWindowHostSessionKey: 'window-a',
-      secondWindowHostSessionKey: 'window-b',
+      firstWindowSessionKey: 'window-a',
+      secondWindowSessionKey: 'window-b',
       commandPropagation: 'proven',
       subagentInheritance: 'not_applicable',
       subagentInheritanceReason: 'This host does not expose child agents.',
@@ -98,9 +146,10 @@ describe('platform session identity spike contract', () => {
     const spike = createPlatformSessionSpike({
       platform: 'zcode',
       observedAt: '2026-07-17T12:00:00.000Z',
+      sessionMode: 'host',
       hostSessionSource: 'api',
-      firstWindowHostSessionKey: 'window-a',
-      secondWindowHostSessionKey: 'window-b',
+      firstWindowSessionKey: 'window-a',
+      secondWindowSessionKey: 'window-b',
       commandPropagation: 'proven',
       subagentInheritance: 'proven',
       hookApproval: 'not_applicable',

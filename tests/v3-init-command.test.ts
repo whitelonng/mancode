@@ -50,8 +50,14 @@ describe('journaled V3 init command', () => {
         JSON.parse(
           await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
         ),
-      ).activationState,
-    ).toBe('v3_active');
+      ),
+    ).toMatchObject({
+      manifestVersion: 2,
+      activationState: 'v3_active',
+      workflowPolicyDefaults: { planning: 2 },
+      minReaderVersion: '0.4.0',
+      minWriterVersion: '0.4.0',
+    });
     await expect(
       readFile(path.join(root, '.agents', 'skills', 'man', 'SKILL.md'), 'utf8'),
     ).resolves.toContain('mancode workflow create man');
@@ -78,7 +84,7 @@ describe('journaled V3 init command', () => {
     ).resolves.toContain('mancode workflow create man');
   });
 
-  it('repairs the selected original entry when ordinary init is repeated', async () => {
+  it('does not repair a missing registered adapter through repeated init', async () => {
     expect(
       await init(root, { fromCli: true, empty: true, platform: 'codex' }),
     ).toBe(EXIT_OK);
@@ -88,14 +94,32 @@ describe('journaled V3 init command', () => {
     });
 
     expect(await init(root, { fromCli: true, platform: 'codex' })).toBe(
-      EXIT_ALREADY_INITIALIZED,
+      EXIT_INIT_FAILED,
     );
     await expect(
       readFile(path.join(root, '.agents', 'skills', 'man', 'SKILL.md'), 'utf8'),
-    ).resolves.toContain('# mancode mode: man');
+    ).rejects.toThrow();
     expect(await init(root, { fromCli: true, interactive: false })).toBe(
       EXIT_ALREADY_INITIALIZED,
     );
+  });
+
+  it('does not register a new platform through repeated init', async () => {
+    expect(await init(root, { v3: true })).toBe(EXIT_OK);
+
+    expect(await init(root, { v3: true, platform: 'codex' })).toBe(
+      EXIT_INIT_FAILED,
+    );
+    await expect(
+      readFile(path.join(root, 'AGENTS.md'), 'utf8'),
+    ).rejects.toThrow();
+    expect(
+      parseSchemaManifest(
+        JSON.parse(
+          await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+        ),
+      ).managedAdapters,
+    ).toEqual({});
   });
 
   it('never creates legacy authority inside an active V3 project', async () => {

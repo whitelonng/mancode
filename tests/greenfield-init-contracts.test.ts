@@ -18,6 +18,7 @@ import {
   stageGreenfieldInitialization,
 } from '../src/context/greenfield-init.js';
 import { parseSchemaManifest } from '../src/context/manifest.js';
+import { inspectV3AdapterVersions } from '../src/installers/v3-adapter.js';
 import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
 import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
 
@@ -59,8 +60,10 @@ describe('journaled greenfield initialization contract', () => {
       ),
     );
     expect(manifest).toMatchObject({
+      manifestVersion: 2,
       activationState: 'v3_active',
       legacyBaseline: null,
+      workflowPolicyDefaults: { planning: 2 },
     });
     expect(
       await readFile(path.join(root, '.mancode', '.gitignore'), 'utf8'),
@@ -195,6 +198,50 @@ describe('journaled greenfield initialization contract', () => {
       ).resolves.toBe('already_activated');
       expect(registrations).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('keeps V2 inactive and forward-repairs a crash after the first adapter target', async () => {
+    const recoveryInput = {
+      projectRoot: root,
+      operationId: OPERATION_ID,
+      registerWorkspaceBinding: async () => {},
+      now: new Date('2026-07-17T12:03:00.000Z'),
+    };
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: 'greenfield_initialize',
+          crashAfter: 'publish-managed-adapters:claude-skill',
+        },
+        () => initializeGreenfield(input(root), recoveryInput),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+    expect(
+      parseSchemaManifest(
+        JSON.parse(
+          await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+        ),
+      ).activationState,
+    ).toBe('initializing');
+    await expect(recoverGreenfieldInitialization(recoveryInput)).resolves.toBe(
+      'forward_repaired',
+    );
+    await expect(
+      inspectV3AdapterVersions(root, [
+        'claude-code',
+        'codex',
+        'cursor',
+        'copilot',
+        'zcode',
+      ]),
+    ).resolves.toEqual({
+      'claude-code': '3',
+      codex: '3',
+      cursor: '3',
+      copilot: '3',
+      zcode: '3',
+    });
   });
 });
 

@@ -88,6 +88,55 @@ describe('schema manifest contract', () => {
       /invalid schema manifest transition/,
     );
   });
+
+  it('strictly separates V1 from the Policy 2 V2 manifest shape', () => {
+    expect(() =>
+      parseSchemaManifest({
+        ...manifest({}),
+        workflowPolicyDefaults: { planning: 2 },
+      }),
+    ).toThrow(/unknown field\(s\): workflowPolicyDefaults/);
+
+    const v2 = parseSchemaManifest({
+      ...manifest({}),
+      manifestVersion: 2,
+      workflowPolicyDefaults: { planning: 2 },
+    });
+    expect(v2).toMatchObject({
+      manifestVersion: 2,
+      workflowPolicyDefaults: { planning: 2 },
+    });
+    expect(() =>
+      parseSchemaManifest({
+        ...v2,
+        minWriterVersion: '0.4.0-beta.1',
+      }),
+    ).toThrow(/V2 requires minReaderVersion and minWriterVersion 0.4.0/);
+    expect(() =>
+      parseSchemaManifest({
+        ...manifest({}),
+        manifestVersion: 2,
+        workflowPolicyDefaults: {
+          planning: 2,
+          review: 1,
+        },
+      }),
+    ).toThrow(/unknown field\(s\): review/);
+  });
+
+  it('treats managedAdapters as the registered required-platform inventory', () => {
+    expect(
+      parseSchemaManifest(manifest({ managedAdapters: {} })).managedAdapters,
+    ).toEqual({});
+    expect(
+      parseSchemaManifest(
+        manifest({ managedAdapters: { codex: '3', cursor: '3' } }),
+      ).managedAdapters,
+    ).toEqual({ codex: '3', cursor: '3' });
+    expect(() =>
+      parseSchemaManifest(manifest({ managedAdapters: { codex: '' } })),
+    ).toThrow(/managedAdapters\.codex must be a non-empty version/);
+  });
 });
 
 describe('session identity contract', () => {

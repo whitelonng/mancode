@@ -65,6 +65,7 @@ describe('V3 workflow create operation', () => {
     expect(created.metadata.governance.requirementsStatus).toBe(
       'needs_clarification',
     );
+    expect(created.metadata.governance.policyVersions.planning).toBe(2);
     expect(created.operation.state).toBe('committed');
     expect(
       created.operation.steps.every((step) => step.state === 'completed'),
@@ -89,6 +90,23 @@ describe('V3 workflow create operation', () => {
     expect((await readSession(root, sessionId))?.activeTaskRef).toEqual(
       created.taskRef,
     );
+  });
+
+  it('keeps standalone manba on planning Policy 1 in a Policy 2 project', async () => {
+    const { sessionId } = await bootstrap(root, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Diagnose an isolated regression.',
+      workflowMode: 'manba',
+      sessionId,
+      client: 'vitest',
+      taskId: id(30),
+      operationId: id(31),
+      now: NOW,
+    });
+
+    expect(created.metadata.parent).toBeNull();
+    expect(created.metadata.governance.policyVersions.planning).toBe(1);
   });
 
   it('requires a privacy confirmation and joined profile before creating shared authority', async () => {
@@ -135,6 +153,7 @@ describe('V3 workflow create operation', () => {
       sharedPrivacyConfirmed: true,
     });
     expect(created.taskRef.namespace).toBe('shared');
+    expect(created.metadata.governance.policyVersions.planning).toBe(1);
     const runtime = await readProjectRuntimeContext(root);
     const home = resolveTaskEntityHomeStore(
       runtime.entityHomeStoreContext,
@@ -195,6 +214,7 @@ describe('V3 workflow create operation', () => {
       include: ['src/**'],
       modules: ['core'],
     });
+    expect(child.metadata.governance.policyVersions.planning).toBe(2);
     expect(child.resolution.dimensions.visibility.source).toBe('parent');
 
     const staleParent = parseWorkflowMetadata({

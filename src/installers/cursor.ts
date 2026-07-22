@@ -262,7 +262,8 @@ function renderSoloRule(): string {
     '- Read `.mancode/project-profile.json` before choosing tools or validation. For detected UI assets and UI work, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles.',
     '- Verify with the narrowest meaningful test, lint, build, or smoke check.',
     '- Perform one bounded self-check limited to the current diff. Do not start another reviewer, create a review artifact, or repeat the review.',
-    '- Recommend /man only for auth, payment, sensitive data, migrations/deletion, public APIs, untrusted input, concurrency, or infrastructure risk.',
+    '- Recommend /man and explain why when platform entry/flow differs, the semantic owner or source of truth is unclear, status/contract/policy semantics change, scope/architecture/cost/acceptance crosses files or modules, or historical compatibility, migration, cross-platform, or team evidence is required. Auth, payment, sensitive data, deletion, public APIs, untrusted input, concurrency, and infrastructure remain hard-risk signals. Advice alone never changes mode, step, policy, or authority.',
+    '- While executing confirmed requirements/plan, new evidence that invalidates its goal, owner, source of truth, acceptance, or scope, or a stale adapter/incompatible writer/unfinished operation/active child/open handoff/active solo assignment, requires the read-only diagnostic `NEEDS_REALIGNMENT` with reason `MANCODE_REFRAME_REQUIRED`. Preserve authority and do not call generic workflow update or modify metadata, requirements, plan, ledgers, claims, or handoffs.',
   ].join('\n');
 }
 

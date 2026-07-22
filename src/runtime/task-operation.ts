@@ -1,11 +1,24 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { taskAggregateDigest } from '../context/aggregate.js';
-import { assertCompatibilityGate } from '../context/compatibility.js';
+import {
+  CURRENT_WRITER_CAPABILITIES,
+  type CompatibilityOperation,
+  assertCompatibilityGate,
+} from '../context/compatibility.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
+import { managedAdapterNames } from '../context/manifest.js';
 import {
   type StoredCoordinationSnapshot,
   type StoredProjectSnapshot,
@@ -18,6 +31,7 @@ import {
   sameTaskRef,
 } from '../context/task-ref.js';
 import { assertParentWorkflowRelation } from '../context/workflow-metadata.js';
+import { inspectV3AdapterVersions } from '../installers/v3-adapter.js';
 import { readSharedActorProfile } from '../team/actor.js';
 import {
   type AuthorizationAction,
@@ -49,6 +63,7 @@ import {
 } from './local-lock.js';
 import {
   armOperationCrashAfterVisibleWrite,
+  pauseIfOperationLockInjectedForTesting,
   throwIfDeferredOperationCrashInjected,
   throwIfOperationCrashInjected,
 } from './operation-crash-injection.js';
@@ -64,10 +79,13 @@ import type {
 import {
   type OperationRecoveryActionV1,
   TASK_AUTHORITY_FILE_NAMES,
+  type TaskArchiveRecoveryAction,
   type TaskAuthorityFileName,
   assertOperationRecoveryPayloadCoversJournal,
   operationRecoveryPayloadDigest,
   parseOperationRecoveryPayload,
+  taskArchiveDigest,
+  taskArchiveManifest,
 } from './operation-recovery-payload.js';
 import { writeOperationRecoveryPayload } from './operation-recovery-store.js';
 import {
@@ -79,6 +97,7 @@ import {
   readCheckoutCodeHead,
   readProjectRuntimeContext,
 } from './project-runtime.js';
+import { acquireProjectWriteBarrier } from './project-write-barrier.js';
 import { type SessionStateV1, readSession } from './session.js';
 import { assertTaskHeadFenceMatchesAggregate } from './task-head-fence.js';
 
@@ -90,6 +109,10 @@ export interface OpenV3TaskOperationInput {
   sessionId: Ulid;
   expectedTaskRevision: number;
   operationId?: Ulid;
+  compatibilityOperation?: Extract<
+    CompatibilityOperation,
+    'v3_business_write' | 'reframe'
+  >;
   /** Additional entities use the same task-store lock family. */
   extraEntityLocks?: string[];
   /**
@@ -117,6 +140,7 @@ export interface OpenedV3TaskOperation {
   codeHead: string | null;
   entityLocks: string[];
   renewLocks(): Promise<void>;
+  releaseProjectBarrier(): Promise<void>;
   release(): Promise<void>;
 }
 
@@ -159,43 +183,60 @@ export async function openV3TaskOperation(
   const operationId = input.operationId ?? createUlid(now.getTime());
   assertUlid(operationId, 'task operation operationId');
   const runtime = await readProjectRuntimeContext(projectRoot);
-  const store = new V3ContextStore(projectRoot);
-  const [project, legacy, session] = await Promise.all([
-    store.readProjectSnapshot(),
-    scanLegacyAuthority(projectRoot),
-    readSession(projectRoot, input.sessionId),
-  ]);
-  if (session === null || session.status !== 'active') {
-    throw new Error('MANCODE_SESSION_NOT_FOUND');
-  }
-  assertCompatibilityGate({
-    manifest: project.manifest,
-    expectedSchemaEpoch: project.manifest.epoch,
-    readerVersion: VERSION,
-    writerVersion: VERSION,
-    adapterVersions: project.manifest.managedAdapters,
-    currentLegacyBaseline: legacy.baseline,
-    legacyAuthorityPresent: legacy.authorityPresent,
-    operation: 'v3_business_write',
-  });
-  const homeStore = resolveTaskEntityHomeStore(
-    runtime.entityHomeStoreContext,
-    taskRef,
-  );
-  const taskKey = taskEntityKey(taskRef);
-  const entityLocks = uniqueEntityLocks([
-    taskKey,
-    ...(input.extraEntityLocks ?? []),
-  ]);
-  const locks = await acquireOperationEntityLocks(
+  const projectBarrier = await acquireProjectWriteBarrier(
+    runtime,
     operationId,
-    [
-      { store: homeStore, entityLockKeys: entityLocks },
-      ...(input.additionalEntityLockTargets ?? []),
-    ],
-    { now },
+    now,
   );
+  let projectBarrierReleased = false;
+  const releaseProjectBarrier = async (): Promise<void> => {
+    if (projectBarrierReleased) return;
+    await projectBarrier.release();
+    projectBarrierReleased = true;
+  };
+  const store = new V3ContextStore(projectRoot);
+  let locks: LocalLockHandle[] = [];
   try {
+    const homeStore = resolveTaskEntityHomeStore(
+      runtime.entityHomeStoreContext,
+      taskRef,
+    );
+    const taskKey = taskEntityKey(taskRef);
+    const entityLocks = uniqueEntityLocks([
+      taskKey,
+      ...(input.extraEntityLocks ?? []),
+    ]);
+    const project = await store.readProjectSnapshot();
+    const [legacy, session, adapterVersions] = await Promise.all([
+      scanLegacyAuthority(projectRoot),
+      readSession(projectRoot, input.sessionId),
+      inspectV3AdapterVersions(
+        projectRoot,
+        managedAdapterNames(project.manifest.managedAdapters),
+      ),
+    ]);
+    if (session === null || session.status !== 'active') {
+      throw new Error('MANCODE_SESSION_NOT_FOUND');
+    }
+    assertCompatibilityGate({
+      manifest: project.manifest,
+      expectedSchemaEpoch: project.manifest.epoch,
+      readerVersion: VERSION,
+      writerVersion: VERSION,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      adapterVersions,
+      currentLegacyBaseline: legacy.baseline,
+      legacyAuthorityPresent: legacy.authorityPresent,
+      operation: input.compatibilityOperation ?? 'v3_business_write',
+    });
+    locks = await acquireOperationEntityLocks(
+      operationId,
+      [
+        { store: homeStore, entityLockKeys: entityLocks },
+        ...(input.additionalEntityLockTargets ?? []),
+      ],
+      { now },
+    );
     if (taskRef.namespace === 'shared') {
       await assertTransportCoordinationWriteAllowed(homeStore, project.config);
     }
@@ -254,14 +295,22 @@ export async function openV3TaskOperation(
       codeHead,
       entityLocks,
       async renewLocks(): Promise<void> {
-        await Promise.all(locks.map((lock) => lock.renew()));
+        await Promise.all([
+          ...locks.map((lock) => lock.renew()),
+          ...(projectBarrierReleased ? [] : [projectBarrier.renew()]),
+        ]);
+      },
+      async releaseProjectBarrier(): Promise<void> {
+        await releaseProjectBarrier();
       },
       async release(): Promise<void> {
         await releaseLocks(locks);
+        await releaseProjectBarrier();
       },
     };
   } catch (error) {
     await releaseLocks(locks);
+    await releaseProjectBarrier().catch(() => undefined);
     await recordV3ErrorDiagnostic(projectRoot, error).catch(() => undefined);
     throw error;
   }
@@ -418,7 +467,13 @@ export async function createTaskOperationJournal(
     context.homeStore,
     journal,
   );
+  await context.releaseProjectBarrier();
   throwIfOperationCrashInjected(input.type, 'prepared');
+  const lockPause = pauseIfOperationLockInjectedForTesting(
+    context.operationId,
+    'entity_locks_held',
+  );
+  if (lockPause !== null) await lockPause;
   return created;
 }
 
@@ -509,6 +564,127 @@ export async function writeTaskAuthorityFile(
     fileName,
     content,
   );
+}
+
+export async function writeTaskArchive(
+  context: OpenedV3TaskOperation,
+  action: TaskArchiveRecoveryAction,
+): Promise<void> {
+  if (
+    !sameTaskRef(action.taskRef, context.taskRef) ||
+    action.archiveId !== context.operationId
+  ) {
+    throw new Error('MANCODE_REFRAME_ARCHIVE_OPERATION_MISMATCH');
+  }
+  await writeTaskArchiveAtRoot(
+    context.task.location.taskRoot,
+    context.operationId,
+    action,
+  );
+}
+
+/** Atomically publishes one immutable operation-owned archive directory. */
+export async function writeTaskArchiveAtRoot(
+  taskRoot: string,
+  operationId: Ulid,
+  action: TaskArchiveRecoveryAction,
+): Promise<void> {
+  assertUlid(operationId, 'task archive operationId');
+  if (action.archiveId !== operationId) {
+    throw new Error('MANCODE_REFRAME_ARCHIVE_OPERATION_MISMATCH');
+  }
+  await assertSafeTaskDirectory(taskRoot);
+  const archiveRoot = await ensureSafeTaskChildDirectory(taskRoot, 'archives');
+  if ((await readTaskArchiveDigestAtRoot(taskRoot, action)) !== null) return;
+
+  const staging = path.join(archiveRoot, `.${operationId}.staging`);
+  const target = path.join(archiveRoot, operationId);
+  await removeSafeArchiveStaging(staging);
+  await mkdir(staging);
+  try {
+    await writeFile(
+      path.join(staging, 'archive.json'),
+      serializeTaskAuthority(taskArchiveManifest(action)),
+      { encoding: 'utf8', flag: 'wx' },
+    );
+    await writeFile(
+      path.join(staging, 'requirements.json'),
+      action.requirementsContent,
+      { encoding: 'utf8', flag: 'wx' },
+    );
+    if (action.planContent !== null) {
+      await writeFile(path.join(staging, 'plan.md'), action.planContent, {
+        encoding: 'utf8',
+        flag: 'wx',
+      });
+    }
+    await rename(staging, target);
+  } catch (error) {
+    await removeSafeArchiveStaging(staging);
+    if (isAlreadyExists(error) || isDirectoryNotEmpty(error)) {
+      const existing = await readTaskArchiveDigestAtRoot(taskRoot, action);
+      if (existing === taskArchiveDigest(action)) return;
+      throw new Error('MANCODE_REFRAME_ARCHIVE_CONFLICT');
+    }
+    throw error;
+  }
+}
+
+export async function readTaskArchiveDigestAtRoot(
+  taskRoot: string,
+  action: TaskArchiveRecoveryAction,
+): Promise<string | null> {
+  await assertSafeTaskDirectory(taskRoot);
+  const archiveRoot = path.join(taskRoot, 'archives');
+  try {
+    const rootEntry = await lstat(archiveRoot);
+    if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+  const target = path.join(archiveRoot, action.archiveId);
+  try {
+    const targetEntry = await lstat(target);
+    if (!targetEntry.isDirectory() || targetEntry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+  const expectedNames = [
+    'archive.json',
+    'requirements.json',
+    ...(action.planContent === null ? [] : ['plan.md']),
+  ].sort();
+  const names = (await readdir(target)).sort();
+  if (
+    names.length !== expectedNames.length ||
+    names.some((name, index) => name !== expectedNames[index])
+  ) {
+    throw new Error('MANCODE_REFRAME_ARCHIVE_CONFLICT');
+  }
+  const archiveContent = await readImmutableArchiveFile(
+    path.join(target, 'archive.json'),
+  );
+  const requirementsContent = await readImmutableArchiveFile(
+    path.join(target, 'requirements.json'),
+  );
+  const planContent =
+    action.planContent === null
+      ? null
+      : await readImmutableArchiveFile(path.join(target, 'plan.md'));
+  if (
+    archiveContent !== serializeTaskAuthority(taskArchiveManifest(action)) ||
+    requirementsContent !== action.requirementsContent ||
+    planContent !== action.planContent
+  ) {
+    throw new Error('MANCODE_REFRAME_ARCHIVE_CONFLICT');
+  }
+  return taskArchiveDigest(action);
 }
 
 /** Fixed-name authority reader used by forward repair; it never follows links. */
@@ -738,7 +914,7 @@ async function assertSafeTaskDirectory(taskRoot: string): Promise<void> {
 
 async function ensureSafeTaskChildDirectory(
   taskRoot: string,
-  child: 'checkpoints',
+  child: 'checkpoints' | 'archives',
 ): Promise<string> {
   const directory = path.join(taskRoot, child);
   try {
@@ -751,6 +927,36 @@ async function ensureSafeTaskChildDirectory(
     throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
   }
   return directory;
+}
+
+async function readImmutableArchiveFile(target: string): Promise<string> {
+  const before = await lstat(target);
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const content = await readFile(target, 'utf8');
+  const after = await lstat(target);
+  if (
+    !after.isFile() ||
+    after.isSymbolicLink() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino
+  ) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  return content;
+}
+
+async function removeSafeArchiveStaging(staging: string): Promise<void> {
+  try {
+    const entry = await lstat(staging);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+    await rm(staging, { recursive: true });
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+  }
 }
 
 async function readImmutableCheckpoint(target: string): Promise<CheckpointV1> {
@@ -809,6 +1015,15 @@ function isAlreadyExists(error: unknown): error is NodeJS.ErrnoException {
     error !== null &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === 'EEXIST'
+  );
+}
+
+function isDirectoryNotEmpty(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOTEMPTY'
   );
 }
 

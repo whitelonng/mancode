@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.3.18-2f855a?style=flat-square" alt="Status: mancode Continuity v0.3.18" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -34,8 +34,9 @@ different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
 
-**mancode Continuity** is the continuous-context runtime that carries tasks,
-decisions, and verification evidence safely into later conversations.
+**mancode Continuity** is the cross-session and team-collaboration runtime that
+carries tasks, decisions, and verification evidence safely into later
+conversations.
 
 [Installation](#installation) · [Usage](#usage)
 
@@ -107,9 +108,14 @@ one window's temporary state as another window's identity.
 ```bash
 mancode status --brief --json
 mancode context session new --client claude-code
+mancode context session show --session <id> --client claude-code --json
 mancode context resume <namespace:ULID> --session <id> --client claude-code
 mancode context show --purpose orient --session <id> --client claude-code
 ```
+
+When the project has a local mancode install, pin one CLI binary for the whole
+task: prefer `./node_modules/.bin/mancode`, otherwise use `mancode`. Check the
+selected binary with `--version` once and do not mix versions afterward.
 
 The original `/man`, `/manba`, and `/manteam` entries handle these steps. The
 CLI form above is useful for diagnostics, automation, or manual recovery.
@@ -234,7 +240,9 @@ design tokens:
 </Button>
 ```
 
-The default workflow asks six questions before writing code:
+The default workflow evaluates a conditional clarity gate before writing code: it asks the user
+only when an unresolved decision could change the goal, scope, behavior, acceptance, or key
+constraints, and it proceeds without ceremonial questions when the request is already clear.
 
 1. What problem does this change solve?
 2. Can an existing implementation be reused?
@@ -242,6 +250,10 @@ The default workflow asks six questions before writing code:
 4. Can this avoid a new subsystem?
 5. What is the smallest meaningful runtime check?
 6. What remains uncertain after checking the code and docs?
+
+These are internal readiness checks, not a mandatory questionnaire. Any unresolved
+decision-changing uncertainty becomes a focused question and blocks requirements finalization
+until the user answers; clear requests continue directly.
 
 <span id="usage"></span>
 
@@ -353,7 +365,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: mancode Continuity v0.3.18. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.4.0. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -394,8 +406,9 @@ mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilo
 mancode init --empty      # Allow a safe empty directory in non-interactive scripts
 mancode init --lang zh-CN # Explicit initialization language (zh-CN or en)
 mancode refresh-project   # Refresh facts after Git or project files are added
-mancode install --force   # Repair or reinstall the selected adapter
-mancode install --minimal # The bootstrap is already minimal; retained for compatibility
+mancode adapter status --json # Inspect actual managed-content digests
+mancode adapter upgrade --platform codex --dry-run # Stage a preview only
+mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 ## Agent Modes
@@ -424,10 +437,16 @@ mancode init --legacy
 mancode status
 mancode status --json
 mancode status --brief --json
-mancode install <claude-code|cursor|codex|copilot|zcode>
+mancode install <claude-code|cursor|codex|copilot|zcode> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode adapter status [--platform <platform>] --json
+mancode adapter upgrade <--all|--platform <platform>> --dry-run
+mancode adapter upgrade <--all|--platform <platform>> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode project upgrade --policy 2 --dry-run
+mancode project upgrade --policy 2 --operation-id <operationId> --session <id> --client <client>
 mancode list-platforms
 mancode team identity create --name "<name>"
 mancode context session new --client <platform>
+mancode context session show --session <id> --client <client> --json
 mancode workflow create <man|manba|manteam> "<task>" --session <id>
 mancode workflow list --json
 mancode workflow show <namespace:ULID> --json
@@ -438,6 +457,7 @@ mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|govern
 mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
+mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
 mancode refresh-project
@@ -452,7 +472,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.3.18
+mancode v0.4.0
 
 Project:     my-app
 Runtime:     ready
@@ -594,14 +614,19 @@ mancode/
 - Irreversible operations such as force pushes, schema migrations, and bulk
   deletes require explicit human confirmation.
 
-## Roadmap
+## Remaining Work
 
-| Phase | Focus |
-|---|---|
-| MVP-1 | solo mode, aesthetics, and Claude Code hooks |
-| MVP-2 | `/manba`, `/man`, `/manteam`, `/manps`, and coaching-staff subagents |
-| MVP-3 | Cursor, Codex (ChatGPT desktop/CLI), and GitHub Copilot adapters |
-| Public Release | stable npm release, marketplace distribution, docs, and demos |
+- Complete real-host session acceptance for Claude Code, Codex, Cursor,
+  GitHub Copilot, and ZCode on one release candidate; verified host sessions
+  and isolated explicit sessions are both valid evidence paths.
+- Run `npm run release:check -- --candidate <full-commit-sha>` for the clean
+  checkout, automated two-clone/legacy checks, tarball SHA-256, and install
+  smoke; complete cross-host recovery separately.
+- Confirm ZCode project-skill discovery and workspace-command paths; keep the
+  adapter provisional until then.
+- Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
+
+See [0.4.0 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
 
 ## Troubleshooting
 
@@ -616,21 +641,26 @@ a deliberately empty directory.
 ### Claude Code hooks not triggering
 
 After `mancode init`, restart Claude Code so it reloads `.claude/settings.json`.
-Run `mancode status` to verify hooks are registered. If hooks are still missing,
-run `mancode install claude-code --force` to rewrite the settings.
+Run `mancode status` to verify hooks are registered. For Continuity adapter drift, preview
+`mancode adapter upgrade --platform claude-code --dry-run`, then repair that
+preview with its `--operation-id`, an active session, and `--confirm`. The legacy
+hook architecture still uses `mancode init --legacy --force`.
 
 ### `mancode status` shows a platform as "not ready"
 
-This means the platform's target files are missing. Run
-`mancode install <platform> --force` to regenerate them. For managed-block
+This means the platform's target files are missing or their digest is stale.
+Preview `mancode adapter upgrade --platform <platform> --dry-run`, inspect the
+staged result, then run it with the returned `--operation-id`, an active session,
+and `--confirm`. For managed-block
 platforms (Codex, ZCode, Copilot), the managed block in `AGENTS.md` or
 `.github/copilot-instructions.md` may have been manually edited or deleted.
 
 ### AGENTS.md or copilot-instructions.md managed block was accidentally deleted
 
-Run `mancode install codex --force` (or `zcode`, or `copilot`) to reinsert the
-managed block. User-authored content outside the relevant mancode managed
-markers is preserved.
+Preview `mancode adapter upgrade --platform codex --dry-run` (or `zcode`, or
+`copilot`), then run it with the returned `--operation-id`, an active session,
+and `--confirm` to reinsert the managed block. User-authored content outside the
+relevant markers is preserved.
 
 ### ZCode skills not appearing
 
@@ -648,16 +678,8 @@ description field — invoke them by asking for `/manba` or similar.
 ### How to reinstall Continuity adapters
 
 ```bash
-mancode uninstall claude-code --force
-mancode uninstall cursor --force
-mancode uninstall codex --force
-mancode uninstall copilot --force
-mancode uninstall zcode --force
-mancode install claude-code
-mancode install cursor
-mancode install codex
-mancode install copilot
-mancode install zcode
+mancode adapter upgrade --all --dry-run
+mancode adapter upgrade --all --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
 Continuity authority is protected, so `mancode uninstall --all` does not delete workflow
@@ -684,8 +706,11 @@ use.
 
 ### How is mancode different from a CLAUDE.md file?
 
-A `CLAUDE.md` file is static guidance. mancode adds hooks, persisted workflow
-state, slash-command skills, and separate review subagents with clean context.
+A `CLAUDE.md` file is static guidance. Continuity maintains one always-loaded
+Claude Code bootstrap block there, while sessions, TaskRefs, requirements,
+plans, and review evidence remain structured authority under `.mancode/`.
+mancode also adds mode skills, persisted workflows, and separate review
+subagents with clean context.
 
 ### How is mancode different from Cursor rules, custom prompts, or agent instructions?
 

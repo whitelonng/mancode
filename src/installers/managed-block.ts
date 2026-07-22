@@ -29,6 +29,26 @@ export function hasManagedBlock(
   return start !== null && end !== null && end.start > start.start;
 }
 
+/** Returns the exact managed block bytes-as-text, including both markers. */
+export function extractManagedBlock(
+  existing: string,
+  startMarker = DEFAULT_MANCODE_START_MARKER,
+  endMarker = DEFAULT_MANCODE_END_MARKER,
+): string | null {
+  const starts = findMarkerLines(existing, startMarker);
+  const ends = findMarkerLines(existing, endMarker);
+  if (starts.length === 0 && ends.length === 0) return null;
+  if (starts.length !== 1 || ends.length !== 1) {
+    throw new Error('managed block is malformed: marker count is invalid');
+  }
+  const start = starts[0];
+  const end = ends[0];
+  if (!start || !end || end.start < start.start) {
+    throw new Error('managed block is malformed: marker order is invalid');
+  }
+  return existing.slice(start.start, end.end);
+}
+
 function cleanUpOrphanedNewlines(content: string): string {
   const trimmed = content.replace(/\n{3,}/gu, '\n\n').replace(/\n+$/u, '\n');
   return trimmed || '';
@@ -92,8 +112,16 @@ function findMarkerLine(
   content: string,
   marker: string,
 ): { start: number; end: number } | null {
+  return findMarkerLines(content, marker)[0] ?? null;
+}
+
+function findMarkerLines(
+  content: string,
+  marker: string,
+): Array<{ start: number; end: number }> {
   let offset = 0;
   let inFence: { char: '`' | '~'; length: number } | null = null;
+  const matches: Array<{ start: number; end: number }> = [];
 
   for (const lineWithBreak of content.matchAll(/[^\n]*(?:\n|$)/gu)) {
     const rawLine = lineWithBreak[0];
@@ -109,14 +137,13 @@ function findMarkerLine(
         inFence = null;
       }
     } else if (!inFence && line === marker) {
-      return {
+      matches.push({
         start: offset,
         end: offset + marker.length,
-      };
+      });
     }
 
     offset += rawLine.length;
   }
-
-  return null;
+  return matches;
 }

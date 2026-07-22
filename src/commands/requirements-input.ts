@@ -19,6 +19,7 @@ export function normalizeRequirementsInput(
   value: unknown,
   requestedTaskRef: TaskRef,
   now: Date = new Date(),
+  options: { allowIncomplete?: boolean } = {},
 ): RequirementsLedgerV1 {
   if (isRecord(value) && 'schemaVersion' in value) {
     return parseRequirementsLedger(value);
@@ -28,7 +29,7 @@ export function normalizeRequirementsInput(
   if (serialized === undefined) {
     throw new Error('requirements input must be valid JSON');
   }
-  const semantic = parseSemanticRequirementsLedger(serialized);
+  const semantic = parseSemanticRequirementsLedger(serialized, options);
   return buildCanonicalRequirements(semantic, requestedTaskRef, now);
 }
 

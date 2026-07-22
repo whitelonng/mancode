@@ -54,7 +54,10 @@ export const REQUIREMENT_DIMENSIONS: RequirementDimension[] = [
   'security',
 ];
 
-export function parseRequirementsLedger(raw: string): RequirementsLedger {
+export function parseRequirementsLedger(
+  raw: string,
+  options: { allowIncomplete?: boolean } = {},
+): RequirementsLedger {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -108,18 +111,22 @@ export function parseRequirementsLedger(raw: string): RequirementsLedger {
   const missingDimensions = REQUIREMENT_DIMENSIONS.filter(
     (dimension) => !coverageDimensions.has(dimension),
   );
-  if (missingDimensions.length > 0) {
+  if (!options.allowIncomplete && missingDimensions.length > 0) {
     throw new Error(
       `requirements coverage is missing: ${missingDimensions.join(', ')}`,
     );
   }
-  if ((value.confirmedScope as string[]).length === 0) {
+  if (
+    !options.allowIncomplete &&
+    (value.confirmedScope as string[]).length === 0
+  ) {
     throw new Error('requirements confirmedScope must not be empty');
   }
   const stackCoverage = coverage.find(
     (item) => item.dimension === 'technical_stack',
   );
   if (
+    !options.allowIncomplete &&
     stackCoverage?.status !== 'not_applicable' &&
     (value.technicalDecisions as string[]).length === 0
   ) {
@@ -129,7 +136,7 @@ export function parseRequirementsLedger(raw: string): RequirementsLedger {
   }
   if (
     !Array.isArray(value.acceptanceCriteria) ||
-    value.acceptanceCriteria.length === 0
+    (!options.allowIncomplete && value.acceptanceCriteria.length === 0)
   ) {
     throw new Error('requirements need at least one acceptance criterion');
   }
@@ -157,7 +164,10 @@ export function parseRequirementsLedger(raw: string): RequirementsLedger {
       method: item.method,
     };
   });
-  if (!acceptanceCriteria.some((item) => item.required)) {
+  if (
+    !options.allowIncomplete &&
+    !acceptanceCriteria.some((item) => item.required)
+  ) {
     throw new Error(
       'requirements need at least one required acceptance criterion',
     );

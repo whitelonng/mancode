@@ -8,7 +8,11 @@ import {
   previewV3TaskPromotion,
   promoteV3Task,
 } from '../context/publish-promote.js';
-import { finalizeV3Requirements } from '../context/requirements-finalize.js';
+import { reframeV3Workflow } from '../context/reframe.js';
+import {
+  finalizeV3Requirements,
+  saveV3RequirementsDraft,
+} from '../context/requirements-finalize.js';
 import { applyV3ReviewLedger } from '../context/review-remediation.js';
 import { changeV3WorkflowScope } from '../context/scope-change.js';
 import {
@@ -16,11 +20,26 @@ import {
   startV3SoloHandoff,
 } from '../context/solo-handoff.js';
 import { completeV3Task } from '../context/task-complete.js';
-import { formatTaskRef, parseTaskRef } from '../context/task-ref.js';
+import {
+  formatTaskRef,
+  parseTaskRef,
+  sameTaskRef,
+} from '../context/task-ref.js';
 import { recordV3Verification } from '../context/verification-record.js';
 import { createV3Workflow } from '../context/workflow-create.js';
 import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
 import { updateV3Workflow } from '../context/workflow-update.js';
+import { resolveTaskEntityHomeStore } from '../runtime/entity-home-store.js';
+import {
+  type TaskArchiveRecoveryAction,
+  taskArchiveManifest,
+} from '../runtime/operation-recovery-payload.js';
+import { readOperationRecoveryPayload } from '../runtime/operation-recovery-store.js';
+import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
+import {
+  readTaskArchiveDigestAtRoot,
+  readTaskCheckpointAtRoot,
+} from '../runtime/task-operation.js';
 import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
   parseRequirementsLedger,
@@ -129,6 +148,7 @@ export interface WorkflowOptions {
   exitCode?: string;
   evidenceFile?: string;
   reason?: string;
+  checkpointId?: string;
 }
 
 interface WorkflowView extends WorkflowMeta {
@@ -249,6 +269,12 @@ async function workflowV3(
   }
   if (subcommand === 'scope') {
     return workflowScopeChangeV3(rootDir, args, options);
+  }
+  if (subcommand === 'reframe') {
+    return workflowReframeV3(rootDir, args, options);
+  }
+  if (subcommand === 'archive' || subcommand === 'checkpoint') {
+    return workflowArtifactShowV3(rootDir, subcommand, args, options);
   }
   if (subcommand === 'child') {
     return workflowChildResultMergeV3(rootDir, args, options);
@@ -376,6 +402,80 @@ async function workflowShowV3(
       error instanceof Error
         ? error.message
         : 'Unable to show the mancode workflow.',
+    );
+  }
+}
+
+async function workflowArtifactShowV3(
+  rootDir: string,
+  kind: 'archive' | 'checkpoint',
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const [task, action, artifactId] = args;
+  if (!task || action !== 'show' || !artifactId || args.length !== 3) {
+    return printV3Error(
+      options.json,
+      `MANCODE_${kind.toUpperCase()}_SHOW_ARGUMENT_INVALID`,
+      `Use: workflow ${kind} <namespace:ULID> show <${kind}Id> [--json].`,
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    assertUlid(artifactId, `${kind}Id`);
+    const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    const snapshot = await project.store.readTaskSnapshot(taskRef);
+    if (kind === 'checkpoint') {
+      const checkpoint = await readTaskCheckpointAtRoot(
+        snapshot.location.taskRoot,
+        artifactId,
+      );
+      if (checkpoint === null || !sameTaskRef(checkpoint.taskRef, taskRef)) {
+        throw new Error('MANCODE_CHECKPOINT_NOT_FOUND');
+      }
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        taskRef,
+        checkpoint,
+      });
+    }
+
+    const runtime = await readProjectRuntimeContext(project.projectRoot);
+    const homeStore = resolveTaskEntityHomeStore(
+      runtime.entityHomeStoreContext,
+      taskRef,
+    );
+    const payload = await readOperationRecoveryPayload(homeStore, artifactId);
+    const archive = payload?.actions.find(
+      (candidate): candidate is TaskArchiveRecoveryAction =>
+        candidate.kind === 'task_archive' &&
+        candidate.archiveId === artifactId &&
+        sameTaskRef(candidate.taskRef, taskRef),
+    );
+    if (
+      archive === undefined ||
+      (await readTaskArchiveDigestAtRoot(
+        snapshot.location.taskRoot,
+        archive,
+      )) === null
+    ) {
+      throw new Error('MANCODE_REFRAME_ARCHIVE_NOT_FOUND');
+    }
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef,
+      archive: taskArchiveManifest(archive),
+      requirements: JSON.parse(archive.requirementsContent),
+      plan: archive.planContent,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, `MANCODE_V3_${kind.toUpperCase()}_SHOW_FAILED`),
+      error instanceof Error
+        ? error.message
+        : `Unable to show the mancode ${kind}.`,
     );
   }
 }
@@ -846,6 +946,75 @@ async function workflowScopeChangeV3(
   }
 }
 
+async function workflowReframeV3(
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const task = args[0];
+  if (!task || args.length !== 1) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REFRAME_ARGUMENT_INVALID',
+      'Use: workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <ULID>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const expectedTaskRevision = parseExpectedTaskRevision(options);
+  if (expectedTaskRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXPECTED_REVISION_REQUIRED',
+      'Workflow reframe requires --expected-revision <positive integer>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (!options.checkpointId) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REFRAME_CHECKPOINT_REQUIRED',
+      'Workflow reframe requires --checkpoint-id <ULID>.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const session = await resolveV3CommandSession(project, options);
+    assertUlid(options.checkpointId, 'checkpointId');
+    const result = await reframeV3Workflow({
+      projectRoot: project.projectRoot,
+      taskRef: parseTaskRef(task),
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+      checkpointId: options.checkpointId,
+      summary: options.summary,
+      nextAction: options.nextAction,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      metadata: result.metadata,
+      requirements: result.requirements,
+      review: result.review,
+      verification: result.verification,
+      checkpoint: result.checkpoint,
+      releasedClaims: result.releasedClaims,
+      archive: result.archive,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_REFRAME_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to reframe the mancode workflow.',
+    );
+  }
+}
+
 async function workflowCompleteV3(
   rootDir: string,
   args: string[],
@@ -1135,11 +1304,11 @@ async function workflowRequirementsV3(
 ): Promise<number> {
   const task = args[0];
   const action = args[1];
-  if (!task || action !== 'finalize' || !options.file) {
+  if (!task || (action !== 'draft' && action !== 'finalize') || !options.file) {
     return printV3Error(
       options.json,
       'MANCODE_REQUIREMENTS_ARGUMENT_INVALID',
-      'Use: workflow requirements <namespace:ULID> finalize --expected-revision <n> --file <path>.',
+      'Use: workflow requirements <namespace:ULID> <draft|finalize> --expected-revision <n> --file <path>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -1148,7 +1317,7 @@ async function workflowRequirementsV3(
     return printV3Error(
       options.json,
       'MANCODE_EXPECTED_REVISION_REQUIRED',
-      'Requirements finalization requires --expected-revision <positive integer>.',
+      'Requirements draft/finalization requires --expected-revision <positive integer>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -1160,8 +1329,15 @@ async function workflowRequirementsV3(
       project.projectRoot,
       options.file,
     );
-    const requirements = normalizeRequirementsInput(requirementsInput, taskRef);
-    const result = await finalizeV3Requirements({
+    const requirements = normalizeRequirementsInput(
+      requirementsInput,
+      taskRef,
+      new Date(),
+      { allowIncomplete: action === 'draft' },
+    );
+    const writeRequirements =
+      action === 'draft' ? saveV3RequirementsDraft : finalizeV3Requirements;
+    const result = await writeRequirements({
       projectRoot: project.projectRoot,
       taskRef,
       sessionId: session.sessionId,
@@ -1185,7 +1361,7 @@ async function workflowRequirementsV3(
       v3ErrorCode(error, 'MANCODE_V3_REQUIREMENTS_FINALIZE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to finalize mancode requirements.',
+        : `Unable to ${action === 'draft' ? 'save the mancode requirements draft' : 'finalize mancode requirements'}.`,
     );
   }
 }

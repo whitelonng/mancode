@@ -1,237 +1,61 @@
-# 12 - Harness 生命周期
+# Continuity 生命周期
 
-mancode 的运行时生命周期：跨平台 hook、上下文注入、状态管理与团队检测。
+本文描述默认 Continuity 路径。旧 `state.json` 生命周期仅用于显式 `--legacy` 兼容。
 
----
-
-## 1. 生命周期概览
+## 初始化
 
 ```text
-用户执行 mancode init
-  ↓
-Node CLI 检测项目 profile
-  ↓
-Git 可用 → 读取团队活动
-Git 不可用 → 使用 solo 默认值，不阻止初始化
-  ↓
-创建 .mancode/state.json 与平台适配文件
-  ↓
-Claude Code 启动
-  ↓
-node .mancode/hooks/session-start.mjs
-  ↓ 注入模式与项目上下文
-用户提交 prompt
-  ↓
-node .mancode/hooks/user-prompt-submit.mjs
-  ↓ 注入 solo 六问、自动路由与条件审美 token
-Claude 处理请求
+mancode init
+  → 检查项目与 legacy/Continuity 物理布局
+  → 检测 Project Profile
+  → 创建 schema.json，状态 initializing
+  → 写 shared/local/runtime 基础权威
+  → 安装所选平台 bootstrap
+  → 校验 adapter 与 runtime binding
+  → 最后切换为 v3_active
 ```
 
-当前两个 runtime hook 都是 Node `.mjs` 脚本。它们不依赖 Bash、jq、grep、
-sed 或 Git，因此可以从 macOS、Linux、Windows CMD、PowerShell 与 Git Bash
-运行。
+已有 legacy authority 时，普通初始化会拒绝覆盖。使用 `mancode migrate context --dry-run` 检查，再通过 stage、resolve 和显式 activation 迁移。
 
----
+## 会话与任务
 
-## 2. Hook 详细说明
-
-### 2.1 SessionStart Hook
-
-**位置**：`.mancode/hooks/session-start.mjs`
-
-**触发时机**：Claude Code 启动会话并加载项目。
-
-**职责**：
-
-1. 从 hook 文件位置计算项目根目录，不依赖当前 shell 或 Git。
-2. 读取 `.mancode/state.json` 与 `.mancode/project-profile.json`。
-3. 注入当前模式、技术栈、UI 能力和最小改动原则。
-4. 已检测到团队且仍处于 solo 时，提示按需使用 `/manteam`。
-5. 状态不存在或 JSON 无法读取时安全退出，不抛出未处理异常。
-
-动态值会移除换行并限制为 200 个字符，避免项目状态污染 prompt 结构。
-
-### 2.2 UserPromptSubmit Hook
-
-**位置**：`.mancode/hooks/user-prompt-submit.mjs`
-
-**触发时机**：用户提交 prompt 后、Claude 开始处理前。
-
-**职责**：
-
-1. 在 solo 模式下注入六个动手前问题。
-2. 从 stdin 读取 Claude Code 提供的 JSON，并提取原始 prompt。
-3. 识别规划或调研请求，提示路由到 `man` skill。
-4. 只有项目 profile 确认存在 UI 资产且 prompt 涉及 UI 时，才注入审美摘要。
-5. 对颜色、字体、组件和 CSS variable 设置数量与字符上限。
-
-Node 直接解析 JSON。不存在 jq fallback，也不会调用任何外部进程。
-
-### 2.3 PostToolUse Hook（计划中，尚未实现）
-
-未来如果实现 PostToolUse，必须继续满足同一跨平台约束：
-
-- 使用 Node 脚本，不调用 Bash 或 POSIX 管道。
-- 默认 opt-in，只处理本次修改的项目内文本文件。
-- 不格式化整仓，不修改未触达文件。
-- 子进程使用 `execFile` / `spawn` 参数数组，不拼接 shell 字符串。
-- 单次执行设置超时；超时提示但不无限阻塞编辑流程。
-- lint/typecheck 的失败必须保留真实退出状态。
-
----
-
-## 3. 团队检测
-
-团队检测发生在 CLI 初始化和状态查询阶段，不在 hook 内执行。
-
-判定为团队需要同时满足：
-
-1. Git 历史贡献者超过 1 人。
-2. 存在 GitHub、GitLab 或 Bitbucket remote。
-3. 最近 30 天活跃贡献者超过 1 人。
-
-实现通过 Node `execFile('git', args)` 直接调用 Git，并在 Node 中拆分、去重邮箱；
-不使用 `/bin/bash`、`sort`、`grep`、重定向或管道。以下情况统一安全降级：
-
-- Git 未安装或不在 PATH。
-- 项目来自 ZIP，没有 `.git`。
-- Git 历史为空或命令执行失败。
-- 当前目录不是独立仓库根目录。
-
-降级结果为 `isTeam: false`、`contributors: 1`、`recentActive: 1`，不会阻止
-`mancode init`。用户仍可通过 `--team` 或 `--no-team` 明确覆盖。
-
----
-
-## 4. `.mancode/state.json`
-
-```json
-{
-  "version": "0.3.14",
-  "currentMode": "solo",
-  "lastMode": "solo",
-  "platform": "claude-code",
-  "initializedAt": "2026-07-11T10:30:00.000Z",
-  "techStack": "JavaScript/TypeScript + React",
-  "uiLibrary": "Tailwind CSS",
-  "currentTask": null,
-  "currentWorkflowMode": null,
-  "skippedSteps": [],
-  "activeSoloPlan": null,
-  "teamModeAutoDetected": false,
-  "contributors": 1
-}
+```text
+宿主或用户创建 session
+  → workflow create 生成 TaskRef 与四个治理实体
+  → context resume 绑定当前 session
+  → context show 解析一致的 Context Pack
+  → mutation 使用 expected revision 执行
 ```
 
-| 字段 | 说明 |
-|---|---|
-| `currentMode` / `lastMode` | 当前和上一次工作流模式 |
-| `platform` | 初始化时选择的默认适配器 |
-| `techStack` / `uiLibrary` | 从 project profile 得到的摘要 |
-| `currentTask` / `currentWorkflowMode` | 当前持久化工作流信息 |
-| `skippedSteps` | 用户明确跳过的工作流步骤 |
-| `activeSoloPlan` | `/man` 计划交给 solo 后保留的 taskId 与 planVersion；solo 验证完成后由 `workflow handoff --complete` 原子清理 |
-| `teamModeAutoDetected` | 自动检测或显式配置后的团队状态 |
-| `contributors` | 检测到的贡献者数量；降级时为 1 |
+session 是本地便利状态。关闭一个 session 不会关闭任务，也不会影响其他 session。宿主 identity key 只保存不可逆 lookup hash；显式 session 不保存原始宿主 key。
 
-CLI 负责写入 state；hooks 只读，不在会话启动或 prompt 提交时修改磁盘状态。
+## 写入与恢复
 
----
+简单单实体 cache 写入可以原子替换。影响任务语义、claim、handoff、迁移或 transport 的写入必须经过 operation journal。
 
-## 5. Claude Code 集成
+发现 `operation_pending`、reservation、task-head fence 漂移或未完成 git-ref receipt 时：
 
-### 5.1 settings.json
+- read-only 命令返回可证明的一致子集和 repair 信息。
+- 普通 mutation 被拒绝。
+- `context doctor`、`operation repair` 或 transport recovery 继续原 operation。
+- 只有尚未产生可见业务写时才允许 abort。
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \".mancode/hooks/session-start.mjs\""
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \".mancode/hooks/user-prompt-submit.mjs\""
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+## 完成与保留
 
-命令只使用 `node` 和带引号的相对路径，在 CMD、PowerShell、Git Bash 与 POSIX
-shell 中语义一致。
+完成门禁读取整个 Task Aggregate。requirements、plan、review、verification、子任务、claim 与 repair 状态必须同时满足策略。
 
-### 5.2 旧版本迁移
+`mancode context compact` 先列出候选，再删除符合 retention policy 的本地 cache、终态 workflow 产物或 repair journal。active task、milestone、被引用 checkpoint 和未完成 operation 不会被静默删除；shared 删除需要显式确认。
 
-`mancode init --force` 或 `mancode install claude-code --force` 会：
+## 团队与跨 clone
 
-1. 识别并移除 mancode 生成的旧命令：
-   `bash .mancode/hooks/session-start.sh` 与
-   `bash .mancode/hooks/user-prompt-submit.sh`。
-2. 注册新的 Node hook 命令。
-3. 删除两个旧 `.sh` 文件并生成 `.mjs` 文件。
-4. 保留无法精确识别为 mancode 生成内容的用户 hook。
+本地 transport 在同一 Git common directory 内共享协调权威。git-ref transport 只在显式 pull/push 后更新，并通过 remote revision 与 ownership fence 做 CAS。
 
-卸载同样同时识别新旧 mancode hook，不会删除无关用户命令。
+业务 Git 内容、分支和 worktree 不由 mancode 自动同步。跨 clone handoff 的接收者必须同时取得对应代码基线。
 
----
+## 发布证据
 
-## 6. `/man` 受管验证门禁
+`context session spike` 记录真实宿主的窗口隔离、子命令传播、子 agent 继承和 hook approval，但不保存原始宿主 session key 或显式 session ID。证据模式为 `host` 或 `explicit`：前者通过后可授权受信宿主身份，后者只证明两个已存在、active、client 匹配的显式 session 隔离，不改变运行时的 `explicit_required` 策略。内部 `context beta` 接受与平台能力匹配的任一路径，并要求所有证据绑定同一个 immutable release candidate。
 
-新创建的 `/man` 与 `/manteam` workflow 使用 policy v2：
+`npm run release:check -- --candidate <完整提交 SHA>` 从 `origin/develop` 创建干净 checkout，运行完整自动化、真实双 clone/legacy fixture、audit、pack 与 tarball 安装 smoke，并把报告和候选 tarball 保存在 `.mancode/local/release-evidence/`。该命令不会执行 `npm publish` 或修改 dist-tag。
 
-1. Step 2 把目标、非空范围、排除项、技术决策、默认值、阻塞未知项、七个 coverage 维度和带稳定 ID 的验收标准写入结构化输入。
-2. `workflow requirements <taskId> finalize --file <input.json>` 校验输入，并确定性生成 `requirements.json` 和 `requirements.md`；readiness 由 `blockingUnknowns` 是否为空推导。
-3. Step 6 初始化 `verification-ledger.json`。每个 required 验收项按 `automated`、`manual` 或 `hybrid` 记录证据；自动 passed/failed 包含命令和退出码。
-4. `manual_required` 会把主 workflow 标为 blocked；普通 `workflow update --status in_progress` 不能绕过，必须在取得用户明确确认后通过 `verify ... confirm-manual` 恢复。
-5. 台账绑定 requirements digest、planVersion 与 remediation round。任一发生变化，旧验证自动失效；remediation 后在 Step 9 重新登记全部 required 验收。
-6. 验证未全部通过时，CLI 同时拒绝 Step 7、review 初始化和 completed。完成还要求 `summary.md`。review 只能在 Step 6 通过专用 skip 命令和理由跳过。
-
-review policy v2 只允许 `clarification` 和用户明确要求跳过的整个 `review` 出现在 `skippedSteps`。targeted review 的第二领域是不适用，不写入 skippedSteps。旧 policy v1 workflow 保持兼容读取。
-
----
-
-## 7. 验证矩阵
-
-本地测试覆盖：
-
-- Git 存在与 PATH 中没有 Git。
-- 非 Git manifest 项目正常初始化。
-- 团队检测的单人、多人、remote 与近期活跃组合。
-- Node hooks 的上下文输出、自动路由、token cap 与不可信 token 清洗。
-- 旧 Bash hook 设置迁移、新 hook 状态检查与卸载。
-
-Windows CI 会在同一个 `windows-latest` runner 上分别从 CMD、PowerShell 和 Git
-Bash 执行 smoke test。测试清空子进程 PATH 来模拟 Git/Bash 不可用，验证 Codex
-初始化、solo 降级、Claude Code 初始化和两个 Node hooks 均能完成。它还会让
-PowerShell 以不允许删除的共享模式实际打开 session evidence 文件，再运行一次
-`context session spike`；原子替换必须在句柄释放后自行重试并成功。该 job 名为
-`Windows compatibility gate`；其 `windows-shells` check 已配置为 `main` 的发布必需检查。
-
-发布候选还必须在目标项目执行内部发布证据命令。该门禁会拒绝
-未激活或不兼容的 mancode 工作流、未安装的平台 bootstrap、未完成的 repair journal、
-缺失 checkout binding，以及没有绑定当前发布候选的五个平台真实双窗口、子命令传播和子 agent
-继承证据的项目。session evidence 文件不保存宿主 session key；`context session spike` 不会从临时
-环境变量自动推断传播结果，只有在每个平台宿主中完成真实 spike 后才能通过。
-
----
-
-## 8. 实施状态
-
-| 阶段 | 内容 |
-|---|---|
-| MVP-1 | SessionStart、UserPromptSubmit、state.json |
-| MVP-2 | 多模式切换；PostToolUse 仍为计划项 |
-| MVP-3 | Claude Code、Cursor、Codex、Copilot、ZCode 适配 |
-| Windows native | Node hooks、无 shell 团队检测、Git 可选、三 shell smoke |
+尚未完成的验收见 [release-acceptance.md](./release-acceptance.md)。

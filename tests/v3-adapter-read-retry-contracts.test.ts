@@ -63,9 +63,14 @@ describe('V3 adapter status reads', () => {
   it('keeps a persistent adapter read failure closed', async () => {
     reads.failuresRemaining = 4;
 
-    await expect(inspectV3Adapter(root, 'claude-code')).rejects.toMatchObject({
-      code: 'EPERM',
+    await expect(inspectV3Adapter(root, 'claude-code')).resolves.toMatchObject({
+      installed: true,
+      ready: false,
+      status: 'unreadable',
+      targets: expect.arrayContaining([
+        expect.objectContaining({ status: 'unreadable', actualDigest: null }),
+      ]),
     });
-    expect(reads.calls).toBe(4);
+    expect(reads.calls).toBe(V3_MODE_NAMES.length + 4);
   });
 });

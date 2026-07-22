@@ -26,6 +26,13 @@ describe('V3 Beta gate', () => {
     await mkdir(root, { recursive: true });
     await initializeV3Project({
       projectRoot: root,
+      managedAdapters: {
+        'claude-code': '3',
+        codex: '3',
+        cursor: '3',
+        copilot: '3',
+        zcode: '3',
+      },
       operationId: id(1),
       workspaceId: id(2),
       schemaEpoch: id(3),
@@ -38,6 +45,7 @@ describe('V3 Beta gate', () => {
   });
 
   it('refuses Beta while real-host spike evidence and adapters are missing', async () => {
+    await rm(path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'));
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       expect(
@@ -61,7 +69,7 @@ describe('V3 Beta gate', () => {
     }
   });
 
-  it('passes only after every V3 adapter and every platform spike is present', async () => {
+  it('passes after every adapter and explicit-session platform spike is proven', async () => {
     await makeBetaReady(root);
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
@@ -208,9 +216,10 @@ async function makeBetaReady(
         createPlatformSessionSpike({
           platform,
           observedAt: '2026-07-18T12:00:00.000Z',
-          hostSessionSource: 'api',
-          firstWindowHostSessionKey: `${platform}-window-a`,
-          secondWindowHostSessionKey: `${platform}-window-b`,
+          sessionMode: 'explicit',
+          hostSessionSource: 'none',
+          firstWindowSessionKey: `${platform}-session-a`,
+          secondWindowSessionKey: `${platform}-session-b`,
           commandPropagation: 'proven',
           subagentInheritance,
           hookApproval: 'not_applicable',

@@ -49,6 +49,27 @@ describe('coaching staff agents', () => {
       expect(SCOUT_AGENT.tools).not.toContain('Edit');
     });
 
+    it('scout records planning-governance evidence without claiming authority', () => {
+      for (const heading of [
+        'Current Behavior Evidence',
+        'Candidate Semantic Owner',
+        'Source of Truth',
+        'Historical / Compatibility Impact',
+      ]) {
+        expect(SCOUT_AGENT.body).toContain(heading);
+      }
+      expect(SCOUT_AGENT.body).toMatch(/可复现观察/);
+      expect(SCOUT_AGENT.body).toMatch(/Confidence: high \| medium \| low/);
+      expect(SCOUT_AGENT.body).toMatch(/Authority:.*结构化文件/);
+      expect(SCOUT_AGENT.body).toMatch(/Existing workflows:.*no change/);
+      expect(SCOUT_AGENT.body).toContain('NEEDS_REALIGNMENT');
+      expect(SCOUT_AGENT.body).toContain('MANCODE_REFRAME_REQUIRED');
+      expect(SCOUT_AGENT.body).toMatch(/不(?:要)?调用通用.*workflow update/);
+      expect(SCOUT_AGENT.body).not.toMatch(
+        /workflow update[^\n]*--status blocked/,
+      );
+    });
+
     it('plan coach is read-only and owns pre-confirmation plans', () => {
       expect(PLAN_COACH_AGENT.body).toMatch(/只读/);
       expect(PLAN_COACH_AGENT.body).toMatch(/plan\.md/);
@@ -59,6 +80,44 @@ describe('coaching staff agents', () => {
       expect(PLAN_COACH_AGENT.tools).not.toContain('Edit');
       expect(PLAN_COACH_AGENT.tools).not.toContain('Write');
       expect(PLAN_COACH_AGENT.tools).not.toContain('Bash');
+    });
+
+    it('plan coach enforces comparable options and one recommendation', () => {
+      expect(PLAN_COACH_AGENT.body).toMatch(/同一个用户目标/);
+      expect(PLAN_COACH_AGENT.body).toContain('complexity_bearer');
+      expect(PLAN_COACH_AGENT.body).toMatch(/唯一 recommendation/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/简单任务.*只列一个/);
+      expect(PLAN_COACH_AGENT.body).toContain(
+        'recommendation: <exactly one option id>',
+      );
+      expect(PLAN_COACH_AGENT.body).toContain('stop_conditions:');
+      expect(PLAN_COACH_AGENT.body).toContain('Domain Matrix');
+      expect(PLAN_COACH_AGENT.body).toContain('NEEDS_REALIGNMENT');
+      expect(PLAN_COACH_AGENT.body).toContain('MANCODE_REFRAME_REQUIRED');
+      expect(PLAN_COACH_AGENT.body).toMatch(/重复检查.*同一类诊断/);
+      expect(PLAN_COACH_AGENT.body).not.toMatch(
+        /workflow update[^\n]*--status blocked/,
+      );
+    });
+
+    it('head coach keeps solo escalation advisory and realignment read-only', () => {
+      const routingSignals = [
+        /平台入口或流程不一致/,
+        /semantic owner 不清/,
+        /source of truth.*不清/,
+        /status、contract、policy.*语义会变化/,
+        /scope、架构、成本或验收.*跨文件\/跨模块/,
+        /历史兼容/,
+        /迁移、跨平台/,
+        /团队协调证据/,
+      ];
+      for (const signal of routingSignals) {
+        expect(HEAD_COACH_AGENT.body).toMatch(signal);
+      }
+      expect(HEAD_COACH_AGENT.body).toMatch(/不自动改变 mode/);
+      expect(HEAD_COACH_AGENT.body).toContain('NEEDS_REALIGNMENT');
+      expect(HEAD_COACH_AGENT.body).toContain('MANCODE_REFRAME_REQUIRED');
+      expect(HEAD_COACH_AGENT.body).toMatch(/这是只读诊断/);
     });
 
     it('head coach body includes 5 core principles', () => {

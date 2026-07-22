@@ -1,7 +1,7 @@
 import type { SkillSpec } from './index.js';
 
 /**
- * /mansolo skill — Back to Practice（docs/03 §6）。
+ * /mansolo skill — Back to Practice（见 docs/workflows.md）。
  *
  * 切回 solo 模式：清理 state.json 里的 workflow 状态。
  */

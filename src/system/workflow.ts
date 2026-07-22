@@ -23,7 +23,7 @@ import {
  * Workflow 元数据。
  *
  * 每个 /man、/manba 或 /manteam 任务在 .mancode/workflows/<taskId>/metadata.json 里
- * 存一份，记录任务进度（docs/14-orchestration.md §2.1）。
+ * 存一份，记录任务进度（见 docs/workflows.md）。
  */
 export interface WorkflowMeta {
   /** YYYYMMDD-HHMMSS-<slug> 格式 */

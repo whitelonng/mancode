@@ -55,6 +55,39 @@ export interface TaskAuthorityFileRecoveryAction {
   targetContent: string;
 }
 
+export interface TaskArchiveManifestV1 {
+  schemaVersion: 1;
+  archiveId: Ulid;
+  operationId: Ulid;
+  taskRef: TaskRef;
+  sourceTaskRevision: number;
+  sourceRequirementsRevision: number;
+  sourceRequirementsDigest: string;
+  sourcePlanVersion: number;
+  sourcePlanDigest: string | null;
+  requirementsFileDigest: string;
+  planFileDigest: string | null;
+  archiveDigest: string;
+  createdAt: string;
+}
+
+/** Immutable requirements/plan snapshot at a fixed operation-owned path. */
+export interface TaskArchiveRecoveryAction {
+  kind: 'task_archive';
+  stepId: string;
+  taskRef: TaskRef;
+  archiveId: Ulid;
+  sourceTaskRevision: number;
+  sourceRequirementsRevision: number;
+  sourceRequirementsDigest: string;
+  sourcePlanVersion: number;
+  sourcePlanDigest: string | null;
+  createdAt: string;
+  requirementsContent: string;
+  planContent: string | null;
+  beforeDigest: null;
+}
+
 export interface WorkflowTaskDirectoryRecoveryAction {
   kind: 'workflow_task_directory';
   stepId: string;
@@ -159,6 +192,7 @@ export interface HandoffRecoveryAction {
 
 export type OperationRecoveryActionV1 =
   | TaskAuthorityFileRecoveryAction
+  | TaskArchiveRecoveryAction
   | WorkflowTaskDirectoryRecoveryAction
   | MigrationTaskDirectoryRecoveryAction
   | ProjectAuthorityFileRecoveryAction
@@ -217,6 +251,15 @@ export function parseOperationRecoveryPayload(
     throw new Error('operation recovery payload primaryStoreId is invalid');
   }
   const actions = parseActions(value.actions);
+  if (
+    actions.some(
+      (action) =>
+        action.kind === 'task_archive' &&
+        action.archiveId !== value.operationId,
+    )
+  ) {
+    throw new Error('operation recovery task archive operationId is invalid');
+  }
   const noOpStepIds = parseStepIds(value.noOpStepIds, 'noOpStepIds');
   const actionSteps = new Set(actions.map((action) => action.stepId));
   if (noOpStepIds.some((stepId) => actionSteps.has(stepId))) {
@@ -351,6 +394,40 @@ export function createTaskAuthorityFileRecoveryAction(input: {
     targetContent: input.targetContent,
   };
   return parseTaskAuthorityFileAction(action);
+}
+
+export function createTaskArchiveRecoveryAction(input: {
+  stepId: string;
+  taskRef: TaskRef;
+  archiveId: Ulid;
+  sourceTaskRevision: number;
+  sourcePlanVersion: number;
+  createdAt: string;
+  requirementsContent: string;
+  planContent: string | null;
+}): TaskArchiveRecoveryAction {
+  const taskRef = parseTaskRefValue(input.taskRef);
+  const requirements = parseRequirementsLedger(
+    parseJson(input.requirementsContent, 'task archive requirements'),
+  );
+  if (!sameTaskRef(requirements.taskRef, taskRef)) {
+    throw new Error('operation recovery task archive TaskRef is invalid');
+  }
+  return parseTaskArchiveAction({
+    kind: 'task_archive',
+    stepId: input.stepId,
+    taskRef,
+    archiveId: input.archiveId,
+    sourceTaskRevision: input.sourceTaskRevision,
+    sourceRequirementsRevision: requirements.revision,
+    sourceRequirementsDigest: requirements.contentDigest,
+    sourcePlanVersion: input.sourcePlanVersion,
+    sourcePlanDigest: taskArchivePlanDigest(taskRef, input.planContent),
+    createdAt: input.createdAt,
+    requirementsContent: input.requirementsContent,
+    planContent: input.planContent,
+    beforeDigest: null,
+  });
 }
 
 export function createWorkflowTaskDirectoryRecoveryAction(input: {
@@ -516,6 +593,14 @@ function assertActionLockCoverage(
     case 'workflow_task_directory':
     case 'migration_task_directory':
       if (!hasLock(taskKey(action.taskRef))) {
+        throw new Error('MANCODE_OPERATION_RECOVERY_LOCK_MISSING');
+      }
+      return;
+    case 'task_archive':
+      if (
+        !hasLock(taskKey(action.taskRef)) ||
+        !hasLock(`archive:${action.archiveId}`)
+      ) {
         throw new Error('MANCODE_OPERATION_RECOVERY_LOCK_MISSING');
       }
       return;
@@ -690,6 +775,8 @@ export function recoveryActionResourceKey(
   switch (action.kind) {
     case 'task_authority_file':
       return `task-file:${action.taskRef.namespace}:${action.taskRef.taskId}:${action.fileName}`;
+    case 'task_archive':
+      return `task-archive:${action.taskRef.namespace}:${action.taskRef.taskId}:${action.archiveId}`;
     case 'workflow_task_directory':
       return `workflow-directory:${action.taskRef.namespace}:${action.taskRef.taskId}`;
     case 'migration_task_directory':
@@ -717,6 +804,8 @@ export function recoveryActionTargetDigest(
   switch (action.kind) {
     case 'task_authority_file':
       return taskAuthorityContentDigest(action.fileName, action.targetContent);
+    case 'task_archive':
+      return taskArchiveDigest(action);
     case 'workflow_task_directory':
       return workflowTaskDirectoryDigest(action);
     case 'migration_task_directory':
@@ -753,6 +842,8 @@ function parseActions(value: unknown): OperationRecoveryActionV1[] {
     switch (action.kind) {
       case 'task_authority_file':
         return parseTaskAuthorityFileAction(action);
+      case 'task_archive':
+        return parseTaskArchiveAction(action);
       case 'workflow_task_directory':
         return parseWorkflowTaskDirectoryAction(action);
       case 'migration_task_directory':
@@ -1157,6 +1248,95 @@ function parseTaskAuthorityFileAction(
   };
 }
 
+function parseTaskArchiveAction(
+  value: Record<string, unknown>,
+): TaskArchiveRecoveryAction {
+  assertKnownKeys(
+    value,
+    [
+      'kind',
+      'stepId',
+      'taskRef',
+      'archiveId',
+      'sourceTaskRevision',
+      'sourceRequirementsRevision',
+      'sourceRequirementsDigest',
+      'sourcePlanVersion',
+      'sourcePlanDigest',
+      'createdAt',
+      'requirementsContent',
+      'planContent',
+      'beforeDigest',
+    ],
+    'operation recovery task archive action',
+  );
+  if (value.kind !== 'task_archive' || value.beforeDigest !== null) {
+    throw new Error('operation recovery task archive action is invalid');
+  }
+  const taskRef = parseTaskRefValue(value.taskRef);
+  assertUlid(value.archiveId, 'operation recovery task archive archiveId');
+  const sourceTaskRevision = parsePositiveInteger(
+    value.sourceTaskRevision,
+    'task archive sourceTaskRevision',
+  );
+  const sourceRequirementsRevision = parsePositiveInteger(
+    value.sourceRequirementsRevision,
+    'task archive sourceRequirementsRevision',
+  );
+  const sourceRequirementsDigest = requireDigest(
+    value.sourceRequirementsDigest,
+    'task archive sourceRequirementsDigest',
+  );
+  const sourcePlanVersion = parsePositiveInteger(
+    value.sourcePlanVersion,
+    'task archive sourcePlanVersion',
+  );
+  const sourcePlanDigest = parseDigestOrNull(
+    value.sourcePlanDigest,
+    'task archive sourcePlanDigest',
+  );
+  const createdAt = parseTimestamp(value.createdAt, 'task archive createdAt');
+  const requirementsContent = parseText(
+    value.requirementsContent,
+    'task archive requirementsContent',
+  );
+  const requirements = parseRequirementsLedger(
+    parseJson(requirementsContent, 'task archive requirements'),
+  );
+  if (
+    !sameTaskRef(requirements.taskRef, taskRef) ||
+    requirements.revision !== sourceRequirementsRevision ||
+    requirements.contentDigest !== sourceRequirementsDigest
+  ) {
+    throw new Error('operation recovery task archive requirements are invalid');
+  }
+  const planContent =
+    value.planContent === null
+      ? null
+      : parseText(value.planContent, 'task archive planContent');
+  if (planContent !== null && !planContent.trim()) {
+    throw new Error('operation recovery task archive plan is invalid');
+  }
+  if (sourcePlanDigest !== taskArchivePlanDigest(taskRef, planContent)) {
+    throw new Error('operation recovery task archive plan digest is invalid');
+  }
+  return {
+    kind: 'task_archive',
+    stepId: parseStepId(value.stepId),
+    taskRef,
+    archiveId: value.archiveId,
+    sourceTaskRevision,
+    sourceRequirementsRevision,
+    sourceRequirementsDigest,
+    sourcePlanVersion,
+    sourcePlanDigest,
+    createdAt,
+    requirementsContent,
+    planContent,
+    beforeDigest: null,
+  };
+}
+
 function parseCheckpointAction(
   value: Record<string, unknown>,
 ): CheckpointRecoveryAction {
@@ -1278,6 +1458,40 @@ function parseText(value: unknown, label: string): string {
   return value;
 }
 
+function parseJson(content: string, label: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error(`operation recovery ${label} JSON is invalid`);
+  }
+}
+
+function parsePositiveInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error(`operation recovery ${label} is invalid`);
+  }
+  return value as number;
+}
+
+function parseTimestamp(value: unknown, label: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    !Number.isFinite(Date.parse(value))
+  ) {
+    throw new Error(`operation recovery ${label} is invalid`);
+  }
+  return value;
+}
+
+function requireDigest(value: unknown, label: string): string {
+  const digest = parseDigestOrNull(value, label);
+  if (digest === null) {
+    throw new Error(`operation recovery ${label} is invalid`);
+  }
+  return digest;
+}
+
 function parseDigestOrNull(value: unknown, label: string): string | null {
   if (value === null) return null;
   if (typeof value !== 'string' || !DIGEST_PATTERN.test(value)) {
@@ -1302,6 +1516,56 @@ export function workflowTaskDirectoryDigest(
         digest: taskAuthorityContentDigest(file.fileName, file.content),
       })),
   });
+}
+
+export function taskArchiveDigest(action: TaskArchiveRecoveryAction): string {
+  return digestCanonicalJson({
+    archiveId: action.archiveId,
+    operationId: action.archiveId,
+    taskRef: action.taskRef,
+    sourceTaskRevision: action.sourceTaskRevision,
+    sourceRequirementsRevision: action.sourceRequirementsRevision,
+    sourceRequirementsDigest: action.sourceRequirementsDigest,
+    sourcePlanVersion: action.sourcePlanVersion,
+    sourcePlanDigest: action.sourcePlanDigest,
+    createdAt: action.createdAt,
+    requirementsContent: action.requirementsContent,
+    planContent: action.planContent,
+  });
+}
+
+export function taskArchiveManifest(
+  action: TaskArchiveRecoveryAction,
+): TaskArchiveManifestV1 {
+  return {
+    schemaVersion: 1,
+    archiveId: action.archiveId,
+    operationId: action.archiveId,
+    taskRef: action.taskRef,
+    sourceTaskRevision: action.sourceTaskRevision,
+    sourceRequirementsRevision: action.sourceRequirementsRevision,
+    sourceRequirementsDigest: action.sourceRequirementsDigest,
+    sourcePlanVersion: action.sourcePlanVersion,
+    sourcePlanDigest: action.sourcePlanDigest,
+    requirementsFileDigest: digestCanonicalJson({
+      content: action.requirementsContent,
+    }),
+    planFileDigest:
+      action.planContent === null
+        ? null
+        : digestCanonicalJson({ content: action.planContent }),
+    archiveDigest: taskArchiveDigest(action),
+    createdAt: action.createdAt,
+  };
+}
+
+function taskArchivePlanDigest(
+  taskRef: TaskRef,
+  content: string | null,
+): string | null {
+  return content === null
+    ? null
+    : digestCanonicalJson({ artifactRef: { taskRef, kind: 'plan' }, content });
 }
 
 export function migrationTaskDirectoryDigest(

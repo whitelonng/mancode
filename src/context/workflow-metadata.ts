@@ -49,6 +49,30 @@ export type PlanDecision =
   | 'governed_execution'
   | null;
 
+export type WorkflowPolicyComponent = 'planning' | 'review' | 'verification';
+
+export const SUPPORTED_WORKFLOW_POLICY_VERSIONS = {
+  planning: [1, 2],
+  review: [1, 2],
+  verification: [1],
+} as const;
+
+export class WorkflowPolicyVersionUnsupportedError extends Error {
+  readonly code = 'MANCODE_POLICY_VERSION_UNSUPPORTED' as const;
+
+  constructor(
+    readonly component: WorkflowPolicyComponent,
+    readonly observedVersion: unknown,
+    readonly supportedVersions: readonly number[],
+    readonly requiredWriter: string,
+  ) {
+    super(
+      `MANCODE_POLICY_VERSION_UNSUPPORTED: component=${component} observed=${String(observedVersion)} supported=${supportedVersions.join(',')} requiredWriter=${requiredWriter}`,
+    );
+    this.name = 'WorkflowPolicyVersionUnsupportedError';
+  }
+}
+
 export interface WorkflowMetadataV3 {
   schemaVersion: 3;
   taskRef: TaskRef;
@@ -588,19 +612,31 @@ function parsePolicyVersions(
     'workflow metadata policyVersions',
   );
   return {
-    planning: parsePositiveIntegerOrNull(
-      value.planning,
-      'workflow metadata planning policy version',
-    ),
-    review: parsePositiveIntegerOrNull(
-      value.review,
-      'workflow metadata review policy version',
-    ),
-    verification: parsePositiveIntegerOrNull(
-      value.verification,
-      'workflow metadata verification policy version',
-    ),
+    planning: parsePolicyVersionOrNull(value.planning, 'planning'),
+    review: parsePolicyVersionOrNull(value.review, 'review'),
+    verification: parsePolicyVersionOrNull(value.verification, 'verification'),
   };
+}
+
+function parsePolicyVersionOrNull(
+  value: unknown,
+  component: WorkflowPolicyComponent,
+): number | null {
+  if (value === null) return null;
+  const supported = SUPPORTED_WORKFLOW_POLICY_VERSIONS[component];
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    !supported.some((version) => version === value)
+  ) {
+    throw new WorkflowPolicyVersionUnsupportedError(
+      component,
+      value,
+      supported,
+      component === 'planning' && value === 2 ? '0.4.0' : '>0.4.0',
+    );
+  }
+  return value;
 }
 
 function parsePlanDecision(value: unknown): PlanDecision {
@@ -859,13 +895,6 @@ function parsePositiveInteger(value: unknown, label: string): number {
     throw new Error(`${label} must be a positive integer`);
   }
   return value;
-}
-
-function parsePositiveIntegerOrNull(
-  value: unknown,
-  label: string,
-): number | null {
-  return value === null ? null : parsePositiveInteger(value, label);
 }
 
 function parseNonNegativeInteger(value: unknown, label: string): number {

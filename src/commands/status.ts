@@ -2,9 +2,13 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { evaluateCompatibilityGate } from '../context/compatibility.js';
+import {
+  CURRENT_WRITER_CAPABILITIES,
+  evaluateCompatibilityGate,
+} from '../context/compatibility.js';
 import { assertUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
+import { managedAdapterNames } from '../context/manifest.js';
 import { V3ContextStore } from '../context/store.js';
 import {
   type PlatformStatus,
@@ -18,7 +22,9 @@ import {
 import {
   type V3PlatformAdapterStatus,
   inspectV3Adapter,
+  inspectV3AdapterVersions,
 } from '../installers/v3-adapter.js';
+import { listUnfinishedOperationRecoveries } from '../runtime/operation-recovery-executor.js';
 import { listPlatformSessionSpikes } from '../runtime/platform-spike-store.js';
 import {
   type SessionSpikePlatform,
@@ -51,7 +57,7 @@ import { VERSION } from '../version.js';
 const HOOK_ESTIMATE_TIMEOUT_MS = 2000;
 
 /**
- * 退出码契约 — 见 docs/08-cli-spec.md §4
+ * 退出码契约见 docs/workflows.md。
  */
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -141,7 +147,7 @@ export interface V3StatusResult {
     state: string;
     epoch: string;
     activatedAt: string | null;
-    managedAdapters: Record<PlatformName, string>;
+    managedAdapters: Partial<Record<PlatformName, string>>;
   };
   compatibility: {
     readAllowed: boolean;
@@ -201,6 +207,11 @@ export interface V3StatusResult {
     explicitRequiredPlatforms: SessionSpikePlatform[];
   };
   adapters: Record<PlatformName, V3PlatformAdapterStatus>;
+  unfinishedOperations: Array<{
+    operationId: string;
+    type: string;
+    state: string;
+  }>;
   legacyAuthorityPresent: boolean;
 }
 
@@ -233,7 +244,7 @@ interface StatusConfig {
 /**
  * `mancode status` 命令。
  *
- * 职责（docs/08-cli-spec.md §4 + progress.md Step 3）：
+ * 职责见 docs/workflows.md：
  * 1. 读取 .mancode/state.json（未初始化则报错退出）
  * 2. 显示项目状态（mode/platform/techStack/uiLibrary）
  * 3. 显示初始化时间
@@ -333,8 +344,29 @@ async function statusV3(
 ): Promise<number> {
   try {
     const store = new V3ContextStore(rootDir);
+    const snapshot = await store.readProjectSnapshot();
+    let runtime: V3StatusResult['runtime'];
+    try {
+      const context = await readProjectRuntimeContext(rootDir);
+      runtime = {
+        binding: 'ready',
+        workspaceId: context.workspaceId,
+        checkoutId: context.checkoutId,
+        repositoryBindingId: context.repositoryBindingId,
+        gitCommonDir: context.gitCommonDir,
+        error: null,
+      };
+    } catch (error) {
+      runtime = {
+        binding: 'registration_required',
+        workspaceId: snapshot.config.workspaceId,
+        checkoutId: null,
+        repositoryBindingId: null,
+        gitCommonDir: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
     const [
-      snapshot,
       project,
       legacy,
       actor,
@@ -342,8 +374,9 @@ async function statusV3(
       sessionSpikes,
       assessmentSignals,
       currentSession,
+      adapterVersions,
+      unfinishedOperations,
     ] = await Promise.all([
-      store.readProjectSnapshot(),
       getProjectName(rootDir),
       scanLegacyAuthority(rootDir),
       readLocalActor(rootDir).catch(() => null),
@@ -358,13 +391,21 @@ async function statusV3(
       listPlatformSessionSpikes(rootDir),
       detectTeamAssessmentSignals(rootDir),
       readV3StatusSession(rootDir),
+      inspectV3AdapterVersions(
+        rootDir,
+        managedAdapterNames(snapshot.manifest.managedAdapters),
+      ),
+      runtime.binding === 'ready'
+        ? listUnfinishedOperationRecoveries(rootDir)
+        : Promise.resolve([]),
     ]);
     const compatibility = evaluateCompatibilityGate({
       manifest: snapshot.manifest,
       expectedSchemaEpoch: snapshot.manifest.epoch,
       readerVersion: VERSION,
       writerVersion: VERSION,
-      adapterVersions: snapshot.manifest.managedAdapters,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      adapterVersions,
       currentLegacyBaseline: legacy.baseline,
       legacyAuthorityPresent: legacy.authorityPresent,
       operation: 'read',
@@ -392,27 +433,6 @@ async function statusV3(
               revision: task.metadata.revision,
             }))
             .catch(() => null);
-    let runtime: V3StatusResult['runtime'];
-    try {
-      const context = await readProjectRuntimeContext(rootDir);
-      runtime = {
-        binding: 'ready',
-        workspaceId: context.workspaceId,
-        checkoutId: context.checkoutId,
-        repositoryBindingId: context.repositoryBindingId,
-        gitCommonDir: context.gitCommonDir,
-        error: null,
-      };
-    } catch (error) {
-      runtime = {
-        binding: 'registration_required',
-        workspaceId: snapshot.config.workspaceId,
-        checkoutId: null,
-        repositoryBindingId: null,
-        gitCommonDir: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
     const result: V3StatusResult = {
       schemaVersion: 1,
       authority: 'v3',
@@ -465,6 +485,11 @@ async function statusV3(
       currentTask,
       sessionEvidence: platformSpikeFreezeStatus(sessionSpikes),
       adapters,
+      unfinishedOperations: unfinishedOperations.map((operation) => ({
+        operationId: operation.journal.operationId,
+        type: operation.journal.type,
+        state: operation.journal.state,
+      })),
       legacyAuthorityPresent: legacy.authorityPresent,
     };
     const output = options.brief ? toContinuityStatus(result) : result;
@@ -488,12 +513,16 @@ function toContinuityStatus(result: V3StatusResult): ContinuityStatusResult {
   const blockers = [
     ...result.compatibility.failures,
     ...(result.runtime.error === null ? [] : [result.runtime.error]),
+    ...(result.unfinishedOperations.length === 0
+      ? []
+      : ['MANCODE_OPERATION_REPAIR_REQUIRED']),
   ];
   const ready =
     result.activation.state === 'v3_active' &&
     result.compatibility.readAllowed &&
     result.compatibility.writeAllowed &&
-    result.runtime.binding === 'ready';
+    result.runtime.binding === 'ready' &&
+    result.unfinishedOperations.length === 0;
   return {
     schemaVersion: 1,
     runtime: 'mancode-continuity',
@@ -805,7 +834,7 @@ function runHookEstimate(rootDir: string, hookPath: string): Promise<string> {
 }
 
 /**
- * 文本格式输出（默认），字段命名对齐 docs/08-cli-spec.md §4.3。
+ * 文本格式输出（默认），字段命名对齐 docs/workflows.md。
  */
 function printText(r: StatusResult): void {
   const publicMode = r.mode === 'mamba' ? 'manba' : r.mode;
@@ -930,6 +959,11 @@ function printV3Text(result: V3StatusResult): void {
   );
   if (result.compatibility.failures.length > 0) {
     console.log(`Compatibility: ${result.compatibility.failures.join(', ')}`);
+  }
+  if (result.unfinishedOperations.length > 0) {
+    console.log(
+      `Recovery:    required (${result.unfinishedOperations.map((operation) => operation.operationId).join(', ')})`,
+    );
   }
   if (result.legacyAuthorityPresent) {
     console.log(
