@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.4.0" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.1-2f855a?style=flat-square" alt="状态：mancode Continuity v0.4.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -108,6 +108,13 @@ mancode context show --purpose orient --session <id> --client claude-code
 mancode 为团队项目提供稳定 TaskRef、隔离 session、治理账本、worktree claim/handoff，
 以及可选的 git-ref 跨 clone 协调。Claude Code、Cursor、Codex、GitHub Copilot 和
 ZCode 都通过 bootstrap 使用同一套工作流数据；平台文件本身不保存任务或 session 副本。
+
+git-ref 下的 workflow create、requirements、plan、review 和 verification 使用显式的
+延后发布边界：先不带 `--sync` 执行 mutation，将对应的 `.mancode/shared`
+变更与代码基线一起提交，再执行
+`mancode team sync push shared:<ULID> --expected-task-revision N`。这些命令若直接带
+`--sync` 会返回 `MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`；只有拿到 push receipt
+才表示跨 clone 同步完成。
 
 在全新项目中，从一个实际使用的平台开始：
 
@@ -322,7 +329,7 @@ src/components/
 
 ## 安装
 
-**状态**：mancode Continuity v0.4.0。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.4.1。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot 和 ZCode adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -427,7 +434,7 @@ mancode version
 以下是简化输出示例：
 
 ```text
-mancode v0.4.0
+mancode v0.4.1
 
 Project:     my-app
 Runtime:     ready
@@ -567,7 +574,7 @@ mancode/
 - 确认 ZCode 项目级 skill 发现和 workspace command 路径；完成前继续标记为 provisional。
 - 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
 
-完整发布条件见 [0.4.0 Continuity 发布验收](./docs/release-acceptance.md)。
+完整发布条件见 [0.4.1 Continuity 发布验收](./docs/release-acceptance.md)。
 
 ## 故障排查
 

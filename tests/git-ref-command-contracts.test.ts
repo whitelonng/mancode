@@ -20,6 +20,7 @@ import {
   teamStatus,
 } from '../src/commands/team.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
+import { workflow } from '../src/commands/workflow.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { createSession } from '../src/runtime/session.js';
@@ -212,6 +213,71 @@ describe('git-ref command explicit-sync contract', () => {
       { exitCode: 3, code: 'MANCODE_TRANSPORT_UNAVAILABLE' },
       { exitCode: 3, code: 'MANCODE_TRANSPORT_UNAVAILABLE' },
     ]);
+  });
+
+  it('never accepts deferred shared workflow sync as if it reached git-ref', async () => {
+    await setGitRefConfig(root);
+    const common = {
+      session: sessionId,
+      client: 'vitest',
+      sync: true,
+      json: true,
+    };
+    const results = [
+      await captureJson(() =>
+        workflow(
+          root,
+          'create',
+          ['manteam', 'Do not silently defer remote publication.'],
+          {
+            ...common,
+            visibility: 'shared',
+            coordination: 'team',
+            confirmShared: true,
+          },
+        ),
+      ),
+      await captureJson(() =>
+        workflow(root, 'requirements', [taskRef, 'draft'], {
+          ...common,
+          expectedRevision: '1',
+          file: 'must-not-be-read.json',
+        }),
+      ),
+      await captureJson(() =>
+        workflow(root, 'plan', [taskRef, 'revise'], {
+          ...common,
+          expectedRevision: '1',
+          file: 'must-not-be-read.md',
+        }),
+      ),
+      await captureJson(() =>
+        workflow(root, 'review', [taskRef, 'apply'], {
+          ...common,
+          expectedRevision: '1',
+          file: 'must-not-be-read.json',
+        }),
+      ),
+      await captureJson(() =>
+        workflow(root, 'verify', [taskRef, 'apply'], {
+          ...common,
+          expectedRevision: '1',
+          file: 'must-not-be-read.json',
+        }),
+      ),
+    ];
+
+    expect(
+      results.map((result) => ({
+        exitCode: result.exitCode,
+        code: result.value.error?.code,
+      })),
+    ).toEqual(
+      Array.from({ length: results.length }, () => ({
+        exitCode: 3,
+        code: 'MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED',
+      })),
+    );
   });
 });
 

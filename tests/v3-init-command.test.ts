@@ -12,6 +12,7 @@ import {
 } from '../src/commands/init.js';
 import { parseSchemaManifest } from '../src/context/manifest.js';
 import { runtimeCheckoutRecordPath } from '../src/runtime/project-runtime.js';
+import { VERSION } from '../src/version.js';
 
 describe('journaled V3 init command', () => {
   let root: string;
@@ -55,8 +56,8 @@ describe('journaled V3 init command', () => {
       manifestVersion: 2,
       activationState: 'v3_active',
       workflowPolicyDefaults: { planning: 2 },
-      minReaderVersion: '0.4.0',
-      minWriterVersion: '0.4.0',
+      minReaderVersion: VERSION,
+      minWriterVersion: VERSION,
     });
     await expect(
       readFile(path.join(root, '.agents', 'skills', 'man', 'SKILL.md'), 'utf8'),

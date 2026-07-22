@@ -349,10 +349,19 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             'recommend `/man`, explain the trigger, and wait for the operator to choose',
           );
+          expect(entry).toContain(
+            'Detect those governance triggers after the smallest fact check needed',
+          );
         }
         if (mode === 'manteam') {
           expect(entry).toContain(
             'same decision-readiness gate as `man` before finalizing requirements',
+          );
+          expect(entry).toContain(
+            'commit the resulting `.mancode/shared` authority changes',
+          );
+          expect(entry).toContain(
+            '`mancode team sync push <shared:ULID> --expected-task-revision <n>`',
           );
           expect(entry).toContain(
             'ownership conflict, or hard-risk direction remains',

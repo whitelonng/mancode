@@ -26,6 +26,7 @@ import {
   createSharedActorProfile,
   publishSharedActorProfile,
 } from '../src/team/actor.js';
+import { VERSION } from '../src/version.js';
 
 const NOW = new Date('2026-07-22T08:00:00.000Z');
 const LEGACY_FIXTURE = fileURLToPath(
@@ -116,7 +117,7 @@ describe('published 0.3.18 CLI compatibility boundary', () => {
     ) as { manifestVersion: number; minWriterVersion: string };
     expect(manifest).toMatchObject({
       manifestVersion: 2,
-      minWriterVersion: '0.4.0',
+      minWriterVersion: VERSION,
     });
     const authorityBefore = await snapshotTree(path.join(root, '.mancode'));
 

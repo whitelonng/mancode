@@ -1,6 +1,6 @@
-# 0.4.0 Continuity 发布验收
+# 0.4.1 Continuity 发布验收
 
-自动化 contract 必须覆盖 Continuity runtime/schema、条件式需求澄清、Policy 2、project upgrade、local reframe、operation recovery、团队协调、git-ref hard reject、五个平台生成结果和 Windows smoke path。条件式需求澄清必须证明清晰请求不被机械提问阻塞，决策性歧义会在 requirements finalize 或实施前停下、提问并等待用户回答。以下证据完成前，不得发布 mancode 0.4.0 或执行 `npm publish`。
+自动化 contract 必须覆盖 Continuity runtime/schema、条件式需求澄清、Policy 2、project upgrade、local reframe、operation recovery、团队协调、git-ref hard reject、五个平台生成结果和 Windows smoke path。条件式需求澄清必须证明清晰请求不被机械提问阻塞，决策性歧义会在 requirements finalize 或实施前停下、提问并等待用户回答。以下证据完成前，不得发布 mancode 0.4.1 或执行 `npm publish`。
 
 ## 发布条件
 

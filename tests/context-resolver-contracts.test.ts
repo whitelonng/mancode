@@ -86,6 +86,8 @@ describe('V3 Context Resolver', () => {
         profile: { projectKind: 'web', frameworks: ['React'] },
       },
     });
+    expect(result.pack.project).not.toHaveProperty('activationState');
+    expect(result.pack.budget.exceededByRequiredEnvelope).toBe(false);
     expect(result.pack.provenance).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ entityKey: 'project-facts' }),
