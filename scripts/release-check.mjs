@@ -39,8 +39,8 @@ const remote = runCaptured('git', ['remote', 'get-url', 'origin'], sourceRoot);
 const originDevelop = remoteRef(remote, 'refs/heads/develop');
 const originMainBefore = remoteRef(remote, 'refs/heads/main');
 assert(
-  originDevelop === candidate,
-  'release candidate must equal origin/develop',
+  originMainBefore === candidate,
+  'release candidate must equal origin/main',
 );
 
 const outputPath = path.resolve(
@@ -65,7 +65,7 @@ try {
   runCheck(checks, 'clean_clone', 'git', [
     'clone',
     '--branch',
-    'develop',
+    'main',
     '--single-branch',
     remote,
     checkout,
@@ -206,7 +206,7 @@ try {
     packageVersion: packageMetadata.version,
     generatedAt: new Date().toISOString(),
     source: {
-      branch: 'develop',
+      branch: 'main',
       originDevelop,
       originMainBefore,
       originMainAfter,

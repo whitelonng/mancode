@@ -22,6 +22,10 @@ describe('release candidate check', () => {
     expect(script).toContain("'legacy_migration'");
     expect(script).toContain("'tarball_install'");
     expect(script).toContain("'origin_main_unchanged'");
+    expect(script).toContain('release candidate must equal origin/main');
+    expect(script).not.toContain('release candidate must equal origin/develop');
+    expect(script).toMatch(/'clone',[\s\S]*'--branch',\s*'main'/);
+    expect(script).toContain("branch: 'main'");
     expect(script).toContain("createHash('sha256')");
     expect(script).not.toMatch(/['"]publish['"]/);
     expect(script).not.toContain('dist-tag');

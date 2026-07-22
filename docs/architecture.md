@@ -77,4 +77,11 @@ mancode team sync push shared:<ULID> --expected-task-revision N --session <ID>
 `team sync push`。直接传入 `--sync` 会稳定返回
 `MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`，防止未发布的本地成功被误报为跨 clone 成功。
 
+明确要求 `--sync` 的原子 git-ref mutation 会在一次 CAS 中更新远端 bundle/fence，随后
+materialize 本地投影。若仍可 resume 的 `in_progress` 或 `blocked` 任务留下 tracked
+`.mancode/shared` 变更，owner 提交该投影后必须用不变的 task revision 再执行
+`team sync push`。这个受限的 same-revision 操作只能把 code head 快进重绑到新提交；
+task revision、aggregate digest、owner 和 ownership epoch 都不得变化。另一 clone 应在
+该 receipt 到达后同步 Git、pull transport 并 resume。
+
 远端不会自动同步业务代码。bundle、ownership fence 和 remote revision 只协调 mancode 权威；调用者仍需自行同步 Git 分支。

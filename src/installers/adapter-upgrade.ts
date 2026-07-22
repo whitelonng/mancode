@@ -283,6 +283,7 @@ export async function upgradeV3Adapters(
         [platform, await inspectV3Adapter(root, platform)] as const,
     ),
   );
+  await removeAdapterUpgradePreview(root, operationId);
   return {
     ...resultBase,
     state: 'committed',
@@ -695,6 +696,26 @@ function adapterUpgradePreviewPath(root: string, operationId: Ulid): string {
     operationId,
     'preview.json',
   );
+}
+
+async function removeAdapterUpgradePreview(
+  root: string,
+  operationId: Ulid,
+): Promise<void> {
+  const upgradeRoot = path.join(
+    path.resolve(root),
+    '.mancode',
+    'staging',
+    'adapters',
+    'upgrade',
+  );
+  const operationRoot = path.dirname(
+    adapterUpgradePreviewPath(root, operationId),
+  );
+  if (path.dirname(operationRoot) !== upgradeRoot) {
+    throw new Error('MANCODE_ADAPTER_UPGRADE_STAGING_INVALID');
+  }
+  await rm(operationRoot, { recursive: true, force: true });
 }
 
 async function readAdapterUpgradePreview(
