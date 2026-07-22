@@ -1055,7 +1055,7 @@ const V3_MODE_DEFINITIONS: Record<
       '- Apply the same decision-readiness gate as `man` before finalizing requirements: validate both clarity and soundness against project facts and team authority. If the goal, scope, acceptance, owner/source of truth, and constraints are clear and consistent, continue without ceremonial questions; if a decision-changing ambiguity, ownership conflict, or hard-risk direction remains, give evidence and a recommendation, ask focused questions, and wait before writing confirmed requirements.',
       '- Persist unresolved team clarification through the same `workflow requirements <namespace:ULID> draft --file <requirements.json>` command as `man`; do not leave ownership questions or partial answers only in chat history.',
       '- Use claims, checkpoints, sync, and handoffs through `mancode team`; never infer ownership from an adapter prompt.',
-      '- Use the same mancode requirements, plan, verification, review, and completion commands as `man`, adding `--sync` whenever the active transport requires it.',
+      '- With git-ref transport, workflow creation plus requirements, plan, review, and verification mutations use an explicit deferred publication boundary: run the workflow command without `--sync`, commit the resulting `.mancode/shared` authority changes together with the matching code head, then run `mancode team sync push <shared:ULID> --expected-task-revision <n>`. Never report cross-clone synchronization before the push returns a receipt. Use `--sync` only for a command whose contract performs an atomic git-ref mutation.',
     ],
   },
   manps: {
@@ -1076,6 +1076,7 @@ const V3_MODE_DEFINITIONS: Record<
       '- Before editing, assess both clarity and soundness using the project facts. If the request is clear, consistent, and low risk, proceed without ceremonial questions. Resolve repository-answerable unknowns yourself; classify the rest as blocking, recommendable, or defaultable. Ask and wait only when a blocking unknown could materially change behavior, scope, acceptance, data, security, compatibility, or ownership.',
       '- A supplied implementation direction is not automatically safe. If it conflicts with repository evidence or involves authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure, or another irreversible effect, show the evidence and impact, recommend the safer path, ask for focused confirmation, and wait before editing.',
       '- If resolving the ambiguity requires architecture, semantic owner/source-of-truth, cross-module scope, migration, team coordination, or formal acceptance decisions, recommend `/man`, explain the trigger, and wait for the operator to choose; advice alone never changes mode or authority.',
+      '- Detect those governance triggers after the smallest fact check needed to establish them. Stop before exhaustive discovery or proposing a concrete topology, migration layout, or implementation plan that depends on unanswered decisions.',
       '- For a governed-to-solo transition, use `mancode workflow handoff <namespace:ULID> --to solo --expected-revision <n> --session <id>`.',
     ],
   },

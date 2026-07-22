@@ -71,4 +71,10 @@ mancode team sync pull
 mancode team sync push shared:<ULID> --expected-task-revision N --session <ID>
 ```
 
+其中 workflow create、requirements、plan、review 和 verification mutation 不会在一条命令中
+同时提交业务代码与远程权威，因此使用显式延后发布边界：不带 `--sync`
+运行 mutation，将 `.mancode/shared` 与匹配的代码基线一起提交，再运行上述
+`team sync push`。直接传入 `--sync` 会稳定返回
+`MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`，防止未发布的本地成功被误报为跨 clone 成功。
+
 远端不会自动同步业务代码。bundle、ownership fence 和 remote revision 只协调 mancode 权威；调用者仍需自行同步 Git 分支。

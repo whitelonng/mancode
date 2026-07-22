@@ -98,7 +98,7 @@ import {
   readProjectRuntimeContext,
 } from './project-runtime.js';
 import { acquireProjectWriteBarrier } from './project-write-barrier.js';
-import { type SessionStateV1, readSession } from './session.js';
+import { type SessionStateV1, readSession, resumeSession } from './session.js';
 import { assertTaskHeadFenceMatchesAggregate } from './task-head-fence.js';
 
 const execFile = promisify(execFileCallback);
@@ -517,7 +517,43 @@ export async function commitTaskOperation(
     { canAbort: false },
   );
   throwIfOperationCrashInjected(previous.type, 'commit');
+  await refreshActiveSessionRevision(context);
   return next;
+}
+
+async function refreshActiveSessionRevision(
+  context: OpenedV3TaskOperation,
+): Promise<void> {
+  try {
+    const session = await readSession(
+      context.projectRoot,
+      context.session.sessionId,
+    );
+    if (
+      session === null ||
+      session.status !== 'active' ||
+      session.activeTaskRef === null ||
+      !sameTaskRef(session.activeTaskRef, context.taskRef)
+    ) {
+      return;
+    }
+    const task = await context.store.readTaskSnapshot(context.taskRef);
+    if (
+      task.metadata.status !== 'in_progress' &&
+      task.metadata.status !== 'blocked'
+    ) {
+      return;
+    }
+    await resumeSession(context.projectRoot, session.sessionId, {
+      taskRef: context.taskRef,
+      workflowMode: task.metadata.workflowMode,
+      taskRevision: task.metadata.revision,
+      now: context.now,
+    });
+  } catch {
+    // Workflow authority is already committed. A later context resume can
+    // repair this session-only convenience projection.
+  }
 }
 
 export async function handleTaskOperationFailure(

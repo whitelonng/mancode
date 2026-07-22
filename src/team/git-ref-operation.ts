@@ -912,7 +912,7 @@ async function assertCleanGitWorktree(
     cwd: projectRoot,
     windowsHide: true,
   });
-  if (stdout.trim()) throw new Error('MANCODE_HANDOFF_DIRTY_WORKTREE');
+  if (stdout.trim()) throw new Error('MANCODE_GIT_REF_DIRTY_WORKTREE');
 }
 
 async function hasCommittedHandoffCheckpoint(

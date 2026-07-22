@@ -28,6 +28,11 @@ import {
 } from '../context/workflow-update.js';
 import { recordV3ErrorDiagnostic } from '../runtime/diagnostics.js';
 import {
+  clearSessionTaskPointer,
+  readSession,
+  resumeSession,
+} from '../runtime/session.js';
+import {
   type OpenedV3TaskOperation,
   openV3TaskOperation,
 } from '../runtime/task-operation.js';
@@ -602,6 +607,7 @@ async function publishTaskMutation(
     if (recovery.state !== 'committed' || recovery.materialization === null) {
       throw new Error('MANCODE_REMOTE_RECEIPT_MISMATCH');
     }
+    await refreshGitRefSessionProjection(input);
     return {
       remoteRevision: mutation.remoteRevision,
       ownershipEpoch: mutation.ownershipEpoch,
@@ -627,6 +633,54 @@ async function publishTaskMutation(
       () => undefined,
     );
     throw error;
+  }
+}
+
+async function refreshGitRefSessionProjection(
+  input: OpenedGitRefWorkflowOperation & {
+    taskBundle: GitRefTaskBundleV1;
+    now: Date;
+  },
+): Promise<void> {
+  try {
+    const session = await readSession(
+      input.context.projectRoot,
+      input.context.session.sessionId,
+    );
+    if (
+      session === null ||
+      session.status !== 'active' ||
+      session.activeTaskRef === null ||
+      !sameTaskRef(session.activeTaskRef, input.context.taskRef)
+    ) {
+      return;
+    }
+    const task = await input.context.store.readTaskSnapshot(
+      input.context.taskRef,
+    );
+    if (
+      task.metadata.status === 'in_progress' ||
+      task.metadata.status === 'blocked'
+    ) {
+      await resumeSession(input.context.projectRoot, session.sessionId, {
+        taskRef: input.context.taskRef,
+        workflowMode: task.metadata.workflowMode,
+        taskRevision: task.metadata.revision,
+        now: input.now,
+      });
+      return;
+    }
+    await clearSessionTaskPointer(
+      input.context.projectRoot,
+      session.sessionId,
+      {
+        expectedTaskRef: input.context.taskRef,
+        now: input.now,
+      },
+    );
+  } catch {
+    // Remote authority and local materialization are already committed. A
+    // later explicit resume repairs this session-only convenience projection.
   }
 }
 

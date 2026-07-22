@@ -127,6 +127,11 @@ describe('V3 requirements finalization operation', () => {
     const persisted = await store.readTaskSnapshot(created.taskRef);
     expect(persisted.aggregate).toEqual(result.aggregate);
     expect(persisted.aggregateError).toBeNull();
+    await expect(readSession(root, sessionId)).resolves.toMatchObject({
+      activeTaskRef: created.taskRef,
+      activeMode: 'man',
+      lastSeenRevision: 2,
+    });
 
     const runtime = await readProjectRuntimeContext(root);
     const home = resolveTaskEntityHomeStore(

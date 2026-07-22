@@ -22,6 +22,7 @@ import {
 } from '../src/runtime/operation-recovery-executor.js';
 import { createSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
+import { VERSION } from '../src/version.js';
 
 const NOW = new Date('2026-07-21T10:00:00.000Z');
 
@@ -75,8 +76,8 @@ describe('project Policy 2 upgrade', () => {
       willUpgrade: true,
       blockers: [],
       operationId: id(12),
-      minReaderVersion: '0.4.0',
-      minWriterVersion: '0.4.0',
+      minReaderVersion: VERSION,
+      minWriterVersion: VERSION,
     });
     await expect(readFile(schemaPath, 'utf8')).resolves.toBe(schemaBefore);
 

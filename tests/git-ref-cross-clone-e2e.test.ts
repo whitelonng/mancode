@@ -32,7 +32,7 @@ import {
   ensureProjectRuntimeContext,
   readCheckoutBranch,
 } from '../src/runtime/project-runtime.js';
-import { createSession } from '../src/runtime/session.js';
+import { createSession, readSession } from '../src/runtime/session.js';
 import {
   type SharedActorProfileV1,
   createLocalActor,
@@ -157,7 +157,7 @@ describe('git-ref coordination across independent clones', () => {
     );
     expect(dirtyPush).toMatchObject({
       exitCode: 3,
-      value: { error: { code: 'MANCODE_HANDOFF_DIRTY_WORKTREE' } },
+      value: { error: { code: 'MANCODE_GIT_REF_DIRTY_WORKTREE' } },
     });
 
     const taskRoot = path.join(
@@ -733,7 +733,7 @@ describe('git-ref coordination across independent clones', () => {
         operationId: id(26),
         now: at(3),
       }),
-    ).rejects.toThrow('MANCODE_HANDOFF_DIRTY_WORKTREE');
+    ).rejects.toThrow('MANCODE_GIT_REF_DIRTY_WORKTREE');
     await expect(storeB.pull()).resolves.toMatchObject({
       manifest: { revision: 2, handoffs: [] },
     });
@@ -981,6 +981,13 @@ describe('git-ref coordination across independent clones', () => {
       remoteRevision: 4,
       materialization: { status: 'updated' },
     });
+    await expect(readSession(fixture.cloneA, SESSION_A)).resolves.toMatchObject(
+      {
+        activeTaskRef: created.taskRef,
+        activeMode: 'manteam',
+        lastSeenRevision: blocked.metadata.revision,
+      },
+    );
     await expect(storeA.pull()).resolves.toMatchObject({
       manifest: {
         revision: 4,
@@ -1094,6 +1101,13 @@ describe('git-ref coordination across independent clones', () => {
       remoteRevision: 3,
       materialization: { status: 'updated' },
     });
+    await expect(readSession(fixture.cloneA, SESSION_A)).resolves.toMatchObject(
+      {
+        activeTaskRef: null,
+        activeMode: null,
+        lastSeenRevision: null,
+      },
+    );
     await expect(storeA.pull()).resolves.toMatchObject({
       manifest: {
         revision: 3,

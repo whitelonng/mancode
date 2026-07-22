@@ -9,8 +9,8 @@ export const CONTEXT_PACK_SCHEMA_VERSION = 2;
 export const CONTEXT_PACK_TOKENIZER_ID = 'cl100k_base@tiktoken-0.7.0';
 export const CONTEXT_PACK_BUDGET_ALGORITHM_VERSION = 'complete-section-v1';
 export const CONTEXT_PACK_DEFAULT_BUDGETS = {
-  bootstrap: 400,
-  task: 1200,
+  bootstrap: 1600,
+  task: 5000,
 } as const;
 
 export type ContextLevel = 'bootstrap' | 'task' | 'full';

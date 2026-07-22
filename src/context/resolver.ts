@@ -568,7 +568,7 @@ function buildStablePack(
       [task.fingerprint, coordination.fingerprint, project.fingerprint],
       true,
     ),
-    runtimeSection('/capabilities', capabilities, true),
+    runtimeSection('/capabilities', capabilitiesProjection(capabilities), true),
     runtimeSection(
       '/transportFreshness',
       transportFreshnessProjection(capabilities),
@@ -672,7 +672,11 @@ function buildRepairPack(
         true,
       ),
       derivedSection('/conflicts', repair.issues, [snapshot.fingerprint], true),
-      runtimeSection('/capabilities', capabilities, true),
+      runtimeSection(
+        '/capabilities',
+        capabilitiesProjection(capabilities),
+        true,
+      ),
       runtimeSection(
         '/transportFreshness',
         transportFreshnessProjection(capabilities),
@@ -715,6 +719,7 @@ function sessionProjection(session: SessionStateV1 | null) {
 }
 
 function activeTaskProjection(task: StoredTaskSnapshot) {
+  const governance = task.metadata.governance;
   return {
     taskRef: task.metadata.taskRef,
     workflowMode: task.metadata.workflowMode,
@@ -725,7 +730,14 @@ function activeTaskProjection(task: StoredTaskSnapshot) {
     currentStep: task.metadata.currentStep,
     ownerActorId: task.metadata.ownerActorId,
     implementationScope: task.metadata.implementationScope,
-    governance: task.metadata.governance,
+    governance: {
+      requirementsStatus: governance.requirementsStatus,
+      planVersion: governance.planVersion,
+      planDecision: governance.planDecision,
+      policyVersions: governance.policyVersions,
+      reviewStatus: governance.reviewStatus,
+      verificationStatus: governance.verificationStatus,
+    },
     plan: task.plan?.artifactRef ?? null,
     latestCheckpointRef: task.metadata.latestCheckpointRef,
   };
@@ -782,7 +794,6 @@ function projectProjection(project: StoredProjectSnapshot) {
     teamPolicy: project.policy.policy,
     defaultVisibility: project.policy.defaultVisibility,
     schemaEpoch: project.manifest.epoch,
-    activationState: project.manifest.activationState,
     facts: project.projectFacts,
     confirmedDecisions: project.confirmedDecisions,
   };
@@ -852,6 +863,14 @@ function transportFreshnessProjection(
     freshness: capabilities.transportFreshness,
     lastSuccessfulSyncAt: capabilities.lastSuccessfulSyncAt,
     remoteRevision: capabilities.remoteRevision,
+  };
+}
+
+function capabilitiesProjection(capabilities: CoordinationCapabilitiesV1) {
+  return {
+    claimAcquisition: capabilities.claimAcquisition,
+    writeGuard: capabilities.writeGuard,
+    transport: capabilities.transport,
   };
 }
 

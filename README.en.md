@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.0" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.1-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -127,6 +127,15 @@ ledgers, worktree claims and handoffs, and optional git-ref coordination across
 clones. Claude Code, Cursor, Codex, GitHub Copilot, and ZCode use the same
 workflow data through platform bootstraps; platform files do not hold task or
 session copies.
+
+Under git-ref transport, workflow create, requirements, plan, review, and
+verification mutations use an explicit deferred publication boundary. Run the
+mutation without `--sync`, commit the matching `.mancode/shared` changes with
+the code baseline, then run
+`mancode team sync push shared:<ULID> --expected-task-revision N`. Passing
+`--sync` directly to those commands returns
+`MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`; cross-clone synchronization is
+complete only after the push returns a receipt.
 
 For a new project, start with one platform you actually use:
 
@@ -365,7 +374,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: mancode Continuity v0.4.0. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.4.1. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -472,7 +481,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.4.0
+mancode v0.4.1
 
 Project:     my-app
 Runtime:     ready
@@ -626,7 +635,7 @@ mancode/
   adapter provisional until then.
 - Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
 
-See [0.4.0 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
+See [0.4.1 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
 
 ## Troubleshooting
 

@@ -1124,10 +1124,16 @@ async function workflowVerifyV3(
   }
   try {
     const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      taskRef.namespace === 'shared',
+      options.sync,
+    );
     const session = await resolveV3CommandSession(project, options);
     const result = await recordV3Verification({
       projectRoot: project.projectRoot,
-      taskRef: parseTaskRef(task),
+      taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
       verification: await readWorkflowJsonInputFile(
@@ -1181,10 +1187,16 @@ async function workflowReviewV3(
   }
   try {
     const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      taskRef.namespace === 'shared',
+      options.sync,
+    );
     const session = await resolveV3CommandSession(project, options);
     const result = await applyV3ReviewLedger({
       projectRoot: project.projectRoot,
-      taskRef: parseTaskRef(task),
+      taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
       review: await readWorkflowJsonInputFile(
@@ -1255,8 +1267,13 @@ async function workflowPlanV3(
   }
   try {
     const project = await readV3CommandProject(rootDir);
-    const session = await resolveV3CommandSession(project, options);
     const taskRef = parseTaskRef(task);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      taskRef.namespace === 'shared',
+      options.sync,
+    );
+    const session = await resolveV3CommandSession(project, options);
     const plan =
       action === 'revise'
         ? await readWorkflowInputFile(
@@ -1323,8 +1340,13 @@ async function workflowRequirementsV3(
   }
   try {
     const project = await readV3CommandProject(rootDir);
-    const session = await resolveV3CommandSession(project, options);
     const taskRef = parseTaskRef(task);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      taskRef.namespace === 'shared',
+      options.sync,
+    );
+    const session = await resolveV3CommandSession(project, options);
     const requirementsInput = await readWorkflowJsonInputFile(
       project.projectRoot,
       options.file,
@@ -1370,6 +1392,20 @@ function parseExpectedTaskRevision(options: WorkflowOptions): number | null {
   return options.expectedRevision === undefined
     ? null
     : parseExactPositiveInteger(options.expectedRevision);
+}
+
+function assertDeferredGitRefSyncOption(
+  transportMode: 'local' | 'git-ref',
+  sharedTask: boolean,
+  sync: boolean | undefined,
+): void {
+  if (sync !== true) return;
+  if (transportMode === 'git-ref' && sharedTask) {
+    throw new Error(
+      'MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED: run this mutation without --sync, commit the resulting .mancode/shared authority changes with the matching code head, then run mancode team sync push <shared:ULID> --expected-task-revision <n>.',
+    );
+  }
+  throw new Error('MANCODE_GIT_REF_SYNC_UNAVAILABLE');
 }
 
 function parseV3PlanDecision(
@@ -1463,6 +1499,12 @@ async function workflowCreateV3(
   }
   try {
     const project = await readV3CommandProject(rootDir);
+    const parsedWorkflowMode = parseV3WorkflowMode(workflowMode);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      parsedWorkflowMode === 'manteam',
+      options.sync,
+    );
     const session = await resolveV3CommandSession(project, options);
     const parentOption = options.parent ?? options.parentTask;
     if (options.parentTask !== undefined && options.parent === undefined) {
@@ -1481,7 +1523,7 @@ async function workflowCreateV3(
     const result = await createV3Workflow({
       projectRoot: project.projectRoot,
       task,
-      workflowMode: parseV3WorkflowMode(workflowMode),
+      workflowMode: parsedWorkflowMode,
       sessionId: session.sessionId,
       client: commandClient(options.client),
       parentTaskRef:

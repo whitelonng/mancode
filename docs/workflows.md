@@ -127,4 +127,6 @@ claim 声明 path、module、API 或 schema 边界。任务或代码基线漂移
 
 handoff 必须经过 `draft → offered → accepted|rejected|cancelled`。accept 会在同一个 journaled operation 中更新 owner、claim、checkpoint 和 task head，避免出现两个合法 owner。
 
+在 git-ref transport 下，workflow create、requirements、plan、review 和 verification 采用延后发布：先不带 `--sync` 写入本地 shared authority，把它与匹配的代码一起提交，再执行 `mancode team sync push shared:<ULID> --expected-task-revision N`。命令直接带 `--sync` 时必须返回 `MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`，不能把未获得 receipt 的变更当作已同步。
+
 只有经过明确确认且通过隐私筛查的决策才能进入 shared memory。任务文本、绝对路径、凭据和宿主 session key 不应写入共享 transport。
