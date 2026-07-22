@@ -6,13 +6,19 @@ mancode 不把“当前模式”保存成全局开关。平台入口创建或恢
 
 | 模式 | 用途 | 持久任务 |
 |---|---|---|
-| `solo` | 小改、最窄验证和一次受限 diff 自检 | 否；可执行已确认的 solo handoff |
+| `solo` | 小改、最窄验证和一次受限 diff 自检；先判断需求是否清晰 | 否；可执行已确认的 solo handoff |
 | `manba` | 复现、根因诊断、最小修复或真实验证 | 是，5 步 |
 | `man` | 需求对齐、计划及可选完整治理 | 是，9 步 |
 | `manteam` | 带 owner、participant、scope 和 claim 的团队治理 | 是，9 步 |
 | `manps` | 确定性项目健康扫描 | 否 |
 
 平台入口分别表现为 `/man`、`$man` 或 prompt，具体映射见 [platform-adapters.md](./platform-adapters.md)。
+
+### 条件式需求澄清
+
+`solo` 和 `/man` 都先判断需求是否足够清晰，不机械追问。目标、范围、验收边界和关键约束可以从用户请求、项目事实或明确的安全默认值确定时，直接继续；不需要为了形式制造问题。
+
+如果仍有会改变目标、范围、用户可见行为、验收、架构、数据、安全、兼容性、owner 或 source of truth 的歧义，必须先向用户提出聚焦问题并等待回答。回答前不得把假设写成 confirmed requirements；复杂度、owner、迁移、跨模块或团队决策超出 Solo 边界时，应推荐 `/man` 并等待用户选择。该判断属于 V3 mode skill 的固定行为契约。
 
 ## `man` 流程
 

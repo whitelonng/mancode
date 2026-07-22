@@ -109,6 +109,7 @@ Plan Coach 继续是只读组件。它在产生计划前执行以下检查：
 2. 每个选项的复杂度由谁承担：实现代码、迁移、运行维护、用户操作、兼容层或测试。不能只写“更简单”，要写承担者和可观察成本。
 3. 输出唯一推荐，并给出拒绝其他选项的主要理由。推荐不是“由用户决定”；用户仍可否决，但计划不能同时保留多个未决方向。
 4. 简单任务可以只列一个明显可行方向，并标注为什么没有真实替代方案；不能为了满足“多选”制造伪选项。
+5. V3 mode entry 在 requirements finalize 前执行条件式 clarity gate：清晰需求不制造形式问题；仍有会改变目标、范围、行为、验收、owner/source of truth 或关键约束的歧义时，必须停下提问并等待用户回答，不得把未验证假设写成 confirmed requirements。
 
 建议的输出契约：
 
@@ -327,6 +328,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - policy parser：1 可接受；0、负数、小数、未知正整数、缺失值和错误 component 均拒绝。
 - workflow create：未升级项目只写 1；升级项目新 `/man` 写 2；已有 workflow 的 policy provenance 不变。
 - Plan Coach：不同目标、无复杂度承担者、多个 recommendation、无 stop condition 均返回 `NEEDS_CLARIFICATION`；简单任务单方向通过。
+- V3 `/man`、`/manteam` 和 Solo mode entry 的条件式 clarity gate：清晰请求直接继续，决策性歧义在 requirements finalize 或代码修改前停下并等待用户回答；不强制无意义提问。
 - stop/re-align：触发时返回 `NEEDS_REALIGNMENT + MANCODE_REFRAME_REQUIRED`，且 authority 的前后 digest 完全相同。
 - Scout/Domain Matrix：可选字段不进入 metadata；高风险 plan 可包含章节；普通任务不被强制增加文件。
 - digest：内容、marker、路径、换行、截断、用户托管区域变化分别得到预期结果；manifest echo 与磁盘不一致必为 stale。
@@ -369,6 +371,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - [x] 旧 V3 fixture、legacy fixture、已有 adapter 和历史 workflow 通过原有测试。
 - [x] 触发 stop/re-align 时只返回 `NEEDS_REALIGNMENT + MANCODE_REFRAME_REQUIRED`，authority 文件内容和 claims 不变。
 - [x] Scout/Plan Coach 新字段和规则覆盖正常、缺失证据、冲突 owner、单方向简单任务。
+- [x] V3 mode entry 恢复条件式需求澄清：清晰需求不机械追问，决策性歧义必须在 finalize/实施前向用户提问并等待回答；五平台生成契约覆盖。
 - [x] adapter digest algorithm、status 分类、stale error、explicit upgrade command 和 recovery contract 完成。
 - [x] policy parser 白名单、writer capability、`minWriterVersion`/reader gate 和 0.3.x + V2 manifest 拒绝 contract 完成；本轮已增加真实发布版 0.3.18 CLI 的黑盒写入拒绝与 authority 全树字节不变证据，后续候选仍需重跑。
 - [x] project upgrade dry-run、确认、commit、repair、abort 和 provenance 完成；现有 workflow 未被批量重写，新 `/man` Policy 2 默认值有明确创建证据。

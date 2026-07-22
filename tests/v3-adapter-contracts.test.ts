@@ -266,6 +266,19 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             "clears this session's active workflow pointer",
           );
+          expect(entry).toContain('run a clarity gate');
+          expect(entry).toContain(
+            'Do not ask ceremonial questions or manufacture alternatives when the request is already clear.',
+          );
+          expect(entry).toContain(
+            'stop before requirements finalization, explain the missing decision, ask focused questions, and wait for the user answer.',
+          );
+          expect(entry).toContain(
+            'never turn an unverified assumption into confirmed scope or confirmed coverage.',
+          );
+          expect(entry).toContain(
+            'summarize the resolved requirements and any remaining defaults',
+          );
         }
         if (mode === 'manps') {
           expect(entry).toContain(
@@ -280,6 +293,23 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('Ordinary focused work needs no TaskRef');
           expect(entry).toContain(
             'Only an explicit governed handoff mutation requires',
+          );
+          expect(entry).toContain(
+            'assess whether the request is clear and narrow using the project facts',
+          );
+          expect(entry).toContain(
+            'If an unresolved ambiguity could materially change behavior, scope, acceptance, data, security, or compatibility, stop and ask focused questions',
+          );
+          expect(entry).toContain(
+            'recommend `/man`, explain the trigger, and wait for the operator to choose',
+          );
+        }
+        if (mode === 'manteam') {
+          expect(entry).toContain(
+            'same conditional clarity gate as `man` before finalizing requirements',
+          );
+          expect(entry).toContain(
+            'if a decision-changing ambiguity remains, ask focused questions and wait before writing confirmed requirements.',
           );
         }
         if (mode === 'man' || mode === 'manba' || mode === 'manteam') {

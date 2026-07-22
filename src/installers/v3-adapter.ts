@@ -931,6 +931,9 @@ const V3_MODE_DEFINITIONS: Record<
     actions: [
       '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
       '- For a new task, run `mancode workflow create man "<task>" --session <id>`.',
+      '- Before writing requirements, inspect the relevant project facts and implementation, then run a clarity gate. Treat the request as clear enough only when the goal, in-scope/out-of-scope behavior, acceptance boundary, semantic owner/source of truth, and decision-changing constraints are supplied, verifiable from the repository, or explicitly recorded as safe defaults. Do not ask ceremonial questions or manufacture alternatives when the request is already clear.',
+      '- If any unresolved ambiguity could change the goal, scope, user-visible behavior, acceptance, architecture, data, security, compatibility, owner, or source of truth, stop before requirements finalization, explain the missing decision, ask focused questions, and wait for the user answer. Ask in as many batches as needed, do not repeat answered questions, and never turn an unverified assumption into confirmed scope or confirmed coverage.',
+      '- After the user answers, summarize the resolved requirements and any remaining defaults. Continue only when no decision-changing blocking unknown remains; otherwise keep the task in clarification and ask again.',
       '- Write requirements as semantic JSON with `version: 1`, a non-empty `goal`, non-empty `confirmedScope`, and the arrays `excludedScope`, `technicalDecisions`, `defaults`, and `blockingUnknowns`. Every array item must be a non-empty string; an array may be empty except `confirmedScope`, and `technicalDecisions` must be non-empty whenever `technical_stack` applies.',
       '- `coverage` must contain exactly one item for each dimension: `platform`, `core_scope`, `technical_stack`, `data_and_persistence`, `performance`, `compatibility`, and `security`. Each item has the shape `{ "dimension": "platform", "status": "confirmed", "rationale": "..." }`; `status` is exactly `confirmed`, `defaulted`, or `not_applicable`, and `rationale` is non-empty.',
       '- `acceptanceCriteria` must contain at least one required item shaped as `{ "id": "AC-1", "description": "...", "required": true, "method": "automated" }`; `method` is exactly `automated`, `manual`, or `hybrid`.',
@@ -961,6 +964,7 @@ const V3_MODE_DEFINITIONS: Record<
     actions: [
       '- Confirm team membership with `mancode team status`; join invited participants before assigning shared work.',
       '- For a new shared task, run `mancode workflow create manteam "<task>" --visibility shared --coordination team --confirm-shared --session <id>`.',
+      '- Apply the same conditional clarity gate as `man` before finalizing requirements: if the goal, scope, acceptance, owner/source of truth, and constraints are clear from the request or project facts, continue without ceremonial questions; if a decision-changing ambiguity remains, ask focused questions and wait before writing confirmed requirements.',
       '- Use claims, checkpoints, sync, and handoffs through `mancode team`; never infer ownership from an adapter prompt.',
       '- Use the same mancode requirements, plan, verification, review, and completion commands as `man`, adding `--sync` whenever the active transport requires it.',
     ],
@@ -980,6 +984,8 @@ const V3_MODE_DEFINITIONS: Record<
     contextPurpose: 'implement',
     actions: [
       '- Do not create or persist a legacy solo mode. Ordinary focused work needs no TaskRef; if the operator expects a governed task, use its bound TaskRef or report that none is bound.',
+      '- Before editing, assess whether the request is clear and narrow using the project facts. If it is clear enough, proceed without ceremonial questions. If an unresolved ambiguity could materially change behavior, scope, acceptance, data, security, or compatibility, stop and ask focused questions; wait for the answer instead of silently choosing.',
+      '- If resolving the ambiguity requires architecture, semantic owner/source-of-truth, cross-module scope, migration, team coordination, or formal acceptance decisions, recommend `/man`, explain the trigger, and wait for the operator to choose; advice alone never changes mode or authority.',
       '- For a governed-to-solo transition, use `mancode workflow handoff <namespace:ULID> --to solo --expected-revision <n> --session <id>`.',
     ],
   },

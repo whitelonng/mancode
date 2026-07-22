@@ -239,7 +239,9 @@ design tokens:
 </Button>
 ```
 
-The default workflow asks six questions before writing code:
+The default workflow evaluates a conditional clarity gate before writing code: it asks the user
+only when an unresolved decision could change the goal, scope, behavior, acceptance, or key
+constraints, and it proceeds without ceremonial questions when the request is already clear.
 
 1. What problem does this change solve?
 2. Can an existing implementation be reused?
@@ -247,6 +249,10 @@ The default workflow asks six questions before writing code:
 4. Can this avoid a new subsystem?
 5. What is the smallest meaningful runtime check?
 6. What remains uncertain after checking the code and docs?
+
+These are internal readiness checks, not a mandatory questionnaire. Any unresolved
+decision-changing uncertainty becomes a focused question and blocks requirements finalization
+until the user answers; clear requests continue directly.
 
 <span id="usage"></span>
 
