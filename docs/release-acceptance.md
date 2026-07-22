@@ -36,7 +36,7 @@ session evidence 不保存原始 key、token、绝对业务路径或任务正文
 ## 当前未完成项
 
 - 五个平台在最终候选上的完整 session spike。
-- Windows CMD、PowerShell 和 Git Bash 的 required smoke check。
+- 当前候选上的 Windows CMD、PowerShell 和 Git Bash required smoke check。
 - 跨真实宿主协作与恢复验收。
 - 当前候选上的双 clone git-ref 人工验收。
 - legacy fixture 的 stage、activation、中断恢复和受约束 rollback 验收。
@@ -44,5 +44,7 @@ session evidence 不保存原始 key、token、绝对业务路径或任务正文
 - `origin/develop` 候选提交上的干净 checkout、tarball 安装和 CLI 启动验收。
 - 验收前后 `origin/main` 未变化的记录。
 - 汇总全部证据后的最终 Beta gate。
+
+开发基线证据：`c12969b` 的 [Windows compatibility gate](https://github.com/whitelonng/mancode/actions/runs/29867788958) 已在 Windows CMD、PowerShell 和 Git Bash 全部通过；本机 smoke 只跳过了非 Windows 环境无法执行的原生 open-file rename 断言。基线后的代码、测试和文档修改进入新候选后，Windows required check 必须重新执行。
 
 完成一项时更新本文件的未完成列表；不要创建新的平行验收计划。

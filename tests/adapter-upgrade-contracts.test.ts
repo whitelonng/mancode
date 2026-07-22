@@ -290,50 +290,121 @@ describe('adapter managed-content digest and upgrade', () => {
     expect(agents).toContain('<!-- mancode:v3:zcode:start -->');
   });
 
-  it('repairs forward after a crash following one visible target write', async () => {
-    const operationId = id(20);
-    await upgradeV3Adapters({
+  it('recovers every five-platform target from its write-before and write-after boundary', async () => {
+    const discovery = await upgradeV3Adapters({
       projectRoot: root,
-      platforms: ['cursor'],
+      platforms: V3_ADAPTER_PLATFORMS,
       dryRun: true,
-      operationId,
+      operationId: id(20),
       now: NOW,
     });
-    await expect(
-      withOperationCrashInjectionForTesting(
-        {
-          operationType: 'adapter_upgrade',
-          crashAfter: 'replace-managed-adapters:cursor-rule',
-        },
-        () =>
-          upgradeV3Adapters({
-            projectRoot: root,
-            platforms: ['cursor'],
-            explicitConfirmation: true,
-            sessionId,
-            operationId,
-            now: NOW,
-          }),
-      ),
-    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const targets = discovery.filePlans.map((plan) => plan.target);
+    expect(targets.length).toBeGreaterThan(1);
+    expect(new Set(targets).size).toBe(targets.length);
 
-    const repaired = await executeOperationRecovery({
-      projectRoot: root,
-      operationId,
-      actorId,
-      sessionId,
-      now: new Date(NOW.getTime() + 1_000),
-    });
-    expect(repaired).toMatchObject({
-      state: 'repaired',
-      journal: { state: 'committed', type: 'adapter_upgrade' },
-    });
-    await expect(inspectV3Adapter(root, 'cursor')).resolves.toMatchObject({
-      status: 'ready',
-      ready: true,
-    });
-  });
+    let caseIndex = 0;
+    for (const boundary of ['before', 'after'] as const) {
+      for (const [targetIndex, target] of targets.entries()) {
+        const caseRoot = path.join(root, `${boundary}-${caseIndex}`);
+        await mkdir(caseRoot, { recursive: true });
+        const fixture = await bootstrapAdapterCase(
+          caseRoot,
+          40 + caseIndex * 7,
+        );
+        const operationId = id(45 + caseIndex * 7);
+        const preview = await upgradeV3Adapters({
+          projectRoot: caseRoot,
+          platforms: V3_ADAPTER_PLATFORMS,
+          dryRun: true,
+          operationId,
+          now: NOW,
+        });
+        expect(preview.filePlans.map((plan) => plan.target)).toEqual(targets);
+
+        await expect(
+          withOperationCrashInjectionForTesting(
+            {
+              operationType: 'adapter_upgrade',
+              crashAfter:
+                boundary === 'before'
+                  ? `replace-managed-adapters:before:${target}`
+                  : `replace-managed-adapters:${target}`,
+            },
+            () =>
+              upgradeV3Adapters({
+                projectRoot: caseRoot,
+                platforms: V3_ADAPTER_PLATFORMS,
+                explicitConfirmation: true,
+                sessionId: fixture.sessionId,
+                operationId,
+                now: NOW,
+              }),
+          ),
+        ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+        const repaired = await executeOperationRecovery({
+          projectRoot: caseRoot,
+          operationId,
+          actorId: fixture.actorId,
+          sessionId: fixture.sessionId,
+          now: new Date(NOW.getTime() + 1_000),
+        });
+        if (boundary === 'before' && targetIndex === 0) {
+          expect(repaired).toMatchObject({
+            state: 'aborted',
+            journal: { state: 'aborted', type: 'adapter_upgrade' },
+          });
+        } else {
+          expect(repaired).toMatchObject({
+            state: 'repaired',
+            journal: { state: 'committed', type: 'adapter_upgrade' },
+          });
+        }
+        const statuses = await Promise.all(
+          V3_ADAPTER_PLATFORMS.map((platform) =>
+            inspectV3Adapter(caseRoot, platform),
+          ),
+        );
+        if (boundary === 'before' && targetIndex === 0) {
+          expect(statuses.every((status) => status.status === 'missing')).toBe(
+            true,
+          );
+        } else {
+          expect(statuses.every((status) => status.ready)).toBe(true);
+        }
+        caseIndex += 1;
+      }
+    }
+  }, 30_000);
 });
+
+async function bootstrapAdapterCase(
+  projectRoot: string,
+  offset: number,
+): Promise<{ actorId: Ulid; sessionId: Ulid }> {
+  await initializeV3Project({
+    projectRoot,
+    operationId: id(offset),
+    workspaceId: id(offset + 1),
+    schemaEpoch: id(offset + 2),
+    now: NOW,
+  });
+  const actorId = id(offset + 3);
+  const sessionId = id(offset + 4);
+  await createLocalActor(projectRoot, {
+    actorId,
+    displayName: 'Adapter Boundary Tester',
+    now: NOW,
+  });
+  await createSession(projectRoot, {
+    actorId,
+    sessionId,
+    client: 'vitest',
+    identitySource: 'explicit',
+    now: NOW,
+  });
+  return { actorId, sessionId };
+}
 
 function id(offset: number): Ulid {
   return createUlid(NOW.getTime() + offset, new Uint8Array(10).fill(offset));

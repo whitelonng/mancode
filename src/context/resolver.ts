@@ -194,25 +194,27 @@ export class ContextResolver {
       throw new Error('MANCODE_SESSION_NOT_FOUND');
     }
     const requestedTask = resolveRequestedTask(request.taskRef, session);
-    const taskRef = (await this.store.locateTask(requestedTask)).taskRef;
     const intent = request.intent ?? 'read';
     const maxReadAttempts = parseMaxReadAttempts(request.maxReadAttempts);
+    const preflight = await this.readCompatibilityPreflight(request, intent);
+    if (!preflight.readAllowed) {
+      throw new Error(preflight.failures[0] ?? 'MANCODE_CONTEXT_READ_BLOCKED');
+    }
+    if (intent === 'mutate' && !preflight.writeAllowed) {
+      throw new Error(preflight.failures[0] ?? 'MANCODE_CONTEXT_WRITE_BLOCKED');
+    }
+    const taskRef = (await this.store.locateTask(requestedTask)).taskRef;
     const snapshot = await this.readStableSnapshot(
       taskRef,
       request,
       maxReadAttempts,
     );
-    const compatibility = evaluateCompatibilityGate({
-      manifest: snapshot.project.manifest,
-      expectedSchemaEpoch: request.compatibility.expectedSchemaEpoch,
-      readerVersion: request.compatibility.readerVersion,
-      writerVersion: request.compatibility.writerVersion,
-      writerCapabilities: request.compatibility.writerCapabilities,
-      adapterVersions: request.compatibility.adapterVersions,
-      currentLegacyBaseline: snapshot.legacy.baseline,
-      legacyAuthorityPresent: snapshot.legacy.authorityPresent,
-      operation: intent === 'read' ? 'read' : 'v3_business_write',
-    });
+    const compatibility = this.evaluateCompatibility(
+      request,
+      intent,
+      snapshot.project,
+      snapshot.legacy,
+    );
     if (!compatibility.readAllowed) {
       throw new Error(
         compatibility.failures[0] ?? 'MANCODE_CONTEXT_READ_BLOCKED',
@@ -253,6 +255,36 @@ export class ContextResolver {
       );
     }
     return resolution;
+  }
+
+  private async readCompatibilityPreflight(
+    request: ContextResolveRequest,
+    intent: ContextResolutionIntent,
+  ) {
+    const [project, legacy] = await Promise.all([
+      this.store.readProjectSnapshot(),
+      scanLegacyAuthority(this.store.projectRoot),
+    ]);
+    return this.evaluateCompatibility(request, intent, project, legacy);
+  }
+
+  private evaluateCompatibility(
+    request: ContextResolveRequest,
+    intent: ContextResolutionIntent,
+    project: StoredProjectSnapshot,
+    legacy: LegacyAuthorityScan,
+  ) {
+    return evaluateCompatibilityGate({
+      manifest: project.manifest,
+      expectedSchemaEpoch: request.compatibility.expectedSchemaEpoch,
+      readerVersion: request.compatibility.readerVersion,
+      writerVersion: request.compatibility.writerVersion,
+      writerCapabilities: request.compatibility.writerCapabilities,
+      adapterVersions: request.compatibility.adapterVersions,
+      currentLegacyBaseline: legacy.baseline,
+      legacyAuthorityPresent: legacy.authorityPresent,
+      operation: intent === 'read' ? 'read' : 'v3_business_write',
+    });
   }
 
   private async readStableSnapshot(

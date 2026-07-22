@@ -505,7 +505,7 @@ function allowedOperationTransitions(
     case 'applying':
       return new Set(['committed', 'repair_required', 'aborted']);
     case 'repair_required':
-      return new Set(['committed']);
+      return new Set(['committed', 'aborted']);
     case 'committed':
     case 'aborted':
       return new Set();

@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -165,6 +172,52 @@ describe('V3 Context Resolver', () => {
         taskId: TASK_ID,
       }),
     ).rejects.toThrow('MANCODE_CONTEXT_PATH_UNSAFE');
+  });
+
+  it('short-circuits a stale adapter before parsing an unsupported workflow policy for mutation', async () => {
+    const fixture = await createFixture();
+    const metadataPath = path.join(
+      fixture.root,
+      '.mancode',
+      'shared',
+      'workflows',
+      TASK_ID,
+      'metadata.json',
+    );
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+      governance: {
+        policyVersions: { planning: number | null };
+      };
+    };
+    metadata.governance.policyVersions.planning = 3;
+    await writeJson(metadataPath, metadata);
+
+    const request = {
+      session: fixture.session,
+      taskRef: `shared:${TASK_ID}`,
+      level: 'task' as const,
+      purpose: 'implement' as const,
+      intent: 'mutate' as const,
+      codeHead: 'abc1234',
+    };
+    await expect(
+      fixture.resolver.resolve({
+        ...request,
+        compatibility: {
+          ...fixture.compatibility,
+          adapterVersions: {
+            ...fixture.compatibility.adapterVersions,
+            codex: 'stale',
+          },
+        },
+      }),
+    ).rejects.toThrow('MANCODE_ADAPTER_CONTENT_STALE');
+    await expect(
+      fixture.resolver.resolve({
+        ...request,
+        compatibility: fixture.compatibility,
+      }),
+    ).rejects.toThrow('MANCODE_POLICY_VERSION_UNSUPPORTED');
   });
 });
 

@@ -23,6 +23,7 @@ docs/*
 !docs/engineering.md
 !docs/12-lifecycle.md
 !docs/release-acceptance.md
+!docs/planning-governance-evolution.md
 
 # Node.js
 node_modules/

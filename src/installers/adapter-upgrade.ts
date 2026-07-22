@@ -444,6 +444,10 @@ async function commitAdapterUpgrade(input: {
     );
     for (const plan of input.plans) {
       await renewLocks(locks);
+      throwIfOperationCrashInjected(
+        'adapter_upgrade',
+        `replace-managed-adapters:before:${plan.target}`,
+      );
       await applyV3AdapterFilePlan(input.root, plan);
       throwIfOperationCrashInjected(
         'adapter_upgrade',

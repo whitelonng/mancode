@@ -275,7 +275,7 @@ export async function createV3Workflow(
     timestamp,
     planningPolicyVersion:
       parent === null
-        ? project.manifest.manifestVersion === 2
+        ? project.manifest.manifestVersion === 2 && workflowMode === 'man'
           ? project.manifest.workflowPolicyDefaults.planning
           : 1
         : parent.metadata.governance.policyVersions.planning,

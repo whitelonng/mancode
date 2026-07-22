@@ -170,6 +170,46 @@ describe('schema compatibility gate', () => {
     ).toThrow(/planning-policy:2/);
   });
 
+  it('blocks a 0.3.x CLI at the V2 manifest boundary before policy execution', () => {
+    const base = activeInput({
+      minReaderVersion: '0.4.0',
+      minWriterVersion: '0.4.0',
+    });
+    const manifest: SchemaManifestV2 = {
+      ...base.manifest,
+      manifestVersion: 2,
+      workflowPolicyDefaults: { planning: 2 },
+    };
+    const result = evaluateCompatibilityGate({
+      ...base,
+      manifest,
+      readerVersion: '0.3.18',
+      writerVersion: '0.3.18',
+      writerCapabilities: ['planning-policy:1'],
+      operation: 'v3_business_write',
+    });
+
+    expect(result).toEqual({
+      readAllowed: false,
+      writeAllowed: false,
+      failures: [
+        'MANCODE_READER_VERSION_TOO_OLD',
+        'MANCODE_WRITER_VERSION_TOO_OLD',
+        'MANCODE_WRITER_CAPABILITY_MISSING',
+      ],
+    });
+    expect(() =>
+      assertCompatibilityGate({
+        ...base,
+        manifest,
+        readerVersion: '0.3.18',
+        writerVersion: '0.3.18',
+        writerCapabilities: ['planning-policy:1'],
+        operation: 'v3_business_write',
+      }),
+    ).toThrow(/^MANCODE_READER_VERSION_TOO_OLD:/);
+  });
+
   it('requires the adapter digest and local reframe capabilities for reframe', () => {
     const input = activeInput();
     expectWriteBlocked(

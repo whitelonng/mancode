@@ -116,6 +116,17 @@ describe('project Policy 2 upgrade', () => {
       review: 1,
       verification: 1,
     });
+    const standaloneManba = await createV3Workflow({
+      projectRoot: root,
+      task: 'Keep diagnosis on its established planning policy.',
+      workflowMode: 'manba',
+      sessionId,
+      client: 'vitest',
+      taskId: id(16),
+      operationId: id(17),
+      now: new Date(NOW.getTime() + 2_000),
+    });
+    expect(standaloneManba.metadata.governance.policyVersions.planning).toBe(1);
     const oldMetadata = parseWorkflowMetadata(
       JSON.parse(await readFile(oldMetadataPath, 'utf8')),
     );

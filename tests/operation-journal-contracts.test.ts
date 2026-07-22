@@ -113,6 +113,24 @@ describe('operation journal contract', () => {
     expect(() =>
       assertOperationJournalTransition(applying, aborted, { canAbort: false }),
     ).toThrow(/cannot abort/);
+    const repairRequired = parseOperationJournal({
+      ...applying,
+      state: 'repair_required',
+    });
+    const safelyAbortedRepair = parseOperationJournal({
+      ...repairRequired,
+      state: 'aborted',
+    });
+    expect(() =>
+      assertOperationJournalTransition(repairRequired, safelyAbortedRepair, {
+        canAbort: true,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertOperationJournalTransition(repairRequired, safelyAbortedRepair, {
+        canAbort: false,
+      }),
+    ).toThrow(/cannot abort/);
   });
 });
 
