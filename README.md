@@ -36,7 +36,7 @@
 日常任务用轻量 `solo`，关键任务用季后赛级别的 `/man`，复杂任务让教练组 subagents
 负责调研、计划、实现和审查。
 
-**mancode Continuity（连续上下文运行时）**负责把任务、决策和验证证据安全地带到后续对话。
+**mancode Continuity（跨会话与团队协作运行时）**负责把任务、决策和验证证据安全地带到后续对话，并协调多人或多 Agent 的任务权威。
 
 mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
 GitHub Copilot 和 ZCode。每个平台继续使用原来的 `man*` 入口，并通过静态
@@ -567,7 +567,7 @@ mancode/
 - 确认 ZCode 项目级 skill 发现和 workspace command 路径；完成前继续标记为 provisional。
 - 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
 
-完整发布条件见 [V3 发布验收](./docs/release-acceptance.md)。
+完整发布条件见 [0.4.0 Continuity 发布验收](./docs/release-acceptance.md)。
 
 ## 故障排查
 
@@ -580,7 +580,7 @@ mancode/
 ### Claude Code hooks 不生效
 
 `mancode init` 后需要重启 Claude Code 以重新加载 `.claude/settings.json`。
-运行 `mancode status` 确认 hooks 已注册。V3 adapter 内容异常时，先运行
+运行 `mancode status` 确认 hooks 已注册。Continuity adapter 内容异常时，先运行
 `mancode adapter upgrade --platform claude-code --dry-run`，再用该预览返回的
 `--operation-id`、active session 和 `--confirm` 完成修复。legacy hook 架构仍使用
 `mancode init --legacy --force`。
@@ -641,8 +641,9 @@ npm uninstall -g mancode
 
 ### mancode 和 CLAUDE.md 有什么区别？
 
-`CLAUDE.md` 是静态指导。mancode 增加 hooks、持久化工作流状态、slash-command skills
-和独立审查 subagents。
+`CLAUDE.md` 是静态指导。Continuity 只在其中维护一段始终加载的 Claude Code bootstrap，
+真正的 session、TaskRef、requirements、计划和审查证据仍由 `.mancode/` 的结构化权威管理；
+mancode 还提供 mode skills、持久化工作流和独立审查 subagents。
 
 ### mancode 和 Cursor rules、自定义 prompt、agent instructions 有什么区别？
 

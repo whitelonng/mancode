@@ -1,12 +1,12 @@
 # Continuity 生命周期
 
-本文描述默认 V3 路径。旧 `state.json` 生命周期仅用于显式 `--legacy` 兼容。
+本文描述默认 Continuity 路径。旧 `state.json` 生命周期仅用于显式 `--legacy` 兼容。
 
 ## 初始化
 
 ```text
 mancode init
-  → 检查项目与 legacy/V3 物理布局
+  → 检查项目与 legacy/Continuity 物理布局
   → 检测 Project Profile
   → 创建 schema.json，状态 initializing
   → 写 shared/local/runtime 基础权威

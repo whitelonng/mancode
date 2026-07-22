@@ -112,7 +112,7 @@ describe('V3 adapter bootstrap integration', () => {
         }),
       ).toBe(0);
       const cursorRule = await readFile(
-        path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
+        path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
         'utf8',
       );
       expect(cursorRule).toContain('# mancode bootstrap');
@@ -169,6 +169,30 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain(
         'In operator-facing narration, say `mancode`',
       );
+      expect(bootstrap).toContain(
+        'treat an ordinary requested coding task as default Solo work',
+      );
+      expect(bootstrap).toContain(
+        'Ordinary Solo work requires no actor identity, session, TaskRef, or workflow',
+      );
+      expect(bootstrap).toContain(
+        'A supplied instruction is not automatically sound',
+      );
+      expect(bootstrap).toContain(
+        'classify each remaining unknown as blocking, recommendable, or defaultable',
+      );
+      expect(bootstrap).toContain(
+        'hard-risk change involving authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure',
+      );
+      expect(bootstrap).toContain(
+        'explicitly asking for research, a plan, architecture, migration design, or formal acceptance authorizes the `man` planning path',
+      );
+      expect(bootstrap).toContain(
+        'For governed task work only, if status has no `identity.actorId`',
+      );
+      expect(bootstrap).toContain(
+        'A plain-language Solo request is not a TaskRef and needs no Context Pack.',
+      );
       expect(bootstrap).toContain('mancode team identity create --name');
       expect(bootstrap).toContain(
         '`task: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
@@ -202,7 +226,8 @@ describe('V3 adapter bootstrap integration', () => {
         ),
       ).toBe(true);
       if (platform === 'claude-code') {
-        expect(bootstrap).toContain('user-invocable: false');
+        expect(installed.target).toBe('CLAUDE.md');
+        expect(bootstrap).toContain('mancode:continuity:claude:start');
       }
 
       for (const mode of V3_MODE_NAMES) {
@@ -266,10 +291,14 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             "clears this session's active workflow pointer",
           );
-          expect(entry).toContain('run a clarity gate');
+          expect(entry).toContain('run a decision-readiness gate');
           expect(entry).toContain(
-            'Do not ask ceremonial questions or manufacture alternatives when the request is already clear.',
+            'Do not ask ceremonial questions or manufacture alternatives when the request is already clear and sound.',
           );
+          expect(entry).toContain(
+            'Classify unresolved decisions as blocking, recommendable, or defaultable.',
+          );
+          expect(entry).toContain('2–3 bounded options');
           expect(entry).toContain(
             'stop before requirements finalization, explain the missing decision, ask focused questions, and wait for the user answer.',
           );
@@ -277,8 +306,24 @@ describe('V3 adapter bootstrap integration', () => {
             'never turn an unverified assumption into confirmed scope or confirmed coverage.',
           );
           expect(entry).toContain(
+            'workflow requirements <namespace:ULID> draft --file <requirements.json>',
+          );
+          expect(entry).toContain(
+            'another session can resume the exact clarification state',
+          );
+          expect(entry).toContain(
             'summarize the resolved requirements and any remaining defaults',
           );
+          expect(entry).toContain('clarity does not waive risk');
+        }
+        if (mode === 'manba') {
+          expect(entry).toContain(
+            'establish the expected behavior from reproducible evidence',
+          );
+          expect(entry).toContain(
+            'ask one focused question and wait instead of inventing product behavior',
+          );
+          expect(entry).toContain('explicit but unsound fix instruction');
         }
         if (mode === 'manps') {
           expect(entry).toContain(
@@ -295,21 +340,25 @@ describe('V3 adapter bootstrap integration', () => {
             'Only an explicit governed handoff mutation requires',
           );
           expect(entry).toContain(
-            'assess whether the request is clear and narrow using the project facts',
+            'assess both clarity and soundness using the project facts',
           );
           expect(entry).toContain(
-            'If an unresolved ambiguity could materially change behavior, scope, acceptance, data, security, or compatibility, stop and ask focused questions',
+            'classify the rest as blocking, recommendable, or defaultable',
           );
+          expect(entry).toContain('A supplied implementation direction');
           expect(entry).toContain(
             'recommend `/man`, explain the trigger, and wait for the operator to choose',
           );
         }
         if (mode === 'manteam') {
           expect(entry).toContain(
-            'same conditional clarity gate as `man` before finalizing requirements',
+            'same decision-readiness gate as `man` before finalizing requirements',
           );
           expect(entry).toContain(
-            'if a decision-changing ambiguity remains, ask focused questions and wait before writing confirmed requirements.',
+            'ownership conflict, or hard-risk direction remains',
+          );
+          expect(entry).toContain(
+            'do not leave ownership questions or partial answers only in chat history',
           );
         }
         if (mode === 'man' || mode === 'manba' || mode === 'manteam') {
@@ -347,7 +396,24 @@ describe('V3 adapter bootstrap integration', () => {
     expect(await init(root, { v3: true, platform: 'codex' })).toBe(1);
     const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
     expect(agents).toContain('# User instructions');
-    expect(agents.match(/mancode:v3:codex:start/g)).toHaveLength(1);
+    expect(agents.match(/mancode:continuity:codex:start/g)).toHaveLength(1);
+  });
+
+  it('keeps the Claude bootstrap always loaded without replacing user memory', async () => {
+    const claudeMemory = path.join(root, 'CLAUDE.md');
+    await writeFile(claudeMemory, '# User project memory\n\nKeep this rule.\n');
+
+    await installV3Adapter(root, 'claude-code');
+    await installV3Adapter(root, 'claude-code');
+    const installed = await readFile(claudeMemory, 'utf8');
+    expect(installed).toContain('# User project memory');
+    expect(installed).toContain('Keep this rule.');
+    expect(installed.match(/mancode:continuity:claude:start/g)).toHaveLength(1);
+
+    await removeV3Adapter(root, 'claude-code');
+    const removed = await readFile(claudeMemory, 'utf8');
+    expect(removed).toContain('# User project memory');
+    expect(removed).not.toContain('mancode:continuity:claude');
   });
 
   it('stages the bootstrap and every original mode entry without changing live files', async () => {
@@ -370,7 +436,10 @@ describe('V3 adapter bootstrap integration', () => {
       readFile(path.join(root, '.cursor', 'commands', 'man.md'), 'utf8'),
     ).rejects.toThrow();
     await expect(
-      readFile(path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'), 'utf8'),
+      readFile(
+        path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
+        'utf8',
+      ),
     ).rejects.toThrow();
   });
 
@@ -619,7 +688,7 @@ describe('V3 adapter bootstrap integration', () => {
             '.mancode',
             'staging',
             'adapters',
-            'v3',
+            'continuity',
             'codex',
             'AGENTS.md',
           ),

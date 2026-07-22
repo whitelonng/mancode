@@ -34,8 +34,9 @@ different gears for different stakes: light solo mode for daily practice, `/man`
 for playoff-level engineering discipline, and coaching-staff subagents for
 research, planning, implementation, and review.
 
-**mancode Continuity** is the continuous-context runtime that carries tasks,
-decisions, and verification evidence safely into later conversations.
+**mancode Continuity** is the cross-session and team-collaboration runtime that
+carries tasks, decisions, and verification evidence safely into later
+conversations.
 
 [Installation](#installation) · [Usage](#usage)
 
@@ -622,7 +623,7 @@ mancode/
   adapter provisional until then.
 - Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
 
-See [V3 Release Acceptance](./docs/release-acceptance.md) for the complete gate.
+See [0.4.0 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
 
 ## Troubleshooting
 
@@ -637,7 +638,7 @@ a deliberately empty directory.
 ### Claude Code hooks not triggering
 
 After `mancode init`, restart Claude Code so it reloads `.claude/settings.json`.
-Run `mancode status` to verify hooks are registered. For V3 adapter drift, preview
+Run `mancode status` to verify hooks are registered. For Continuity adapter drift, preview
 `mancode adapter upgrade --platform claude-code --dry-run`, then repair that
 preview with its `--operation-id`, an active session, and `--confirm`. The legacy
 hook architecture still uses `mancode init --legacy --force`.
@@ -702,8 +703,11 @@ use.
 
 ### How is mancode different from a CLAUDE.md file?
 
-A `CLAUDE.md` file is static guidance. mancode adds hooks, persisted workflow
-state, slash-command skills, and separate review subagents with clean context.
+A `CLAUDE.md` file is static guidance. Continuity maintains one always-loaded
+Claude Code bootstrap block there, while sessions, TaskRefs, requirements,
+plans, and review evidence remain structured authority under `.mancode/`.
+mancode also adds mode skills, persisted workflows, and separate review
+subagents with clean context.
 
 ### How is mancode different from Cursor rules, custom prompts, or agent instructions?
 

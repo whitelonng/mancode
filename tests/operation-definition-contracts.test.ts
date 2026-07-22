@@ -11,7 +11,7 @@ const ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7H';
 
 describe('machine-readable operation definitions', () => {
   it('gives every hard-consistency operation steps, a visible commit point, and crash recovery fixtures', () => {
-    expect(Object.keys(OPERATION_DEFINITIONS)).toHaveLength(26);
+    expect(Object.keys(OPERATION_DEFINITIONS)).toHaveLength(27);
     for (const definition of Object.values(OPERATION_DEFINITIONS)) {
       expect(definition.steps.at(-1)).toMatchObject({
         id: 'commit',

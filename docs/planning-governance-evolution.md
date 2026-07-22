@@ -14,11 +14,12 @@
 
 | 类别 | 状态 | 证据 |
 | --- | --- | --- |
-| A–F 实现工作包 | 工作树生产加固完成 | `4dc2e7e` 包含 Policy 2 mode scope、resolver 短路和 adapter target recovery 修复；本轮又补齐 required adapter readiness、真实 reframe 并发和已发布旧 CLI 黑盒证据，等待形成下一候选 |
-| 本地发布前检查 | 工作树通过 | 本轮 `npm run prepublishOnly` 通过：lint、typecheck、build、dist adapter 验证、119 个测试文件/824 个测试；`npm audit --omit=dev`、`npm pack --dry-run` 和实际 tarball 安装/CLI/module smoke 均通过，形成候选后仍需在干净 checkout 重跑 |
+| A–F 实现工作包 | 工作树生产加固完成 | `4dc2e7e` 包含 Policy 2 mode scope、resolver 短路和 adapter target recovery 修复；本轮又补齐 required adapter readiness、真实 reframe 并发、已发布旧 CLI 黑盒证据、条件式 decision-readiness、跨会话 requirements draft 和 Continuity 命名迁移，等待形成下一候选 |
+| 本地发布前检查 | 工作树通过 | 本轮 `npm run prepublishOnly` 通过：lint、typecheck、build、dist adapter 验证、119 个测试文件/833 个测试；`npm audit --omit=dev`、`npm pack --dry-run` 和实际 tarball/Claude Code smoke 均通过，形成候选后仍需在干净 checkout 重跑 |
 | GitHub Quality gate | 候选通过 | `4dc2e7e` 的 [Quality gate run 29896302856](https://github.com/whitelonng/mancode/actions/runs/29896302856) 成功；候选变化后必须重跑 |
 | GitHub Windows gate | 候选通过 | `4dc2e7e` 的 [Windows gate run 29896302904](https://github.com/whitelonng/mancode/actions/runs/29896302904) 在 CMD、PowerShell、Git Bash 全部成功；候选变化后必须重跑 |
 | `develop` 远程一致性 | 候选已对齐 | `4dc2e7e` 已与 `origin/develop` 对齐；后续工作树修复形成新候选后需重新推送和对齐，`main` 未修改 |
+| Claude Code 条件式澄清实测 | 工作树通过 | Claude Code 2.1.142 使用本地 0.4.0 tarball：清晰请求直接执行，需求不清晰时提问等待，明确但与证据冲突的请求被拦截；真实测试同时发现并修复了隐藏 bootstrap skill 未稳定加载的问题，最终改为 `CLAUDE.md` 受控区，候选形成后仍需重跑 |
 | 最终发布验收 | 未完成 | 五平台真实宿主、跨 clone/legacy 人工验收、最终 Beta gate 和干净 checkout tarball 验收仍待完成 |
 | npm 发布 | 未执行 | 在上项全部完成前保持禁止 |
 
@@ -49,7 +50,7 @@
 
 ## 3. 基线证据与代码 owner
 
-以下证据以当前工作树的 V3 实现为准。候选形成前后都应重新运行对应 contract；如果在途改动改变了行号或行为，更新证据而不是沿用旧结论。
+以下证据以当前工作树的 Continuity 实现为准。候选形成前后都应重新运行对应 contract；如果在途改动改变了行号或行为，更新证据而不是沿用旧结论。
 
 | 事实 | 当前证据 | 对本计划的影响 |
 | --- | --- | --- |
@@ -109,7 +110,7 @@ Plan Coach 继续是只读组件。它在产生计划前执行以下检查：
 2. 每个选项的复杂度由谁承担：实现代码、迁移、运行维护、用户操作、兼容层或测试。不能只写“更简单”，要写承担者和可观察成本。
 3. 输出唯一推荐，并给出拒绝其他选项的主要理由。推荐不是“由用户决定”；用户仍可否决，但计划不能同时保留多个未决方向。
 4. 简单任务可以只列一个明显可行方向，并标注为什么没有真实替代方案；不能为了满足“多选”制造伪选项。
-5. V3 mode entry 在 requirements finalize 前执行条件式 clarity gate：清晰需求不制造形式问题；仍有会改变目标、范围、行为、验收、owner/source of truth 或关键约束的歧义时，必须停下提问并等待用户回答，不得把未验证假设写成 confirmed requirements。
+5. Continuity mode entry 在 requirements finalize 前执行条件式 decision-readiness gate：同时检查清晰度、与项目证据的一致性和风险；清晰且可靠的需求不制造形式问题，仍有会改变目标、范围、行为、验收、owner/source of truth 或关键约束的歧义时，必须停下提问并等待用户回答，不得把未验证假设写成 confirmed requirements。
 
 建议的输出契约：
 
@@ -328,7 +329,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - policy parser：1 可接受；0、负数、小数、未知正整数、缺失值和错误 component 均拒绝。
 - workflow create：未升级项目只写 1；升级项目新 `/man` 写 2；已有 workflow 的 policy provenance 不变。
 - Plan Coach：不同目标、无复杂度承担者、多个 recommendation、无 stop condition 均返回 `NEEDS_CLARIFICATION`；简单任务单方向通过。
-- V3 `/man`、`/manteam` 和 Solo mode entry 的条件式 clarity gate：清晰请求直接继续，决策性歧义在 requirements finalize 或代码修改前停下并等待用户回答；不强制无意义提问。
+- Continuity `/man`、`/manteam` 和 Solo mode entry 的条件式 decision-readiness gate：清晰且可靠的请求直接继续，决策性歧义在 requirements finalize 或代码修改前停下并等待用户回答；不强制无意义提问。
 - stop/re-align：触发时返回 `NEEDS_REALIGNMENT + MANCODE_REFRAME_REQUIRED`，且 authority 的前后 digest 完全相同。
 - Scout/Domain Matrix：可选字段不进入 metadata；高风险 plan 可包含章节；普通任务不被强制增加文件。
 - digest：内容、marker、路径、换行、截断、用户托管区域变化分别得到预期结果；manifest echo 与磁盘不一致必为 stale。
@@ -368,10 +369,10 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 当前 gate 结果如下。`[x]` 仅表示实现和自动化证据完成；真实宿主或发布验收未完成时，仍不得发布 npm。
 
 - [x] 模板和文档 contract 通过；advisory 不直接执行 schema migration、policy 写入或自动 step 变更。
-- [x] 旧 V3 fixture、legacy fixture、已有 adapter 和历史 workflow 通过原有测试。
+- [x] 旧 layout-version-3 fixture、legacy fixture、已有 adapter 和历史 workflow 通过原有测试。
 - [x] 触发 stop/re-align 时只返回 `NEEDS_REALIGNMENT + MANCODE_REFRAME_REQUIRED`，authority 文件内容和 claims 不变。
 - [x] Scout/Plan Coach 新字段和规则覆盖正常、缺失证据、冲突 owner、单方向简单任务。
-- [x] V3 mode entry 恢复条件式需求澄清：清晰需求不机械追问，决策性歧义必须在 finalize/实施前向用户提问并等待回答；五平台生成契约覆盖。
+- [x] Continuity mode entry 恢复条件式需求澄清：清晰需求不机械追问，决策性歧义必须在 finalize/实施前向用户提问并等待回答；五平台生成契约覆盖。
 - [x] adapter digest algorithm、status 分类、stale error、explicit upgrade command 和 recovery contract 完成。
 - [x] policy parser 白名单、writer capability、`minWriterVersion`/reader gate 和 0.3.x + V2 manifest 拒绝 contract 完成；本轮已增加真实发布版 0.3.18 CLI 的黑盒写入拒绝与 authority 全树字节不变证据，后续候选仍需重跑。
 - [x] project upgrade dry-run、确认、commit、repair、abort 和 provenance 完成；现有 workflow 未被批量重写，新 `/man` Policy 2 默认值有明确创建证据。

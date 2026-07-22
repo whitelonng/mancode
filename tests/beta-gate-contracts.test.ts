@@ -45,7 +45,7 @@ describe('V3 Beta gate', () => {
   });
 
   it('refuses Beta while real-host spike evidence and adapters are missing', async () => {
-    await rm(path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'));
+    await rm(path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'));
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       expect(

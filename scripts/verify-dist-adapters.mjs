@@ -19,9 +19,9 @@ try {
   runCli(['init', '--empty', '--platform', 'all', '--lang', 'en']);
 
   const generatedFiles = [
-    '.claude/skills/mancode-v3/SKILL.md',
+    'CLAUDE.md',
     '.claude/skills/man/SKILL.md',
-    '.cursor/rules/mancode-v3.mdc',
+    '.cursor/rules/mancode-continuity.mdc',
     '.cursor/commands/man.md',
     'AGENTS.md',
     '.agents/skills/man/SKILL.md',
@@ -30,7 +30,10 @@ try {
   ];
 
   for (const relativePath of generatedFiles) {
-    const content = await readFile(path.join(projectRoot, relativePath), 'utf8');
+    const content = await readFile(
+      path.join(projectRoot, relativePath),
+      'utf8',
+    );
     assertGeneratedContract(relativePath, content);
   }
 
@@ -79,6 +82,8 @@ function assertGeneratedContract(relativePath, content) {
     'mancode status --json',
     'authority: "v3"',
     'v3_active',
+    'mancode-v3',
+    'mancode:v3',
   ]) {
     assert(
       !content.includes(forbidden),

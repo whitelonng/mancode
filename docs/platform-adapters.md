@@ -6,7 +6,7 @@
 
 | 平台 | 入口与文件 | 动态能力 | 当前边界 |
 |---|---|---|---|
-| Claude Code | `.claude/skills/` | skills；legacy 模式可用 hooks | 默认 V3 不依赖旧 `state.json` hooks |
+| Claude Code | `CLAUDE.md` 托管区、`.claude/skills/` | 项目 memory 与 mode skills；legacy 模式可用 hooks | 默认 Continuity 不依赖旧 `state.json` hooks |
 | Cursor | `.cursor/rules/`、`.cursor/commands/` | rules 与 commands | 无 mancode 原生 session API |
 | Codex | `AGENTS.md` 托管区、`.agents/skills/` | `$man*` skills | session 传播需真实宿主证据 |
 | GitHub Copilot | instruction 托管区、`.github/prompts/` | instructions 与 prompts | 能力依具体 Copilot 宿主而异 |
@@ -28,14 +28,16 @@ manifest 的 `managedAdapters` key 是项目登记的 required 平台集合。gr
 每个平台都必须：
 
 - 能发现原来的 `man`、`manba`、`manteam`、`manps` 和 `mansolo` 入口。
-- 在开始任务前解析 V3 schema、session、TaskRef 和 Context Pack。
+- 在开始任务前解析 Continuity manifest、session、TaskRef 和 Context Pack。
 - 不保存易过期的 task/session 状态副本。
 - 未证明宿主 session 传播时要求显式 session。
 - 保留用户自写配置，并支持重复安装和安全卸载。
 
 ## Legacy hooks
 
-只有 `mancode init --legacy` 安装读取 `.mancode/state.json` 的旧 Claude Code hooks。V3 adapter 不应创建、读取或刷新 legacy authority。
+只有 `mancode init --legacy` 安装读取 `.mancode/state.json` 的旧 Claude Code hooks。Continuity adapter 不应创建、读取或刷新 legacy authority。
+
+Continuity 的 Claude Code bootstrap 位于根目录 `CLAUDE.md` 的 `mancode:continuity:claude` 托管区，确保普通 Solo 请求也会加载；原有 mode skills 仍位于 `.claude/skills/`。Cursor bootstrap 位于 `.cursor/rules/mancode-continuity.mdc`，其他嵌入式托管区同样使用 `mancode:continuity:*` 标记。升级时只自动移除带 mancode 旧管理标记的 `mancode-v3`/旧 Continuity bootstrap 或托管区；用户在 `CLAUDE.md` 和同名旧文件中的自写内容会保留。
 
 Windows 上的脚本与文件替换不能依赖 Bash、jq 或 Unix rename 行为。发布流程包含 CMD、PowerShell 和 Git Bash smoke test。
 

@@ -43,6 +43,10 @@ export const OPERATION_AUTHORIZATION_ACTIONS: Record<
 > = {
   workflow_create: ['local_workflow_mutation', 'shared_create_publish_promote'],
   workflow_update: ['local_workflow_mutation', 'shared_metadata_plan_mutation'],
+  requirements_draft: [
+    'local_workflow_mutation',
+    'shared_metadata_plan_mutation',
+  ],
   requirements_finalize: [
     'local_workflow_mutation',
     'shared_metadata_plan_mutation',
@@ -174,6 +178,24 @@ export const OPERATION_DEFINITIONS: Record<
     [
       prepare('validate', ['task:'], ['task:']),
       write('write-metadata', ['task:'], ['task:']),
+      write('update-task-head-fence', ['task_head:', 'task:'], ['task:']),
+      commit('commit', ['task_head:', 'task:'], ['task:']),
+    ],
+  ),
+  requirements_draft: definition(
+    'requirements_draft',
+    'update-metadata',
+    true,
+    false,
+    [
+      prepare('validate', ['task:'], ['task:']),
+      write('write-requirements', ['requirements:', 'task:'], ['task:']),
+      write(
+        'mark-review-verification-stale',
+        ['review:', 'verification:', 'task:'],
+        ['task:'],
+      ),
+      write('update-metadata', ['task:'], ['task:']),
       write('update-task-head-fence', ['task_head:', 'task:'], ['task:']),
       commit('commit', ['task_head:', 'task:'], ['task:']),
     ],

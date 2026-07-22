@@ -12,7 +12,7 @@ Project Profile 记录：
 - 是否检测到 UI 资产和浏览器自动化能力。
 - high、medium 或 low 置信度。
 
-普通 V3 初始化把可共享项目事实写入 `.mancode/shared/context/project.json`。项目结构变化后运行：
+普通 Continuity 初始化把可共享项目事实写入 `.mancode/shared/context/project.json`。项目结构变化后运行：
 
 ```bash
 mancode refresh-project

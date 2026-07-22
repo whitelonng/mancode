@@ -53,6 +53,8 @@ export interface FinalizeV3RequirementsInput {
   now?: Date;
 }
 
+export type SaveV3RequirementsDraftInput = FinalizeV3RequirementsInput;
+
 export interface FinalizedV3Requirements {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
@@ -72,13 +74,40 @@ export interface FinalizedV3Requirements {
 export async function finalizeV3Requirements(
   input: FinalizeV3RequirementsInput,
 ): Promise<FinalizedV3Requirements> {
+  return writeV3Requirements(input, 'finalize');
+}
+
+/**
+ * Persists an incomplete clarification ledger without claiming that its scope
+ * or coverage is confirmed. A later session can resume the TaskRef and read the
+ * open questions from the normal plan Context Pack.
+ */
+export async function saveV3RequirementsDraft(
+  input: SaveV3RequirementsDraftInput,
+): Promise<FinalizedV3Requirements> {
+  return writeV3Requirements(input, 'draft');
+}
+
+async function writeV3Requirements(
+  input: FinalizeV3RequirementsInput,
+  action: 'draft' | 'finalize',
+): Promise<FinalizedV3Requirements> {
   const taskRef = parseTaskRefValue(input.taskRef);
   const submitted = parseRequirementsLedger(input.requirements);
   if (!sameTaskRef(submitted.taskRef, taskRef)) {
     throw new Error('MANCODE_REQUIREMENTS_TASK_REF_MISMATCH');
   }
-  if (submitted.status !== 'confirmed') {
+  if (action === 'finalize' && submitted.status !== 'confirmed') {
     throw new Error('MANCODE_REQUIREMENTS_CONFIRMATION_REQUIRED');
+  }
+  if (action === 'draft' && submitted.status !== 'draft') {
+    throw new Error('MANCODE_REQUIREMENTS_DRAFT_REQUIRED');
+  }
+  if (
+    action === 'draft' &&
+    !submitted.blockingUnknowns.some((unknown) => unknown.status === 'open')
+  ) {
+    throw new Error('MANCODE_REQUIREMENTS_DRAFT_BLOCKER_REQUIRED');
   }
 
   const context = await openV3TaskOperation({
@@ -95,11 +124,12 @@ export async function finalizeV3Requirements(
   try {
     assertRequirementsFinalizeEligible(context.task.metadata);
     const timestamp = context.now.toISOString();
-    const requirements = createFinalRequirements(
+    const requirements = createReplacementRequirements(
       context.task.requirements,
       submitted,
       context.operationId,
       timestamp,
+      action === 'draft' ? 'draft' : 'confirmed',
     );
     const review = markTaskReviewStale(
       context.task.review,
@@ -130,7 +160,7 @@ export async function finalizeV3Requirements(
     const taskHeadFence = nextTaskHeadFence(context, aggregate, timestamp);
 
     journal = await createTaskOperationJournal(context, {
-      type: 'requirements_finalize',
+      type: action === 'draft' ? 'requirements_draft' : 'requirements_finalize',
       action:
         taskRef.namespace === 'shared'
           ? 'shared_metadata_plan_mutation'
@@ -271,17 +301,18 @@ function assertRequirementsFinalizeEligible(
   }
 }
 
-function createFinalRequirements(
+function createReplacementRequirements(
   previous: RequirementsLedgerV1,
   submitted: RequirementsLedgerV1,
   operationId: Ulid,
   updatedAt: string,
+  status: 'draft' | 'confirmed',
 ): RequirementsLedgerV1 {
   const draft: RequirementsLedgerV1 = {
     ...submitted,
     taskRef: previous.taskRef,
     revision: previous.revision + 1,
-    status: 'confirmed',
+    status,
     contentDigest: '',
     lastOperationId: operationId,
     updatedAt,
@@ -310,7 +341,8 @@ function updateMetadata(
     lastOperationId: operationId,
     governance: {
       ...previous.governance,
-      requirementsStatus: 'ready',
+      requirementsStatus:
+        requirements.status === 'confirmed' ? 'ready' : 'needs_clarification',
       requirementsDigest: requirements.contentDigest,
       reviewStatus: review.status,
       reviewLedgerDigest: review.contentDigest,

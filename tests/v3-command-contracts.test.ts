@@ -767,6 +767,135 @@ describe('V3 CLI command contracts', () => {
     }
   });
 
+  it('persists incomplete clarification and resumes it from another session', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await teamIdentityCreate(root, { name: 'Fixture User', json: true });
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const firstSessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      await workflow(
+        root,
+        'create',
+        ['man', 'Choose the durable notification owner.'],
+        {
+          session: firstSessionId,
+          client: 'fixture',
+          json: true,
+        },
+      );
+      const created = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        taskRef: TaskRef;
+      };
+      const task = `${created.taskRef.namespace}:${created.taskRef.taskId}`;
+      const draftPath = path.join(root, 'requirements-draft.json');
+      await writeFile(
+        draftPath,
+        `${JSON.stringify(
+          {
+            version: 1,
+            goal: 'Deliver durable notifications.',
+            confirmedScope: [],
+            excludedScope: [],
+            technicalDecisions: [],
+            defaults: [],
+            blockingUnknowns: [
+              'Choose whether the database or queue owns delivery state.',
+            ],
+            coverage: [],
+            acceptanceCriteria: [],
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      expect(
+        await workflow(root, 'requirements', [task, 'draft'], {
+          session: firstSessionId,
+          client: 'fixture',
+          expectedRevision: '1',
+          file: draftPath,
+          json: true,
+        }),
+      ).toBe(0);
+      const saved = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        metadata: {
+          revision: number;
+          governance: { requirementsStatus: string };
+        };
+        requirements: RequirementsLedgerV1;
+        operation: { type: string; state: string };
+      };
+      expect(saved).toMatchObject({
+        metadata: {
+          revision: 2,
+          governance: { requirementsStatus: 'needs_clarification' },
+        },
+        requirements: {
+          status: 'draft',
+          blockingUnknowns: [
+            {
+              statement:
+                'Choose whether the database or queue owns delivery state.',
+              status: 'open',
+            },
+          ],
+        },
+        operation: { type: 'requirements_draft', state: 'committed' },
+      });
+
+      await contextSessionNew(root, { client: 'fixture', json: true });
+      const secondSessionId = (
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+          session: { sessionId: string };
+        }
+      ).session.sessionId;
+      expect(secondSessionId).not.toBe(firstSessionId);
+      expect(
+        await contextResume(root, task, {
+          session: secondSessionId,
+          client: 'fixture',
+          json: true,
+        }),
+      ).toBe(0);
+      expect(
+        await contextShow(root, {
+          task,
+          session: secondSessionId,
+          client: 'fixture',
+          purpose: 'plan',
+          level: 'task',
+          json: true,
+        }),
+      ).toBe(0);
+      const resumed = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        pack: {
+          governance: {
+            requirements: RequirementsLedgerV1;
+          };
+        };
+      };
+      expect(resumed.pack.governance.requirements).toMatchObject({
+        status: 'draft',
+        blockingUnknowns: [
+          {
+            statement:
+              'Choose whether the database or queue owns delivery state.',
+            status: 'open',
+          },
+        ],
+      });
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
   it('requires reframe concurrency inputs and returns the committed JSON contract', async () => {
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});

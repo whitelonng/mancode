@@ -255,8 +255,8 @@ describe('legacy migration stage contract', () => {
     expect(migratedAgents).toContain('# User instructions');
     expect(migratedAgents).not.toContain('Legacy mancode instructions');
     expect(migratedAgents).not.toContain('Legacy ZCode mancode instructions');
-    expect(migratedAgents).toContain('mancode:v3:codex:start');
-    expect(migratedAgents).toContain('mancode:v3:zcode:start');
+    expect(migratedAgents).toContain('mancode:continuity:codex:start');
+    expect(migratedAgents).toContain('mancode:continuity:zcode:start');
     const migratedClaudeSettings = await readFile(
       path.join(root, '.claude', 'settings.json'),
       'utf8',

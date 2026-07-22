@@ -9,7 +9,10 @@ import {
   promoteV3Task,
 } from '../context/publish-promote.js';
 import { reframeV3Workflow } from '../context/reframe.js';
-import { finalizeV3Requirements } from '../context/requirements-finalize.js';
+import {
+  finalizeV3Requirements,
+  saveV3RequirementsDraft,
+} from '../context/requirements-finalize.js';
 import { applyV3ReviewLedger } from '../context/review-remediation.js';
 import { changeV3WorkflowScope } from '../context/scope-change.js';
 import {
@@ -1301,11 +1304,11 @@ async function workflowRequirementsV3(
 ): Promise<number> {
   const task = args[0];
   const action = args[1];
-  if (!task || action !== 'finalize' || !options.file) {
+  if (!task || (action !== 'draft' && action !== 'finalize') || !options.file) {
     return printV3Error(
       options.json,
       'MANCODE_REQUIREMENTS_ARGUMENT_INVALID',
-      'Use: workflow requirements <namespace:ULID> finalize --expected-revision <n> --file <path>.',
+      'Use: workflow requirements <namespace:ULID> <draft|finalize> --expected-revision <n> --file <path>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -1314,7 +1317,7 @@ async function workflowRequirementsV3(
     return printV3Error(
       options.json,
       'MANCODE_EXPECTED_REVISION_REQUIRED',
-      'Requirements finalization requires --expected-revision <positive integer>.',
+      'Requirements draft/finalization requires --expected-revision <positive integer>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -1326,8 +1329,15 @@ async function workflowRequirementsV3(
       project.projectRoot,
       options.file,
     );
-    const requirements = normalizeRequirementsInput(requirementsInput, taskRef);
-    const result = await finalizeV3Requirements({
+    const requirements = normalizeRequirementsInput(
+      requirementsInput,
+      taskRef,
+      new Date(),
+      { allowIncomplete: action === 'draft' },
+    );
+    const writeRequirements =
+      action === 'draft' ? saveV3RequirementsDraft : finalizeV3Requirements;
+    const result = await writeRequirements({
       projectRoot: project.projectRoot,
       taskRef,
       sessionId: session.sessionId,
@@ -1351,7 +1361,7 @@ async function workflowRequirementsV3(
       v3ErrorCode(error, 'MANCODE_V3_REQUIREMENTS_FINALIZE_FAILED'),
       error instanceof Error
         ? error.message
-        : 'Unable to finalize mancode requirements.',
+        : `Unable to ${action === 'draft' ? 'save the mancode requirements draft' : 'finalize mancode requirements'}.`,
     );
   }
 }

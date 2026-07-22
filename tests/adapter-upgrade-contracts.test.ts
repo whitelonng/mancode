@@ -121,7 +121,7 @@ describe('adapter managed-content digest and upgrade', () => {
 
     await writeFile(
       agentsPath,
-      original.replace('<!-- mancode:v3:codex:end -->', ''),
+      original.replace('<!-- mancode:continuity:codex:end -->', ''),
     );
     await expect(inspectV3Adapter(root, 'codex')).resolves.toMatchObject({
       status: 'stale',
@@ -154,7 +154,7 @@ describe('adapter managed-content digest and upgrade', () => {
   });
 
   it('stages a dry-run without publishing live targets, then commits explicitly', async () => {
-    const live = path.join(root, '.cursor', 'rules', 'mancode-v3.mdc');
+    const live = path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc');
     const preview = await upgradeV3Adapters({
       projectRoot: root,
       platforms: ['cursor'],
@@ -210,7 +210,10 @@ describe('adapter managed-content digest and upgrade', () => {
       }),
     ).rejects.toThrow('MANCODE_EXPLICIT_CONFIRMATION_REQUIRED');
     await expect(
-      readFile(path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'), 'utf8'),
+      readFile(
+        path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
+        'utf8',
+      ),
     ).rejects.toThrow();
     await expect(
       readFile(
@@ -223,7 +226,7 @@ describe('adapter managed-content digest and upgrade', () => {
           operationId,
           '.cursor',
           'rules',
-          'mancode-v3.mdc',
+          'mancode-continuity.mdc',
         ),
         'utf8',
       ),
@@ -241,7 +244,7 @@ describe('adapter managed-content digest and upgrade', () => {
     });
     await mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
     await writeFile(
-      path.join(root, '.cursor', 'rules', 'mancode-v3.mdc'),
+      path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
       '# User-owned cursor rule\n',
     );
 
@@ -256,6 +259,171 @@ describe('adapter managed-content digest and upgrade', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('migrates managed V3 bootstrap paths and markers to Continuity', async () => {
+    const legacyRule = path.join(root, '.cursor', 'rules', 'mancode-v3.mdc');
+    const legacyMode = path.join(root, '.cursor', 'commands', 'man.md');
+    await mkdir(path.dirname(legacyRule), { recursive: true });
+    await mkdir(path.dirname(legacyMode), { recursive: true });
+    await writeFile(
+      legacyRule,
+      '<!-- Managed by mancode:v3-adapter. Do not edit this marker. -->\n# old bootstrap\n',
+    );
+    await writeFile(
+      legacyMode,
+      '<!-- Managed by mancode:v3-mode-entry. Do not edit this marker. -->\n# old mode\n',
+    );
+
+    const operationId = id(15);
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['cursor'],
+      dryRun: true,
+      operationId,
+      now: NOW,
+    });
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['cursor'],
+      explicitConfirmation: true,
+      sessionId,
+      operationId,
+      now: NOW,
+    });
+
+    await expect(readFile(legacyRule, 'utf8')).rejects.toThrow();
+    await expect(readFile(legacyMode, 'utf8')).resolves.toContain(
+      'mancode:continuity-mode-entry',
+    );
+    await expect(inspectV3Adapter(root, 'cursor')).resolves.toMatchObject({
+      status: 'ready',
+      target: '.cursor/rules/mancode-continuity.mdc',
+    });
+
+    const legacyClaudeSkill = path.join(
+      root,
+      '.claude',
+      'skills',
+      'mancode-v3',
+      'SKILL.md',
+    );
+    await mkdir(path.dirname(legacyClaudeSkill), { recursive: true });
+    await writeFile(
+      legacyClaudeSkill,
+      '<!-- Managed by mancode:v3-adapter. Do not edit this marker. -->\n# old bootstrap\n',
+    );
+    const retiredContinuitySkill = path.join(
+      root,
+      '.claude',
+      'skills',
+      'mancode-continuity',
+      'SKILL.md',
+    );
+    await mkdir(path.dirname(retiredContinuitySkill), { recursive: true });
+    await writeFile(
+      retiredContinuitySkill,
+      '<!-- Managed by mancode:continuity-adapter. Do not edit this marker. -->\n# retired bootstrap\n',
+    );
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['claude-code'],
+      dryRun: true,
+      operationId: id(19),
+      now: NOW,
+    });
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['claude-code'],
+      explicitConfirmation: true,
+      sessionId,
+      operationId: id(19),
+      now: NOW,
+    });
+    await expect(readFile(legacyClaudeSkill, 'utf8')).rejects.toThrow();
+    await expect(readFile(retiredContinuitySkill, 'utf8')).rejects.toThrow();
+    await expect(inspectV3Adapter(root, 'claude-code')).resolves.toMatchObject({
+      status: 'ready',
+      target: 'CLAUDE.md',
+    });
+  });
+
+  it('preserves a user-authored file at the retired V3 path', async () => {
+    const legacyRule = path.join(root, '.cursor', 'rules', 'mancode-v3.mdc');
+    await mkdir(path.dirname(legacyRule), { recursive: true });
+    await writeFile(legacyRule, '# User-owned legacy-named cursor rule\n');
+
+    const operationId = id(16);
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['cursor'],
+      dryRun: true,
+      operationId,
+      now: NOW,
+    });
+    await upgradeV3Adapters({
+      projectRoot: root,
+      platforms: ['cursor'],
+      explicitConfirmation: true,
+      sessionId,
+      operationId,
+      now: NOW,
+    });
+
+    await expect(readFile(legacyRule, 'utf8')).resolves.toBe(
+      '# User-owned legacy-named cursor rule\n',
+    );
+    await expect(inspectV3Adapter(root, 'cursor')).resolves.toMatchObject({
+      status: 'ready',
+    });
+  });
+
+  it.each([
+    ['codex', 'AGENTS.md', 'codex'],
+    ['zcode', 'AGENTS.md', 'zcode'],
+    ['copilot', '.github/copilot-instructions.md', 'copilot'],
+  ] as const)(
+    'replaces legacy embedded V3 markers for %s without touching user content',
+    async (platform, relativeTarget, markerName) => {
+      const target = path.join(root, relativeTarget);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(
+        target,
+        [
+          '# User instructions',
+          `<!-- mancode:v3:${markerName}:start -->`,
+          '# old managed bootstrap',
+          `<!-- mancode:v3:${markerName}:end -->`,
+          '',
+        ].join('\n'),
+      );
+
+      const operationId = id(17);
+      await upgradeV3Adapters({
+        projectRoot: root,
+        platforms: [platform],
+        dryRun: true,
+        operationId,
+        now: NOW,
+      });
+      await upgradeV3Adapters({
+        projectRoot: root,
+        platforms: [platform],
+        explicitConfirmation: true,
+        sessionId,
+        operationId,
+        now: NOW,
+      });
+
+      const content = await readFile(target, 'utf8');
+      expect(content).toContain('# User instructions');
+      expect(content).not.toContain(`mancode:v3:${markerName}`);
+      expect(
+        content.match(
+          new RegExp(`mancode:continuity:${markerName}:start`, 'g'),
+        ),
+      ).toHaveLength(1);
+    },
+  );
 
   it('upgrades all platforms while journaling shared targets only once', async () => {
     await upgradeV3Adapters({
@@ -286,8 +454,8 @@ describe('adapter managed-content digest and upgrade', () => {
       upgraded.filePlans.filter((plan) => plan.target === 'agents-mode-man'),
     ).toHaveLength(1);
     const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
-    expect(agents).toContain('<!-- mancode:v3:codex:start -->');
-    expect(agents).toContain('<!-- mancode:v3:zcode:start -->');
+    expect(agents).toContain('<!-- mancode:continuity:codex:start -->');
+    expect(agents).toContain('<!-- mancode:continuity:zcode:start -->');
   });
 
   it('recovers every five-platform target from its write-before and write-after boundary', async () => {

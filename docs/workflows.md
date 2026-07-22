@@ -18,7 +18,23 @@ mancode 不把“当前模式”保存成全局开关。平台入口创建或恢
 
 `solo` 和 `/man` 都先判断需求是否足够清晰，不机械追问。目标、范围、验收边界和关键约束可以从用户请求、项目事实或明确的安全默认值确定时，直接继续；不需要为了形式制造问题。
 
-如果仍有会改变目标、范围、用户可见行为、验收、架构、数据、安全、兼容性、owner 或 source of truth 的歧义，必须先向用户提出聚焦问题并等待回答。回答前不得把假设写成 confirmed requirements；复杂度、owner、迁移、跨模块或团队决策超出 Solo 边界时，应推荐 `/man` 并等待用户选择。该判断属于 V3 mode skill 的固定行为契约。
+如果仍有会改变目标、范围、用户可见行为、验收、架构、数据、安全、兼容性、owner 或 source of truth 的歧义，必须先向用户提出聚焦问题并等待回答。回答前不得把假设写成 confirmed requirements；复杂度、owner、迁移、跨模块或团队决策超出 Solo 边界时，应推荐 `/man` 并等待用户选择。该判断属于 Continuity mode entry 的固定行为契约。
+
+| 输入状态 | 处理方式 |
+| --- | --- |
+| 目标与需求清晰、与项目证据一致、风险低 | 默认 Solo 直接执行最窄改动，不创建 session 或 TaskRef，不做形式化追问 |
+| 目标清晰、需求有缺口 | 先把未知项分成 blocking、recommendable、defaultable；只为会改变决策的 blocking 项停下提问 |
+| 表述明确但与项目证据冲突，或涉及认证、支付、敏感数据、删除、迁移、公开 API、并发、基础设施等高风险边界 | 展示证据和影响，推荐更安全路径，取得聚焦确认后再继续；“明确”不等于“正确或安全” |
+| 用户明确请求计划、架构、迁移设计或正式验收 | 可直接进入 `/man` 规划路径；普通实现中途遇到这类决策时只推荐 `/man`，不得静默切换权威 |
+
+受治理任务在等待 blocking 回答前，必须把已知事实、部分决定和开放问题写入 requirements draft：
+
+```bash
+mancode workflow requirements local:<ULID> draft \
+  --file requirements.json --expected-revision N --session <SESSION_ID>
+```
+
+draft 的 `blockingUnknowns` 必须列出开放决定；scope、coverage、technical decisions 或 acceptance 可以暂不完整。后续会话通过 TaskRef 恢复同一澄清状态，每次回答后更新 draft；只有 blocking 项清零且 requirements 完整时才能 `finalize`。`manba` 在修复前还必须先从复现、测试、文档、历史或语义 owner 建立预期行为，无法确定时先问一个聚焦问题。
 
 ## `man` 流程
 
