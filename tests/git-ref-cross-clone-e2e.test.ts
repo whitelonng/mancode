@@ -1040,6 +1040,124 @@ describe('git-ref coordination across independent clones', () => {
     ).rejects.toThrow('MANCODE_REPAIR_AUTHORIZATION_MISMATCH');
   }, 20_000);
 
+  it('rebinds an atomically blocked task to a committed projection before another clone resumes it', async () => {
+    const fixture = await createFixture();
+    const created = await createRemoteTask(fixture.cloneA, fixture.codeHead);
+    const storeA = await strictStore(fixture.cloneA);
+    const initialBundle = await taskBundle(fixture.cloneA);
+    const establishOperationId = id(110);
+    await storeA.establishCoordinationAuthority({
+      operationId: establishOperationId,
+      actorId: ACTOR_A,
+      expectedRemoteRevision: 0,
+      expectedPriorTransportEpoch: null,
+      targetTransportEpoch: 2,
+      actorProfiles: fixture.profiles,
+      ownershipFences: [
+        ownershipFence(initialBundle, ACTOR_A, 1, establishOperationId),
+      ],
+      claims: [],
+      handoffs: [],
+      taskBundles: [initialBundle],
+    });
+
+    const blocked = await updateGitRefWorkflow({
+      projectRoot: fixture.cloneA,
+      taskRef: created.taskRef,
+      sessionId: SESSION_A,
+      expectedTaskRevision: created.metadata.revision,
+      status: 'blocked',
+      blockingReason: 'Awaiting an external dependency.',
+      operationId: id(111),
+      now: at(4),
+    });
+    expect(blocked).toMatchObject({
+      metadata: { status: 'blocked' },
+      remoteRevision: 2,
+    });
+
+    const taskRoot = path.join(
+      '.mancode',
+      'shared',
+      'workflows',
+      created.taskRef.taskId,
+    );
+    await git(fixture.cloneA, ['add', '--force', taskRoot]);
+    await git(fixture.cloneA, [
+      'commit',
+      '-m',
+      'commit atomically materialized blocked task',
+    ]);
+    const committedHead = await gitOutput(fixture.cloneA, [
+      'rev-parse',
+      'HEAD',
+    ]);
+
+    const rebound = await captureJson<CommandJson>(() =>
+      teamSyncPush(fixture.cloneA, {
+        task: formatTaskRef(created.taskRef),
+        expectedTaskRevision: String(blocked.metadata.revision),
+        session: SESSION_A,
+        client: 'vitest-a',
+        json: true,
+      }),
+    );
+    expect(rebound).toMatchObject({
+      exitCode: 0,
+      value: {
+        changed: true,
+        taskRevision: blocked.metadata.revision,
+        remoteRevision: 3,
+      },
+    });
+    await expect(storeA.pull()).resolves.toMatchObject({
+      manifest: {
+        ownershipFences: [
+          {
+            taskRevision: blocked.metadata.revision,
+          },
+        ],
+        taskBundles: [
+          {
+            taskRevision: blocked.metadata.revision,
+            codeRef: { head: committedHead },
+          },
+        ],
+      },
+    });
+
+    await git(fixture.cloneA, ['push', 'origin', 'main']);
+    await git(fixture.cloneB, ['fetch', 'origin']);
+    await git(fixture.cloneB, ['merge', '--ff-only', 'origin/main']);
+    const pulled = await captureJson<CommandJson>(() =>
+      teamSyncPull(fixture.cloneB, {
+        task: formatTaskRef(created.taskRef),
+        json: true,
+      }),
+    );
+    expect(pulled).toMatchObject({
+      exitCode: 0,
+      value: {
+        remoteRevision: 3,
+        materializedBundles: [{ status: 'unchanged', codeReachable: true }],
+      },
+    });
+    const resumed = await captureJson<CommandJson>(() =>
+      contextResume(fixture.cloneB, formatTaskRef(created.taskRef), {
+        session: SESSION_B,
+        client: 'vitest-b',
+        json: true,
+      }),
+    );
+    expect(resumed).toMatchObject({
+      exitCode: 0,
+      value: {
+        taskRef: created.taskRef,
+        taskRevision: blocked.metadata.revision,
+      },
+    });
+  }, 20_000);
+
   it('completes a ready shared task and releases its remote claim in one CAS', async () => {
     const fixture = await createFixture();
     const created = await createRemoteTask(fixture.cloneA, fixture.codeHead, {

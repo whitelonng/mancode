@@ -1,6 +1,9 @@
 # 规划治理演进与安全发布契约
 
-本文是 mancode 0.4.0 的规划治理实施与发布契约。它描述目标行为、兼容边界、验证证据和停止条件。`4dc2e7e` 是当前已验证的开发集成候选；后续契约修复必须进入新的唯一候选。在最终发布门禁和 npm 发布完成前，本文的“已完成”只表示代码与自动化验证完成，不表示已经发布。
+本文记录 mancode 0.4.0 的规划治理实施基线，以及 0.4.1 发布后发现的契约偏差和
+0.4.2 修正。第 4–13 节保留 0.4.0 的能力设计与不变量；“当前状态”和第 14 节使用
+0.4.2 的现行发布契约。历史候选与勾选项只能说明当时的开发证据，不能替代最终
+`origin/main` 候选的发布验收。
 
 ## 1. 决策摘要
 
@@ -8,20 +11,22 @@
 | --- | --- | --- | --- |
 | 0.4.0 | additive advisory、adapter digest/upgrade、policy parser/capability gate、显式 project upgrade、已升级项目的 Policy 2 默认值，以及 local transport 的原子 `reframe` | 不强制 `solo -> /man`；不批量重写旧 workflow；不把项目升级伪装成普通 `refresh`；不自动降级 policy；git-ref transport 不执行 reframe | A–F 工作包、完整测试、真实宿主验收和 npm 发布前检查全部通过；只有完成 project upgrade 的项目启用 Policy 2 |
 
-这是唯一对外版本。工作包可以分 PR、独立合并和独立评审，但不产生中间发布。任何能力都必须一起通过 0.4.0 release gate；在此之前不得通过 feature flag、环境变量、手工 metadata 或 npm 预发布提前启用。
+这是 0.4.0 原计划的单版本决定。0.4.1 已作为发布修复存在，0.4.2 继续修复
+git-ref code-head rebind 和发布候选身份；补丁版本不得降低原 release gate，也不能用
+历史版本的证据替代新候选。
 
-### 当前状态（2026-07-22）
+### 当前状态（2026-07-23）
 
 | 类别 | 状态 | 证据 |
 | --- | --- | --- |
-| A–F 实现工作包 | 工作树生产加固完成 | Policy 2、adapter recovery、reframe、旧 CLI 黑盒、decision-readiness、requirements draft 和 Continuity 命名已经完成；本轮继续修正平台发布证据与最终 release-check |
-| 本地发布前检查 | 新候选待重跑 | 最终候选必须通过 `npm run prepublishOnly`，并由 `npm run release:check -- --candidate <SHA>` 从远端干净 checkout 重跑跨 clone、legacy、audit、pack 和 tarball 安装 smoke |
-| GitHub Quality gate | 历史候选通过 | `2c9d697` 的 [Quality gate run 29930349142](https://github.com/whitelonng/mancode/actions/runs/29930349142) 成功；本轮形成新候选后必须重跑 |
-| GitHub Windows gate | 历史候选通过 | `2c9d697` 的 [Windows gate run 29930353690](https://github.com/whitelonng/mancode/actions/runs/29930353690) 在 CMD、PowerShell、Git Bash 全部成功；本轮形成新候选后必须重跑 |
-| `develop` 远程一致性 | 新候选待形成 | `2c9d697` 当前与 `origin/develop` 对齐；本轮工作树形成新候选后需重新推送和对齐，`main` 不得修改 |
-| Claude Code 条件式澄清实测 | 工作树通过 | Claude Code 2.1.142 使用本地 0.4.0 tarball：清晰请求直接执行，需求不清晰时提问等待，明确但与证据冲突的请求被拦截；真实测试同时发现并修复了隐藏 bootstrap skill 未稳定加载的问题，最终改为 `CLAUDE.md` 受控区，候选形成后仍需重跑 |
-| 最终发布验收 | 未完成 | 五平台真实宿主与跨宿主恢复、自动 release-check、最终 Beta gate 和候选 tarball 验收仍待完成 |
-| npm 发布 | 未执行 | 在上项全部完成前保持禁止 |
+| A–F 实现工作包 | 已随 0.4.0 发布 | Policy 2、adapter recovery、local reframe、旧 CLI 拒绝与 decision-readiness 基线保留；补丁版本不改这些语义 |
+| 0.4.1 hotfix | 已发布但证据未闭合 | npm `gitHead` 为 main 合并提交 `8cc8b24`，而旧 release-check 只接受 `origin/develop` 的 `aaa8d6c`；仓库内没有绑定已发布提交的完整 release-check/Beta 证据 |
+| git-ref publication | 0.4.2 修正中 | 0.4.1 已为 create/requirements/plan/review/verification增加 deferred boundary；真实双 clone 又发现原子 mutation 投影提交后无法为 blocked task 重绑 code head，0.4.2 增加受限 same-revision fast-forward rebind |
+| adapter upgrade staging | 0.4.2 已修正 | 真实 tarball 测试发现确认成功后残留 `.mancode/staging/adapters/upgrade/<operationId>` 会让 git-ref clean-worktree gate 拒绝同步；确认成功现在只清理该 operation 的预览目录，并由 contract 验证 live target 已发布且预览已删除 |
+| 依赖审计 | 工作树通过 | [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr) 覆盖 esbuild `0.27.3–0.28.0` 的 Windows dev-server 低危问题；tsup 尚不接受 0.28.1，因此 0.4.2 暂时精确约束到未受影响且兼容的 0.27.2，保持 `npm audit` 零漏洞门禁 |
+| GitHub 自动门禁 | 0.4.1 历史候选通过 | `8cc8b24` 的 [Quality gate run 29943330958](https://github.com/whitelonng/mancode/actions/runs/29943330958) 和 [Windows gate run 29943330982](https://github.com/whitelonng/mancode/actions/runs/29943330982) 成功；0.4.2 最终 main 候选必须重新执行 |
+| 最终发布身份 | 已重新定稿 | `develop` 只作集成；最终候选必须是 `origin/main` 的单个提交，release-check、CI、真实宿主、Beta、npm `gitHead`、tag 和 GitHub Release 全部绑定该 SHA |
+| 0.4.2 发布验收 | 未完成 | 最终 main 合并提交、五平台真实宿主、跨宿主恢复、release-check、Beta gate、npm/tag/Release 仍待完成 |
 
 ## 2. 目标、不变量与非目标
 
@@ -206,7 +211,7 @@ mancode adapter status --json
 1. 先读取 project manifest、实际 adapter inventory、profile 和当前 writer capability；stale、路径冲突、未完成 operation 或版本门禁失败时只报告，不写文件。
 2. 在 staging 目录渲染所有目标，展示变更 target、digest 和托管区域差异；用户确认后才进入 journal。
 3. 在 adapter locks 下按目标写入，使用 before/target digest recovery action；中断后由 `operation repair` 继续或在无业务写的前提下 abort。
-4. 写完重新读取并验证每个 target；仅在 renderer version 变化时更新 manifest 的 adapter version/inventory，不写 content digest。任何一个 target 失败都不能报告整体成功。
+4. 写完重新读取并验证每个 target；仅在 renderer version 变化时更新 manifest 的 adapter version/inventory，不写 content digest。任何一个 target 失败都不能报告整体成功；成功后只删除该 operation 的 staging 预览，不能让已消费的临时文件污染后续 Git clean-worktree gate。
 5. 不修改 task、requirements、plan、policy 或 step；adapter 升级与 workflow 语义升级是两个 operation。
 
 `refresh-project` 可以发现并报告 stale，但不能悄悄完成 adapter upgrade。`install --force` 是否复用底层 writer 由实现决定，但必须保留一个语义明确、可审计的显式 upgrade 入口。
@@ -318,9 +323,26 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 | 0.4.x + 已升级项目 | 读写且保留 provenance | 读写，要求 digest/capability | 写 2 | 目标 Policy 2 路径 |
 | 0.3.x + V2 已升级项目 | 不允许写入 | 不允许读取后执行 | 不允许创建 | 0.3.18 在 manifest parser 边界拒绝；能解析 V2 的旧 reader/writer 返回 version-too-old failure |
 | 任意 CLI + stale adapter | 读诊断 | 拒绝 mutation | 拒绝创建 | 先执行显式 adapter upgrade |
-| 任意 CLI + git-ref transport | 正常既有 transport contract | Policy 2 仍可按 transport contract 运行 | 不能 reframe | `MANCODE_REFRAME_GIT_REF_UNSUPPORTED` |
+| 任意 CLI + git-ref transport | 使用下述显式 publication contract | Policy 2 按相同 publication contract 运行 | 不能 reframe | `MANCODE_REFRAME_GIT_REF_UNSUPPORTED` |
 
 “读”不等于“执行”：旧 CLI 只能在 V1/Policy 1 的兼容范围内展示安全诊断；遇到 V2 manifest 必须先由 manifest parser 或 reader gate 阻断，不能生成执行指令或写入任何 authority。
+
+### 8.1 0.4.2 补充：git-ref publication 与 code-head 矩阵
+
+0.4.0 将非 reframe 的 git-ref 行为概括为“正常既有 transport contract”，粒度不足。
+从 0.4.2 起，所有公开 writer 必须落入以下明确边界之一：
+
+| mutation 类别 | 本地/远端顺序 | Git 提交后的动作 | 跨 clone 完成条件 |
+| --- | --- | --- | --- |
+| create、requirements、plan、review、verification | 不带 `--sync` 写本地 shared authority | 提交匹配的 `.mancode/shared` 与代码，再执行 `team sync push` | push 返回 receipt，另一 clone 同步 Git 后 pull/resume |
+| 明确要求 `--sync` 的原子 lifecycle/scope mutation | 单次远端 CAS 成功后 materialize 本地投影 | 若仍可 resume 的 in-progress/blocked task 的 tracked 投影被提交，用不变 revision 再执行 `team sync push` | same-revision、same-aggregate、owner-only、fast-forward rebind 返回 receipt |
+| claim、handoff 等远端协调 mutation | 只走各自显式 CAS/repair contract | 不允许用普通 Git 提交伪造 ownership 或 receipt | 远端 receipt 与本地 recovery/materialization 都完成 |
+| reframe | git-ref 下拒绝 | 无 | `MANCODE_REFRAME_GIT_REF_UNSUPPORTED` |
+
+`.mancode/shared` 是可提交的共享 authority 表示，git-ref bundle/fence 是跨 clone 协调
+authority；二者必须通过 task revision、aggregate digest 和 codeRef 唯一绑定。任何 writer
+若不能说明本地文件、remote CAS、Git commit、code-head rebind 和 session projection 的
+先后关系，必须触发第 12 节的重新对齐条件，不能继续沿用“既有 contract”作为证明。
 
 ## 9. 验证矩阵
 
@@ -342,7 +364,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - 五个平台生成、status、stale 编辑、dry-run、确认升级、升级后重新读取。
 - adapter upgrade 在每个 target 写入前、写入后和中断点恢复；共享 `AGENTS` target 不能被两个平台重复覆盖。
 - local transport 下的 Policy 2 create/plan/review/verification 与旧 workflow 并存。
-- 两个 clone 的 git-ref 兼容门、旧 writer 拒绝、receipt recovery；所有 git-ref reframe 请求必须确认硬拒绝。
+- 两个 clone 的 git-ref 兼容门、旧 writer 拒绝、receipt recovery，以及 deferred publish 和原子 mutation 后“提交 tracked 投影 → same-revision code-head rebind → 第二 clone pull/resume”的完整链路；所有 git-ref reframe 请求必须确认硬拒绝。
 - active child、open handoff、active solo assignment 的并发 race：先取得锁的一方决定，另一方得到 expected-revision 或明确 reframe error。
 
 ### 9.3 真实宿主和跨平台
@@ -366,7 +388,8 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 ### 10.2 0.4.0 gate
 
-当前 gate 结果如下。`[x]` 仅表示实现和自动化证据完成；真实宿主或发布验收未完成时，仍不得发布 npm。
+以下保留 0.4.0 发布前记录。`[x]` 仅表示当时的实现和自动化证据；它不是
+0.4.2 的发布状态，也不能证明后来发布的 npm 提交已经通过相同 gate。
 
 - [x] 模板和文档 contract 通过；advisory 不直接执行 schema migration、policy 写入或自动 step 变更。
 - [x] 旧 layout-version-3 fixture、legacy fixture、已有 adapter 和历史 workflow 通过原有测试。
@@ -385,6 +408,11 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - [x] 按开发集成要求将候选 `4dc2e7e` 推送到远程 `develop`，且 Quality 与 Windows gate 均通过；这不等同于 release gate 通过。
 - [ ] 完成剩余发布验收后才允许进入 npm 发布检查；任何条件失败都不得发布 npm。
 
+0.4.0 与 0.4.1 后来已经发布，但仓库内的未完成列表和外部 gate 证据没有在发布前闭合，
+且 0.4.1 的 npm `gitHead` 不是旧 release-check 所要求的 `origin/develop` 提交。该偏差
+不通过事后勾选消除；0.4.2 按 [`docs/release-acceptance.md`](./release-acceptance.md) 的
+main-candidate 契约重新建立可审计证据。
+
 ## 11. 发布回滚与停止策略
 
 | 发现的问题 | 立即动作 | 禁止动作 | 恢复方式 |
@@ -400,15 +428,14 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 ## 12. 实施顺序与停止/重新对齐条件
 
-截至 `4dc2e7e`，步骤 1–4 是已验证的开发集成候选；本轮生产加固修复形成新候选后，受影响的自动化证据和步骤 5、7 仍需重新完成。
+A–F 是已经发布的 0.4.0 能力基线。0.4.2 的修复和发布按以下顺序重新建立证据：
 
-1. [x] 冻结本文件中的错误码、字段语义、digest 规范和兼容矩阵，并复核 public workflow create 的 Policy 1 基线。
-2. [x] 完成 A–F 工作包；工作包可以独立合并，但不发布中间 npm 版本。
-3. [x] 完成 adapter digest/upgrade 和 parser/capability gate；当前工作树已通过 0.3.x + V2 manifest reader/writer fixture，新候选仍需重跑。
-4. [x] 完成 project upgrade 和 local reframe 的独立 operation/recovery；只在 upgraded marker 下打开 Policy 2 create default。
-5. [ ] 在同一个 release candidate 上通过第 10.2 节和 [`docs/release-acceptance.md`](./release-acceptance.md) 的全部真实宿主、release-check、Beta gate 和 tarball 检查。
-6. [ ] 将本轮加固后的唯一候选提交推送到远程 `develop`；`4dc2e7e` 的历史推送不替代新候选，且禁止推送、合并或创建以 `main` 为目标的发布操作。
-7. [ ] 确认远程 `develop` 与完整验收证据完全一致后，才允许发布唯一的 npm 版本 0.4.0。git-ref reframe 始终拒绝，不进入本计划范围。
+1. [x] 记录 0.4.1 的 git-ref publication 与发布候选偏差，不把历史 CI 当作当前证据。
+2. [x] 为原子 mutation 的 tracked 投影提交增加 same-revision、same-aggregate、owner-only、fast-forward code-head rebind，并加入第二 clone resume 回归测试。
+3. [x] 将 release-check 改为要求 candidate 同时等于本地 HEAD 与 `origin/main`，并从 main 创建干净 checkout。
+4. [ ] 在 `develop` 完成实现、测试和文档评审后合并到 `main`，形成唯一 0.4.2 candidate。
+5. [ ] 在该 main SHA 上通过 [`docs/release-acceptance.md`](./release-acceptance.md) 的 Quality/Windows、release-check、真实宿主、跨宿主恢复、Beta 和 tarball 检查。
+6. [ ] 从同一 main checkout 发布 0.4.2，验证 npm version/integrity/`gitHead`，再为同一 SHA 创建 `v0.4.2` tag 与 GitHub Release。
 
 任何阶段出现下列情况，都回到“证据和契约评审”，而不是继续编码：
 
@@ -431,19 +458,25 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 3. **升级命令的公开名称：** 以现有 `adapter status/upgrade` 命令注册、JSON 输出和 shell 退出码测试确定名称；文档和实现必须只保留一个正式入口。
 4. **Capability 的编码：** 默认由 CLI 内置 capability set 加 project `minWriterVersion` 双门控制，不新增可被旧 CLI 忽略的 manifest capability 字段；local reframe 与 git-ref hard reject 必须使用不同 capability 结果。
 
-这四项仍须与第 10.2 节的共同 release gate 一起通过，才允许发布 0.4.0。git-ref reframe 不在支持范围内。
+这四项是已发布的兼容基线；0.4.2 不改变其语义。任何后续变更仍须重新通过对应
+contract 与 release gate。git-ref reframe 继续不在支持范围内。
 
 ## 14. 远程分支与 npm 发布顺序
 
-0.4.0 只允许按以下顺序发布：
+0.4.2 及后续补丁统一使用“最终 main 提交发布”模型：
 
-`2c9d697` 是上一已验证开发候选，其 [Quality gate](https://github.com/whitelonng/mancode/actions/runs/29930349142) 和 [Windows gate](https://github.com/whitelonng/mancode/actions/runs/29930353690) 均成功。候选后的任何实现、测试或发布文档修改都会使这些证据不再适用于新候选；新的唯一候选必须重新完成第 1–3 步并推送到 `origin/develop`，第 4–6 步必须在任何正式 npm 发布前补齐。
+1. 所有实现、修复和文档先在 `develop` 完成窄测试、完整自动化和评审。
+2. 将最终变更合并并推送到 `main`。该合并提交是唯一 release candidate；develop SHA、PR head SHA 和 main 的父提交都不能代替它。
+3. 等待该 main SHA 的 GitHub Quality 与 Windows required checks 成功。
+4. 在本地检出同一提交，运行 `npm run release:check -- --candidate <完整 SHA>`。脚本要求本地 HEAD 和 `origin/main` 都等于 candidate，从 main 创建干净 checkout，并确认检查期间 main 未变化。
+5. 使用 release-check 保留的 tarball 完成五平台真实宿主、跨宿主恢复和最终 Beta gate；所有证据必须绑定同一个 main SHA 与 package version。
+6. 全部门禁成功后才允许执行一次正式 npm 发布。随后核对 registry version、integrity 与 `gitHead`，确保仍指向 candidate。
+7. npm 核对成功后，为同一提交创建并推送版本 tag，发布 GitHub Release，并记录候选 SHA 与 tarball SHA-256。
 
-1. 所有实现、修复和文档进入本地 `develop`，形成唯一 release candidate commit。
-2. 在该提交上完成第 10.2 节的全部自动化、恢复、跨平台和真实宿主验收。任何失败都必须修复并从头重跑受影响的 release gate。
-3. [ ] 对本轮形成的新候选只执行 `git push origin develop`。禁止直接或间接更新远程 `main`，包括 push、merge、rebase、以 `main` 为目标的 PR 或自动化发布工作流。
-4. 从远程 `develop` 的同一提交运行 `npm run release:check -- --candidate <完整 SHA>`；使用其保留的 tarball 完成真实宿主证据，再运行最终 Beta gate。
-5. 确认 release candidate commit、远程 `develop` commit、测试证据和待发布 package version 完全一致。
-6. 前五步全部成功后才允许执行 `npm publish`。不发布 `0.4.0-beta`、`0.4.0-rc` 或其他中间 npm 版本。
+任何代码、依赖、构建配置、版本号或发布文档变化都会产生新的 main candidate，并使旧证据失效。检查期间禁止并发更新 main；但“合并到 main”本身是建立候选的必要步骤，不再把 main 永久冻结在旧版本。
 
-若 `npm publish` 前发生任何代码、依赖、构建配置或发布文档变化，候选提交立即失效，必须重新执行步骤 2–5。npm 发布成功不授权更新远程 `main`。
+### 14.1 0.4.1 偏差与 0.4.2 处置
+
+- 0.4.1 的 npm `gitHead` 是 `8cc8b24` main 合并提交，旧 release-check 却要求 candidate 等于 `origin/develop` 的 `aaa8d6c`；因此已发布提交无法通过当时脚本的身份断言。
+- 0.4.1 的最终 Quality/Windows checks 已成功，但仓库验收文档仍把这些和其他 gate 列为未完成，且没有 0.4.1 tag/GitHub Release。CI 成功不能代替候选绑定与证据收口。
+- 0.4.2 不追溯修改 0.4.1 证据。它改用 main-candidate 模型、补齐 code-head rebind 回归，并要求 npm、tag 和 GitHub Release 全部绑定最终 main SHA。

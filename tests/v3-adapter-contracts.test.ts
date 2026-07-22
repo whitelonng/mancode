@@ -364,6 +364,9 @@ describe('V3 adapter bootstrap integration', () => {
             '`mancode team sync push <shared:ULID> --expected-task-revision <n>`',
           );
           expect(entry).toContain(
+            'with the unchanged task revision to rebind the remote code head',
+          );
+          expect(entry).toContain(
             'ownership conflict, or hard-risk direction remains',
           );
           expect(entry).toContain(

@@ -332,7 +332,7 @@ function prepareOwnershipFence(
   expectedPredecessorBundleDigest: string | null,
 ): PreparedGitRefCoordinationMutation {
   const metadata = metadataFromBundle(taskBundle);
-  assertRemoteTaskEligible(metadata);
+  assertRemoteTaskCoordination(metadata);
   assertTaskBundleIdentity(taskBundle, context.taskRef);
   if (metadata.ownerActorId === null) {
     throw new Error('MANCODE_TASK_OWNER_REQUIRED');
@@ -344,6 +344,7 @@ function prepareOwnershipFence(
     throw new Error('MANCODE_TASK_BUNDLE_DIVERGED');
   }
   if (context.fence === null) {
+    assertRemoteTaskEligible(metadata);
     if (
       metadata.ownerActorId !== context.input.actorId ||
       metadata.ownershipEpoch !== 0 ||
@@ -363,6 +364,7 @@ function prepareOwnershipFence(
       throw new Error('MANCODE_TASK_REVISION_CONFLICT');
     }
     if (taskBundle.taskRevision === context.fence.taskRevision) {
+      assertRemoteTaskRebindEligible(metadata);
       if (taskBundle.aggregateDigest !== context.fence.aggregateDigest) {
         throw new Error('MANCODE_SPLIT_BRAIN');
       }
@@ -380,6 +382,7 @@ function prepareOwnershipFence(
         taskBundle,
       );
     }
+    assertRemoteTaskEligible(metadata);
   }
   const codeHeadChanged =
     context.taskBundle !== null &&
@@ -1259,11 +1262,21 @@ function metadataFromBundle(
 }
 
 function assertRemoteTaskEligible(metadata: WorkflowMetadataV3): void {
-  if (
-    metadata.workflowMode !== 'manteam' ||
-    metadata.coordination !== 'team' ||
-    metadata.status !== 'in_progress'
-  ) {
+  assertRemoteTaskCoordination(metadata);
+  if (metadata.status !== 'in_progress') {
+    throw new Error('MANCODE_REMOTE_COORDINATION_TASK_INVALID');
+  }
+}
+
+function assertRemoteTaskRebindEligible(metadata: WorkflowMetadataV3): void {
+  assertRemoteTaskCoordination(metadata);
+  if (metadata.status !== 'in_progress' && metadata.status !== 'blocked') {
+    throw new Error('MANCODE_REMOTE_COORDINATION_TASK_INVALID');
+  }
+}
+
+function assertRemoteTaskCoordination(metadata: WorkflowMetadataV3): void {
+  if (metadata.workflowMode !== 'manteam' || metadata.coordination !== 'team') {
     throw new Error('MANCODE_REMOTE_COORDINATION_TASK_INVALID');
   }
 }

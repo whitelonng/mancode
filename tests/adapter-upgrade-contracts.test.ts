@@ -197,6 +197,23 @@ describe('adapter managed-content digest and upgrade', () => {
     await expect(readFile(live, 'utf8')).resolves.toContain(
       '# mancode bootstrap',
     );
+    await expect(
+      readFile(
+        path.join(
+          root,
+          '.mancode',
+          'staging',
+          'adapters',
+          'upgrade',
+          preview.operationId,
+          'preview.json',
+        ),
+        'utf8',
+      ),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(root, preview.stagedTargets[0] ?? ''), 'utf8'),
+    ).rejects.toThrow();
   });
 
   it('does not create staging or live targets without dry-run or confirmation', async () => {

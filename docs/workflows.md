@@ -129,4 +129,10 @@ handoff 必须经过 `draft → offered → accepted|rejected|cancelled`。accep
 
 在 git-ref transport 下，workflow create、requirements、plan、review 和 verification 采用延后发布：先不带 `--sync` 写入本地 shared authority，把它与匹配的代码一起提交，再执行 `mancode team sync push shared:<ULID> --expected-task-revision N`。命令直接带 `--sync` 时必须返回 `MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`，不能把未获得 receipt 的变更当作已同步。
 
+`workflow update` 等明确要求 `--sync` 的原子 mutation 先取得远端 receipt，再 materialize
+本地 `.mancode/shared` 投影。对于仍需跨 clone resume 的 `in_progress` 或 `blocked`
+任务，如果提交这些 tracked 投影使 Git HEAD 前进，owner 必须在 clean worktree 上使用
+不变的 task revision 再执行一次 `team sync push`。该操作只允许同 revision、同
+aggregate 的 code-head fast-forward rebind；完成后另一个 clone 才能 pull 并 resume。
+
 只有经过明确确认且通过隐私筛查的决策才能进入 shared memory。任务文本、绝对路径、凭据和宿主 session key 不应写入共享 transport。

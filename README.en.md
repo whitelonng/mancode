@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.1-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.1" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.2-2f855a?style=flat-square" alt="Status: mancode Continuity v0.4.2" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
 </p>
 
@@ -136,6 +136,13 @@ the code baseline, then run
 `--sync` directly to those commands returns
 `MANCODE_GIT_REF_DEFERRED_SYNC_REQUIRED`; cross-clone synchronization is
 complete only after the push returns a receipt.
+
+Atomic git-ref mutations that explicitly require `--sync`, such as
+`workflow update`, complete the remote CAS before materializing the local
+projection. If a resumable `in_progress` or `blocked` task leaves tracked
+`.mancode/shared` changes, commit that projection and run the same
+`team sync push` with the unchanged task revision to rebind the remote code
+head. Another clone must not resume until this push returns a receipt.
 
 For a new project, start with one platform you actually use:
 
@@ -374,7 +381,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: mancode Continuity v0.4.1. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.4.2. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -481,7 +488,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.4.1
+mancode v0.4.2
 
 Project:     my-app
 Runtime:     ready
@@ -628,14 +635,16 @@ mancode/
 - Complete real-host session acceptance for Claude Code, Codex, Cursor,
   GitHub Copilot, and ZCode on one release candidate; verified host sessions
   and isolated explicit sessions are both valid evidence paths.
-- Run `npm run release:check -- --candidate <full-commit-sha>` for the clean
-  checkout, automated two-clone/legacy checks, tarball SHA-256, and install
-  smoke; complete cross-host recovery separately.
+- Merge the final candidate into `main`, then run
+  `npm run release:check -- --candidate <full-commit-sha>` from that same
+  `origin/main` commit for the clean checkout, automated two-clone/legacy
+  checks, tarball SHA-256, and install smoke; complete cross-host recovery
+  separately.
 - Confirm ZCode project-skill discovery and workspace-command paths; keep the
   adapter provisional until then.
 - Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
 
-See [0.4.1 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
+See [0.4.2 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
 
 ## Troubleshooting
 
@@ -660,7 +669,9 @@ hook architecture still uses `mancode init --legacy --force`.
 This means the platform's target files are missing or their digest is stale.
 Preview `mancode adapter upgrade --platform <platform> --dry-run`, inspect the
 staged result, then run it with the returned `--operation-id`, an active session,
-and `--confirm`. For managed-block
+and `--confirm`. A successful confirmation removes that operation's staging
+preview so internal temporary files cannot make a later Git sync report a dirty
+worktree. For managed-block
 platforms (Codex, ZCode, Copilot), the managed block in `AGENTS.md` or
 `.github/copilot-instructions.md` may have been manually edited or deleted.
 

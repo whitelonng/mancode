@@ -183,6 +183,26 @@ describe('git-ref coordination domain contracts', () => {
       revision: 2,
       lastValidatedCodeRef: nextBundle.codeRef,
     });
+
+    const completedBundle = bundle(metadata({ status: 'completed' }));
+    const completed = {
+      ...baseManifest(),
+      ownershipFences: [fence(completedBundle)],
+      taskBundles: [completedBundle],
+    };
+    expect(() =>
+      prepareGitRefCoordinationMutation(completed, {
+        kind: 'ownership_fence',
+        operationId: id(28),
+        actorId: OWNER_ID,
+        taskRef: TASK_REF,
+        expectedRemoteRevision: 1,
+        expectedOwnershipEpoch: 1,
+        expectedPredecessorBundleDigest: completedBundle.bundleDigest,
+        taskBundle: bundleWithCodeHead(completedBundle, 'def5678'),
+        now: NOW,
+      }),
+    ).toThrow('MANCODE_REMOTE_COORDINATION_TASK_INVALID');
   });
 
   it('materializes remote handoffs as fetched without changing business state', () => {
