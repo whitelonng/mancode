@@ -355,7 +355,7 @@ export async function contextResume(
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
     const taskRef = parseTaskRef(task);
-    const resolution = await resolveContext(project, session, {
+    let resolution = await resolveContext(project, session, {
       taskRef,
       level: 'bootstrap',
       purpose: 'orient',
@@ -364,15 +364,29 @@ export async function contextResume(
     if (resolution.metadata === null || resolution.aggregate === null) {
       throw new Error('MANCODE_CONTEXT_WRITE_BLOCKED');
     }
-    const resumed = await resumeSession(
-      project.projectRoot,
-      session.sessionId,
-      {
+    let resumed = session;
+    let packIsCurrent = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      resumed = await resumeSession(project.projectRoot, session.sessionId, {
         taskRef: resolution.taskRef,
         workflowMode: resolution.metadata.workflowMode,
         taskRevision: resolution.aggregate.taskRevision,
-      },
-    );
+      });
+      resolution = await resolveContext(project, resumed, {
+        taskRef,
+        level: 'bootstrap',
+        purpose: 'orient',
+        intent: 'mutate',
+      });
+      if (resolution.metadata === null || resolution.aggregate === null) {
+        throw new Error('MANCODE_CONTEXT_WRITE_BLOCKED');
+      }
+      if (resolution.aggregate.taskRevision === resumed.lastSeenRevision) {
+        packIsCurrent = true;
+        break;
+      }
+    }
+    if (!packIsCurrent) throw new Error('MANCODE_CONTEXT_CHANGED');
     return printV3Result(options.json, {
       schemaVersion: 1,
       session: resumed,

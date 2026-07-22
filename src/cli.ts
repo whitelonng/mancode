@@ -250,7 +250,7 @@ program
   )
   .option(
     '--file <path>',
-    'Semantic or canonical structured requirements JSON input file',
+    'Semantic requirements JSON, plan Markdown, or ledger input file',
   )
   .option('--acceptance <id>', 'Acceptance criterion id (for example AC-1)')
   .option('--method <method>', 'Verification method: automated or manual')

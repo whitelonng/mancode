@@ -3,6 +3,7 @@ import type {
   ManagedAdapter,
   SchemaManifest,
 } from './manifest.js';
+import { managedAdapterInventoriesMatch } from './manifest.js';
 
 export type CompatibilityOperation =
   | 'read'
@@ -212,25 +213,12 @@ function adapterFailureFor(
   ) {
     return 'MANCODE_ADAPTER_CONTENT_STALE';
   }
-  return adaptersMatch(input.manifest, input.adapterVersions)
+  return managedAdapterInventoriesMatch(
+    input.manifest.managedAdapters,
+    input.adapterVersions,
+  )
     ? null
     : 'MANCODE_ADAPTER_VERSION_MISMATCH';
-}
-
-function adaptersMatch(
-  manifest: SchemaManifest,
-  actual: Partial<Record<ManagedAdapter, string>>,
-): boolean {
-  const expectedAdapters = Object.keys(
-    manifest.managedAdapters,
-  ) as ManagedAdapter[];
-  const actualAdapters = Object.keys(actual) as ManagedAdapter[];
-  return (
-    expectedAdapters.length === actualAdapters.length &&
-    expectedAdapters.every(
-      (adapter) => actual[adapter] === manifest.managedAdapters[adapter],
-    )
-  );
 }
 
 function requiredWriterCapabilities(

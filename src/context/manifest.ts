@@ -210,7 +210,10 @@ export function assertSchemaManifestPolicyUpgrade(
     next.activationState !== 'v3_active' ||
     previous.activatedAt !== next.activatedAt ||
     !sameLegacyBaseline(previous.legacyBaseline, next.legacyBaseline) ||
-    !sameManagedAdapters(previous.managedAdapters, next.managedAdapters) ||
+    !managedAdapterInventoriesMatch(
+      previous.managedAdapters,
+      next.managedAdapters,
+    ) ||
     compareVersions(next.minReaderVersion, previous.minReaderVersion) < 0 ||
     compareVersions(next.minWriterVersion, previous.minWriterVersion) < 0 ||
     next.workflowPolicyDefaults.planning !== 2 ||
@@ -361,7 +364,7 @@ function assertManifestStateShape(manifest: SchemaManifest): void {
   }
 }
 
-function sameManagedAdapters(
+export function managedAdapterInventoriesMatch(
   left: ManagedAdapterInventory,
   right: ManagedAdapterInventory,
 ): boolean {

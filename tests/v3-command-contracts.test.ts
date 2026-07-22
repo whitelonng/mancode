@@ -388,6 +388,8 @@ describe('V3 CLI command contracts', () => {
       expect(await operationShow(root, operationId, { json: true })).toBe(0);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         journal: { operationId, state: 'committed' },
+        recoveryAction: 'none',
+        recoveryReason: 'terminal',
         payloadBound: true,
       });
       expect(
@@ -442,6 +444,20 @@ describe('V3 CLI command contracts', () => {
           json: true,
         }),
       ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        session: {
+          activeTaskRef: createPayload.taskRef,
+          activeMode: 'man',
+          lastSeenRevision: 1,
+        },
+        pack: {
+          session: {
+            activeTaskRef: createPayload.taskRef,
+            activeMode: 'man',
+          },
+          snapshot: { taskRevision: 1 },
+        },
+      });
       expect(
         await contextShow(root, {
           task,
@@ -843,11 +859,47 @@ describe('V3 CLI command contracts', () => {
         operation: { type: 'reframe', state: 'committed' },
       });
       expect(result.archive.archiveId).toBe(result.operation.operationId);
+      expect(
+        await workflow(
+          root,
+          'archive',
+          [task, 'show', result.archive.archiveId],
+          { json: true },
+        ),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        taskRef: created.taskRef,
+        archive: {
+          archiveId: result.archive.archiveId,
+          sourceTaskRevision: 2,
+          sourceRequirementsRevision: 2,
+        },
+        requirements: { status: 'confirmed', revision: 2 },
+        plan: null,
+      });
+      expect(
+        await workflow(root, 'checkpoint', [task, 'show', checkpointId], {
+          json: true,
+        }),
+      ).toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        taskRef: created.taskRef,
+        checkpoint: {
+          checkpointId,
+          kind: 'requirements_reframed',
+          taskRevision: 4,
+        },
+      });
       await expect(
         new V3ContextStore(root).readTaskSnapshot(created.taskRef),
       ).resolves.toMatchObject({
         metadata: { revision: 4, currentStep: 2 },
         requirements: { revision: 3, status: 'draft' },
+      });
+      await expect(readSession(root, sessionId)).resolves.toMatchObject({
+        activeTaskRef: created.taskRef,
+        activeMode: 'man',
+        lastSeenRevision: 4,
       });
     } finally {
       logs.mockRestore();

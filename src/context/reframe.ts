@@ -15,6 +15,10 @@ import {
   readCheckoutBranch,
   readProjectRuntimeContext,
 } from '../runtime/project-runtime.js';
+import {
+  enqueueSessionPointerProjection,
+  reconcileProjectionIntents,
+} from '../runtime/projection-outbox.js';
 import type { TaskHeadFenceV1 } from '../runtime/task-head-fence.js';
 import { replaceTaskHeadFence } from '../runtime/task-head-store.js';
 import {
@@ -59,7 +63,7 @@ import {
   nextTaskHeadFence,
   taskMutationExpectedRevisions,
 } from './task-mutation.js';
-import { type TaskRef, parseTaskRefValue } from './task-ref.js';
+import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 import type { VerificationLedgerV1 } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
@@ -201,6 +205,21 @@ export async function reframeV3Workflow(
       latestCheckpoint: checkpoint,
     });
     const taskHeadFence = nextTaskHeadFence(context, aggregate, timestamp);
+    const refreshesSessionPointer =
+      context.session.activeTaskRef !== null &&
+      sameTaskRef(context.session.activeTaskRef, taskRef);
+    if (refreshesSessionPointer) {
+      await enqueueSessionPointerProjection(context.projectRoot, {
+        operationId: context.operationId,
+        action: 'resume',
+        sessionId: context.session.sessionId,
+        expectedPreviousTaskRef: context.session.activeTaskRef,
+        taskRef,
+        workflowMode: metadata.workflowMode,
+        taskRevision: metadata.revision,
+        now: context.now,
+      });
+    }
 
     journal = await createTaskOperationJournal(context, {
       type: 'reframe',
@@ -380,6 +399,17 @@ export async function reframeV3Workflow(
       await replaceTaskHeadFence(context.homeStore, taskHeadFence);
     }
     const operation = await commitTaskOperation(context, journal);
+    if (refreshesSessionPointer) {
+      try {
+        await reconcileProjectionIntents(
+          context.projectRoot,
+          context.operationId,
+          context.now,
+        );
+      } catch {
+        // Reframed authority is committed; doctor can finish the projection.
+      }
+    }
     const archive = archiveSummary(archiveAction);
     return {
       metadata,

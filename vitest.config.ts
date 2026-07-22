@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    maxWorkers: 2,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'lcov'],

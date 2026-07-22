@@ -127,6 +127,8 @@ describe('operation recovery executor', () => {
       inspectOperationRecovery(root, operationId),
     ).resolves.toMatchObject({
       journal: { state: 'committed' },
+      recoveryAction: 'none',
+      recoveryReason: 'terminal',
       payloadBound: true,
     });
     await expect(readLocalDiagnostics(root)).resolves.toMatchObject({

@@ -1,4 +1,8 @@
 import { assertUlid } from '../context/ids.js';
+import {
+  managedAdapterInventoriesMatch,
+  managedAdapterNames,
+} from '../context/manifest.js';
 import { V3ContextStore } from '../context/store.js';
 import { upgradeV3Adapters } from '../installers/adapter-upgrade.js';
 import {
@@ -8,6 +12,7 @@ import {
 import {
   V3_ADAPTER_PLATFORMS,
   inspectV3Adapter,
+  v3AdapterVersionsFromStatuses,
 } from '../installers/v3-adapter.js';
 import {
   printV3Error,
@@ -45,16 +50,33 @@ export async function adapterStatus(
       ),
     );
     const adapters = Object.fromEntries(entries);
+    const readinessPlatforms =
+      options.platform === undefined
+        ? new Set<PlatformName>(
+            managedAdapterNames(project.manifest.managedAdapters),
+          )
+        : new Set(platforms);
+    const manifestAdapters = Object.fromEntries(
+      platforms.flatMap((platform) => {
+        const version = project.manifest.managedAdapters[platform];
+        return version === undefined ? [] : [[platform, version]];
+      }),
+    );
+    const actualAdapterVersions = v3AdapterVersionsFromStatuses(
+      entries,
+      readinessPlatforms,
+    );
+    const actualAdaptersReady = entries.every(
+      ([platform, status]) =>
+        actualAdapterVersions[platform] === undefined || status.ready,
+    );
     return printV3Result(options.json, {
       schemaVersion: 1,
       renderer: 'mancode-adapter-digest-v1',
-      ready: entries.every(([, status]) => status.ready),
-      manifestAdapters: Object.fromEntries(
-        platforms.map((platform) => [
-          platform,
-          project.manifest.managedAdapters[platform],
-        ]),
-      ),
+      ready:
+        actualAdaptersReady &&
+        managedAdapterInventoriesMatch(manifestAdapters, actualAdapterVersions),
+      manifestAdapters,
       adapters,
     });
   } catch (error) {

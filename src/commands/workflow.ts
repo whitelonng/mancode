@@ -17,11 +17,26 @@ import {
   startV3SoloHandoff,
 } from '../context/solo-handoff.js';
 import { completeV3Task } from '../context/task-complete.js';
-import { formatTaskRef, parseTaskRef } from '../context/task-ref.js';
+import {
+  formatTaskRef,
+  parseTaskRef,
+  sameTaskRef,
+} from '../context/task-ref.js';
 import { recordV3Verification } from '../context/verification-record.js';
 import { createV3Workflow } from '../context/workflow-create.js';
 import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
 import { updateV3Workflow } from '../context/workflow-update.js';
+import { resolveTaskEntityHomeStore } from '../runtime/entity-home-store.js';
+import {
+  type TaskArchiveRecoveryAction,
+  taskArchiveManifest,
+} from '../runtime/operation-recovery-payload.js';
+import { readOperationRecoveryPayload } from '../runtime/operation-recovery-store.js';
+import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
+import {
+  readTaskArchiveDigestAtRoot,
+  readTaskCheckpointAtRoot,
+} from '../runtime/task-operation.js';
 import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
   parseRequirementsLedger,
@@ -255,6 +270,9 @@ async function workflowV3(
   if (subcommand === 'reframe') {
     return workflowReframeV3(rootDir, args, options);
   }
+  if (subcommand === 'archive' || subcommand === 'checkpoint') {
+    return workflowArtifactShowV3(rootDir, subcommand, args, options);
+  }
   if (subcommand === 'child') {
     return workflowChildResultMergeV3(rootDir, args, options);
   }
@@ -381,6 +399,80 @@ async function workflowShowV3(
       error instanceof Error
         ? error.message
         : 'Unable to show the mancode workflow.',
+    );
+  }
+}
+
+async function workflowArtifactShowV3(
+  rootDir: string,
+  kind: 'archive' | 'checkpoint',
+  args: string[],
+  options: WorkflowOptions,
+): Promise<number> {
+  const [task, action, artifactId] = args;
+  if (!task || action !== 'show' || !artifactId || args.length !== 3) {
+    return printV3Error(
+      options.json,
+      `MANCODE_${kind.toUpperCase()}_SHOW_ARGUMENT_INVALID`,
+      `Use: workflow ${kind} <namespace:ULID> show <${kind}Id> [--json].`,
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    assertUlid(artifactId, `${kind}Id`);
+    const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    const snapshot = await project.store.readTaskSnapshot(taskRef);
+    if (kind === 'checkpoint') {
+      const checkpoint = await readTaskCheckpointAtRoot(
+        snapshot.location.taskRoot,
+        artifactId,
+      );
+      if (checkpoint === null || !sameTaskRef(checkpoint.taskRef, taskRef)) {
+        throw new Error('MANCODE_CHECKPOINT_NOT_FOUND');
+      }
+      return printV3Result(options.json, {
+        schemaVersion: 1,
+        taskRef,
+        checkpoint,
+      });
+    }
+
+    const runtime = await readProjectRuntimeContext(project.projectRoot);
+    const homeStore = resolveTaskEntityHomeStore(
+      runtime.entityHomeStoreContext,
+      taskRef,
+    );
+    const payload = await readOperationRecoveryPayload(homeStore, artifactId);
+    const archive = payload?.actions.find(
+      (candidate): candidate is TaskArchiveRecoveryAction =>
+        candidate.kind === 'task_archive' &&
+        candidate.archiveId === artifactId &&
+        sameTaskRef(candidate.taskRef, taskRef),
+    );
+    if (
+      archive === undefined ||
+      (await readTaskArchiveDigestAtRoot(
+        snapshot.location.taskRoot,
+        archive,
+      )) === null
+    ) {
+      throw new Error('MANCODE_REFRAME_ARCHIVE_NOT_FOUND');
+    }
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef,
+      archive: taskArchiveManifest(archive),
+      requirements: JSON.parse(archive.requirementsContent),
+      plan: archive.planContent,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, `MANCODE_V3_${kind.toUpperCase()}_SHOW_FAILED`),
+      error instanceof Error
+        ? error.message
+        : `Unable to show the mancode ${kind}.`,
     );
   }
 }

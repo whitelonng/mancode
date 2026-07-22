@@ -170,7 +170,7 @@ describe('schema compatibility gate', () => {
     ).toThrow(/planning-policy:2/);
   });
 
-  it('blocks a 0.3.x CLI at the V2 manifest boundary before policy execution', () => {
+  it('evaluates the declared 0.3.18 version and capability tuple at the V2 boundary', () => {
     const base = activeInput({
       minReaderVersion: '0.4.0',
       minWriterVersion: '0.4.0',

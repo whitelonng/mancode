@@ -27,10 +27,13 @@ import {
 } from '../src/context/workflow-metadata.js';
 import { updateV3Workflow } from '../src/context/workflow-update.js';
 import { resolveTaskEntityHomeStore } from '../src/runtime/entity-home-store.js';
+import { readHandoff } from '../src/runtime/handoff-store.js';
+import { createOperationLockPauseForTesting } from '../src/runtime/operation-crash-injection.js';
 import { readOperationJournal } from '../src/runtime/operation-store.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
-import { createSession } from '../src/runtime/session.js';
+import { createSession, readSession } from '../src/runtime/session.js';
 import { readTaskHeadFence } from '../src/runtime/task-head-store.js';
+import { readTaskCheckpointAtRoot } from '../src/runtime/task-operation.js';
 import {
   createLocalActor,
   createSharedActorProfile,
@@ -238,6 +241,11 @@ describe('V3 local workflow reframe', () => {
         `task_head:${created.taskRef.taskId}`,
       ]),
     });
+    await expect(readSession(root, actors.sessionId)).resolves.toMatchObject({
+      activeTaskRef: created.taskRef,
+      activeMode: 'manteam',
+      lastSeenRevision: reframed.metadata.revision,
+    });
   });
 
   it('rejects active child, open handoff, and active solo before writing authority', async () => {
@@ -381,6 +389,43 @@ describe('V3 local workflow reframe', () => {
     });
   });
 
+  it('serializes reframe and child creation in both canonical parent-lock orders', async () => {
+    await assertChildReframeRace(
+      await caseRoot(root, 'concurrent-child-reframe-wins'),
+      'reframe',
+    );
+    await assertChildReframeRace(
+      await caseRoot(root, 'concurrent-child-create-wins'),
+      'child',
+    );
+  });
+
+  it('serializes reframe across both handoff checkpoint and draft lock phases', async () => {
+    await assertHandoffReframeRace(
+      await caseRoot(root, 'concurrent-handoff-reframe-wins'),
+      'reframe',
+    );
+    await assertHandoffReframeRace(
+      await caseRoot(root, 'concurrent-handoff-checkpoint-wins'),
+      'handoff_checkpoint',
+    );
+    await assertHandoffReframeRace(
+      await caseRoot(root, 'concurrent-handoff-draft-wins'),
+      'handoff_draft',
+    );
+  });
+
+  it('serializes reframe and solo handoff start in both canonical task-lock orders', async () => {
+    await assertSoloReframeRace(
+      await caseRoot(root, 'concurrent-solo-reframe-wins'),
+      'reframe',
+    );
+    await assertSoloReframeRace(
+      await caseRoot(root, 'concurrent-solo-start-wins'),
+      'solo',
+    );
+  });
+
   it('rejects terminal, repair-pending, manba, and git-ref workflows without a reframe journal', async () => {
     const terminalRoot = await caseRoot(root, 'terminal');
     const terminalActors = await bootstrap(terminalRoot);
@@ -513,6 +558,430 @@ describe('V3 local workflow reframe', () => {
     });
   });
 });
+
+async function assertChildReframeRace(
+  projectRoot: string,
+  winner: 'reframe' | 'child',
+): Promise<void> {
+  const actors = await bootstrap(projectRoot);
+  const parent = await createV3Workflow({
+    projectRoot,
+    task: 'Race requirements reframe against a diagnostic child.',
+    workflowMode: 'man',
+    sessionId: actors.sessionId,
+    client: 'vitest',
+    taskId: id(200),
+    operationId: id(201),
+    now: NOW,
+  });
+  const finalized = await finalizeV3Requirements({
+    projectRoot,
+    taskRef: parent.taskRef,
+    sessionId: actors.sessionId,
+    expectedTaskRevision: parent.metadata.revision,
+    requirements: confirmedRequirements(parent.requirements),
+    operationId: id(202),
+    now: NOW,
+  });
+  const planned = await reviseV3Plan({
+    projectRoot,
+    taskRef: parent.taskRef,
+    sessionId: actors.sessionId,
+    expectedTaskRevision: finalized.metadata.revision,
+    plan: '# Plan\n\n1. Implement and verify the confirmed change.\n',
+    planDecision: 'governed_execution',
+    operationId: id(203),
+    now: NOW,
+  });
+  await writeMetadata(
+    projectRoot,
+    parent.taskRef,
+    parseWorkflowMetadata({ ...planned.metadata, currentStep: 6 }),
+  );
+
+  const childTaskRef: TaskRef = { namespace: 'local', taskId: id(204) };
+  const childOperationId = id(205);
+  const reframeOperationId = id(206);
+  const reframeCheckpointId = id(207);
+  const parentBefore = await authorityDigest(projectRoot, parent.taskRef);
+  const reframe = () =>
+    reframeV3Workflow({
+      projectRoot,
+      taskRef: parent.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: planned.metadata.revision,
+      checkpointId: reframeCheckpointId,
+      operationId: reframeOperationId,
+      now: NOW,
+    });
+  const createChild = () =>
+    createV3Workflow({
+      projectRoot,
+      task: 'Diagnose the verification failure before parent reframe.',
+      workflowMode: 'manba',
+      sessionId: actors.sessionId,
+      client: 'vitest',
+      parentTaskRef: parent.taskRef,
+      taskId: childTaskRef.taskId,
+      operationId: childOperationId,
+      now: NOW,
+    });
+  const store = new V3ContextStore(projectRoot);
+  const home = await taskHomeStore(projectRoot, parent.taskRef);
+
+  if (winner === 'reframe') {
+    const result = await runPausedCanonicalLockRace(
+      reframeOperationId,
+      reframe,
+      createChild,
+    );
+    const persisted = await store.readTaskSnapshot(parent.taskRef);
+    expect(persisted.metadata).toEqual(result.metadata);
+    expect(persisted.requirements).toEqual(result.requirements);
+    expect(persisted.aggregateError).toBeNull();
+    await expect(
+      store.listActiveChildTaskRefs(parent.taskRef),
+    ).resolves.toEqual([]);
+    await expectTaskMissing(projectRoot, childTaskRef);
+    await expect(
+      readOperationJournal(home, childOperationId),
+    ).resolves.toBeNull();
+    await expect(
+      readOperationJournal(home, reframeOperationId),
+    ).resolves.toMatchObject({ state: 'committed', type: 'reframe' });
+    return;
+  }
+
+  const result = await runPausedCanonicalLockRace(
+    childOperationId,
+    createChild,
+    reframe,
+  );
+  expect(await authorityDigest(projectRoot, parent.taskRef)).toBe(parentBefore);
+  const child = await store.readTaskSnapshot(childTaskRef);
+  expect(child.metadata).toEqual(result.metadata);
+  expect(child.aggregateError).toBeNull();
+  await expect(store.listActiveChildTaskRefs(parent.taskRef)).resolves.toEqual([
+    childTaskRef,
+  ]);
+  await expect(
+    readOperationJournal(home, childOperationId),
+  ).resolves.toMatchObject({ state: 'committed', type: 'workflow_create' });
+  await expect(
+    readOperationJournal(home, reframeOperationId),
+  ).resolves.toBeNull();
+  await expectNoReframeArtifacts(
+    projectRoot,
+    parent.taskRef,
+    reframeOperationId,
+    reframeCheckpointId,
+  );
+}
+
+async function assertHandoffReframeRace(
+  projectRoot: string,
+  winner: 'reframe' | 'handoff_checkpoint' | 'handoff_draft',
+): Promise<void> {
+  const actors = await bootstrap(projectRoot, {
+    git: true,
+    joined: true,
+    receiver: true,
+  });
+  const created = await createV3Workflow({
+    projectRoot,
+    task: 'Race a named handoff against requirements reframe.',
+    workflowMode: 'manteam',
+    sessionId: actors.sessionId,
+    client: 'vitest',
+    sharedPrivacyConfirmed: true,
+    participantActorIds: [actors.receiverActorId as Ulid],
+    implementationScope: { include: ['src/**'], modules: ['handoff'] },
+    taskId: id(300),
+    operationId: id(301),
+    now: NOW,
+  });
+  const planned = await confirmManteamPlan({
+    projectRoot,
+    taskRef: created.taskRef,
+    sessionId: actors.sessionId,
+    requirements: created.requirements,
+    now: NOW,
+  });
+  const handoffId = id(302);
+  const handoffCheckpointId = id(303);
+  const handoffCheckpointOperationId = id(304);
+  const handoffOperationId = id(305);
+  const reframeOperationId = id(306);
+  const reframeCheckpointId = id(307);
+  const createHandoff = () =>
+    createV3HandoffDraft({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: planned.taskRevision,
+      toActorId: actors.receiverActorId as Ulid,
+      handoffId,
+      checkpointId: handoffCheckpointId,
+      checkpointOperationId: handoffCheckpointOperationId,
+      operationId: handoffOperationId,
+      now: NOW,
+    });
+  const reframe = () =>
+    reframeV3Workflow({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: planned.taskRevision,
+      checkpointId: reframeCheckpointId,
+      operationId: reframeOperationId,
+      now: NOW,
+    });
+  const store = new V3ContextStore(projectRoot);
+  const home = await taskHomeStore(projectRoot, created.taskRef);
+
+  if (winner === 'reframe') {
+    const result = await runPausedCanonicalLockRace(
+      reframeOperationId,
+      reframe,
+      createHandoff,
+    );
+    const persisted = await store.readTaskSnapshot(created.taskRef);
+    expect(persisted.metadata).toEqual(result.metadata);
+    expect(persisted.requirements).toEqual(result.requirements);
+    expect(persisted.aggregateError).toBeNull();
+    await expect(readHandoff(home, handoffId)).resolves.toBeNull();
+    await expect(
+      readTaskCheckpointAtRoot(
+        taskRootPath(projectRoot, created.taskRef),
+        handoffCheckpointId,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      readOperationJournal(home, handoffCheckpointOperationId),
+    ).resolves.toBeNull();
+    await expect(
+      readOperationJournal(home, handoffOperationId),
+    ).resolves.toBeNull();
+    await expect(
+      readOperationJournal(home, reframeOperationId),
+    ).resolves.toMatchObject({ state: 'committed', type: 'reframe' });
+    await expect(
+      readTaskHeadFence(home, created.taskRef),
+    ).resolves.toMatchObject({
+      taskRevision: persisted.metadata.revision,
+      lastOperationId: reframeOperationId,
+    });
+    return;
+  }
+
+  const result = await runPausedCanonicalLockRace(
+    winner === 'handoff_checkpoint'
+      ? handoffCheckpointOperationId
+      : handoffOperationId,
+    createHandoff,
+    reframe,
+  );
+  const persisted = await store.readTaskSnapshot(created.taskRef);
+  expect(persisted.aggregateError).toBeNull();
+  expect(persisted.metadata).toMatchObject({
+    lastOperationId: handoffCheckpointOperationId,
+    latestCheckpointRef: { artifactId: handoffCheckpointId },
+  });
+  expect(persisted.requirements.status).toBe('confirmed');
+  await expect(readHandoff(home, handoffId)).resolves.toEqual(result.handoff);
+  await expect(
+    readOperationJournal(home, handoffCheckpointOperationId),
+  ).resolves.toMatchObject({ state: 'committed', type: 'checkpoint_create' });
+  await expect(
+    readOperationJournal(home, handoffOperationId),
+  ).resolves.toMatchObject({ state: 'committed', type: 'handoff_transition' });
+  await expect(
+    readOperationJournal(home, reframeOperationId),
+  ).resolves.toBeNull();
+  await expect(readTaskHeadFence(home, created.taskRef)).resolves.toMatchObject(
+    {
+      taskRevision: persisted.metadata.revision,
+      lastOperationId: handoffCheckpointOperationId,
+    },
+  );
+  await expectNoReframeArtifacts(
+    projectRoot,
+    created.taskRef,
+    reframeOperationId,
+    reframeCheckpointId,
+  );
+}
+
+async function assertSoloReframeRace(
+  projectRoot: string,
+  winner: 'reframe' | 'solo',
+): Promise<void> {
+  const actors = await bootstrap(projectRoot);
+  const created = await createV3Workflow({
+    projectRoot,
+    task: 'Race solo execution assignment against requirements reframe.',
+    workflowMode: 'man',
+    sessionId: actors.sessionId,
+    client: 'vitest',
+    taskId: id(400),
+    operationId: id(401),
+    now: NOW,
+  });
+  const finalized = await finalizeV3Requirements({
+    projectRoot,
+    taskRef: created.taskRef,
+    sessionId: actors.sessionId,
+    expectedTaskRevision: created.metadata.revision,
+    requirements: confirmedRequirements(created.requirements),
+    operationId: id(402),
+    now: NOW,
+  });
+  const planned = await reviseV3Plan({
+    projectRoot,
+    taskRef: created.taskRef,
+    sessionId: actors.sessionId,
+    expectedTaskRevision: finalized.metadata.revision,
+    plan: '# Plan\n\n1. Execute the bounded solo change.\n',
+    operationId: id(403),
+    now: NOW,
+  });
+  const soloOperationId = id(404);
+  const reframeOperationId = id(405);
+  const reframeCheckpointId = id(406);
+  const startSolo = () =>
+    startV3SoloHandoff({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: planned.metadata.revision,
+      operationId: soloOperationId,
+      now: NOW,
+    });
+  const reframe = () =>
+    reframeV3Workflow({
+      projectRoot,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: planned.metadata.revision,
+      checkpointId: reframeCheckpointId,
+      operationId: reframeOperationId,
+      now: NOW,
+    });
+  const store = new V3ContextStore(projectRoot);
+  const home = await taskHomeStore(projectRoot, created.taskRef);
+
+  if (winner === 'reframe') {
+    const result = await runPausedCanonicalLockRace(
+      reframeOperationId,
+      reframe,
+      startSolo,
+    );
+    const persisted = await store.readTaskSnapshot(created.taskRef);
+    expect(persisted.metadata).toEqual(result.metadata);
+    expect(persisted.requirements).toEqual(result.requirements);
+    expect(persisted.metadata.soloExecution).toBeNull();
+    expect(persisted.aggregateError).toBeNull();
+    await expect(
+      readOperationJournal(home, soloOperationId),
+    ).resolves.toBeNull();
+    await expect(
+      readOperationJournal(home, reframeOperationId),
+    ).resolves.toMatchObject({ state: 'committed', type: 'reframe' });
+    return;
+  }
+
+  const result = await runPausedCanonicalLockRace(
+    soloOperationId,
+    startSolo,
+    reframe,
+  );
+  const persisted = await store.readTaskSnapshot(created.taskRef);
+  expect(persisted.metadata).toEqual(result.metadata);
+  expect(persisted.metadata.soloExecution).toMatchObject({ state: 'active' });
+  expect(persisted.requirements.status).toBe('confirmed');
+  expect(persisted.aggregateError).toBeNull();
+  await expect(
+    readOperationJournal(home, soloOperationId),
+  ).resolves.toMatchObject({ state: 'committed', type: 'solo_handoff' });
+  await expect(
+    readOperationJournal(home, reframeOperationId),
+  ).resolves.toBeNull();
+  await expectNoReframeArtifacts(
+    projectRoot,
+    created.taskRef,
+    reframeOperationId,
+    reframeCheckpointId,
+  );
+}
+
+async function runPausedCanonicalLockRace<Winner>(
+  winnerOperationId: Ulid,
+  winner: () => Promise<Winner>,
+  loser: () => Promise<unknown>,
+): Promise<Winner> {
+  const pause = createOperationLockPauseForTesting({
+    operationId: winnerOperationId,
+    pauseAfter: 'entity_locks_held',
+  });
+  const winnerPromise = pause.run(winner);
+  void winnerPromise.catch(() => undefined);
+  await pause.reached;
+  const loserPromise = loser();
+  const [loserWhilePaused] = await Promise.allSettled([loserPromise]);
+  pause.release();
+  const [winnerResult, loserResult] = await Promise.allSettled([
+    winnerPromise,
+    loserPromise,
+  ]);
+
+  expect(loserWhilePaused).toMatchObject({ status: 'rejected' });
+  expect(loserResult).toMatchObject({ status: 'rejected' });
+  if (loserResult.status !== 'rejected') {
+    throw new Error('expected the lock contender to be rejected');
+  }
+  expect(
+    loserResult.reason instanceof Error
+      ? loserResult.reason.message
+      : String(loserResult.reason),
+  ).toBe('MANCODE_LOCK_HELD');
+  if (winnerResult.status === 'rejected') throw winnerResult.reason;
+  return winnerResult.value;
+}
+
+async function taskHomeStore(projectRoot: string, taskRef: TaskRef) {
+  const runtime = await readProjectRuntimeContext(projectRoot);
+  return resolveTaskEntityHomeStore(runtime.entityHomeStoreContext, taskRef);
+}
+
+async function expectTaskMissing(
+  projectRoot: string,
+  taskRef: TaskRef,
+): Promise<void> {
+  await expect(
+    readFile(
+      path.join(taskRootPath(projectRoot, taskRef), 'metadata.json'),
+      'utf8',
+    ),
+  ).rejects.toMatchObject({ code: 'ENOENT' });
+}
+
+async function expectNoReframeArtifacts(
+  projectRoot: string,
+  taskRef: TaskRef,
+  operationId: Ulid,
+  checkpointId: Ulid,
+): Promise<void> {
+  const taskRoot = taskRootPath(projectRoot, taskRef);
+  await expect(
+    readTaskCheckpointAtRoot(taskRoot, checkpointId),
+  ).resolves.toBeNull();
+  await expect(
+    readFile(
+      path.join(taskRoot, 'archives', operationId, 'archive.json'),
+      'utf8',
+    ),
+  ).rejects.toMatchObject({ code: 'ENOENT' });
+}
 
 async function expectRejectedWithoutAuthorityChange(input: {
   projectRoot: string;

@@ -63,6 +63,7 @@ import {
 } from './local-lock.js';
 import {
   armOperationCrashAfterVisibleWrite,
+  pauseIfOperationLockInjectedForTesting,
   throwIfDeferredOperationCrashInjected,
   throwIfOperationCrashInjected,
 } from './operation-crash-injection.js';
@@ -468,6 +469,11 @@ export async function createTaskOperationJournal(
   );
   await context.releaseProjectBarrier();
   throwIfOperationCrashInjected(input.type, 'prepared');
+  const lockPause = pauseIfOperationLockInjectedForTesting(
+    context.operationId,
+    'entity_locks_held',
+  );
+  if (lockPause !== null) await lockPause;
   return created;
 }
 

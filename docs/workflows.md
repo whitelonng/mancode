@@ -44,9 +44,11 @@ mancode workflow requirements local:<ULID> finalize \
   --file requirements.json --expected-revision 1 --session <SESSION_ID>
 mancode workflow plan local:<ULID> revise \
   --file plan.md --expected-revision 2 --session <SESSION_ID>
+mancode workflow plan local:<ULID> confirm \
+  --plan-decision governed_execution --expected-revision 3 --session <SESSION_ID>
 ```
 
-用 `mancode workflow show <TaskRef> --json` 获取最新 revision，不要手工编辑 metadata 或 ledger。
+`plan revise` 必须通过 `--file <plan.md>` 读取 Markdown 计划。修订与确认是两个独立写操作；每次写入后都应从命令结果或 `mancode workflow show <TaskRef> --json` 获取最新 revision，再用于下一次 `--expected-revision`。只保留计划时把确认参数改为 `--plan-decision plan_only`。不要手工编辑 metadata 或 ledger。
 
 ## Policy 2 与需求重新对齐
 
@@ -62,11 +64,25 @@ mancode project upgrade --policy 2 --operation-id <OPERATION_ID> --session <SESS
 当新证据推翻已确认需求时，local workflow 可以从现有 checkpoint 执行原子 reframe：
 
 ```bash
+mancode context resume local:<ULID> --session <SESSION_ID> --client <CLIENT> --json
 mancode workflow reframe local:<ULID> \
-  --expected-revision N --checkpoint-id <ULID> --session <SESSION_ID>
+  --expected-revision N \
+  --checkpoint-id <FRESH_CHECKPOINT_ULID> \
+  --summary "新证据为何使当前需求失效" \
+  --next-action "回到 Step 2 后要澄清的事项" \
+  --session <SESSION_ID> --json
 ```
 
-reframe 会归档当前 requirements、plan 和 ledger，释放有效 claim，并把任务带回需求对齐步骤。它只接受 requirements 已确认、且不存在 active child、open handoff 或 active solo assignment 的 local workflow；git-ref transport 明确拒绝该操作。
+仅在 session 尚未指向目标 TaskRef 时执行 `context resume`。`--checkpoint-id` 必须是本次操作新生成的规范 ULID，不能复用旧 checkpoint。reframe 会原子归档当前 requirements、plan 和 ledger，释放有效 claim，清除 plan decision，并把任务带回 Step 2 的 draft requirements；完成命令后应停止实施，先重新澄清、finalize requirements、revise plan，再由用户确认计划。它只接受 requirements 已确认、且不存在 active child、open handoff 或 active solo assignment 的 local workflow；git-ref transport 明确拒绝该操作。
+
+reframe 的 JSON 结果会返回 `archive.archiveId` 与 `checkpoint.checkpointId`。可通过只读 CLI 检查证据，无需读取 `.mancode` 私有 authority 文件：
+
+```bash
+mancode workflow archive local:<ULID> show <ARCHIVE_ULID> --json
+mancode workflow checkpoint local:<ULID> show <CHECKPOINT_ULID> --json
+```
+
+archive 输出会校验归档摘要，并返回 reframe 前的 requirements 与 plan；checkpoint 输出返回该次 reframe 的完整 checkpoint。这两个命令不修改 workflow，也不需要 `--session`。
 
 ## Session 与 Context Pack
 

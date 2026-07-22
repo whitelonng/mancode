@@ -367,6 +367,31 @@ describe('V3 adapter bootstrap integration', () => {
     expect(agentsAfterCodex).toContain('Codex or ZCode');
   });
 
+  it('renders the complete plan and local reframe command contracts', async () => {
+    await init(root, { v3: true, platform: 'codex' });
+    const man = await readFile(v3ModeEntryPath(root, 'codex', 'man'), 'utf8');
+
+    expect(man).toContain(
+      'revise --expected-revision <n> --file <plan.md> --session <id> --client <active-client>',
+    );
+    expect(man).toContain(
+      'confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id> --client <active-client>',
+    );
+    expect(man).toContain(
+      'workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <fresh-ULID>',
+    );
+    expect(man).toContain('stops at Step 2 with draft requirements');
+    expect(man).toContain(
+      'Do not substitute plan revise, scope-change, or workflow update for reframe.',
+    );
+    expect(man).toContain(
+      'workflow archive <namespace:ULID> show <archive-ULID> --json',
+    );
+    expect(man).toContain(
+      'workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json',
+    );
+  });
+
   it('refuses to overwrite a user-authored original mode entry', async () => {
     await init(root, { v3: true });
     const modePath = v3ModeEntryPath(root, 'codex', 'man');

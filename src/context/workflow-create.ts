@@ -18,6 +18,7 @@ import {
 } from '../runtime/local-lock.js';
 import {
   armOperationCrashAfterVisibleWrite,
+  pauseIfOperationLockInjectedForTesting,
   throwIfDeferredOperationCrashInjected,
   throwIfOperationCrashInjected,
 } from '../runtime/operation-crash-injection.js';
@@ -431,6 +432,11 @@ export async function createV3Workflow(
     await projectBarrier.release();
     projectBarrierReleased = true;
     throwIfOperationCrashInjected('workflow_create', 'prepared');
+    const lockPause = pauseIfOperationLockInjectedForTesting(
+      operationId,
+      'entity_locks_held',
+    );
+    if (lockPause !== null) await lockPause;
 
     journal = await advanceJournal(homeStore, journal, 'validate', now, true);
     // Mark write intent before the visible effect. This makes a crash in the

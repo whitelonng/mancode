@@ -71,6 +71,7 @@ import {
   updateOperationJournal,
 } from './operation-store.js';
 import { readProjectRuntimeContext } from './project-runtime.js';
+import { inspectOperationProjectionState } from './projection-outbox.js';
 import { assertRecoveryActor, planOperationRecovery } from './reconciler.js';
 import { readSession } from './session.js';
 import { readTaskHeadFence, replaceTaskHeadFence } from './task-head-store.js';
@@ -122,6 +123,10 @@ export async function inspectOperationRecovery(
   const plan = planOperationRecovery({
     journal: located.journal,
     reservations: await readReservations(located.journal, stores),
+    projections: await inspectOperationProjectionState(
+      projectRoot,
+      operationId,
+    ),
   });
   return {
     journal: located.journal,

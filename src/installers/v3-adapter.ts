@@ -669,16 +669,31 @@ export async function inspectV3AdapterVersions(
   ];
   const required = new Set(requiredPlatforms);
   const entries = await Promise.all(
-    platforms.map(async (platform) => {
-      const status = await inspectV3Adapter(projectRoot, platform);
-      const primaryPresent = status.targets[0]?.status !== 'missing';
-      return required.has(platform) || primaryPresent
-        ? ([platform, status.ready ? status.version : status.status] as const)
-        : null;
-    }),
+    platforms.map(
+      async (platform) =>
+        [platform, await inspectV3Adapter(projectRoot, platform)] as const,
+    ),
   );
+  return v3AdapterVersionsFromStatuses(entries, required);
+}
+
+/** Builds the same physical inventory used by compatibility from prior status reads. */
+export function v3AdapterVersionsFromStatuses(
+  entries: ReadonlyArray<readonly [PlatformName, V3PlatformAdapterStatus]>,
+  requiredPlatforms: ReadonlySet<PlatformName> | readonly PlatformName[] = [],
+): Partial<Record<PlatformName, string>> {
+  const required =
+    requiredPlatforms instanceof Set
+      ? requiredPlatforms
+      : new Set(requiredPlatforms);
+  const versions = entries.map(([platform, status]) => {
+    const primaryPresent = status.targets[0]?.status !== 'missing';
+    return required.has(platform) || primaryPresent
+      ? ([platform, status.ready ? status.version : status.status] as const)
+      : null;
+  });
   return Object.fromEntries(
-    entries.filter(
+    versions.filter(
       (entry): entry is NonNullable<typeof entry> => entry !== null,
     ),
   ) as Partial<Record<PlatformName, string>>;
@@ -921,8 +936,11 @@ const V3_MODE_DEFINITIONS: Record<
       '- `acceptanceCriteria` must contain at least one required item shaped as `{ "id": "AC-1", "description": "...", "required": true, "method": "automated" }`; `method` is exactly `automated`, `manual`, or `hybrid`.',
       '- Finalize requirements with `mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>`.',
       '- Let mancode assign internal IDs and digests; do not invent canonical IDs or digests in the semantic input.',
-      '- Revise or confirm the plan with `mancode workflow plan <namespace:ULID> revise|confirm --expected-revision <n> ... --session <id>`.',
+      '- Revise the plan with `mancode workflow plan <namespace:ULID> revise --expected-revision <n> --file <plan.md> --session <id>`.',
+      '- Confirm the current plan with `mancode workflow plan <namespace:ULID> confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id>`.',
       "- Confirming with `--plan-decision plan_only` keeps the plan as planned authority and clears this session's active workflow pointer. Resume the TaskRef explicitly before any later governed mutation.",
+      '- When new evidence materially invalidates confirmed requirements and the operator explicitly chooses to realign the same local task, resume its TaskRef if needed, generate a fresh canonical checkpoint ULID, and run `mancode workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <fresh-ULID> --summary "<reason>" --next-action "<step-2 action>" --session <id>`. Reframe archives the confirmed requirements and plan, clears the plan decision, and stops at Step 2 with draft requirements. Do not substitute plan revise, scope-change, or workflow update for reframe.',
+      '- Read reframe evidence without opening private authority files: `mancode workflow archive <namespace:ULID> show <archive-ULID> --json` and `mancode workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json`.',
       '- Apply verification and review ledgers with their mancode `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
     ],
   },

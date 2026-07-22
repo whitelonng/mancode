@@ -27,6 +27,7 @@ import {
   writeTeamEvent,
 } from '../team/events.js';
 import { replaceFileAtomically } from './atomic-file.js';
+import type { OperationProjectionState } from './reconciler.js';
 import {
   clearSessionTaskPointer,
   readSession,
@@ -265,6 +266,35 @@ export async function listProjectionIntents(
       compareUtf8(left.operationId, right.operationId) ||
       compareUtf8(left.projectionId, right.projectionId),
   );
+}
+
+/**
+ * Inspects the projections actually declared for one operation. An operation
+ * with no projection intents has no projection repair work.
+ */
+export async function inspectOperationProjectionState(
+  projectRoot: string,
+  operationId: Ulid,
+): Promise<OperationProjectionState> {
+  assertUlid(operationId, 'projection operationId');
+  const state: OperationProjectionState = {
+    auditEvent: 'not_applicable',
+    sessionPointer: 'not_applicable',
+    cache: 'not_applicable',
+  };
+  const intents = await listProjectionIntents(projectRoot, {
+    operationId,
+    includeTerminal: true,
+  });
+  for (const intent of intents) {
+    const key = projectionStateKey(intent.target.kind);
+    const availability =
+      intent.state === 'superseded'
+        ? 'not_applicable'
+        : await inspectProjection(projectRoot, intent.target);
+    state[key] = mergeProjectionAvailability(state[key], availability);
+  }
+  return state;
 }
 
 /** Applies only durable, fully specified targets and leaves conflicts pending. */
@@ -519,6 +549,32 @@ async function inspectProjection(
         ? 'missing'
         : 'present';
   }
+}
+
+function projectionStateKey(
+  kind: ProjectionTargetV1['kind'],
+): keyof OperationProjectionState {
+  switch (kind) {
+    case 'audit_event':
+      return 'auditEvent';
+    case 'session_pointer':
+      return 'sessionPointer';
+    case 'cache_invalidation':
+      return 'cache';
+  }
+}
+
+function mergeProjectionAvailability(
+  left: ProjectionAvailability,
+  right: ProjectionAvailability,
+): ProjectionAvailability {
+  const priority: Record<ProjectionAvailability, number> = {
+    not_applicable: 0,
+    present: 1,
+    missing: 2,
+    conflict: 3,
+  };
+  return priority[right] > priority[left] ? right : left;
 }
 
 async function applyProjection(

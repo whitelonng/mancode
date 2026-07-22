@@ -1,6 +1,6 @@
 # 规划治理演进与安全发布契约
 
-本文是 mancode 0.4.0 的规划治理实施与发布契约。它描述目标行为、兼容边界、验证证据和停止条件。`c12969b` 是开发集成基线；后续契约修复必须进入新的唯一候选。在最终发布门禁和 npm 发布完成前，本文的“已完成”只表示代码与自动化验证完成，不表示已经发布。
+本文是 mancode 0.4.0 的规划治理实施与发布契约。它描述目标行为、兼容边界、验证证据和停止条件。`4dc2e7e` 是当前已验证的开发集成候选；后续契约修复必须进入新的唯一候选。在最终发布门禁和 npm 发布完成前，本文的“已完成”只表示代码与自动化验证完成，不表示已经发布。
 
 ## 1. 决策摘要
 
@@ -14,11 +14,11 @@
 
 | 类别 | 状态 | 证据 |
 | --- | --- | --- |
-| A–F 实现工作包 | 工作树修复完成 | `c12969b` 为基线；Policy 2 mode scope、resolver 短路和 adapter target recovery 已修复，等待形成新候选 |
-| 本地发布前检查 | 工作树通过 | `npm run prepublishOnly` 通过：lint、typecheck、build、dist adapter 验证、117 个测试文件/811 个测试；形成新候选后仍需重跑 |
-| GitHub Quality gate | 需重跑 | 旧基线 run 29867788739 不能替代新候选证据 |
-| GitHub Windows gate | 需重跑 | 旧基线 run 29867788958 不能替代新候选证据；目标仍是 Windows CMD、PowerShell、Git Bash |
-| `develop` 远程一致性 | 候选失效 | 当前本地有候选后的实现、测试和文档修改；形成新候选后再与 `origin/develop` 对齐，`main` 未修改 |
+| A–F 实现工作包 | 工作树生产加固完成 | `4dc2e7e` 包含 Policy 2 mode scope、resolver 短路和 adapter target recovery 修复；本轮又补齐 required adapter readiness、真实 reframe 并发和已发布旧 CLI 黑盒证据，等待形成下一候选 |
+| 本地发布前检查 | 工作树通过 | 本轮 `npm run prepublishOnly` 通过：lint、typecheck、build、dist adapter 验证、119 个测试文件/824 个测试；`npm audit --omit=dev`、`npm pack --dry-run` 和实际 tarball 安装/CLI/module smoke 均通过，形成候选后仍需在干净 checkout 重跑 |
+| GitHub Quality gate | 候选通过 | `4dc2e7e` 的 [Quality gate run 29896302856](https://github.com/whitelonng/mancode/actions/runs/29896302856) 成功；候选变化后必须重跑 |
+| GitHub Windows gate | 候选通过 | `4dc2e7e` 的 [Windows gate run 29896302904](https://github.com/whitelonng/mancode/actions/runs/29896302904) 在 CMD、PowerShell、Git Bash 全部成功；候选变化后必须重跑 |
+| `develop` 远程一致性 | 候选已对齐 | `4dc2e7e` 已与 `origin/develop` 对齐；后续工作树修复形成新候选后需重新推送和对齐，`main` 未修改 |
 | 最终发布验收 | 未完成 | 五平台真实宿主、跨 clone/legacy 人工验收、最终 Beta gate 和干净 checkout tarball 验收仍待完成 |
 | npm 发布 | 未执行 | 在上项全部完成前保持禁止 |
 
@@ -49,18 +49,18 @@
 
 ## 3. 基线证据与代码 owner
 
-以下证据以已验证的 V3 基线为准。实现开始前应重新运行对应 contract；如果在途改动改变了行号或行为，更新证据而不是沿用旧结论。
+以下证据以当前工作树的 V3 实现为准。候选形成前后都应重新运行对应 contract；如果在途改动改变了行号或行为，更新证据而不是沿用旧结论。
 
 | 事实 | 当前证据 | 对本计划的影响 |
 | --- | --- | --- |
-| workflow create 的 Policy 1 基线 | 以 release candidate 的 public `workflow create` contract 和 [`src/context/workflow-create.ts`](../src/context/workflow-create.ts#L742) 共同复核 | 不以单个 builder 行号宣称基线；0.4.0 必须由“项目已升级”状态选择默认值，未升级项目仍写 1 |
-| policy parser 接受任意正整数 | [`src/context/workflow-metadata.ts`](../src/context/workflow-metadata.ts#L581) | 必须改为显式白名单；未知版本要产生稳定错误码 |
-| context compatibility 使用 manifest 中的 adapter 版本回显 | [`src/commands/context.ts`](../src/commands/context.ts#L833) | 不能把 manifest echo 当作磁盘内容证据 |
-| adapter inspection 返回 renderer 当前常量 | [`src/installers/v3-adapter.ts`](../src/installers/v3-adapter.ts#L480) | 需要实际文件 digest 和 stale 分类 |
-| requirements finalize 与 plan revise 已有 stale ledger 逻辑 | [`src/context/requirements-finalize.ts`](../src/context/requirements-finalize.ts#L263)、[`src/context/plan-revision.ts`](../src/context/plan-revision.ts#L280) | 可复用 ledger stale 的验证模式，但不能借此假装实现了 reframe |
-| scope-change 会处理旧 claim 与 successor claim | [`src/context/scope-change.ts`](../src/context/scope-change.ts#L569) | 它不是需求重构；reframe 必须有独立 operation type 和 eligibility |
-| parent contract 变化会使 child snapshot stale | [`src/context/child-result-merge.ts`](../src/context/child-result-merge.ts#L335) | reframe 必须在入口拒绝 active child，而不是事后合并 stale 结果 |
-| solo handoff 目前有 start/complete，但没有取消或 reframe 路径 | [`src/context/solo-handoff.ts`](../src/context/solo-handoff.ts#L350) | advisory 只返回诊断；0.4.0 reframe 必须显式拒绝 active solo assignment |
+| workflow create 保留 Policy 1 基线，只在 V2 已升级项目的新 `/man` 上使用 Policy 2 默认值 | 以 release candidate 的 public `workflow create` contract 和 [`src/context/workflow-create.ts`](../src/context/workflow-create.ts#L277) 共同复核 | 不以单个 builder 行号宣称基线；项目升级状态和 workflow mode 共同决定默认值 |
+| policy parser 只接受各组件显式支持的版本白名单 | [`src/context/workflow-metadata.ts`](../src/context/workflow-metadata.ts#L621) | 未知版本产生稳定的 `WorkflowPolicyVersionUnsupportedError`，不能被当成未来版本静默接受 |
+| context compatibility 使用 adapter 的实际磁盘 inventory | [`src/commands/context.ts`](../src/commands/context.ts#L881) | manifest echo 不作为磁盘内容证据；inventory、renderer version 和内容状态必须共同匹配 |
+| adapter inspection 重建 expected bytes/digest，并分类 `ready`、`missing`、`stale`、`unreadable` | [`src/installers/v3-adapter.ts`](../src/installers/v3-adapter.ts#L626) | status 与 mutation gate 都以物理 target 为准，非 ready 状态不能与 manifest version 混淆 |
+| requirements finalize 与 plan revise 显式把旧 review/verification ledger 标为 stale | [`src/context/requirements-finalize.ts`](../src/context/requirements-finalize.ts#L188)、[`src/context/plan-revision.ts`](../src/context/plan-revision.ts#L347) | 复用 ledger stale 的验证模式，但 reframe 仍使用独立原子 operation |
+| scope-change 会处理旧 claim 与 successor claim | [`src/context/scope-change.ts`](../src/context/scope-change.ts#L637) | 它不是需求重构；reframe 使用独立 operation type 和 eligibility |
+| parent contract 变化会使 child snapshot stale | [`src/context/child-result-merge.ts`](../src/context/child-result-merge.ts#L331) | reframe 在入口拒绝 active child，而不是事后合并 stale 结果 |
+| reframe eligibility 显式拒绝 active child、open handoff 和 active solo assignment | [`src/context/reframe.ts`](../src/context/reframe.ts#L497) | advisory 只返回诊断；不得通过局部清理绕过跨实体约束 |
 
 **实现 owner 约定：** workflow metadata/parser 负责 policy 结构和状态转换； adapter installer/status 负责渲染、digest 和物理文件； compatibility/resolver 负责 reader/writer 门；workflow operation 模块负责跨实体写入；templates 只负责 advisory 文本，不得直接写权威状态。
 
@@ -215,7 +215,7 @@ mancode adapter status --json
 
 | CLI/release | 可读取/写入的 planning policy |
 | --- | --- |
-| 既有 0.3.x CLI | 只支持 V1/Policy 1；遇到 V2 manifest 由 `minReaderVersion`/`minWriterVersion` 拒绝，不把旧 parser 行为当作未知 policy 拒绝证据 |
+| 既有 0.3.x CLI | 只支持 V1/Policy 1；已发布的 0.3.18 在 V2 manifest schema parser 边界拒绝未知的 `workflowPolicyDefaults`，并在 policy 执行和 authority mutation 前终止；能解析 V2 的 reader/writer 仍由 `minReaderVersion`/`minWriterVersion` 拒绝 |
 | 0.4.0（未升级项目） | 读取和写入已有 `1`；新建仍按项目记录的默认值 |
 | 0.4.0（已升级项目） | `1` 和 `2`；新建 `/man` 默认 `2` |
 
@@ -314,11 +314,11 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 | 0.3.x + V1 未升级项目 | 读写 Policy 1 | 不提供 Policy 2 创建 | 写 1 | 保持旧行为；Policy 2 需要显式升级 |
 | 0.4.x + 未升级项目 | 读写 | 不创建、不接受未满足门禁的 2 | 写 1 | CLI 新，但 project policy 未升级 |
 | 0.4.x + 已升级项目 | 读写且保留 provenance | 读写，要求 digest/capability | 写 2 | 目标 Policy 2 路径 |
-| 0.3.x + V2 已升级项目 | 不允许绕过 `minWriterVersion` 写入 | 不允许绕过 `minReaderVersion` 读取/执行 | 不允许创建 | 显式 `MANCODE_WRITER_VERSION_TOO_OLD` 或 reader failure |
+| 0.3.x + V2 已升级项目 | 不允许写入 | 不允许读取后执行 | 不允许创建 | 0.3.18 在 manifest parser 边界拒绝；能解析 V2 的旧 reader/writer 返回 version-too-old failure |
 | 任意 CLI + stale adapter | 读诊断 | 拒绝 mutation | 拒绝创建 | 先执行显式 adapter upgrade |
 | 任意 CLI + git-ref transport | 正常既有 transport contract | Policy 2 仍可按 transport contract 运行 | 不能 reframe | `MANCODE_REFRAME_GIT_REF_UNSUPPORTED` |
 
-“读”不等于“执行”：旧 CLI 只能在 V1/Policy 1 的兼容范围内展示安全诊断；遇到 V2 manifest 必须先由 reader gate 阻断，不能生成执行指令或写入任何 authority。
+“读”不等于“执行”：旧 CLI 只能在 V1/Policy 1 的兼容范围内展示安全诊断；遇到 V2 manifest 必须先由 manifest parser 或 reader gate 阻断，不能生成执行指令或写入任何 authority。
 
 ## 9. 验证矩阵
 
@@ -370,13 +370,13 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 - [x] 触发 stop/re-align 时只返回 `NEEDS_REALIGNMENT + MANCODE_REFRAME_REQUIRED`，authority 文件内容和 claims 不变。
 - [x] Scout/Plan Coach 新字段和规则覆盖正常、缺失证据、冲突 owner、单方向简单任务。
 - [x] adapter digest algorithm、status 分类、stale error、explicit upgrade command 和 recovery contract 完成。
-- [x] policy parser 白名单、writer capability、`minWriterVersion`/reader gate 和 0.3.x + V2 manifest 拒绝测试在当前工作树通过；新候选仍需重跑。
+- [x] policy parser 白名单、writer capability、`minWriterVersion`/reader gate 和 0.3.x + V2 manifest 拒绝 contract 完成；本轮已增加真实发布版 0.3.18 CLI 的黑盒写入拒绝与 authority 全树字节不变证据，后续候选仍需重跑。
 - [x] project upgrade dry-run、确认、commit、repair、abort 和 provenance 完成；现有 workflow 未被批量重写，新 `/man` Policy 2 默认值有明确创建证据。
-- [x] local transport 的完整原子 reframe、recovery、并发和 archive retention 通过；没有复用 scope-change，也没有 active child/open handoff/active solo assignment 的绕过路径。
+- [x] local transport 的完整原子 reframe、recovery、archive retention，以及与 child create、handoff create/start、solo handoff start 的真实并发竞争通过；没有复用 scope-change，也没有部分 authority 或 eligibility 绕过路径。
 - [x] 已升级/未升级项目、旧/新 workflow、local/git-ref transport 的自动化兼容矩阵通过；git-ref reframe 稳定返回 `MANCODE_REFRAME_GIT_REF_UNSUPPORTED`。
-- [x] 5 个 adapter renderer、Windows path、line ending、用户托管区和每个 target 写前/写后中断恢复在当前工作树通过；新候选仍需重跑 dist/Windows/recovery gate。
+- [x] 5 个 adapter renderer、Windows path、line ending、用户托管区和每个 target 写前/写后中断恢复在 `4dc2e7e` 通过；后续候选仍需重跑 dist/Windows/recovery gate。
 - [ ] Claude Code、Codex、Cursor、GitHub Copilot、ZCode 的最终候选真实宿主验收，以及 [`docs/release-acceptance.md`](./release-acceptance.md) 要求的跨 clone、legacy、Beta gate 和干净 checkout tarball 验收。
-- [x] 按开发集成要求将候选 `c12969b` 推送到远程 `develop`；这不等同于 release gate 通过。
+- [x] 按开发集成要求将候选 `4dc2e7e` 推送到远程 `develop`，且 Quality 与 Windows gate 均通过；这不等同于 release gate 通过。
 - [ ] 完成剩余发布验收后才允许进入 npm 发布检查；任何条件失败都不得发布 npm。
 
 ## 11. 发布回滚与停止策略
@@ -394,14 +394,14 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 ## 12. 实施顺序与停止/重新对齐条件
 
-截至 `c12969b`，步骤 1–4 是开发集成基线；当前修复尚未形成新的候选，步骤 2–5 和 7 需在新候选上重新完成。
+截至 `4dc2e7e`，步骤 1–4 是已验证的开发集成候选；本轮生产加固修复形成新候选后，受影响的自动化证据和步骤 5、7 仍需重新完成。
 
 1. [x] 冻结本文件中的错误码、字段语义、digest 规范和兼容矩阵，并复核 public workflow create 的 Policy 1 基线。
 2. [x] 完成 A–F 工作包；工作包可以独立合并，但不发布中间 npm 版本。
 3. [x] 完成 adapter digest/upgrade 和 parser/capability gate；当前工作树已通过 0.3.x + V2 manifest reader/writer fixture，新候选仍需重跑。
 4. [x] 完成 project upgrade 和 local reframe 的独立 operation/recovery；只在 upgraded marker 下打开 Policy 2 create default。
 5. [ ] 在同一个 release candidate 上通过第 10.2 节和 [`docs/release-acceptance.md`](./release-acceptance.md) 的全部真实宿主、跨 clone、legacy、Beta gate 和 tarball 检查。
-6. [x] 只把候选提交推送到远程 `develop`；禁止推送、合并或创建以 `main` 为目标的发布操作。
+6. [ ] 将本轮加固后的唯一候选提交推送到远程 `develop`；`4dc2e7e` 的历史推送不替代新候选，且禁止推送、合并或创建以 `main` 为目标的发布操作。
 7. [ ] 确认远程 `develop` 与完整验收证据完全一致后，才允许发布唯一的 npm 版本 0.4.0。git-ref reframe 始终拒绝，不进入本计划范围。
 
 任何阶段出现下列情况，都回到“证据和契约评审”，而不是继续编码：
@@ -422,7 +422,7 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 1. **Public create 基线：** 用未升级项目的端到端 create contract 证明只写 Policy 1；不得把 CLI 选项、模板默认值或 builder 默认值中的任一项当成唯一证据。
 2. **Digest 的持久化位置：** 固定采用“renderer 重建 expected digest + local 非权威 cache”，不在 V1 或 V2 持久化 content digest。性能不足必须另立设计，不能阻塞后临时扩 schema。
-3. **升级命令的公开名称：** 以现有 `adapter status/install` 命令注册、JSON 输出和 shell 退出码测试确定名称；文档和实现必须只保留一个正式入口。
+3. **升级命令的公开名称：** 以现有 `adapter status/upgrade` 命令注册、JSON 输出和 shell 退出码测试确定名称；文档和实现必须只保留一个正式入口。
 4. **Capability 的编码：** 默认由 CLI 内置 capability set 加 project `minWriterVersion` 双门控制，不新增可被旧 CLI 忽略的 manifest capability 字段；local reframe 与 git-ref hard reject 必须使用不同 capability 结果。
 
 这四项仍须与第 10.2 节的共同 release gate 一起通过，才允许发布 0.4.0。git-ref reframe 不在支持范围内。
@@ -431,11 +431,11 @@ mancode project upgrade --policy 2 --operation-id <operationId> --session <id> -
 
 0.4.0 只允许按以下顺序发布：
 
-`c12969b` 是当前开发集成基线；候选后的实现、测试和发布文档修改已使其失效。新的唯一候选必须重新完成第 1–3 步并推送到 `origin/develop`；第 4–6 步必须在任何 `npm publish` 前补齐。
+`4dc2e7e` 是当前已验证的开发集成候选，其 [Quality gate](https://github.com/whitelonng/mancode/actions/runs/29896302856) 和 [Windows gate](https://github.com/whitelonng/mancode/actions/runs/29896302904) 均成功。候选后的任何实现、测试或发布文档修改都会使这些证据不再适用于新候选；新的唯一候选必须重新完成第 1–3 步并推送到 `origin/develop`，第 4–6 步必须在任何 `npm publish` 前补齐。
 
 1. 所有实现、修复和文档进入本地 `develop`，形成唯一 release candidate commit。
 2. 在该提交上完成第 10.2 节的全部自动化、恢复、跨平台和真实宿主验收。任何失败都必须修复并从头重跑受影响的 release gate。
-3. [x] 只执行 `git push origin develop`。禁止直接或间接更新远程 `main`，包括 push、merge、rebase、以 `main` 为目标的 PR 或自动化发布工作流。
+3. [ ] 对本轮形成的新候选只执行 `git push origin develop`。禁止直接或间接更新远程 `main`，包括 push、merge、rebase、以 `main` 为目标的 PR 或自动化发布工作流。
 4. 从远程 `develop` 的同一提交创建干净 checkout，运行 `npm ci`、`npm run prepublishOnly`、要求的平台 smoke tests 和 `npm pack --dry-run`；随后执行实际 `npm pack`，验证生成 tarball 可安装、CLI 可启动。
 5. 确认 release candidate commit、远程 `develop` commit、测试证据和待发布 package version 完全一致。
 6. 前五步全部成功后才允许执行 `npm publish`。不发布 `0.4.0-beta`、`0.4.0-rc` 或其他中间 npm 版本。
