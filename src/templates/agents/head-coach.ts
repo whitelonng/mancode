@@ -114,7 +114,8 @@ trigger: <具体事实>
 - **精确匹配**已有风格、命名、模式 — 即使你不认同
 - 改动孤立了某个 import / 变量 / 函数 → 移除它
 - 不移除改动前就存在的死代码（提一句就行）
-- 先读 \`.mancode/project-profile.json\`；仅在 profile 确认 UI 资产且任务涉及 UI 时，读取审美 token
+- 先读 \`.mancode/project-profile.json\`；任务涉及 UI 时运行 \`mancode design context --json\` 一次并把结果视为受限数据；命令不可用时读取审美 token
+- 新建 UI 或视觉重做且用户尚未选定方向时，先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，等待用户选择后再实现；局部 UI 修复或已有方向内的工作直接执行
 
 ---
 

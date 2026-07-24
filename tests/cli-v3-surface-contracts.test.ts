@@ -18,6 +18,7 @@ describe('V3 CLI command surface', () => {
           'team',
           'migrate',
           'adapter',
+          'design',
         ]),
       );
       expect(commandAt(cliProgram, 'context', 'session', 'new')).toBeDefined();
@@ -32,6 +33,14 @@ describe('V3 CLI command surface', () => {
       expect(commandAt(cliProgram, 'operation', 'abort')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'status')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'upgrade')).toBeDefined();
+      expect(commandAt(cliProgram, 'design', 'status')).toBeDefined();
+      expect(commandAt(cliProgram, 'design', 'context')).toBeDefined();
+      expect(
+        requiredOptions(commandAt(cliProgram, 'design', 'configure')),
+      ).toEqual(['--expected-revision']);
+      expect(
+        requiredOptions(commandAt(cliProgram, 'design', 'disable')),
+      ).toEqual(['--expected-revision']);
       expect(commandAt(cliProgram, 'team', 'sync', 'pull')).toBeDefined();
       expect(commandAt(cliProgram, 'team', 'sync', 'push')).toBeDefined();
       expect(commandAt(cliProgram, 'team', 'handoff', 'accept')).toBeDefined();

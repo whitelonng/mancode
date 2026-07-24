@@ -64,6 +64,9 @@ describe('Cursor adapter', () => {
     expect(solo).toContain('globs: "**/*"');
     expect(solo).toContain('# mancode solo');
     expect(solo).toContain('read `.mancode/aesthetics/style-tokens.json`');
+    expect(solo).toContain('present 2-3 distinct product-appropriate');
+    expect(solo).toContain('then wait for the user to choose');
+    expect(solo).toContain('continue directly for scoped UI fixes');
     expect(solo).toContain('one bounded self-check');
     expect(solo).toContain('Do not start another reviewer');
     expect(solo).toContain('semantic owner or source of truth is unclear');

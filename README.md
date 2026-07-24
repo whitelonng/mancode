@@ -159,8 +159,9 @@ legacy `state.json` 与当前工作流权威数据。
 ├── schema.json
 ├── shared/config.json
 ├── shared/context/project.json
+├── shared/context/design-policy.json # 可选：design configure 后创建
 ├── shared/team/
-└── local/                         # session、workflow、manps 报告
+└── local/                         # session、workflow、扫描报告和样式缓存
 
 .claude/skills/                  # Claude Code：bootstrap + 原 mode skills
 .cursor/rules/ + commands/       # Cursor：bootstrap + 原 mode commands
@@ -182,7 +183,7 @@ AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 ins
 - **自由选择执行强度**：计划确认后，可只保留计划、交给默认 `solo` 轻量开发，或继续完整 `/man` 的验证与有界风险审查。
 - **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/<namespace>/workflows/<ULID>/`。
 - **支持团队上下文**：`/manteam` 通过 `.mancode/shared/` 的类型化实体共享已确认信息。
-- **扫描项目健康度**：`mancode manps` 检测陈旧 TODO、未使用依赖、风险依赖和硬编码设计值。
+- **扫描项目健康度**：`mancode manps` 检测陈旧 TODO、未使用依赖、风险依赖、混用图标系统和硬编码设计值。
 
 ## 适合什么项目？
 
@@ -428,8 +429,12 @@ mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json>
 mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
+mancode design status --json
+mancode design context --json
+mancode design configure --expected-revision <n> [options]
+mancode design disable --expected-revision <n>
 mancode refresh-project
-mancode refresh-style
+mancode refresh-style [--root <relative-path>]
 mancode version
 ```
 
@@ -527,6 +532,35 @@ mancode manps config
 .mancode/local/preseason-reports/<timestamp>-<area>.md
 ```
 
+### `mancode design`
+
+项目设计策略是显式启用功能。`mancode init` 不会创建策略；策略缺失、禁用或损坏时，
+`design context` 会安全降级为 `preserve`，普通编码和工作流恢复不受影响。
+Legacy 项目也可读取这个安全上下文，但只有当前 Continuity 项目能配置共享策略。
+
+- `preserve`：保持现有层级、布局、组件系统和交互模式，只完成任务要求的 UI 改动。
+- `refine`：在不改变产品结构的前提下改善层级、排版、间距、状态和响应式行为。
+- `experimental`：允许一个符合产品语境的统一视觉方向和更高级的构图/动效，但必须显式传入 `--confirm-experimental`；它不授权新增产品功能、改变信息架构或扩大任务范围。
+
+新建 UI 或视觉重做时，如果用户尚未选定视觉方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，等待用户选择后再实现。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。`experimental` 对品牌、活动、编辑、作品集和发布型页面强调首屏记忆点与贯穿全页的视觉母题；对任务型产品仍优先保证工作流清晰度。
+
+策略只保存 preset、图标、表情、动效和浏览器验证的严格枚举，不保存自由文本提示词。
+Agent 通过 `mancode design context --json` 获取代码生成的固定指导、质量门槛和经过清洗的
+样式摘要。`--icons lucide` 不会自动安装 Lucide；依赖变更仍需任务明确授权。
+
+```bash
+mancode design status --json
+mancode design configure --expected-revision 0 --preset refine --icons lucide --emoji forbid-as-interface-icon --motion purposeful --browser-validation when-available
+mancode design context --json
+mancode design disable --expected-revision 1
+
+# experimental 必须额外确认
+mancode design configure --expected-revision 0 --preset experimental --confirm-experimental
+```
+
+策略保存在 `.mancode/shared/context/design-policy.json`，应像其他仓库配置一样审查并提交。
+`configure`/`disable` 只更新当前 checkout，不会发布 git-ref 远端同步回执。
+
 ### `mancode refresh-style`
 
 刷新项目 profile；检测到 UI 资产时，还会重新扫描设计 token。它会更新：
@@ -535,6 +569,9 @@ mancode manps config
 .mancode/local/cache/style-tokens.json
 .mancode/shared/context/project.json
 ```
+
+Monorepo 可显式选择一个仓库内 UI 根目录，例如 `mancode refresh-style --root apps/web`。
+绝对路径、路径穿越和逃逸仓库的符号链接会被拒绝；不传 `--root` 时保持整仓扫描行为。
 
 平台 adapter 是不嵌入 task/style 快照的静态 bootstrap，因此刷新项目事实后不需要重装。
 

@@ -523,6 +523,51 @@ process.exit(1);
     );
   });
 
+  it('reports one P2 issue when multiple icon systems are declared', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          'lucide-react': '^0.468.0',
+          '@heroicons/react': '^2.2.0',
+        },
+      }),
+      'utf-8',
+    );
+
+    const report = await runPreseasonScan(dir, 'all');
+    const issues = report.issues.filter(
+      (issue) => issue.id === 'aesthetics-mixed-icon-systems',
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      severity: 'P2',
+      type: 'aesthetics',
+      file: 'package.json',
+    });
+    expect(issues[0]?.detail).toContain('Lucide, Heroicons');
+  });
+
+  it('does not report multiple packages from the same icon system', async () => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { 'lucide-react': '^0.468.0' },
+        devDependencies: { 'lucide-static': '^0.468.0' },
+      }),
+      'utf-8',
+    );
+
+    const report = await runPreseasonScan(dir, 'all');
+
+    expect(
+      report.issues.some(
+        (issue) => issue.id === 'aesthetics-mixed-icon-systems',
+      ),
+    ).toBe(false);
+  });
+
   it('does not follow symlinked directories during source scans', async () => {
     await writeFile(
       path.join(dir, 'package.json'),

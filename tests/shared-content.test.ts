@@ -47,6 +47,9 @@ describe('generateSharedContent', () => {
     expect(content).toContain('Tech stack: React + TypeScript');
     expect(content).toContain('read `.mancode/state.json`');
     expect(content).toContain('read `.mancode/aesthetics/style-tokens.json`');
+    expect(content).toContain('present 2-3 distinct product-appropriate');
+    expect(content).toContain('then wait for the user to choose');
+    expect(content).toContain('continue directly for scoped UI fixes');
     expect(content).toContain('YAGNI ladder');
     expect(content).toContain('manba: diagnose bugs');
     expect(content).toContain('Platform Downgrade');

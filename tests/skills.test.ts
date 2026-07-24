@@ -141,6 +141,9 @@ describe('mvp-2 skills', () => {
 
   it('keeps non-Claude mode files on the same validated workflow contract', () => {
     const man = renderModeSkill('man', '/');
+    expect(man).toContain('present 2-3 distinct product-appropriate');
+    expect(man).toContain('then wait for the user to choose');
+    expect(man).toContain('directly for scoped UI fixes');
     expect(man).toMatch(/workflow create man/);
     expect(man).toMatch(/Step 1/);
     expect(man).toMatch(/Step 9/);
