@@ -16,7 +16,6 @@ function updateThemeToggle(theme) {
       : "Switch to light theme";
   themeToggle.setAttribute("aria-label", label);
   themeToggle.title = label;
-  themeToggle.querySelector("span").textContent = isLight ? "◑" : "◐";
 }
 
 updateThemeToggle(document.documentElement.dataset.theme || "dark");

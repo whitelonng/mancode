@@ -28,7 +28,7 @@
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
-        <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span aria-hidden="true">◐</span></button>
+        <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span></button>
         <a class="language-link" href="./docs.html" lang="en" aria-label="Switch to English">EN</a>
       </div>
     </header>
@@ -44,7 +44,7 @@
         <p class="docs-nav-hint" aria-hidden="true">横向滑动查看全部主题 →</p>
         <nav class="docs-nav">
           <div class="docs-nav-group"><p>从这里开始</p><a class="active" href="#overview">概览</a><a href="#install">安装与初始化</a><a href="#files">文件与隐私</a><a href="#continuity">跨会话续接</a><a href="#recommend">选择模式</a></div>
-          <div class="docs-nav-group"><p>使用 mancode</p><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台适配</a></div>
+          <div class="docs-nav-group"><p>使用 mancode</p><a href="#design">设计策略</a><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台适配</a></div>
           <div class="docs-nav-group"><p>维护</p><a href="#style">刷新上下文</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></div>
           <div class="docs-nav-group"><p>链接</p><a href="./index.zh-CN.html">官网首页</a><a href="./docs.html">English Docs</a><a href="https://github.com/whitelonng/mancode/blob/main/README.md">GitHub README</a></div>
         </nav>
@@ -83,7 +83,7 @@
             <tr><td><code>--platform LIST</code></td><td>已经知道目标 Agent</td><td>安装 <code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code> 中的一个或多个。</td></tr>
             <tr><td><code>--empty</code></td><td>目录有意保持为空</td><td>无需先执行 <code>git init</code> 或创建 manifest，也能初始化通用项目。</td></tr>
             <tr><td><code>--team</code> / <code>--no-team</code></td><td>不采用自动判断结果</td><td>强制开启或关闭团队共享上下文。</td></tr>
-            <tr><td><code>--style NAME</code></td><td>已有明确的视觉偏好</td><td>保存为默认样式偏好。</td></tr>
+            <tr><td><code>--style NAME</code></td><td>显式使用 <code>--legacy</code> 初始化</td><td>保存旧版自由文本样式偏好。Continuity 项目改用带 revision 的 <code>mancode design</code> 策略。</td></tr>
             <tr><td><code>--lang en|zh-CN</code></td><td>需要稳定的生成语言</td><td>指定生成内容的语言。</td></tr>
           </tbody></table>
 
@@ -131,6 +131,35 @@
           <div class="docs-admonition"><strong>判断原则</strong><p>不要因为任务很长就默认使用 <code>/man</code>。当错误选择代价高、难以回滚，或事后很难审查时，再升级到它。</p></div>
         </section>
 
+        <section class="doc-section" id="design" data-searchable>
+          <h2>设置设计策略</h2>
+          <p>设计策略是面向 UI 任务的显式启用 Continuity 能力。<code>mancode init</code> 不会自动创建它；策略缺失、禁用或损坏时，设计上下文会安全降级为 <code>preserve</code>，不会阻塞普通编码或工作流恢复。</p>
+          <div class="mode-guide design-presets">
+            <article><small>改动最小</small><h3>preserve</h3><p>保留现有层级、布局、组件系统和交互模式，只完成任务真正要求的 UI 改动。</p></article>
+            <article><small>推荐默认</small><h3>refine</h3><p>改善层级、排版、间距、状态和响应式行为，但不改变产品结构。</p></article>
+            <article><small>显式确认</small><h3>experimental</h3><p>传入 <code>--confirm-experimental</code> 后允许一个更强、符合产品语境的构图与有目的动效，但不能扩大范围或虚构产品功能。</p></article>
+          </div>
+
+          <h3>实现前先选视觉方向</h3>
+          <p>新建 UI 或视觉重做时，如果用户尚未选定方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，再等待用户选择。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。</p>
+          <div class="docs-note"><strong>产品语境决定强度</strong><p>品牌、活动、编辑、作品集和发布型页面可以强化首屏记忆点，并让一个视觉母题贯穿全页；任务型产品仍然把工作流清晰度放在视觉奇观之前。</p></div>
+
+          <h3>配置与检查</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode design status --json
+<span class="command-prompt">$</span> mancode design configure --expected-revision 0 --preset refine --icons lucide --emoji forbid-as-interface-icon --motion purposeful --browser-validation when-available
+<span class="command-prompt">$</span> mancode design context --json
+<span class="command-prompt">$</span> mancode design configure --expected-revision 1 --preset experimental --confirm-experimental
+<span class="command-prompt">$</span> mancode design disable --expected-revision 2</code></pre><button type="button" data-copy-code>复制</button></div>
+          <table class="docs-table"><thead><tr><th>控制项</th><th>可选值</th><th>边界</th></tr></thead><tbody>
+            <tr><td><code>--preset</code></td><td><code>preserve</code>、<code>refine</code>、<code>experimental</code></td><td>每次启用 <code>experimental</code> 都需要显式确认。</td></tr>
+            <tr><td><code>--icons</code></td><td><code>existing-first</code>、<code>lucide</code></td><td>选择 Lucide 不会自动安装依赖；依赖变更仍需任务明确授权。</td></tr>
+            <tr><td><code>--emoji</code></td><td><code>allow</code>、<code>forbid-as-interface-icon</code></td><td>严格模式禁止用表情符号代替界面图标。</td></tr>
+            <tr><td><code>--motion</code></td><td><code>minimal</code>、<code>purposeful</code></td><td>动效必须服务于层级、反馈或叙事，不能遮蔽核心工作流。</td></tr>
+            <tr><td><code>--browser-validation</code></td><td><code>off</code>、<code>when-available</code>、<code>required</code></td><td><code>required</code> 会在无法执行浏览器验证时形成硬质量门槛。</td></tr>
+          </tbody></table>
+          <div class="docs-admonition"><strong>任务范围保持不变</strong><p>任何设计 preset 都不授权新增功能、改变信息架构、静默安装依赖或重做无关界面。策略保存在 <code>.mancode/shared/context/design-policy.json</code>，应像其他仓库配置一样审查。</p></div>
+        </section>
+
         <section class="doc-section" id="modes" data-searchable>
           <h2>调用模式</h2>
           <p>模式名称是通用的，但调用方式取决于平台的扩展机制。下面这些内容应输入 Agent 对话框，而不是操作系统终端。<code>/mansolo</code> 或 <code>$mansolo</code> 会显式回到默认 <code>solo</code> 模式。</p>
@@ -168,7 +197,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h2>CLI 参考</h2>
           <p>CLI 负责安装适配器和强制执行持久化工作流状态。读取状态的命令应在已初始化项目中运行；非法状态转换会安全失败，不会静默篡改元数据。</p>
           <div class="command-list">
-            <article class="command-card"><header><h3>mancode init</h3><span>初始化</span></header><p>创建 <code>.mancode/</code>，识别项目，在适用时扫描样式 token，并安装平台适配器。</p><ul><li>选项：<code>--force</code>、<code>--yes</code>、<code>--team</code>、<code>--no-team</code>、<code>--style &lt;name&gt;</code>、<code>--platform &lt;list&gt;</code>、<code>--empty</code>、<code>--lang &lt;locale&gt;</code>。</li></ul></article>
+            <article class="command-card"><header><h3>mancode init</h3><span>初始化</span></header><p>创建 <code>.mancode/</code>，识别项目，在适用时扫描样式 token，并安装平台适配器。</p><ul><li>选项：<code>--force</code>、<code>--yes</code>、<code>--team</code>、<code>--no-team</code>、<code>--platform &lt;list&gt;</code>、<code>--empty</code>、<code>--lang &lt;locale&gt;</code>。<code>--style &lt;name&gt;</code> 仅适用于 legacy。</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>适配器</span></header><p>初始化后通过 journaled upgrade 路径安装一个平台。</p><ul><li><code>--confirm --operation-id &lt;operationId&gt;</code> 和 active session 授权发布预览中的 managed 写入。</li><li><code>--minimal</code> 保留用于 legacy 兼容。</li></ul></article>
             <article class="command-card"><header><h3>mancode adapter status | upgrade</h3><span>修复</span></header><p>比较 managed-content digest，用 <code>--dry-run</code> 生成 staging，并且只用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布该次预览。</p></article>
             <article class="command-card"><header><h3>mancode project upgrade --policy 2</h3><span>策略</span></header><p>预览或提交项目的 Policy 2 默认值，不重写已有 workflow；提交需要预览返回的 operation ID 和 active session。</p></article>
@@ -176,6 +205,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前 CLI 支持的平台，并标出项目中已经配置的平台。</p></article>
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 Continuity 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；Continuity workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
+            <article class="command-card"><header><h3>mancode design status | context | configure | disable</h3><span>设计</span></header><p>检查有效 UI 指导，或修改带 revision 的项目设计策略。配置必须传入 <code>--expected-revision &lt;n&gt;</code>；experimental 还需要 <code>--confirm-experimental</code>。</p></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、框架或验证命令后刷新项目事实，并报告 stale adapter。</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>设计上下文</span></header><p>刷新项目画像和设计 token；adapter 修复先用 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code> 预览。</p></article>
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 Continuity 适配器。Continuity 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
