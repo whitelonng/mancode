@@ -19,6 +19,10 @@ export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_V3_REFRESH_FAILED = 2;
 
+export interface RefreshStyleOptions {
+  root?: string;
+}
+
 /**
  * `mancode refresh-style` 命令。
  *
@@ -38,10 +42,16 @@ export const EXIT_V3_REFRESH_FAILED = 2;
  */
 export async function refreshStyle(
   rootDir: string = process.cwd(),
+  options: RefreshStyleOptions = {},
 ): Promise<number> {
+  const scanTarget = await resolveScanTarget(rootDir, options.root);
+  if (scanTarget === null) {
+    console.error('✗  style scan root must stay inside the project root.');
+    return EXIT_V3_REFRESH_FAILED;
+  }
   const stateFile = path.join(rootDir, '.mancode', 'state.json');
   if (await pathExists(path.join(rootDir, '.mancode', 'schema.json'))) {
-    return refreshV3Style(rootDir);
+    return refreshV3Style(rootDir, scanTarget.root, scanTarget.scopeRoot);
   }
 
   // 1. 检查是否已初始化
@@ -60,14 +70,18 @@ export async function refreshStyle(
     `${JSON.stringify(profile, null, 2)}\n`,
     'utf-8',
   );
-  const uiLibraryHint = primaryUiLibrary(profile);
+  const scanProfile =
+    scanTarget.scopeRoot === '.'
+      ? profile
+      : await detectProjectProfile(scanTarget.root);
+  const uiLibraryHint = primaryUiLibrary(scanProfile);
   await refreshLegacyStateContext(rootDir, profile, uiLibraryHint);
   console.log(
     `   类型: ${profile.projectKind} | UI: ${profile.uiAssets} | 浏览器: ${profile.browserAutomation}`,
   );
 
   // 3. 审美扫描（仅在 profile 确认 UI 资产时执行）
-  if (profile.uiAssets !== 'detected') {
+  if (scanProfile.uiAssets !== 'detected') {
     console.log(
       'ℹ️  No UI assets detected in project profile. Skipping style scan.',
     );
@@ -78,7 +92,11 @@ export async function refreshStyle(
 
   // 4. 扫描审美 token
   console.log('✓  扫描项目设计 token...');
-  const tokens = await scanAesthetics(rootDir, uiLibraryHint);
+  const tokens = await scanAesthetics(
+    scanTarget.root,
+    uiLibraryHint,
+    scanTarget.scopeRoot,
+  );
 
   // 5. 写入 style-tokens.json
   const tokensPath = path.join(
@@ -151,7 +169,11 @@ function printAestheticsSummary(
 }
 
 /** V3 keeps detected facts shared and rebuildable style scans checkout-local. */
-async function refreshV3Style(rootDir: string): Promise<number> {
+async function refreshV3Style(
+  rootDir: string,
+  scanRoot: string,
+  scopeRoot: string,
+): Promise<number> {
   try {
     const project = await new V3ContextStore(rootDir).readProjectSnapshot();
     if (project.manifest.activationState !== 'v3_active') {
@@ -159,7 +181,9 @@ async function refreshV3Style(rootDir: string): Promise<number> {
     }
     console.log('✓  刷新 mancode 项目 profile...');
     const profile = await detectProjectProfile(rootDir);
-    const uiLibraryHint = primaryUiLibrary(profile);
+    const scanProfile =
+      scopeRoot === '.' ? profile : await detectProjectProfile(scanRoot);
+    const uiLibraryHint = primaryUiLibrary(scanProfile);
     await writeV3ProjectFacts(
       rootDir,
       createProjectFacts(profile, {
@@ -177,7 +201,7 @@ async function refreshV3Style(rootDir: string): Promise<number> {
       'cache',
       'style-tokens.json',
     );
-    if (profile.uiAssets !== 'detected') {
+    if (scanProfile.uiAssets !== 'detected') {
       await fs.rm(tokensPath, { force: true });
       console.log(
         'ℹ️  No UI assets detected in project profile. Skipping style scan.',
@@ -187,7 +211,7 @@ async function refreshV3Style(rootDir: string): Promise<number> {
     }
 
     console.log('✓  扫描项目设计 token...');
-    const tokens = await scanAesthetics(rootDir, uiLibraryHint);
+    const tokens = await scanAesthetics(scanRoot, uiLibraryHint, scopeRoot);
     await fs.mkdir(path.dirname(tokensPath), { recursive: true });
     await fs.writeFile(
       tokensPath,
@@ -278,4 +302,42 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function resolveScanTarget(
+  rootDir: string,
+  requestedRoot: string | undefined,
+): Promise<{ root: string; scopeRoot: string } | null> {
+  const projectRoot = await fs
+    .realpath(path.resolve(rootDir))
+    .catch(() => null);
+  if (projectRoot === null) return null;
+  if (requestedRoot === undefined || requestedRoot === '.') {
+    return { root: projectRoot, scopeRoot: '.' };
+  }
+  if (
+    path.isAbsolute(requestedRoot) ||
+    requestedRoot.includes('\0') ||
+    requestedRoot
+      .split(/[\\/]/)
+      .some((segment) => segment === '' || segment === '.' || segment === '..')
+  ) {
+    return null;
+  }
+  const candidate = await fs
+    .realpath(path.resolve(projectRoot, requestedRoot))
+    .catch(() => null);
+  if (candidate === null) return null;
+  const relative = path.relative(projectRoot, candidate);
+  if (
+    relative.startsWith(`..${path.sep}`) ||
+    relative === '..' ||
+    path.isAbsolute(relative)
+  ) {
+    return null;
+  }
+  return {
+    root: candidate,
+    scopeRoot: relative.split(path.sep).join('/') || '.',
+  };
 }

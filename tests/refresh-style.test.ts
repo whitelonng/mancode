@@ -2,11 +2,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { designContext } from '../src/commands/design.js';
 import { init } from '../src/commands/init.js';
 import { install } from '../src/commands/install.js';
 import {
   EXIT_NOT_INITIALIZED,
   EXIT_OK,
+  EXIT_V3_REFRESH_FAILED,
   refreshStyle,
 } from '../src/commands/refresh-style.js';
 
@@ -84,6 +86,36 @@ describe('mancode refresh-style', () => {
     expect(tokens.matchLevel).toBe('high');
     expect(tokens.colors).toHaveProperty('primary', '#3b82f6');
     expect(tokens.fonts.sans).toEqual(['Inter', 'system-ui', 'sans-serif']);
+    expect(tokens.scopeRoot).toBe('.');
+  });
+
+  it('scans a repository-relative UI root without accepting traversal', async () => {
+    await mkdir(path.join(dir, 'apps', 'web', 'src'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({
+        dependencies: { react: '^18.0.0', tailwindcss: '^3.4.0' },
+      }),
+      'utf8',
+    );
+    await writeFile(
+      path.join(dir, 'apps', 'web', 'tailwind.config.js'),
+      TAILWIND_CONFIG,
+      'utf8',
+    );
+    await silentInit(dir);
+
+    expect(await refreshStyle(dir, { root: 'apps/web' })).toBe(EXIT_OK);
+    const tokens = JSON.parse(
+      await readFile(
+        path.join(dir, '.mancode', 'aesthetics', 'style-tokens.json'),
+        'utf8',
+      ),
+    );
+    expect(tokens.scopeRoot).toBe('apps/web');
+    expect(await refreshStyle(dir, { root: '../outside' })).toBe(
+      EXIT_V3_REFRESH_FAILED,
+    );
   });
 
   it('overwrites previous tokens on re-scan', async () => {
@@ -263,6 +295,32 @@ describe('mancode refresh-style', () => {
     await expect(
       readFile(path.join(dir, '.mancode', 'state.json'), 'utf8'),
     ).rejects.toThrow();
+  });
+
+  it('makes a scoped V3 UI scan applicable in design context', async () => {
+    await mkdir(path.join(dir, 'apps', 'web'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({
+        dependencies: { react: '^18.0.0', tailwindcss: '^3.4.0' },
+      }),
+      'utf8',
+    );
+    await writeFile(
+      path.join(dir, 'apps', 'web', 'tailwind.config.js'),
+      TAILWIND_CONFIG,
+      'utf8',
+    );
+    await silentV3Init(dir);
+
+    expect(await refreshStyle(dir, { root: 'apps/web' })).toBe(EXIT_OK);
+    const logs = await captureLog(() => designContext(dir, { json: true }));
+    expect(JSON.parse(String(logs.at(-1)))).toMatchObject({
+      applicable: true,
+      reason: 'scoped_ui_assets_detected',
+      project: { uiAssets: 'none' },
+      style: { scopeRoot: 'apps/web' },
+    });
   });
 });
 

@@ -172,8 +172,9 @@ By default, `mancode init` creates mancode workflow and platform integration fil
 ├── schema.json
 ├── shared/config.json
 ├── shared/context/project.json
+├── shared/context/design-policy.json # optional; created by design configure
 ├── shared/team/
-└── local/                         # sessions, workflows, manps reports
+└── local/                         # sessions, workflows, scan reports, style cache
 
 .claude/skills/                  # Claude Code: bootstrap + original mode skills
 .cursor/rules/ + commands/       # Cursor: bootstrap + original mode commands
@@ -206,7 +207,7 @@ the original mode entries, never task/session snapshots. `mancode init
 - **Support team context**: use `/manteam` with confirmed typed entities under
   `.mancode/shared/`.
 - **Scan project health**: use `mancode manps` to detect stale TODOs, unused
-  dependencies, risky packages, and hardcoded design values.
+  dependencies, risky packages, mixed icon systems, and hardcoded design values.
 
 ## Best Fit
 
@@ -476,8 +477,12 @@ mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json>
 mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
+mancode design status --json
+mancode design context --json
+mancode design configure --expected-revision <n> [options]
+mancode design disable --expected-revision <n>
 mancode refresh-project
-mancode refresh-style
+mancode refresh-style [--root <relative-path>]
 mancode version
 ```
 
@@ -578,6 +583,53 @@ Outputs:
 .mancode/local/preseason-reports/<timestamp>-<area>.md
 ```
 
+### `mancode design`
+
+Project design policy is opt-in. `mancode init` does not create a policy. When
+the policy is missing, disabled, or corrupt, `design context` safely resolves to
+`preserve`; ordinary coding and workflow recovery continue normally.
+Legacy projects can read this safe context, but only current Continuity projects
+can configure the shared policy.
+
+- `preserve` retains the existing hierarchy, layout, component system, and
+  interaction patterns while making only task-required UI changes.
+- `refine` improves hierarchy, typography, spacing, states, and responsive
+  behavior without changing the product structure.
+- `experimental` permits one coherent, product-appropriate visual direction
+  and more advanced composition or motion, but requires
+  `--confirm-experimental`. It never authorizes new product behavior,
+  information-architecture changes, or broader task scope.
+
+For a new UI surface or aesthetic redesign, if the user has not selected a
+visual direction, the agent first presents 2-3 distinct,
+product-appropriate directions with concise tradeoffs and a recommendation,
+then waits for the user to choose. Scoped UI fixes, changes within an existing
+design system, and tasks with an already selected direction continue directly.
+For brand, campaign, editorial, portfolio, and launch surfaces, `experimental`
+emphasizes a memorable first viewport and a visual motif carried through the
+full page; task-oriented products still prioritize workflow clarity.
+
+The policy stores only strict enums for preset, icons, emoji, motion, and browser
+validation, never free-form prompt text. Agents read code-generated guidance,
+quality gates, and a sanitized style summary through `mancode design context
+--json`. `--icons lucide` does not install Lucide; dependency changes still need
+explicit task approval.
+
+```bash
+mancode design status --json
+mancode design configure --expected-revision 0 --preset refine --icons lucide --emoji forbid-as-interface-icon --motion purposeful --browser-validation when-available
+mancode design context --json
+mancode design disable --expected-revision 1
+
+# experimental always needs an extra confirmation
+mancode design configure --expected-revision 0 --preset experimental --confirm-experimental
+```
+
+The policy lives at `.mancode/shared/context/design-policy.json` and should be
+reviewed and committed like other repository configuration. `configure` and
+`disable` update only the current checkout; they do not publish a git-ref remote
+sync receipt.
+
 ### `mancode refresh-style`
 
 Refreshes the project profile and, when UI assets are detected, rescans design
@@ -587,6 +639,11 @@ tokens. It updates:
 .mancode/local/cache/style-tokens.json
 .mancode/shared/context/project.json
 ```
+
+For a monorepo, select one repository-relative UI root explicitly, for example
+`mancode refresh-style --root apps/web`. Absolute paths, traversal, and symlinks
+that escape the repository are rejected. Omitting `--root` preserves the
+whole-repository scan behavior.
 
 Platform adapters are static bootstraps that embed no task or style snapshot, so
 refreshing project facts does not require reinstalling them.

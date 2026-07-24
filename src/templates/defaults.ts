@@ -29,6 +29,7 @@ export const DEFAULT_CONFIG = {
  */
 export const EMPTY_STYLE_TOKENS = {
   version: '1.0.0',
+  scopeRoot: '.',
   lastScanned: null,
   colors: {},
   fonts: {},

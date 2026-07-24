@@ -200,7 +200,8 @@ const SCANNERS: PreseasonScanner[] = [
   {
     name: 'aesthetic-drift',
     areas: ['all'],
-    scan: ({ projectRoot, files }) => scanAestheticDrift(projectRoot, files),
+    scan: ({ projectRoot, files, pkg }) =>
+      scanAestheticDrift(projectRoot, files, pkg),
   },
   {
     name: 'architecture',
@@ -696,6 +697,7 @@ function scanConfig(projectRoot: string, files: string[]): PreseasonIssue[] {
 function scanAestheticDrift(
   projectRoot: string,
   files: string[],
+  pkg: PackageJson | null,
 ): PreseasonIssue[] {
   const issues: PreseasonIssue[] = [];
   const frontendFiles = files.filter((file) => /\.(tsx|jsx|css)$/.test(file));
@@ -720,7 +722,42 @@ function scanAestheticDrift(
       break;
     }
   }
+  const iconSystems = detectedIconSystems(pkg);
+  if (iconSystems.length > 1) {
+    issues.push({
+      id: 'aesthetics-mixed-icon-systems',
+      severity: 'P2',
+      type: 'aesthetics',
+      title: 'Multiple icon systems declared',
+      file: 'package.json',
+      detail: `Multiple icon systems are declared: ${iconSystems.join(', ')}.`,
+      recommendation:
+        'Use the configured design policy for new interface work; remove a redundant package only after confirming it has no active imports.',
+    });
+  }
   return issues;
+}
+
+function detectedIconSystems(pkg: PackageJson | null): string[] {
+  if (!pkg) return [];
+  const packages = Object.keys({
+    ...pkg.dependencies,
+    ...pkg.devDependencies,
+  });
+  const systems: Array<[string, RegExp]> = [
+    ['Lucide', /^lucide(?:-|$)/],
+    ['Heroicons', /^@heroicons\//],
+    [
+      'Material Icons',
+      /^(?:@mui\/icons-material|@material-design-icons\/|material-icons(?:-|$)|material-symbols(?:-|$))/,
+    ],
+    ['Phosphor', /^(?:@phosphor-icons\/|phosphor-(?:react|icons)(?:-|$))/],
+    ['Font Awesome', /^@fortawesome\/(?:free|pro|sharp)-.+-svg-icons$/],
+    ['React Icons', /^react-icons$/],
+  ];
+  return systems
+    .filter(([, pattern]) => packages.some((name) => pattern.test(name)))
+    .map(([name]) => name);
 }
 
 async function scanArchitecture(

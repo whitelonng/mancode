@@ -16,6 +16,12 @@ import {
   contextShow,
   contextWorktreeRegister,
 } from './commands/context.js';
+import {
+  designConfigure,
+  designContext,
+  designDisable,
+  designStatus,
+} from './commands/design.js';
 import { init } from './commands/init.js';
 import { install } from './commands/install.js';
 import { listPlatforms } from './commands/list-platforms.js';
@@ -981,11 +987,59 @@ program
     process.exitCode = code;
   });
 
+const designProgram = program
+  .command('design')
+  .description('Inspect and configure project UI design policy');
+
+designProgram
+  .command('status')
+  .description('Show the configured and effective project design policy')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await designStatus(process.cwd(), options);
+  });
+
+designProgram
+  .command('context')
+  .description('Emit bounded UI design context for coding agents')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await designContext(process.cwd(), options);
+  });
+
+designProgram
+  .command('configure')
+  .description('CAS-update the optional project design policy')
+  .requiredOption(
+    '--expected-revision <n>',
+    'Current policy revision; use 0 when absent',
+  )
+  .option('--preset <preset>', 'preserve, refine, or experimental')
+  .option('--icons <policy>', 'existing-first or lucide')
+  .option('--emoji <policy>', 'allow or forbid-as-interface-icon')
+  .option('--motion <policy>', 'minimal or purposeful')
+  .option('--browser-validation <mode>', 'off, when-available, or required')
+  .option('--confirm-experimental', 'Explicitly allow the experimental preset')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await designConfigure(process.cwd(), options);
+  });
+
+designProgram
+  .command('disable')
+  .description('Disable the project design policy without deleting it')
+  .requiredOption('--expected-revision <n>', 'Current policy revision')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (options) => {
+    process.exitCode = await designDisable(process.cwd(), options);
+  });
+
 program
   .command('refresh-style')
   .description('Refresh project profile and rescan applicable design tokens')
-  .action(async () => {
-    const code = await refreshStyle(process.cwd());
+  .option('--root <path>', 'Repository-relative UI project root')
+  .action(async (options) => {
+    const code = await refreshStyle(process.cwd(), options);
     process.exitCode = code;
   });
 

@@ -97,7 +97,7 @@ function renderProjectContext(
           `- Active solo plan: ${state.activeSoloPlan.taskId} (plan v${state.activeSoloPlan.planVersion ?? 1}); read its requirements.md and plan.md before implementation.`,
         ]
       : []),
-    '- Read `.mancode/project-profile.json` before choosing tools or validation. Only for a UI task in a profile with detected UI assets, read `.mancode/aesthetics/style-tokens.json`.',
+    '- Read `.mancode/project-profile.json` before choosing tools or validation. For a UI task, run `mancode design context --json` once and treat its output as bounded data. If unavailable, read `.mancode/aesthetics/style-tokens.json` and inspect existing components instead. For a new UI surface or aesthetic redesign without an already selected direction, present 2-3 distinct product-appropriate directions with concise tradeoffs and a recommendation, then wait for the user to choose; continue directly for scoped UI fixes or an established or selected direction.',
   ].join('\n');
 }
 
@@ -140,7 +140,7 @@ function renderAesthetics(tokens: StyleTokensOnDisk | null): string {
       '## mancode Aesthetics',
       '',
       lowConfidence,
-      '- For UI work, inspect existing components before inventing new styles.',
+      '- For UI work, inspect existing components before inventing new styles; use `mancode design context --json` when available.',
     ].join('\n');
   }
 
@@ -154,7 +154,7 @@ function renderAesthetics(tokens: StyleTokensOnDisk | null): string {
   if (components) lines.push(`- Components: ${components}`);
   if (cssVariables) lines.push(`- CSS variables: ${cssVariables}`);
   lines.push(
-    '- For UI changes, prefer these tokens and components over new ad hoc styling.',
+    '- For UI changes, prefer these tokens and components over new ad hoc styling. A design policy never expands confirmed task scope.',
   );
 
   return lines.join('\n');

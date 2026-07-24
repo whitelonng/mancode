@@ -11,6 +11,7 @@ import path from 'node:path';
  */
 export interface AestheticsTokens {
   version: string;
+  scopeRoot: string;
   lastScanned: string | null;
   colors: Record<string, string>;
   fonts: Record<string, string[]>;
@@ -42,6 +43,7 @@ const MAX_COMPONENT_FILES = 2000;
 export async function scanAesthetics(
   projectRoot: string,
   uiLibrary: string | null = null,
+  scopeRoot = '.',
 ): Promise<AestheticsTokens> {
   const sourceFiles: string[] = [];
 
@@ -96,6 +98,7 @@ export async function scanAesthetics(
 
   return {
     version: '1.0.0',
+    scopeRoot,
     lastScanned: new Date().toISOString(),
     colors,
     fonts,

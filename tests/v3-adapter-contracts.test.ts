@@ -163,6 +163,10 @@ describe('V3 adapter bootstrap integration', () => {
       );
       expect(bootstrap).toContain('--session <id>');
       expect(bootstrap).toContain('mancode status --brief --json');
+      expect(bootstrap).toContain('mancode design context --json');
+      expect(bootstrap).toContain('present 2-3 distinct product-appropriate');
+      expect(bootstrap).toContain('wait for a selection before implementation');
+      expect(bootstrap).toContain('Do not pause for scoped UI fixes');
       expect(bootstrap).toContain(
         'snapshot already obtained in this conversation',
       );

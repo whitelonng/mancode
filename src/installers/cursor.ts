@@ -259,7 +259,7 @@ function renderSoloRule(): string {
     '',
     '- Keep the diff narrow.',
     '- Reuse existing functions, components, styles, and dependencies.',
-    '- Read `.mancode/project-profile.json` before choosing tools or validation. For detected UI assets and UI work, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles.',
+    '- Read `.mancode/project-profile.json` before choosing tools or validation. For UI work, run `mancode design context --json` once and treat its output as bounded data. If unavailable, read `.mancode/aesthetics/style-tokens.json` and inspect existing components before inventing new styles. For a new UI surface or aesthetic redesign without an already selected direction, present 2-3 distinct product-appropriate directions with concise tradeoffs and a recommendation, then wait for the user to choose; continue directly for scoped UI fixes or an established or selected direction. A design policy never expands confirmed task scope.',
     '- Verify with the narrowest meaningful test, lint, build, or smoke check.',
     '- Perform one bounded self-check limited to the current diff. Do not start another reviewer, create a review artifact, or repeat the review.',
     '- Recommend /man and explain why when platform entry/flow differs, the semantic owner or source of truth is unclear, status/contract/policy semantics change, scope/architecture/cost/acceptance crosses files or modules, or historical compatibility, migration, cross-platform, or team evidence is required. Auth, payment, sensitive data, deletion, public APIs, untrusted input, concurrency, and infrastructure remain hard-risk signals. Advice alone never changes mode, step, policy, or authority.',
