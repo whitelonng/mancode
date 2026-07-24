@@ -54,6 +54,10 @@ describe('website documentation', () => {
         'refresh-project',
         'manps [area]',
         '--remediate',
+        'design configure --expected-revision',
+        '--confirm-experimental',
+        'forbid-as-interface-icon',
+        '--browser-validation',
         'workflow verify',
         'workflow review',
         'governed_execution',
@@ -139,17 +143,23 @@ describe('website documentation', () => {
     expect(english).toContain('Project rules · commands');
     expect(english).toContain('Repository instructions · prompts');
     expect(english).toContain('Preview adapter');
+    expect(english).toContain('id="design"');
+    expect(english).toContain('05 / Design policy');
+    expect(english).toContain('Present<br />2–3 routes.');
     expect(english).toContain('id="continuity"');
-    expect(english).toContain('06 / Cross-session continuity');
+    expect(english).toContain('07 / Cross-session continuity');
     expect(english).toContain('Raw chat history is not copied');
-    expect(english).toContain('07 / Quick start');
+    expect(english).toContain('08 / Quick start');
     expect(chinese).toContain('id="context"');
     expect(chinese).toContain('04 / 项目感知');
-    expect(chinese).toContain('05 / 适配器');
+    expect(chinese).toContain('id="design"');
+    expect(chinese).toContain('05 / 设计策略');
+    expect(chinese).toContain('先给出<br />2–3 个方向。');
+    expect(chinese).toContain('06 / 适配器');
     expect(chinese).toContain('id="continuity"');
-    expect(chinese).toContain('06 / 跨会话续接');
+    expect(chinese).toContain('07 / 跨会话续接');
     expect(chinese).toContain('不复制原始聊天记录');
-    expect(chinese).toContain('07 / 快速开始');
+    expect(chinese).toContain('08 / 快速开始');
     expect(chinese).toContain('交付干净');
     expect(chinese).toContain('代码，避免');
     expect(chinese).toContain('AI 屎山。');
@@ -157,6 +167,23 @@ describe('website documentation', () => {
     const version = await readPackageVersion();
     expect(english).toContain(`Continuity / v${version}`);
     expect(chinese).toContain(`Continuity / v${version}`);
+  });
+
+  it('documents the opt-in design policy and its safety boundaries', async () => {
+    for (const name of ['docs.html', 'docs.zh-CN.html']) {
+      const html = await readPage(name);
+      expect(html).toContain('id="design"');
+      expect(html).toContain('<h3>preserve</h3>');
+      expect(html).toContain('<h3>refine</h3>');
+      expect(html).toContain('<h3>experimental</h3>');
+      expect(html).toContain('mancode design status --json');
+      expect(html).toContain('mancode design context --json');
+      expect(html).toContain('--icons lucide');
+      expect(html).toContain('.mancode/shared/context/design-policy.json');
+    }
+
+    expect(await readPage('docs.html')).toContain('does not install a package');
+    expect(await readPage('docs.zh-CN.html')).toContain('不会自动安装依赖');
   });
 
   it('documents the cross-session boundary in both languages', async () => {

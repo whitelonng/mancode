@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="mancode：给 AI 编码 Agent 恰到好处的工程纪律。" />
+    <meta name="description" content="mancode：给 AI 编码 Agent 恰到好处的工程纪律，以及明确可选的视觉方向。" />
     <meta name="theme-color" content="#08090a" />
     <link rel="icon" href="./logo.png" />
     <link rel="stylesheet" href="./styles.css" />
@@ -20,8 +20,8 @@
     <a class="skip-link" href="#main">跳到正文</a><div class="noise" aria-hidden="true"></div>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <nav class="main-nav" aria-label="主导航"><a href="#modes">模式</a><a href="#workflow">工作流</a><a href="#platforms">平台</a><a href="#continuity">跨会话</a><a href="./docs.zh-CN.html">文档</a><a href="https://github.com/whitelonng/mancode">GitHub</a></nav>
-      <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span aria-hidden="true">◐</span><b>主题</b></button><a class="language-link" href="./index.html" lang="en" aria-label="Switch to English">EN</a><a class="button button-small button-ghost header-cta" href="#install">开始使用 ↘</a></div>
+      <nav class="main-nav" aria-label="主导航"><a href="#modes">模式</a><a href="#workflow">工作流</a><a href="#design">审美</a><a href="#platforms">平台</a><a href="#continuity">跨会话</a><a href="./docs.zh-CN.html">文档</a><a href="https://github.com/whitelonng/mancode">GitHub</a></nav>
+      <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span><b>主题</b></button><a class="language-link" href="./index.html" lang="en" aria-label="Switch to English">EN</a><a class="button button-small button-ghost header-cta" href="#install">开始使用 ↘</a></div>
     </header>
 
     <main id="main">
@@ -67,10 +67,43 @@
         </div>
       </section>
 
-      <section class="platforms-section" id="platforms"><div class="section-kicker reveal"><span>05 / 适配器</span><span>保留你的 Agent，加入纪律。</span></div><div class="section-title-row platform-title reveal"><h2>一套战术。<br />你的工具。</h2><p>mancode 是工作流层，不是新的编码 Agent。Claude Code 获得最完整的原生集成；其他工具获得持久 rules、skills 或 instruction 文件。</p></div><div class="platform-table reveal" role="table"><div class="platform-row platform-head" role="row"><span role="columnheader">平台</span><span role="columnheader">适配方式</span><span role="columnheader">级别</span></div><div class="platform-row" role="row"><strong role="cell">Claude Code</strong><span role="cell">Hooks · skills · subagents</span><em role="cell">完整集成</em></div><div class="platform-row" role="row"><strong role="cell">Cursor</strong><span role="cell">项目 rules · commands</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">Codex</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">GitHub Copilot</strong><span role="cell">仓库 instructions · prompts</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">ZCode</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">预览适配器</em></div></div></section>
+      <section class="design-section" id="design">
+        <div class="section-kicker reveal"><span>05 / 设计策略</span><span>先选方向，再谈装饰。</span></div>
+        <div class="design-lead reveal">
+          <div><p class="eyebrow">0.5.0 新能力</p><h2>方向你来选。<br />效果交给它。</h2></div>
+          <div class="design-thesis">
+            <p>新建 UI 或视觉重做，不再由 Agent 默默套用唯一默认风格。方向尚未确定时，mancode 会先给出 2–3 个符合产品语境的方案、简明取舍和一个推荐；你选定后，它再把一个视觉系统做完整。</p>
+            <a href="./docs.zh-CN.html#design">配置设计策略 <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+
+        <div class="design-board reveal">
+          <div class="direction-board" aria-label="视觉方向选择流程">
+            <header><span>UI 需求 / 尚未选定</span><b>等待决策</b></header>
+            <div class="direction-prompt"><small>开始实现之前</small><strong>先给出<br />2–3 个方向。</strong><p>视觉逻辑要有差异，取舍要说清楚，并给出一个推荐。在方向属于你之前，不急着写代码。</p></div>
+            <ol>
+              <li><b>01</b><span>编辑式精度</span><em>克制 / 排版驱动</em></li>
+              <li class="selected"><b>02</b><span>技术剧场</span><em>强烈 / 动态叙事</em></li>
+              <li><b>03</b><span>产品清晰度</span><em>紧凑 / 功能优先</em></li>
+            </ol>
+          </div>
+
+          <div class="preset-stack">
+            <article><div><small>策略 / 01</small><span>最稳妥</span></div><h3>preserve</h3><p>保留现有层级、组件、布局和交互模式，只完成任务真正要求的 UI 改动。</p></article>
+            <article class="preset-featured"><div><small>策略 / 02</small><span>推荐</span></div><h3>refine</h3><p>改善排版、间距、层级、状态和响应式行为，但不改变产品结构。</p></article>
+            <article><div><small>策略 / 03</small><span>显式开启</span></div><h3>experimental</h3><p>确认后允许更强的构图与有目的的动效，仍然不能突破既有产品范围。</p></article>
+          </div>
+        </div>
+
+        <div class="design-guardrails reveal" aria-label="设计策略边界">
+          <span><b>01</b> 现有设计系统优先</span><span><b>02</b> 不扩大产品范围</span><span><b>03</b> 不偷加依赖</span><span><b>04</b> 条件允许时浏览器验证</span>
+        </div>
+      </section>
+
+      <section class="platforms-section" id="platforms"><div class="section-kicker reveal"><span>06 / 适配器</span><span>保留你的 Agent，加入纪律。</span></div><div class="section-title-row platform-title reveal"><h2>一套战术。<br />你的工具。</h2><p>mancode 是工作流层，不是新的编码 Agent。Claude Code 获得最完整的原生集成；其他工具获得持久 rules、skills 或 instruction 文件。</p></div><div class="platform-table reveal" role="table"><div class="platform-row platform-head" role="row"><span role="columnheader">平台</span><span role="columnheader">适配方式</span><span role="columnheader">级别</span></div><div class="platform-row" role="row"><strong role="cell">Claude Code</strong><span role="cell">Hooks · skills · subagents</span><em role="cell">完整集成</em></div><div class="platform-row" role="row"><strong role="cell">Cursor</strong><span role="cell">项目 rules · commands</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">Codex</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">GitHub Copilot</strong><span role="cell">仓库 instructions · prompts</span><em role="cell">适配器</em></div><div class="platform-row" role="row"><strong role="cell">ZCode</strong><span role="cell">AGENTS.md · 项目 skills</span><em role="cell">预览适配器</em></div></div></section>
 
       <section class="platforms-section" id="continuity">
-        <div class="section-kicker reveal"><span>06 / 跨会话续接</span><span>换窗口，不丢任务脉络。</span></div>
+        <div class="section-kicker reveal"><span>07 / 跨会话续接</span><span>换窗口，不丢任务脉络。</span></div>
         <div class="section-title-row platform-title reveal">
           <h2>一项任务。<br />下个会话继续。</h2>
           <p>mancode 把目标、需求、计划、检查结果和交接信息保存在稳定 TaskRef 下。新聊天窗口或 CLI session 可以恢复这项任务，只加载当前目的需要的 Context Pack，不依赖旧窗口一直打开。</p>
@@ -84,7 +117,7 @@
         </div>
       </section>
 
-      <section class="install-section section-dark" id="install"><div class="section-kicker reveal"><span>07 / 快速开始</span><span>安装一次，初始化一次，继续编码。</span></div><div class="install-grid"><div class="install-copy reveal"><p class="eyebrow">准备上场</p><h2>把 mancode<br />放进轮换。</h2><p>不需要账户、Dashboard、API Key 或新编辑器。原生支持 Windows CMD、PowerShell、Git Bash、macOS 与 Linux。</p><a class="button button-solid" href="./docs.zh-CN.html">阅读完整文档 ↗</a></div><div class="steps-terminal reveal"><div class="terminal-command"><span>01 / 安装</span><code>npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><div class="terminal-command"><span>02 / 进入项目</span><code>cd your-project</code><button type="button" data-copy="cd your-project">复制</button></div><div class="terminal-command"><span>03 / 初始化</span><code>mancode init</code><button type="button" data-copy="mancode init">复制</button></div><div class="terminal-ready"><i></i><span>solo 模式已就绪</span><b>00:03</b></div></div></div></section>
+      <section class="install-section section-dark" id="install"><div class="section-kicker reveal"><span>08 / 快速开始</span><span>安装一次，初始化一次，继续编码。</span></div><div class="install-grid"><div class="install-copy reveal"><p class="eyebrow">准备上场</p><h2>把 mancode<br />放进轮换。</h2><p>不需要账户、Dashboard、API Key 或新编辑器。原生支持 Windows CMD、PowerShell、Git Bash、macOS 与 Linux。</p><a class="button button-solid" href="./docs.zh-CN.html">阅读完整文档 ↗</a></div><div class="steps-terminal reveal"><div class="terminal-command"><span>01 / 安装</span><code>npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><div class="terminal-command"><span>02 / 进入项目</span><code>cd your-project</code><button type="button" data-copy="cd your-project">复制</button></div><div class="terminal-command"><span>03 / 初始化</span><code>mancode init</code><button type="button" data-copy="mancode init">复制</button></div><div class="terminal-ready"><i></i><span>solo 模式已就绪</span><b>00:03</b></div></div></div></section>
 
       <section class="final-cta"><div class="final-cta-mark" aria-hidden="true">M</div><p class="reveal">简单任务少一点仪式。<br />关键任务多一点纪律。</p><h2 class="reveal">别再替 AI<br />收拾臃肿。</h2><div class="final-actions reveal"><div class="command-bar command-light"><code><span>&gt;</span> npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><a class="button button-dark" href="https://github.com/whitelonng/mancode">GitHub 上查看 ↗</a></div></section>
     </main>

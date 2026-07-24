@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="mancode gives AI coding agents the right level of engineering discipline for every task."
+      content="mancode gives AI coding agents the right engineering discipline and an explicit design direction for every task."
     />
     <meta name="theme-color" content="#08090a" />
     <meta property="og:title" content="mancode — Ship clean code, not AI bloat." />
@@ -37,6 +37,7 @@
       <nav class="main-nav" aria-label="Primary navigation">
         <a href="#modes">Modes</a>
         <a href="#workflow">Workflow</a>
+        <a href="#design">Design</a>
         <a href="#platforms">Platforms</a>
         <a href="#continuity">Continuity</a>
         <a href="./docs.html">Docs</a>
@@ -44,7 +45,7 @@
       </nav>
       <div class="header-actions">
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme">
-          <span aria-hidden="true">◐</span><b>Theme</b>
+          <span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span><b>Theme</b>
         </button>
         <a class="language-link" href="./index.zh-CN.html" lang="zh-CN" aria-label="切换到中文">中</a>
         <a class="button button-small button-ghost header-cta" href="#install">Get mancode ↘</a>
@@ -314,9 +315,71 @@
         </div>
       </section>
 
+      <section class="design-section" id="design">
+        <div class="section-kicker reveal">
+          <span>05 / Design policy</span>
+          <span>Direction before decoration.</span>
+        </div>
+        <div class="design-lead reveal">
+          <div>
+            <p class="eyebrow">New in 0.5.0</p>
+            <h2>Choose the look.<br />Then make it real.</h2>
+          </div>
+          <div class="design-thesis">
+            <p>
+              A new UI or visual redesign no longer starts from one silent default. When the direction
+              is open, mancode asks the agent for 2–3 product-appropriate routes, the tradeoffs, and a
+              recommendation. You choose. Then it builds one coherent system.
+            </p>
+            <a href="./docs.html#design">Configure the policy <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+
+        <div class="design-board reveal">
+          <div class="direction-board" aria-label="Visual direction selection flow">
+            <header><span>UI brief / unselected</span><b>Decision required</b></header>
+            <div class="direction-prompt">
+              <small>Before implementation</small>
+              <strong>Present<br />2–3 routes.</strong>
+              <p>Distinct visual logic. Clear tradeoffs. One recommendation. No code until the direction is yours.</p>
+            </div>
+            <ol>
+              <li><b>01</b><span>Editorial precision</span><em>Quiet / typographic</em></li>
+              <li class="selected"><b>02</b><span>Technical theatre</span><em>Bold / kinetic</em></li>
+              <li><b>03</b><span>Product clarity</span><em>Dense / functional</em></li>
+            </ol>
+          </div>
+
+          <div class="preset-stack">
+            <article>
+              <div><small>Preset / 01</small><span>Safest</span></div>
+              <h3>preserve</h3>
+              <p>Keep the hierarchy, components, layout, and interaction patterns. Change only what the task requires.</p>
+            </article>
+            <article class="preset-featured">
+              <div><small>Preset / 02</small><span>Recommended</span></div>
+              <h3>refine</h3>
+              <p>Improve type, spacing, hierarchy, states, and responsive behavior without changing the product structure.</p>
+            </article>
+            <article>
+              <div><small>Preset / 03</small><span>Explicit opt-in</span></div>
+              <h3>experimental</h3>
+              <p>Allow one stronger composition and purposeful motion—after confirmation, inside the existing product scope.</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="design-guardrails reveal" aria-label="Design policy guardrails">
+          <span><b>01</b> Existing system first</span>
+          <span><b>02</b> No product-scope expansion</span>
+          <span><b>03</b> No surprise dependencies</span>
+          <span><b>04</b> Browser validation when available</span>
+        </div>
+      </section>
+
       <section class="platforms-section" id="platforms">
         <div class="section-kicker reveal">
-          <span>05 / Adapters</span>
+          <span>06 / Adapters</span>
           <span>Keep your agent. Add the discipline.</span>
         </div>
         <div class="section-title-row platform-title reveal">
@@ -351,7 +414,7 @@
 
       <section class="platforms-section" id="continuity">
         <div class="section-kicker reveal">
-          <span>06 / Cross-session continuity</span>
+          <span>07 / Cross-session continuity</span>
           <span>Change windows without losing the task.</span>
         </div>
         <div class="section-title-row platform-title reveal">
@@ -384,7 +447,7 @@
 
       <section class="install-section section-dark" id="install">
         <div class="section-kicker reveal">
-          <span>07 / Quick start</span>
+          <span>08 / Quick start</span>
           <span>One install. One init. Keep coding.</span>
         </div>
         <div class="install-grid">

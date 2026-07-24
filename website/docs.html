@@ -28,7 +28,7 @@
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
-        <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"><span aria-hidden="true">◐</span></button>
+        <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span></button>
         <a class="language-link" href="./docs.zh-CN.html" lang="zh-CN" aria-label="切换到中文">中</a>
       </div>
     </header>
@@ -44,7 +44,7 @@
         <p class="docs-nav-hint" aria-hidden="true">Swipe to see every topic →</p>
         <nav class="docs-nav">
           <div class="docs-nav-group"><p>Start here</p><a class="active" href="#overview">Overview</a><a href="#install">Install &amp; initialize</a><a href="#files">Files &amp; privacy</a><a href="#continuity">Cross-session continuity</a><a href="#recommend">Choose a mode</a></div>
-          <div class="docs-nav-group"><p>Use mancode</p><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a></div>
+          <div class="docs-nav-group"><p>Use mancode</p><a href="#design">Design policy</a><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a></div>
           <div class="docs-nav-group"><p>Maintain</p><a href="#style">Refresh context</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></div>
           <div class="docs-nav-group"><p>Links</p><a href="./index.html">Marketing site</a><a href="./docs.zh-CN.html">中文文档</a><a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">README on GitHub</a></div>
         </nav>
@@ -83,7 +83,7 @@
             <tr><td><code>--platform LIST</code></td><td>You know the target agents</td><td>Installs one or more of <code>claude-code</code>, <code>cursor</code>, <code>codex</code>, <code>copilot</code>, and <code>zcode</code>.</td></tr>
             <tr><td><code>--empty</code></td><td>The directory is intentionally empty</td><td>Allows generic-project initialization without <code>git init</code> or a package manifest.</td></tr>
             <tr><td><code>--team</code> / <code>--no-team</code></td><td>Auto-detection is not the policy you want</td><td>Forces shared-memory mode on or off.</td></tr>
-            <tr><td><code>--style NAME</code></td><td>You have a named visual preference</td><td>Saves it as the default style preference.</td></tr>
+            <tr><td><code>--style NAME</code></td><td>You explicitly initialize with <code>--legacy</code></td><td>Stores the old free-text style preference. Continuity projects use the revisioned <code>mancode design</code> policy instead.</td></tr>
             <tr><td><code>--lang en|zh-CN</code></td><td>You need deterministic generated text</td><td>Sets the generated-content locale.</td></tr>
           </tbody></table>
 
@@ -131,6 +131,35 @@
           <div class="docs-admonition"><strong>Rule of thumb</strong><p>Use <code>/man</code> when a wrong choice would be expensive, hard to reverse, or difficult to inspect later—not simply because the task is large.</p></div>
         </section>
 
+        <section class="doc-section" id="design" data-searchable>
+          <h2>Set a design policy</h2>
+          <p>The design policy is an explicit, opt-in Continuity feature for UI work. <code>mancode init</code> does not create it. When no valid policy is active, design context fails open to <code>preserve</code>, so ordinary coding and workflow recovery are not blocked.</p>
+          <div class="mode-guide design-presets">
+            <article><small>Lowest disruption</small><h3>preserve</h3><p>Keeps the existing hierarchy, layout, component system, and interaction patterns. The agent makes only the UI changes required by the task.</p></article>
+            <article><small>Recommended default</small><h3>refine</h3><p>Improves hierarchy, typography, spacing, states, and responsive behavior without changing the product structure.</p></article>
+            <article><small>Explicit confirmation</small><h3>experimental</h3><p>Allows one stronger product-appropriate composition and purposeful motion after <code>--confirm-experimental</code>. It still cannot expand scope or invent product features.</p></article>
+          </div>
+
+          <h3>Choose a direction before implementation</h3>
+          <p>For a new UI surface or aesthetic redesign, if the user has not chosen a visual direction, the agent presents 2–3 distinct, product-appropriate directions with concise tradeoffs and a recommendation, then waits for a choice. Scoped UI fixes, work inside an established design system, and tasks with an already selected direction continue directly.</p>
+          <div class="docs-note"><strong>Context decides the intensity</strong><p>Brand, campaign, editorial, portfolio, and launch surfaces may use a memorable first viewport and one visual motif across the page. Task-oriented products keep workflow clarity ahead of spectacle.</p></div>
+
+          <h3>Configure and inspect</h3>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode design status --json
+<span class="command-prompt">$</span> mancode design configure --expected-revision 0 --preset refine --icons lucide --emoji forbid-as-interface-icon --motion purposeful --browser-validation when-available
+<span class="command-prompt">$</span> mancode design context --json
+<span class="command-prompt">$</span> mancode design configure --expected-revision 1 --preset experimental --confirm-experimental
+<span class="command-prompt">$</span> mancode design disable --expected-revision 2</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <table class="docs-table"><thead><tr><th>Control</th><th>Accepted values</th><th>Boundary</th></tr></thead><tbody>
+            <tr><td><code>--preset</code></td><td><code>preserve</code>, <code>refine</code>, <code>experimental</code></td><td><code>experimental</code> requires explicit confirmation every time it is enabled.</td></tr>
+            <tr><td><code>--icons</code></td><td><code>existing-first</code>, <code>lucide</code></td><td>Choosing Lucide does not install a package; dependency changes still require task approval.</td></tr>
+            <tr><td><code>--emoji</code></td><td><code>allow</code>, <code>forbid-as-interface-icon</code></td><td>The stricter value prevents emoji from replacing interface icons.</td></tr>
+            <tr><td><code>--motion</code></td><td><code>minimal</code>, <code>purposeful</code></td><td>Motion must support hierarchy, feedback, or narrative—not obscure the core workflow.</td></tr>
+            <tr><td><code>--browser-validation</code></td><td><code>off</code>, <code>when-available</code>, <code>required</code></td><td><code>required</code> creates a hard quality gate when browser verification cannot run.</td></tr>
+          </tbody></table>
+          <div class="docs-admonition"><strong>Scope stays fixed</strong><p>No design preset authorizes new features, information-architecture changes, silent dependency installation, or unrelated redesign. The policy is stored at <code>.mancode/shared/context/design-policy.json</code> and should be reviewed like any other repository configuration.</p></div>
+        </section>
+
         <section class="doc-section" id="modes" data-searchable>
           <h2>Invoke a mode</h2>
           <p>Mode names are portable, but invocation follows the extension model of each agent. Run them in the agent chat—not in your operating-system shell. <code>/mansolo</code> or <code>$mansolo</code> explicitly returns to the default <code>solo</code> mode.</p>
@@ -168,7 +197,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h2>CLI reference</h2>
           <p>The CLI installs adapters and enforces durable workflow state. Run state-reading commands from an initialized project. Invalid transitions fail safely instead of silently editing workflow metadata.</p>
           <div class="command-list">
-            <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project, scans style tokens where relevant, and installs adapters.</p><ul><li>Options: <code>--force</code>, <code>--yes</code>, <code>--team</code>, <code>--no-team</code>, <code>--style &lt;name&gt;</code>, <code>--platform &lt;list&gt;</code>, <code>--empty</code>, <code>--lang &lt;locale&gt;</code>.</li></ul></article>
+            <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project, scans style tokens where relevant, and installs adapters.</p><ul><li>Options: <code>--force</code>, <code>--yes</code>, <code>--team</code>, <code>--no-team</code>, <code>--platform &lt;list&gt;</code>, <code>--empty</code>, <code>--lang &lt;locale&gt;</code>. <code>--style &lt;name&gt;</code> is legacy-only.</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs one adapter through the journaled upgrade path after initialization.</p><ul><li><code>--confirm --operation-id &lt;operationId&gt;</code> and an active session authorize the previewed managed writes.</li><li><code>--minimal</code> remains available for legacy compatibility.</li></ul></article>
             <article class="command-card"><header><h3>mancode adapter status | upgrade</h3><span>Repair</span></header><p>Compares managed-content digests, stages changes with <code>--dry-run</code>, and publishes that exact preview only with <code>--confirm --operation-id &lt;operationId&gt;</code>.</p></article>
             <article class="command-card"><header><h3>mancode project upgrade --policy 2</h3><span>Policy</span></header><p>Previews or commits the project Policy 2 default without rewriting existing workflows. A commit requires the preview's operation ID and an active session.</p></article>
@@ -176,6 +205,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>Discover</span></header><p>Lists adapters known to the installed CLI and marks those already configured in the project.</p></article>
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates Continuity requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; Continuity workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic health scan for <code>all</code>, <code>deps</code>, <code>security</code>, <code>dead-code</code>, <code>config</code>.</p><ul><li><code>--json</code> emits machine-readable output.</li><li><code>--remediate</code> enters the explicit remediation path; the default is scan-only.</li></ul></article>
+            <article class="command-card"><header><h3>mancode design status | context | configure | disable</h3><span>Design</span></header><p>Inspects effective UI guidance or changes the revisioned project design policy. Configuration requires <code>--expected-revision &lt;n&gt;</code>; experimental mode also requires <code>--confirm-experimental</code>.</p></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then reports stale adapters.</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Preview any adapter repair with <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>.</p></article>
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one Continuity adapter. Continuity protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
