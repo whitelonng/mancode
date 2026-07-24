@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.4.2-2f855a?style=flat-square" alt="状态：mancode Continuity v0.4.2" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.0" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
 </p>
 
@@ -336,7 +336,7 @@ src/components/
 
 ## 安装
 
-**状态**：mancode Continuity v0.4.2。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.5.0。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot 和 ZCode adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -445,7 +445,7 @@ mancode version
 以下是简化输出示例：
 
 ```text
-mancode v0.4.2
+mancode v0.5.0
 
 Project:     my-app
 Runtime:     ready
