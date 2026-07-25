@@ -31,6 +31,7 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 ├── shared/
 │   ├── config.json                # 项目策略与 transport 配置
 │   ├── context/project.json       # 可共享项目事实
+│   ├── context/glossary.json      # 用户确认的项目术语表
 │   ├── workflows/                 # shared Task Aggregate
 │   ├── team/                      # actor、claim、handoff、checkpoint
 │   └── memory/decisions/          # 明确确认的共享决策

@@ -19,7 +19,7 @@ export const MAN_SKILL: SkillSpec = {
 
 ### Step 1: Scout 调研
 
-调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”，并按可验证事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；字段不相关或无法验证时可以省略，不能编造。Current Behavior Evidence 至少有一个可复现观察和仓库路径、测试或命令证据；owner 写置信度与冲突；source of truth 区分 authority 和 derived copy；兼容影响覆盖旧 workflow、legacy fixture、transport、迁移和 rollback。运行 \`mancode workflow update <taskId> --step 2\`。
+先读 \`.mancode/shared/context/glossary.json\`（若存在），调研、报告与后续沟通优先使用其中已确认术语。调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”，并按可验证事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；字段不相关或无法验证时可以省略，不能编造。Current Behavior Evidence 至少有一个可复现观察和仓库路径、测试或命令证据；owner 写置信度与冲突；source of truth 区分 authority 和 derived copy；兼容影响覆盖旧 workflow、legacy fixture、transport、迁移和 rollback。运行 \`mancode workflow update <taskId> --step 2\`。
 
 ### Step 2: 需求澄清
 
@@ -86,7 +86,7 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 2. remediation 会使旧验证整批失效。在 Step 9 重跑全部 required 验收，并通过 verify record/require-manual/confirm-manual 重新登记证据；未重新全部通过不能 completed。不重新运行已完成的 reviewer。修复若引入新的高风险面则标记 blocked，不能开启无界 review 循环。
 3. 写 \`summary.md\`：改动、新建、复用、验证、审查深度、findings 处置、跳过步骤和残余风险。
 4. CLI 确认所需审查领域完成且 blocker 清零后才写 \`completed\`；否则用 \`--status blocked --blocking-reason "<原因>"\`。
-5. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。
+5. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。发现新的高频领域词时向用户提议，经用户确认后用 \`mancode context glossary add\` 登记，不得未经确认写入术语表。
 6. worktree 合并前取得用户确认；终态写入成功后 state 回 solo 并清空 workflow 指针。
 
 任何 step/status/outcome/planVersion 变化都必须经过 workflow CLI；CLI 拒绝时保留当前 state 并报告原因，不可绕过校验直接改 metadata.json。

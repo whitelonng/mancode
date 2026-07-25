@@ -1,5 +1,11 @@
 import { CURRENT_WRITER_CAPABILITIES } from '../context/compatibility.js';
 import type { ContextLevel, ContextPurpose } from '../context/context-pack.js';
+import {
+  addGlossaryEntry,
+  readProjectGlossary,
+  removeGlossaryEntry,
+  updateGlossaryEntry,
+} from '../context/glossary.js';
 import { isUlid } from '../context/ids.js';
 import { managedAdapterNames } from '../context/manifest.js';
 import {
@@ -20,6 +26,7 @@ import {
   readLocalDiagnosticsConfig,
   setLocalDiagnosticsEnabled,
 } from '../runtime/diagnostics.js';
+import { resolveCoordinationEntityHomeStore } from '../runtime/entity-home-store.js';
 import {
   executeOperationRecovery,
   inspectOperationRecovery,
@@ -152,6 +159,17 @@ export interface ContextPublishOptions extends ContextResumeOptions {
   expectedRevision?: string;
   confirmShared?: boolean;
   dryRun?: boolean;
+}
+
+export interface ContextGlossaryOptions {
+  term?: string;
+  definition?: string;
+  alias?: string[];
+  task?: string;
+  expectedRevision?: string;
+  session?: string;
+  client?: string;
+  json?: boolean;
 }
 
 export interface ContextReconcileTaskHeadOptions extends ContextResumeOptions {
@@ -904,6 +922,145 @@ export async function contextReconcileTaskHead(
         : 'Unable to reconcile the mancode task head.',
     );
   }
+}
+
+/**
+ * Implements `mancode context glossary <list|add|update|remove>`. Reading is
+ * session-free; every mutation writes shared authority and therefore requires
+ * an active session plus an explicit glossary revision CAS.
+ */
+export async function contextGlossary(
+  rootDir: string,
+  action: string | undefined,
+  options: ContextGlossaryOptions,
+): Promise<number> {
+  if (
+    action !== 'list' &&
+    action !== 'add' &&
+    action !== 'update' &&
+    action !== 'remove'
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GLOSSARY_ACTION_INVALID',
+      'Use: context glossary <list|add|update|remove>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  if (action === 'list') {
+    try {
+      const project = await readV3CommandProject(rootDir);
+      const glossary = await readProjectGlossary(project.projectRoot);
+      return printV3Result(options.json, { schemaVersion: 1, glossary });
+    } catch (error) {
+      return printV3Error(
+        options.json,
+        v3ErrorCode(error, 'MANCODE_GLOSSARY_LIST_FAILED'),
+        error instanceof Error
+          ? error.message
+          : 'Unable to read the project glossary.',
+      );
+    }
+  }
+  if (options.term === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GLOSSARY_TERM_REQUIRED',
+      `context glossary ${action} requires --term <term>.`,
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  const expectedRevision = parseGlossaryExpectedRevision(
+    options.expectedRevision,
+  );
+  if (expectedRevision === null) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GLOSSARY_EXPECTED_REVISION_REQUIRED',
+      'context glossary mutations require --expected-revision <n> (0 for an empty glossary).',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  if (action === 'add' && options.definition === undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GLOSSARY_DEFINITION_REQUIRED',
+      'context glossary add requires --definition <text>.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  if (
+    action === 'update' &&
+    options.definition === undefined &&
+    (options.alias === undefined || options.alias.length === 0) &&
+    options.task === undefined
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_GLOSSARY_UPDATE_EMPTY',
+      'context glossary update requires --definition, --alias, or --task.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    await resolveV3CommandSession(project, options);
+    const store = resolveCoordinationEntityHomeStore(
+      project.runtime.entityHomeStoreContext,
+    );
+    const sourceTaskRef =
+      options.task === undefined ? undefined : parseTaskRef(options.task);
+    const aliases =
+      options.alias === undefined || options.alias.length === 0
+        ? undefined
+        : options.alias;
+    const glossary =
+      action === 'add'
+        ? await addGlossaryEntry(project.projectRoot, store, expectedRevision, {
+            term: options.term,
+            definition: options.definition as string,
+            ...(aliases === undefined ? {} : { aliases }),
+            ...(sourceTaskRef === undefined ? {} : { sourceTaskRef }),
+          })
+        : action === 'update'
+          ? await updateGlossaryEntry(
+              project.projectRoot,
+              store,
+              expectedRevision,
+              {
+                term: options.term,
+                ...(options.definition === undefined
+                  ? {}
+                  : { definition: options.definition }),
+                ...(aliases === undefined ? {} : { aliases }),
+                ...(sourceTaskRef === undefined ? {} : { sourceTaskRef }),
+              },
+            )
+          : await removeGlossaryEntry(
+              project.projectRoot,
+              store,
+              expectedRevision,
+              options.term,
+            );
+    return printV3Result(options.json, { schemaVersion: 1, glossary });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_GLOSSARY_MUTATION_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to change the project glossary.',
+    );
+  }
+}
+
+/** The glossary CAS accepts 0 so the first `add` targets the empty glossary. */
+function parseGlossaryExpectedRevision(
+  value: string | undefined,
+): number | null {
+  if (value === undefined || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 async function resolveContext(

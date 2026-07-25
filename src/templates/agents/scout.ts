@@ -22,6 +22,7 @@ export const SCOUT_AGENT: AgentSpec = {
 - 只列对实施有用的信息
 - 找到风险点要标注（⚠️）
 - 不确定的要明说，不猜
+- 存在 \`.mancode/shared/context/glossary.json\` 时，报告优先使用其中术语；发现新的高频领域词可在报告中列为建议词条（仅建议，不写入术语表）
 - 引用文件用 \`path:line\` 格式，让 Head Coach 一秒跳过去
 
 ## 你不是决策者

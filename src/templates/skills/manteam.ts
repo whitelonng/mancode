@@ -13,7 +13,7 @@ export const MANTEAM_SKILL: SkillSpec = {
     'Team workflow for shared repositories. Adds contributor context, coordination notes, commit discipline, and hand-off summaries to the full /man flow.',
   body: `# mancode · /manteam (Team Game)
 
-用户用 \`/manteam <task>\` 触发你。这是多人协作版的完整工作流：先理解团队上下文，再按 /man 的 9 步流程推进。
+用户用 \`/manteam <task>\` 触发你。这是多人协作版的完整工作流：先理解团队上下文，再按 /man 的 9 步流程推进。存在 \`.mancode/shared/context/glossary.json\` 时优先使用其中术语。
 
 用 \`mancode workflow create manteam "<task>" --json\` 创建 workflow，并将 state 指向返回的 taskId。后续 step/status/planVersion/skippedSteps 全部使用 \`mancode workflow update\`；不得直接改 metadata.json。若已有 active workflow，先让用户选择恢复或放弃，不能清空旧指针。
 

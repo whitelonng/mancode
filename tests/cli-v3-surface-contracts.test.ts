@@ -29,6 +29,13 @@ describe('V3 CLI command surface', () => {
       expect(
         commandAt(cliProgram, 'context', 'session', 'spike'),
       ).toBeDefined();
+      expect(commandAt(cliProgram, 'context', 'glossary')).toBeDefined();
+      expect(
+        requiredOptions(commandAt(cliProgram, 'context', 'glossary')),
+      ).toEqual([]);
+      expect(
+        commandAt(cliProgram, 'context', 'glossary').helpInformation(),
+      ).toContain('--expected-revision');
       expect(commandAt(cliProgram, 'operation', 'repair')).toBeDefined();
       expect(commandAt(cliProgram, 'operation', 'abort')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'status')).toBeDefined();

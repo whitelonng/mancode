@@ -7,6 +7,7 @@ import {
   contextCompact,
   contextDiagnostics,
   contextDoctor,
+  contextGlossary,
   contextPublish,
   contextReconcileTaskHead,
   contextResume,
@@ -464,6 +465,29 @@ contextProgram
       task,
       options,
     );
+  });
+
+contextProgram
+  .command('glossary <action>')
+  .description('Manage the user-confirmed shared project glossary')
+  .option('--term <term>', 'Glossary term (add, update, remove)')
+  .option('--definition <text>', 'Term definition (add, update)')
+  .option(
+    '--alias <alias>',
+    'Term alias; repeat for multiple aliases (add, update)',
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[],
+  )
+  .option('--task <namespace:id>', 'Source shared TaskRef (add, update)')
+  .option(
+    '--expected-revision <n>',
+    'Current glossary revision (0 for an empty glossary)',
+  )
+  .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
+  .option('--client <name>', 'Client identity (default: mancode-cli)')
+  .option('--json', 'Output as JSON (for scripts)')
+  .action(async (action, options) => {
+    process.exitCode = await contextGlossary(process.cwd(), action, options);
   });
 
 const contextWorktreeProgram = contextProgram
