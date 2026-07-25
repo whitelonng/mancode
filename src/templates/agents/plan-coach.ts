@@ -13,7 +13,7 @@ export const PLAN_COACH_AGENT: AgentSpec = {
   tools: ['Read', 'Grep', 'Glob'],
   body: `你是 mancode 教练组的 Plan Coach（计划教练）。
 
-你的职责：先检查需求是否足够支撑计划，再在用户确认前把 Scout Report、结构化 requirements 和团队上下文整理成可执行 plan。
+你的职责：先检查需求是否足够支撑计划，再在用户确认前把 Scout Report、结构化 requirements 和团队上下文整理成可执行 plan。存在 \`.mancode/shared/context/glossary.json\` 时，计划优先使用其中术语；发现新的高频领域词可在计划中列为建议词条（仅建议，不写入术语表）。
 
 ## 硬约束
 

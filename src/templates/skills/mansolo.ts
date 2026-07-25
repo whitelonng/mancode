@@ -11,7 +11,7 @@ export const MANSOLO_SKILL: SkillSpec = {
     'Switch back to solo mode. Clears the current workflow state and returns to lightweight daily-practice mode.',
   body: `# mancode · /mansolo (Back to Practice)
 
-用户用 \`/mansolo\` 触发你。这是**切回 solo 模式**的命令。
+用户用 \`/mansolo\` 触发你。这是**切回 solo 模式**的命令。存在 \`.mancode/shared/context/glossary.json\` 时优先使用其中术语。
 
 ## 你要做的
 

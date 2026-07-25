@@ -148,7 +148,9 @@ export function printV3Result(
   result: unknown,
 ): number {
   if (json) {
-    console.log(JSON.stringify(result, null, 2));
+    // Machine consumers parse the receipt; compact JSON keeps the token cost
+    // of every --json receipt down without changing parseability.
+    console.log(JSON.stringify(result));
   } else {
     console.log(JSON.stringify(result, null, 2));
   }
@@ -163,7 +165,7 @@ export function printV3Error(
 ): number {
   const result = { schemaVersion: 1, error: { code, message } };
   if (json) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(result));
   } else {
     console.error(`✗  ${code}`);
     console.error(`   ${message}`);

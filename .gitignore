@@ -59,6 +59,7 @@ Desktop.ini
 # IDE
 .vscode/
 .idea/
+.qoder/
 *.swp
 *.swo
 *~

@@ -1121,6 +1121,7 @@ const V3_MODE_DEFINITIONS: Record<
     actions: [
       '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
       '- For a new task, run `mancode workflow create man "<task>" --session <id>`.',
+      '- Read `.mancode/shared/context/glossary.json` when it exists and prefer its confirmed terms in clarification, requirements, plans, reports, and naming.',
       '- Before writing requirements, inspect the relevant project facts and implementation, then run a decision-readiness gate covering both clarity and soundness. Treat the request as ready only when the goal, in-scope/out-of-scope behavior, acceptance boundary, semantic owner/source of truth, and decision-changing constraints are supplied and consistent with evidence, verifiable from the repository, or explicitly recorded as safe defaults. A supplied instruction is not automatically correct. Do not ask ceremonial questions or manufacture alternatives when the request is already clear and sound.',
       '- Classify unresolved decisions as blocking, recommendable, or defaultable. Ask and wait for blocking decisions; for recommendable decisions, present 2–3 bounded options with tradeoffs and one clear recommendation; use a default only when it is low-impact, reversible, consistent with repository conventions, and recorded with its reason.',
       '- If any unresolved ambiguity could change the goal, scope, user-visible behavior, acceptance, architecture, data, security, compatibility, owner, or source of truth, stop before requirements finalization, explain the missing decision, ask focused questions, and wait for the user answer. Ask in as many batches as needed, do not repeat answered questions, and never turn an unverified assumption into confirmed scope or confirmed coverage.',
@@ -1138,6 +1139,7 @@ const V3_MODE_DEFINITIONS: Record<
       '- When new evidence materially invalidates confirmed requirements and the operator explicitly chooses to realign the same local task, resume its TaskRef if needed, generate a fresh canonical checkpoint ULID, and run `mancode workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <fresh-ULID> --summary "<reason>" --next-action "<step-2 action>" --session <id>`. Reframe archives the confirmed requirements and plan, clears the plan decision, and stops at Step 2 with draft requirements. Do not substitute plan revise, scope-change, or workflow update for reframe.',
       '- Read reframe evidence without opening private authority files: `mancode workflow archive <namespace:ULID> show <archive-ULID> --json` and `mancode workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json`.',
       '- Apply verification and review ledgers with their mancode `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
+      '- When a new high-frequency domain term emerges, propose it to the operator; only after explicit confirmation register it with `mancode context glossary add --term "<term>" --definition "<definition>" --expected-revision <n> --session <id>`. Never write to the glossary without operator confirmation.',
     ],
   },
   manba: {
@@ -1158,6 +1160,7 @@ const V3_MODE_DEFINITIONS: Record<
     contextPurpose: 'plan',
     actions: [
       '- Confirm team membership with `mancode team status`; join invited participants before assigning shared work.',
+      '- Read `.mancode/shared/context/glossary.json` when it exists and prefer its confirmed terms in shared requirements, plans, and handoffs.',
       '- For a new shared task, run `mancode workflow create manteam "<task>" --visibility shared --coordination team --confirm-shared --session <id>`.',
       '- Apply the same decision-readiness gate as `man` before finalizing requirements: validate both clarity and soundness against project facts and team authority. If the goal, scope, acceptance, owner/source of truth, and constraints are clear and consistent, continue without ceremonial questions; if a decision-changing ambiguity, ownership conflict, or hard-risk direction remains, give evidence and a recommendation, ask focused questions, and wait before writing confirmed requirements.',
       '- Persist unresolved team clarification through the same `workflow requirements <namespace:ULID> draft --file <requirements.json>` command as `man`; do not leave ownership questions or partial answers only in chat history.',
@@ -1180,6 +1183,7 @@ const V3_MODE_DEFINITIONS: Record<
     contextPurpose: 'implement',
     actions: [
       '- Do not create or persist a legacy solo mode. Ordinary focused work needs no TaskRef; if the operator expects a governed task, use its bound TaskRef or report that none is bound.',
+      '- Read `.mancode/shared/context/glossary.json` when it exists and prefer its confirmed terms.',
       '- Before editing, assess both clarity and soundness using the project facts. If the request is clear, consistent, and low risk, proceed without ceremonial questions. Resolve repository-answerable unknowns yourself; classify the rest as blocking, recommendable, or defaultable. Ask and wait only when a blocking unknown could materially change behavior, scope, acceptance, data, security, compatibility, or ownership.',
       '- A supplied implementation direction is not automatically safe. If it conflicts with repository evidence or involves authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure, or another irreversible effect, show the evidence and impact, recommend the safer path, ask for focused confirmation, and wait before editing.',
       '- If resolving the ambiguity requires architecture, semantic owner/source-of-truth, cross-module scope, migration, team coordination, or formal acceptance decisions, recommend `/man`, explain the trigger, and wait for the operator to choose; advice alone never changes mode or authority.',

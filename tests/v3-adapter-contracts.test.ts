@@ -319,6 +319,10 @@ describe('V3 adapter bootstrap integration', () => {
             'summarize the resolved requirements and any remaining defaults',
           );
           expect(entry).toContain('clarity does not waive risk');
+          expect(entry).toContain('mancode context glossary add');
+          expect(entry).toContain(
+            'Never write to the glossary without operator confirmation.',
+          );
         }
         if (mode === 'manba') {
           expect(entry).toContain(
@@ -356,6 +360,10 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             'Detect those governance triggers after the smallest fact check needed',
           );
+        }
+        if (mode === 'man' || mode === 'manteam' || mode === 'mansolo') {
+          expect(entry).toContain('.mancode/shared/context/glossary.json');
+          expect(entry).toContain('prefer its confirmed terms');
         }
         if (mode === 'manteam') {
           expect(entry).toContain(

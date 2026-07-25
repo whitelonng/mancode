@@ -47,6 +47,8 @@ describe('coaching staff agents', () => {
       expect(SCOUT_AGENT.body).toMatch(/调研|investigat/i);
       expect(SCOUT_AGENT.tools).toContain('Read');
       expect(SCOUT_AGENT.tools).not.toContain('Edit');
+      expect(SCOUT_AGENT.body).toMatch(/shared\/context\/glossary\.json/);
+      expect(SCOUT_AGENT.body).toMatch(/仅建议，不写入术语表/);
     });
 
     it('scout records planning-governance evidence without claiming authority', () => {
@@ -77,6 +79,8 @@ describe('coaching staff agents', () => {
       expect(PLAN_COACH_AGENT.body).toMatch(/NEEDS_CLARIFICATION/);
       expect(PLAN_COACH_AGENT.body).toMatch(/blocking/);
       expect(PLAN_COACH_AGENT.tools).toEqual(['Read', 'Grep', 'Glob']);
+      expect(PLAN_COACH_AGENT.body).toMatch(/shared\/context\/glossary\.json/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/仅建议，不写入术语表/);
       expect(PLAN_COACH_AGENT.tools).not.toContain('Edit');
       expect(PLAN_COACH_AGENT.tools).not.toContain('Write');
       expect(PLAN_COACH_AGENT.tools).not.toContain('Bash');

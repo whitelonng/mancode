@@ -75,6 +75,9 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/简单任务.*只列一个方向/);
     expect(MAN_SKILL.body).toMatch(/stop conditions/);
     expect(MAN_SKILL.body).toMatch(/Domain Matrix/);
+    expect(MAN_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
+    expect(MAN_SKILL.body).toMatch(/context glossary add/);
+    expect(MAN_SKILL.body).toMatch(/不得未经确认写入术语表/);
     expect(MAN_SKILL.body).toContain('NEEDS_REALIGNMENT');
     expect(MAN_SKILL.body).toContain('MANCODE_REFRAME_REQUIRED');
     expect(MAN_SKILL.body).toMatch(/不得调用通用.*workflow update.*blocked/);
@@ -137,6 +140,8 @@ describe('mvp-2 skills', () => {
     expect(MANSOLO_SKILL.body).toMatch(/不要先清空 state/);
     expect(MANTEAM_SKILL.body).toMatch(/workflow create manteam/);
     expect(MANTEAM_SKILL.body).toMatch(/planVersion/);
+    expect(MANTEAM_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
+    expect(MANSOLO_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
   });
 
   it('keeps non-Claude mode files on the same validated workflow contract', () => {

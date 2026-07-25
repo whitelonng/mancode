@@ -20,6 +20,21 @@ mancode refresh-project
 
 检测不到的 framework 不会写入 profile。Git、manifest 或源码目录缺失时，初始化可以安全降级，但不会把 unknown 项目伪装成 Web 项目。
 
+## 项目术语表
+
+`.mancode/shared/context/glossary.json` 保存用户确认的项目术语：每个词条含 term、definition、aliases、可选的 shared TaskRef 来源和确认时间。term 与 alias 全局大小写不敏感唯一，条目上限 200，所有文本经过共享隐私扫描。
+
+术语表只能通过 CLI 写入，且每个词条必须先经用户确认，不做自动术语提取：
+
+```bash
+mancode context glossary list --json
+mancode context glossary add --term "Task Aggregate" --definition "..." --expected-revision 0 --session <id>
+mancode context glossary update --term "Task Aggregate" --definition "..." --expected-revision 1 --session <id>
+mancode context glossary remove --term "Task Aggregate" --expected-revision 2 --session <id>
+```
+
+`list` 是只读命令；文件不存在时读作 revision 0 的空术语表，首次 `add` 使用 `--expected-revision 0`。变更命令需要 active session，在本地锁内执行 revision CAS；并发写入时后写者收到 `MANCODE_GLOSSARY_REVISION_CONFLICT`，不会静默覆盖。
+
 ## 设计资产扫描
 
 只有 profile 确认存在 UI 资产时，mancode 才扫描设计信号。当前实现识别：
