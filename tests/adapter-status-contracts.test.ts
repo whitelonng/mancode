@@ -56,6 +56,8 @@ describe('adapter status command contracts', () => {
       'cursor',
       'copilot',
       'zcode',
+      'kimi-code',
+      'qoder',
     ]);
   });
 

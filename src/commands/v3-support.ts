@@ -128,7 +128,9 @@ function platformForClient(client: string): SessionSpikePlatform | null {
     client === 'codex' ||
     client === 'cursor' ||
     client === 'copilot' ||
-    client === 'zcode'
+    client === 'zcode' ||
+    client === 'kimi-code' ||
+    client === 'qoder'
     ? client
     : null;
 }

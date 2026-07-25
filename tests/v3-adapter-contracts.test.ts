@@ -479,7 +479,7 @@ describe('V3 adapter bootstrap integration', () => {
     );
     expect(agentsAfterZcode).toContain('--client codex');
     expect(agentsAfterZcode).toContain('--client zcode');
-    expect(agentsAfterCodex).toContain('Codex or ZCode');
+    expect(agentsAfterCodex).toContain('Codex, ZCode, or Kimi Code');
   });
 
   it('renders the complete plan and local reframe command contracts', async () => {

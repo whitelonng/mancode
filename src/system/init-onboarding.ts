@@ -178,6 +178,7 @@ export async function detectPlatformHints(
   if (await exists('.claude')) hints.add('claude-code');
   if (await exists('.cursor')) hints.add('cursor');
   if (await exists('.github/copilot-instructions.md')) hints.add('copilot');
+  if (await exists('.qoder')) hints.add('qoder');
   return ALL_PLATFORMS.filter((platform) => hints.has(platform));
 }
 

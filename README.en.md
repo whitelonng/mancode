@@ -11,14 +11,14 @@
 
 <p align="center">
   Adapts to common coding agent tools, including Claude Code, Cursor, Codex in
-  the ChatGPT desktop app and CLI, GitHub Copilot, and ZCode.
+  the ChatGPT desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder.
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/status-Continuity%20v0.5.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.0" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder" />
 </p>
 
 <p align="center">
@@ -41,7 +41,8 @@ conversations.
 [Installation](#installation) · [Usage](#usage)
 
 mancode ships with adapters for Claude Code, Cursor, Codex in the ChatGPT
-desktop app and CLI, GitHub Copilot, and ZCode. It keeps the original `man*`
+desktop app and CLI, GitHub Copilot, ZCode, Kimi Code (desktop/CLI), and Qoder
+(IDE/CLI). It keeps the original `man*`
 entries on every platform and connects them to one Context Pack and workflow
 authority through static bootstraps.
 
@@ -124,7 +125,8 @@ CLI form above is useful for diagnostics, automation, or manual recovery.
 
 mancode gives team projects stable TaskRefs, isolated sessions, governance
 ledgers, worktree claims and handoffs, and optional git-ref coordination across
-clones. Claude Code, Cursor, Codex, GitHub Copilot, and ZCode use the same
+clones. Claude Code, Cursor, Codex, GitHub Copilot, ZCode, Kimi Code, and
+Qoder use the same
 workflow data through platform bootstraps; platform files do not hold task or
 session copies.
 
@@ -178,8 +180,9 @@ By default, `mancode init` creates mancode workflow and platform integration fil
 
 .claude/skills/                  # Claude Code: bootstrap + original mode skills
 .cursor/rules/ + commands/       # Cursor: bootstrap + original mode commands
-AGENTS.md                        # Codex (ChatGPT desktop/CLI): managed instructions
-.agents/skills/                  # Codex / ZCode: original mode skills
+AGENTS.md                        # Codex / ZCode / Kimi Code / Qoder: separate managed instruction blocks
+.agents/skills/                  # Codex / ZCode / Kimi Code: original mode skills
+.qoder/commands/                 # Qoder: original mode commands
 .github/copilot-instructions.md  # GitHub Copilot: managed instruction block
 .github/prompts/                 # GitHub Copilot: original mode prompts
 ```
@@ -383,7 +386,7 @@ it should behave, and why previous decisions were made.
 ## Installation
 
 **Status**: mancode Continuity v0.5.0. Claude Code, Cursor, Codex in the ChatGPT
-desktop app and CLI, GitHub Copilot, and ZCode adapters are included.
+desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
 are supported. Git is optional: without it, initialization continues with solo
@@ -409,6 +412,11 @@ Supported platforms:
 - ZCode: managed `AGENTS.md` block and provisional `$man*` skills in
   `.agents/skills/`; project skill discovery and slash commands pending verified
   workspace paths
+- Kimi Code (desktop app and CLI): managed `AGENTS.md` block plus
+  `/skill:man*` repo skills under `.agents/skills/`; host discovery paths
+  pending real-host verification
+- Qoder (IDE and CLI): managed `AGENTS.md` block plus `/man*` repo commands
+  under `.qoder/commands/`; host discovery paths pending real-host verification
 - Windsurf, Cline, Roo Code: planned later
 
 ### Install Options
@@ -419,7 +427,7 @@ mancode init --yes        # Skip generic-project confirmation (use --platform in
 mancode init --team       # Force-enable team mode
 mancode init --no-team    # Force-disable team mode
 mancode init --legacy --style NAME # Legacy only: save a default style preference
-mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilot,zcode, or all
+mancode init --platform PLATFORMS # One or more: claude-code,cursor,codex,copilot,zcode,kimi-code,qoder, or all
 mancode init --empty      # Allow a safe empty directory in non-interactive scripts
 mancode init --lang zh-CN # Explicit initialization language (zh-CN or en)
 mancode refresh-project   # Refresh facts after Git or project files are added
@@ -454,7 +462,7 @@ mancode init --legacy
 mancode status
 mancode status --json
 mancode status --brief --json
-mancode install <claude-code|cursor|codex|copilot|zcode> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode install <claude-code|cursor|codex|copilot|zcode|kimi-code|qoder> --confirm --operation-id <operationId> --session <id> --client <client>
 mancode adapter status [--platform <platform>] --json
 mancode adapter upgrade <--all|--platform <platform>> --dry-run
 mancode adapter upgrade <--all|--platform <platform>> --confirm --operation-id <operationId> --session <id> --client <client>
@@ -507,6 +515,8 @@ mancode adapter status:
   ✓ Codex (ChatGPT desktop/CLI): ready
   ○ GitHub Copilot: not installed
   ○ ZCode: not installed
+  ○ Kimi Code (desktop/CLI): not installed
+  ○ Qoder (IDE/CLI): not installed
 ```
 
 ### `mancode manps deps`
@@ -734,7 +744,8 @@ platforms (Codex, ZCode, Copilot), the managed block in `AGENTS.md` or
 
 ### AGENTS.md or copilot-instructions.md managed block was accidentally deleted
 
-Preview `mancode adapter upgrade --platform codex --dry-run` (or `zcode`, or
+Preview `mancode adapter upgrade --platform codex --dry-run` (or `zcode`,
+`kimi-code`, `qoder`, or
 `copilot`), then run it with the returned `--operation-id`, an active session,
 and `--confirm` to reinsert the managed block. User-authored content outside the
 relevant markers is preserved.

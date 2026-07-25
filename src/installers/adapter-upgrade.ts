@@ -631,7 +631,7 @@ function modeTargetForPlatform(platform: PlatformName, mode: string): string {
   const family =
     platform === 'claude-code'
       ? 'claude'
-      : platform === 'codex' || platform === 'zcode'
+      : platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
         ? 'agents'
         : platform;
   return `${family}-mode-${mode}`;

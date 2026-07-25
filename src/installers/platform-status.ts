@@ -12,6 +12,10 @@ import {
   MANCODE_CURSOR_RULE_FILES,
 } from './cursor.js';
 import {
+  KIMI_MANCODE_END_MARKER,
+  KIMI_MANCODE_START_MARKER,
+} from './kimi-code.js';
+import {
   DEFAULT_MANCODE_END_MARKER,
   DEFAULT_MANCODE_START_MARKER,
   hasManagedBlock,
@@ -21,6 +25,10 @@ import {
   MODE_FILE_MANAGED_MARKER,
   MODE_NAMES,
 } from './mode-skills.js';
+import {
+  QODER_MANCODE_END_MARKER,
+  QODER_MANCODE_START_MARKER,
+} from './qoder.js';
 import {
   ZCODE_MANCODE_END_MARKER,
   ZCODE_MANCODE_START_MARKER,
@@ -204,6 +212,84 @@ async function checkPlatformReadiness(
       readyDetail: hasSkills
         ? 'managed block and skills present'
         : 'mode skills are missing, incomplete, or user-authored',
+    };
+  }
+
+  if (platform === 'kimi-code') {
+    const hasBlock = await fileHasManagedBlock(
+      path.join(rootDir, 'AGENTS.md'),
+      KIMI_MANCODE_START_MARKER,
+      KIMI_MANCODE_END_MARKER,
+    );
+    if (!hasBlock) {
+      return {
+        present: false,
+        ready: false,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block missing',
+      };
+    }
+    if (await isPlatformMinimal(rootDir, 'kimi-code')) {
+      return {
+        present: true,
+        ready: true,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block present',
+      };
+    }
+
+    // Non-minimal installs should expose all five mancode-managed mode skills.
+    const skillsDir = path.join(rootDir, '.agents', 'skills');
+    const hasSkills = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
+      MANCODE_AGENT_SKILL_MARKERS,
+    );
+    return {
+      present: true,
+      ready: hasSkills,
+      target: 'AGENTS.md + .agents/skills/',
+      readyDetail: hasSkills
+        ? 'managed block and skills present'
+        : 'mode skills are missing, incomplete, or user-authored',
+    };
+  }
+
+  if (platform === 'qoder') {
+    const hasBlock = await fileHasManagedBlock(
+      path.join(rootDir, 'AGENTS.md'),
+      QODER_MANCODE_START_MARKER,
+      QODER_MANCODE_END_MARKER,
+    );
+    if (!hasBlock) {
+      return {
+        present: false,
+        ready: false,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block missing',
+      };
+    }
+    if (await isPlatformMinimal(rootDir, 'qoder')) {
+      return {
+        present: true,
+        ready: true,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block present',
+      };
+    }
+
+    // Non-minimal installs should expose all five mancode-managed mode commands.
+    const commandsDir = path.join(rootDir, '.qoder', 'commands');
+    const hasCommands = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(commandsDir, `${mode}.md`)),
+      [MODE_FILE_MANAGED_MARKER],
+    );
+    return {
+      present: true,
+      ready: hasCommands,
+      target: 'AGENTS.md + .qoder/commands/',
+      readyDetail: hasCommands
+        ? 'managed block and commands present'
+        : 'mode commands are missing, incomplete, or user-authored',
     };
   }
 

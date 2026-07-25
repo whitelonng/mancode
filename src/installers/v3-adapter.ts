@@ -83,6 +83,10 @@ const V3_CODEX_START_MARKER = '<!-- mancode:continuity:codex:start -->';
 const V3_CODEX_END_MARKER = '<!-- mancode:continuity:codex:end -->';
 const V3_ZCODE_START_MARKER = '<!-- mancode:continuity:zcode:start -->';
 const V3_ZCODE_END_MARKER = '<!-- mancode:continuity:zcode:end -->';
+const V3_KIMI_START_MARKER = '<!-- mancode:continuity:kimi:start -->';
+const V3_KIMI_END_MARKER = '<!-- mancode:continuity:kimi:end -->';
+const V3_QODER_START_MARKER = '<!-- mancode:continuity:qoder:start -->';
+const V3_QODER_END_MARKER = '<!-- mancode:continuity:qoder:end -->';
 const V3_COPILOT_START_MARKER = '<!-- mancode:continuity:copilot:start -->';
 const V3_COPILOT_END_MARKER = '<!-- mancode:continuity:copilot:end -->';
 const LEGACY_V3_CODEX_MARKERS = [
@@ -101,6 +105,14 @@ const LEGACY_CODEX_START_MARKER = '<!-- mancode:start -->';
 const LEGACY_CODEX_END_MARKER = '<!-- mancode:end -->';
 const LEGACY_ZCODE_START_MARKER = '<!-- mancode:zcode:start -->';
 const LEGACY_ZCODE_END_MARKER = '<!-- mancode:zcode:end -->';
+const LEGACY_KIMI_MARKERS = [
+  '<!-- mancode:kimi-code:start -->',
+  '<!-- mancode:kimi-code:end -->',
+] as const;
+const LEGACY_QODER_MARKERS = [
+  '<!-- mancode:qoder:start -->',
+  '<!-- mancode:qoder:end -->',
+] as const;
 const RETRIABLE_ADAPTER_READ_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 const ADAPTER_READ_MAX_ATTEMPTS = 4;
 const ADAPTER_READ_RETRY_DELAY_MS = 25;
@@ -149,15 +161,16 @@ interface V3AdapterManagedTargetSpec {
 }
 
 /**
- * A physical file touched by the V3 bootstrap renderer. Codex and ZCode
- * deliberately share the AGENTS target, so activation journals these files
- * rather than individual platform installs.
+ * A physical file touched by the V3 bootstrap renderer. Codex, ZCode, and
+ * Kimi Code deliberately share the AGENTS target, so activation journals these
+ * files rather than individual platform installs.
  */
 export type V3ModeEntryFileTarget =
   | `claude-mode-${V3ModeName}`
   | `agents-mode-${V3ModeName}`
   | `cursor-mode-${V3ModeName}`
-  | `copilot-mode-${V3ModeName}`;
+  | `copilot-mode-${V3ModeName}`
+  | `qoder-mode-${V3ModeName}`;
 
 export type V3LegacyAdapterFileTarget =
   | 'claude-settings'
@@ -195,6 +208,8 @@ export const V3_ADAPTER_PLATFORMS: readonly PlatformName[] = [
   'cursor',
   'copilot',
   'zcode',
+  'kimi-code',
+  'qoder',
 ];
 
 export interface V3AdapterFilePlan {
@@ -227,6 +242,7 @@ const V3_MODE_ENTRY_FILE_TARGETS = V3_MODE_NAMES.flatMap((mode) => [
   `agents-mode-${mode}` as const,
   `cursor-mode-${mode}` as const,
   `copilot-mode-${mode}` as const,
+  `qoder-mode-${mode}` as const,
 ]);
 
 const V3_LEGACY_ADAPTER_FILE_TARGETS: readonly V3LegacyAdapterFileTarget[] = [
@@ -295,21 +311,37 @@ export async function planV3AdapterFiles(
   }
   const agents = removeLegacyV3Block(
     removeLegacyV3Block(
-      removeLegacyAgentsBlocks(existing.get('agents') ?? ''),
-      LEGACY_V3_CODEX_MARKERS,
+      removeLegacyV3Block(
+        removeLegacyV3Block(
+          removeLegacyAgentsBlocks(existing.get('agents') ?? ''),
+          LEGACY_V3_CODEX_MARKERS,
+        ),
+        LEGACY_V3_ZCODE_MARKERS,
+      ),
+      LEGACY_KIMI_MARKERS,
     ),
-    LEGACY_V3_ZCODE_MARKERS,
+    LEGACY_QODER_MARKERS,
   );
   const nextAgents = replaceManagedV3BlockText(
     replaceManagedV3BlockText(
-      agents,
-      V3_CODEX_START_MARKER,
-      V3_CODEX_END_MARKER,
-      renderV3Bootstrap('codex'),
+      replaceManagedV3BlockText(
+        replaceManagedV3BlockText(
+          agents,
+          V3_CODEX_START_MARKER,
+          V3_CODEX_END_MARKER,
+          renderV3Bootstrap('codex'),
+        ),
+        V3_ZCODE_START_MARKER,
+        V3_ZCODE_END_MARKER,
+        renderV3Bootstrap('zcode'),
+      ),
+      V3_KIMI_START_MARKER,
+      V3_KIMI_END_MARKER,
+      renderV3Bootstrap('kimi-code'),
     ),
-    V3_ZCODE_START_MARKER,
-    V3_ZCODE_END_MARKER,
-    renderV3Bootstrap('zcode'),
+    V3_QODER_START_MARKER,
+    V3_QODER_END_MARKER,
+    renderV3Bootstrap('qoder'),
   );
   const legacyAdapterPlans = planLegacyAdapterRetirement(existing);
   const plans: V3AdapterFilePlan[] = [
@@ -578,11 +610,14 @@ export function v3ModeEntryPath(
       return path.join(root, '.claude', 'skills', mode, 'SKILL.md');
     case 'codex':
     case 'zcode':
+    case 'kimi-code':
       return path.join(root, '.agents', 'skills', mode, 'SKILL.md');
     case 'cursor':
       return path.join(root, '.cursor', 'commands', `${mode}.md`);
     case 'copilot':
       return path.join(root, '.github', 'prompts', `${mode}.prompt.md`);
+    case 'qoder':
+      return path.join(root, '.qoder', 'commands', `${mode}.md`);
   }
 }
 
@@ -650,6 +685,24 @@ export async function installV3Adapter(
           [LEGACY_CODEX_START_MARKER, LEGACY_CODEX_END_MARKER],
           [LEGACY_ZCODE_START_MARKER, LEGACY_ZCODE_END_MARKER],
         ],
+      );
+      break;
+    case 'kimi-code':
+      await replaceManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        V3_KIMI_START_MARKER,
+        V3_KIMI_END_MARKER,
+        content,
+        [LEGACY_KIMI_MARKERS],
+      );
+      break;
+    case 'qoder':
+      await replaceManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        V3_QODER_START_MARKER,
+        V3_QODER_END_MARKER,
+        content,
+        [LEGACY_QODER_MARKERS],
       );
       break;
   }
@@ -729,6 +782,8 @@ export async function inspectV3AdapterVersions(
     'cursor',
     'copilot',
     'zcode',
+    'kimi-code',
+    'qoder',
   ];
   const required = new Set(requiredPlatforms);
   const entries = await Promise.all(
@@ -797,7 +852,11 @@ export async function removeV3Adapter(
       );
       preserveSharedModeEntries = await anyManagedBlockPresent(
         path.join(root, 'AGENTS.md'),
-        [[V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER], LEGACY_V3_ZCODE_MARKERS],
+        [
+          [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
+          LEGACY_V3_ZCODE_MARKERS,
+          [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
+        ],
       );
       break;
     case 'copilot':
@@ -823,7 +882,42 @@ export async function removeV3Adapter(
       );
       preserveSharedModeEntries = await anyManagedBlockPresent(
         path.join(root, 'AGENTS.md'),
-        [[V3_CODEX_START_MARKER, V3_CODEX_END_MARKER], LEGACY_V3_CODEX_MARKERS],
+        [
+          [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
+          LEGACY_V3_CODEX_MARKERS,
+          [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
+        ],
+      );
+      break;
+    case 'kimi-code':
+      await removeManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        V3_KIMI_START_MARKER,
+        V3_KIMI_END_MARKER,
+      );
+      await removeManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        ...LEGACY_KIMI_MARKERS,
+      );
+      preserveSharedModeEntries = await anyManagedBlockPresent(
+        path.join(root, 'AGENTS.md'),
+        [
+          [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
+          LEGACY_V3_CODEX_MARKERS,
+          [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
+          LEGACY_V3_ZCODE_MARKERS,
+        ],
+      );
+      break;
+    case 'qoder':
+      await removeManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        V3_QODER_START_MARKER,
+        V3_QODER_END_MARKER,
+      );
+      await removeManagedV3Block(
+        path.join(root, 'AGENTS.md'),
+        ...LEGACY_QODER_MARKERS,
       );
       break;
   }
@@ -839,12 +933,12 @@ export function renderV3Bootstrap(platform: PlatformName): string {
   const platformLabel = platformLabelFor(platform);
   const sessionArguments = sessionArgumentsFor(platform);
   const sessionCreationGuidance =
-    platform === 'codex' || platform === 'zcode'
-      ? 'When status has no `session`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode.'
+    platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
+      ? 'When status has no `session`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with `mancode context session new --client codex` in Codex, `mancode context session new --client zcode` in ZCode, or `mancode context session new --client kimi-code` in Kimi Code.'
       : `When status has no \`session\`, first reuse any explicit session ID already returned in this conversation. Only when neither exists, create one once with \`mancode context session new --client ${platform}\`.`;
   const spikePlatform =
-    platform === 'codex' || platform === 'zcode'
-      ? 'the active Codex or ZCode host'
+    platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
+      ? 'the active Codex, ZCode, or Kimi Code host'
       : platform;
   const modeEntry = capabilitiesFor(platform).nativeModeEntry
     ? 'Use the platform mode entry only as a shortcut; resolve a Context Pack first.'
@@ -881,6 +975,11 @@ export function renderV3Bootstrap(platform: PlatformName): string {
     '- For a mode entry, request the matching Context Pack purpose: `plan`, `implement`, `review`, `verify`, or `handoff`.',
     '- Do not persist task, mode, or session state in this adapter file or any legacy state file.',
     `- ${modeEntry}`,
+    ...(platform === 'qoder'
+      ? [
+          '- Treat host-injected security scan findings (L1/L2/L3) as advisory review input for the current step. In a governed review, fold open findings into the single remediation round; after any post-verification code change, re-run and re-record the required checks before completing. Scan findings never reopen completed reviews or bypass workflow revisions.',
+        ]
+      : []),
     `- No approved session or prompt hook is assumed. After a real-host spike is recorded for ${spikePlatform}, a verified host may provide MANCODE_HOST_SESSION_KEY; otherwise mutations require an explicit \`--session\`.`,
   ].join('\n');
 }
@@ -902,8 +1001,8 @@ export function renderV3ModeEntry(
   const cliSelectionGuidance =
     'Before the first command, use `./node_modules/.bin/mancode` when it exists, otherwise `mancode`; check that selected binary with `--version` once and never mix binaries or versions. In every command below, replace the literal `mancode` with that selected binary path when the local binary exists.';
   const sessionCreationGuidance =
-    platform === 'codex' || platform === 'zcode'
-      ? 'If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run `mancode context session new --client codex` in Codex or `mancode context session new --client zcode` in ZCode exactly once, then retain the returned session ID.'
+    platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
+      ? 'If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run `mancode context session new --client codex` in Codex, `mancode context session new --client zcode` in ZCode, or `mancode context session new --client kimi-code` in Kimi Code exactly once, then retain the returned session ID.'
       : `If status has no current session, reuse an explicit session ID already retained in this conversation. Only if neither exists, run \`mancode context session new --client ${platform}\` exactly once and retain the returned session ID.`;
   let authoritySteps: string[];
   if (mode === 'manps') {
@@ -941,7 +1040,9 @@ export function renderV3ModeEntry(
     '---',
     ...(platform === 'claude-code' ||
     platform === 'codex' ||
-    platform === 'zcode'
+    platform === 'zcode' ||
+    platform === 'kimi-code' ||
+    platform === 'qoder'
       ? [`name: ${mode}`]
       : []),
     ...(platform === 'copilot' ? ["agent: 'agent'"] : []),
@@ -984,13 +1085,17 @@ export function renderV3ModeEntry(
 
 function sessionArgumentsFor(platform: PlatformName): string {
   const client =
-    platform === 'codex' || platform === 'zcode' ? '<active-client>' : platform;
+    platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
+      ? '<active-client>'
+      : platform;
   return `--session <id> --client ${client}`;
 }
 
 function sessionClientGuidanceFor(platform: PlatformName): string {
-  return platform === 'codex' || platform === 'zcode'
-    ? 'Use `--client codex` in Codex or `--client zcode` in ZCode on every command that uses this session.'
+  return platform === 'codex' ||
+    platform === 'zcode' ||
+    platform === 'kimi-code'
+    ? 'Use `--client codex` in Codex, `--client zcode` in ZCode, or `--client kimi-code` in Kimi Code on every command that uses this session.'
     : `Use \`--client ${platform}\` on every command that uses this session.`;
 }
 
@@ -1143,6 +1248,27 @@ async function renderV3AdapterCandidate(
         renderV3Bootstrap(platform),
       );
     }
+    case 'kimi-code': {
+      const existing = (await readAdapterTarget(root, 'agents')) ?? '';
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeLegacyAgentsBlocks(existing),
+          LEGACY_KIMI_MARKERS,
+        ),
+        V3_KIMI_START_MARKER,
+        V3_KIMI_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    }
+    case 'qoder': {
+      const existing = (await readAdapterTarget(root, 'agents')) ?? '';
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(existing, LEGACY_QODER_MARKERS),
+        V3_QODER_START_MARKER,
+        V3_QODER_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    }
   }
 }
 
@@ -1201,6 +1327,8 @@ function primaryFileTarget(platform: PlatformName): V3AdapterFileTarget {
       return 'cursor-rule';
     case 'codex':
     case 'zcode':
+    case 'kimi-code':
+    case 'qoder':
       return 'agents';
     case 'copilot':
       return 'copilot-instructions';
@@ -1259,6 +1387,31 @@ function planPlatformBootstrapUpgrade(
           ),
           V3_ZCODE_START_MARKER,
           V3_ZCODE_END_MARKER,
+          renderV3Bootstrap(platform),
+        ),
+      );
+      return;
+    case 'kimi-code':
+      desired.set(
+        target,
+        replaceManagedV3BlockText(
+          removeLegacyV3Block(
+            removeLegacyAgentsBlocks(current ?? ''),
+            LEGACY_KIMI_MARKERS,
+          ),
+          V3_KIMI_START_MARKER,
+          V3_KIMI_END_MARKER,
+          renderV3Bootstrap(platform),
+        ),
+      );
+      return;
+    case 'qoder':
+      desired.set(
+        target,
+        replaceManagedV3BlockText(
+          removeLegacyV3Block(current ?? '', LEGACY_QODER_MARKERS),
+          V3_QODER_START_MARKER,
+          V3_QODER_END_MARKER,
           renderV3Bootstrap(platform),
         ),
       );
@@ -1328,6 +1481,24 @@ function primaryManagedTargetSpec(
         V3_ZCODE_END_MARKER,
         renderV3Bootstrap(platform),
       );
+    case 'kimi-code':
+      return embeddedManagedTargetSpec(
+        target,
+        'agents#kimi-code',
+        'agents',
+        V3_KIMI_START_MARKER,
+        V3_KIMI_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'qoder':
+      return embeddedManagedTargetSpec(
+        target,
+        'agents#qoder',
+        'agents',
+        V3_QODER_START_MARKER,
+        V3_QODER_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
   }
 }
 
@@ -1355,7 +1526,7 @@ function modeEntryFileTarget(
   const family =
     platform === 'claude-code'
       ? 'claude'
-      : platform === 'codex' || platform === 'zcode'
+      : platform === 'codex' || platform === 'zcode' || platform === 'kimi-code'
         ? 'agents'
         : platform;
   return `${family}-mode-${mode}` as V3ModeEntryFileTarget;
@@ -1802,10 +1973,17 @@ function legacyAdapterTargetsForPlatform(
       /^(cursor-legacy|cursor-alias)-/u.test(target),
     );
   }
-  if (platform === 'codex' || platform === 'zcode') {
+  if (
+    platform === 'codex' ||
+    platform === 'zcode' ||
+    platform === 'kimi-code'
+  ) {
     return V3_LEGACY_ADAPTER_FILE_TARGETS.filter((target) =>
       target.startsWith('agents-alias-'),
     );
+  }
+  if (platform === 'qoder') {
+    return [];
   }
   return V3_LEGACY_ADAPTER_FILE_TARGETS.filter((target) =>
     target.startsWith('copilot-alias-'),
@@ -2044,7 +2222,7 @@ function parseModeEntryFileTarget(
   target: V3AdapterFileTarget,
 ): { platform: PlatformName; mode: V3ModeName } | null {
   const match =
-    /^(claude|agents|cursor|copilot)-mode-(manba|man|manteam|manps|mansolo)$/u.exec(
+    /^(claude|agents|cursor|copilot|qoder)-mode-(manba|man|manteam|manps|mansolo)$/u.exec(
       target,
     );
   if (!match) return null;
@@ -2057,7 +2235,9 @@ function parseModeEntryFileTarget(
         ? 'codex'
         : family === 'cursor'
           ? 'cursor'
-          : 'copilot';
+          : family === 'qoder'
+            ? 'qoder'
+            : 'copilot';
   return { platform, mode };
 }
 
@@ -2236,6 +2416,8 @@ function targetFor(platform: PlatformName): string {
       return '.cursor/rules/mancode-continuity.mdc';
     case 'codex':
     case 'zcode':
+    case 'kimi-code':
+    case 'qoder':
       return 'AGENTS.md';
     case 'copilot':
       return '.github/copilot-instructions.md';
@@ -2297,11 +2479,15 @@ function platformLabelFor(platform: PlatformName): string {
     case 'cursor':
       return 'Cursor';
     case 'codex':
-      return 'Codex or ZCode (shared AGENTS.md bootstrap)';
+      return 'Codex, ZCode, or Kimi Code (shared AGENTS.md bootstrap)';
     case 'copilot':
       return 'GitHub Copilot';
     case 'zcode':
-      return 'Codex or ZCode (shared AGENTS.md bootstrap)';
+      return 'Codex, ZCode, or Kimi Code (shared AGENTS.md bootstrap)';
+    case 'kimi-code':
+      return 'Codex, ZCode, or Kimi Code (shared AGENTS.md bootstrap)';
+    case 'qoder':
+      return 'Qoder (IDE/CLI)';
   }
 }
 

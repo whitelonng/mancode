@@ -139,6 +139,8 @@ describe('init onboarding', () => {
       'codex',
       'copilot',
       'zcode',
+      'kimi-code',
+      'qoder',
     ]);
     expect(parsePlatformSelection('unknown')).toBeNull();
   });

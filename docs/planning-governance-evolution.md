@@ -369,7 +369,7 @@ authority；二者必须通过 task revision、aggregate digest 和 codeRef 唯�
 
 ### 9.3 真实宿主和跨平台
 
-发布候选必须在 Claude Code、Codex、Cursor、GitHub Copilot、ZCode 以及 Windows CMD/PowerShell/Git Bash 路径上验证：入口传播、session identity、adapter 文件、status/stale 诊断和升级命令。缺少真实宿主证据的平台只能标记 `not_applicable` 并阻止对应能力发布，不能用另一个宿主代替。
+发布候选必须在 Claude Code、Codex、Cursor、GitHub Copilot、ZCode、Kimi Code、Qoder 以及 Windows CMD/PowerShell/Git Bash 路径上验证：入口传播、session identity、adapter 文件、status/stale 诊断和升级命令。缺少真实宿主证据的平台只能标记 `not_applicable` 并阻止对应能力发布，不能用另一个宿主代替。
 
 ## 10. 单版本 release gate
 
@@ -404,7 +404,7 @@ authority；二者必须通过 task revision、aggregate digest 和 codeRef 唯�
 - [x] 5 个 adapter renderer、Windows path、line ending、用户托管区和每个 target 写前/写后中断恢复在 `4dc2e7e` 通过；后续候选仍需重跑 dist/Windows/recovery gate。
 - [x] 平台证据区分 `host_session_verified` 与 `explicit_session_verified`；显式路径验证两个 active、不同且 client 匹配的 session，只满足发布证据，不提升运行时宿主信任。
 - [x] release-check 从远端候选创建干净 checkout，自动运行完整门禁、双 clone、legacy、audit、pack、tarball CLI/module smoke，并输出提交绑定的 SHA-256 证据；脚本不包含 npm publish 或 dist-tag 操作。
-- [ ] Claude Code、Codex、Cursor、GitHub Copilot、ZCode 的最终候选真实宿主验收，以及 [`docs/release-acceptance.md`](./release-acceptance.md) 要求的跨 clone、legacy、Beta gate 和干净 checkout tarball 验收。
+- [ ] Claude Code、Codex、Cursor、GitHub Copilot、ZCode、Kimi Code、Qoder 的最终候选真实宿主验收，以及 [`docs/release-acceptance.md`](./release-acceptance.md) 要求的跨 clone、legacy、Beta gate 和干净 checkout tarball 验收。
 - [x] 按开发集成要求将候选 `4dc2e7e` 推送到远程 `develop`，且 Quality 与 Windows gate 均通过；这不等同于 release gate 通过。
 - [ ] 完成剩余发布验收后才允许进入 npm 发布检查；任何条件失败都不得发布 npm。
 
