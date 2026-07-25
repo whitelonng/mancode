@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.0" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.1-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder" />
 </p>
 
@@ -385,7 +385,7 @@ it should behave, and why previous decisions were made.
 
 ## Installation
 
-**Status**: mancode Continuity v0.5.0. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.5.1. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -501,7 +501,7 @@ mancode version
 Simplified output:
 
 ```text
-mancode v0.5.0
+mancode v0.5.1
 
 Project:     my-app
 Runtime:     ready
