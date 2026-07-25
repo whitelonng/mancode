@@ -486,6 +486,8 @@ describe('mancode init', () => {
       'codex',
       'copilot',
       'zcode',
+      'kimi-code',
+      'qoder',
     ]);
   });
 

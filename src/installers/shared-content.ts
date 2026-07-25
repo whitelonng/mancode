@@ -162,7 +162,13 @@ function renderAesthetics(tokens: StyleTokensOnDisk | null): string {
 
 function renderModes(options: SharedContentOptions): string {
   let commandLabel: string;
-  if (options.capabilities.skills === 'agents-skills') {
+  if (options.platform === 'kimi-code') {
+    commandLabel =
+      'Invoke mode skills with `/skill:man`, `/skill:manba`, `/skill:manteam`, `/skill:manps`, `/skill:mansolo`.';
+  } else if (options.platform === 'qoder') {
+    commandLabel =
+      'Invoke mode commands with `/man`, `/manba`, `/manteam`, `/manps`, `/mansolo`.';
+  } else if (options.capabilities.skills === 'agents-skills') {
     commandLabel =
       'Invoke mode skills with `$man`, `$manba`, `$manteam`, `$manps`, `$mansolo`.';
   } else if (options.capabilities.slashCommands === 'native') {

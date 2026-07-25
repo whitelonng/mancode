@@ -11,14 +11,14 @@
 
 <p align="center">
   适配常见编程代理工具，包括 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
-  Codex CLI、GitHub Copilot 和 ZCode。
+  Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder。
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
   <img src="https://img.shields.io/badge/status-Continuity%20v0.5.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.0" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder" />
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
 **mancode Continuity（跨会话与团队协作运行时）**负责把任务、决策和验证证据安全地带到后续对话，并协调多人或多 Agent 的任务权威。
 
 mancode 当前支持 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、Codex CLI、
-GitHub Copilot 和 ZCode。每个平台继续使用原来的 `man*` 入口，并通过静态
+GitHub Copilot、ZCode、Kimi Code（桌面端/CLI）和 Qoder（IDE/CLI）。每个平台继续使用原来的 `man*` 入口，并通过静态
 bootstrap 接入统一的 Context Pack 与 workflow authority。
 
 mancode 会安装三类能力：
@@ -106,8 +106,8 @@ mancode context show --purpose orient --session <id> --client claude-code
 ## 跨客户端与团队协作
 
 mancode 为团队项目提供稳定 TaskRef、隔离 session、治理账本、worktree claim/handoff，
-以及可选的 git-ref 跨 clone 协调。Claude Code、Cursor、Codex、GitHub Copilot 和
-ZCode 都通过 bootstrap 使用同一套工作流数据；平台文件本身不保存任务或 session 副本。
+以及可选的 git-ref 跨 clone 协调。Claude Code、Cursor、Codex、GitHub Copilot、
+ZCode、Kimi Code 和 Qoder 都通过 bootstrap 使用同一套工作流数据；平台文件本身不保存任务或 session 副本。
 
 git-ref 下的 workflow create、requirements、plan、review 和 verification 使用显式的
 延后发布边界：先不带 `--sync` 执行 mutation，将对应的 `.mancode/shared`
@@ -165,8 +165,9 @@ legacy `state.json` 与当前工作流权威数据。
 
 .claude/skills/                  # Claude Code：bootstrap + 原 mode skills
 .cursor/rules/ + commands/       # Cursor：bootstrap + 原 mode commands
-AGENTS.md                        # Codex（ChatGPT 桌面端/CLI）：托管 instructions
-.agents/skills/                  # Codex / ZCode：原 mode skills
+AGENTS.md                        # Codex / ZCode / Kimi Code / Qoder：各自托管 instructions block
+.agents/skills/                  # Codex / ZCode / Kimi Code：原 mode skills
+.qoder/commands/                 # Qoder：原 mode commands
 .github/copilot-instructions.md  # GitHub Copilot：托管 instruction block
 .github/prompts/                 # GitHub Copilot：原 mode prompts
 ```
@@ -337,7 +338,7 @@ src/components/
 ## 安装
 
 **状态**：mancode Continuity v0.5.0。Claude Code、Cursor、ChatGPT 桌面端中的
-Codex、Codex CLI、GitHub Copilot 和 ZCode adapter 均已接入。
+Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
@@ -361,6 +362,10 @@ mancode init --platform all
 - GitHub Copilot：托管 instruction block 与 `.github/prompts/` 原 mode prompts
 - ZCode：托管 `AGENTS.md` block，并暂按 `.agents/skills/` 生成 `$man*`
   skills；项目级 skill 发现和 slash commands 仍需确认 workspace 路径后再发布承诺
+- Kimi Code（桌面端、CLI）：托管 `AGENTS.md` block，并在 `.agents/skills/`
+  下提供 `/skill:man*` 项目 skills；宿主发现路径仍需真实验证
+- Qoder（IDE、CLI）：托管 `AGENTS.md` block，并在 `.qoder/commands/` 下提供
+  `/man*` 项目 commands；宿主发现路径仍需真实验证
 - Windsurf、Cline、Roo Code：后续计划
 
 ### 安装参数
@@ -371,7 +376,7 @@ mancode init --yes        # 跳过通用项目确认（CI 中仍需 --platform�
 mancode init --team       # 强制启用团队模式
 mancode init --no-team    # 强制禁用团队模式
 mancode init --legacy --style NAME # 仅 legacy：保存默认审美偏好
-mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,copilot,zcode，或 all
+mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,copilot,zcode,kimi-code,qoder，或 all
 mancode init --empty      # 非交互脚本中允许安全的空目录
 mancode init --lang zh-CN # 显式指定初始化语言（zh-CN 或 en）
 mancode refresh-project   # 后续加入 Git 或项目文件后刷新项目事实
@@ -406,7 +411,7 @@ mancode init --legacy
 mancode status
 mancode status --json
 mancode status --brief --json
-mancode install <claude-code|cursor|codex|copilot|zcode> --confirm --operation-id <operationId> --session <id> --client <client>
+mancode install <claude-code|cursor|codex|copilot|zcode|kimi-code|qoder> --confirm --operation-id <operationId> --session <id> --client <client>
 mancode adapter status [--platform <platform>] --json
 mancode adapter upgrade <--all|--platform <platform>> --dry-run
 mancode adapter upgrade <--all|--platform <platform>> --confirm --operation-id <operationId> --session <id> --client <client>
@@ -459,6 +464,8 @@ mancode adapter status:
   ✓ Codex (ChatGPT desktop/CLI): ready
   ○ GitHub Copilot: not installed
   ○ ZCode: not installed
+  ○ Kimi Code (desktop/CLI): not installed
+  ○ Qoder (IDE/CLI): not installed
 ```
 
 ### `mancode manps deps`
@@ -646,7 +653,7 @@ mancode/
 
 ### AGENTS.md 或 copilot-instructions.md 受控区被误删
 
-运行 `mancode adapter upgrade --platform codex --dry-run`（或 `zcode`、`copilot`）
+运行 `mancode adapter upgrade --platform codex --dry-run`（或 `zcode`、`kimi-code`、`qoder`、`copilot`）
 检查差异，再用该预览返回的 `--operation-id` 和 active session 执行 `--confirm`
 重新插入受控区。
 对应 mancode 受控标记外的用户内容会被保留。

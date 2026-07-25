@@ -11,6 +11,8 @@
 | Codex | `AGENTS.md` 托管区、`.agents/skills/` | `$man*` skills | session 传播需真实宿主证据 |
 | GitHub Copilot | instruction 托管区、`.github/prompts/` | instructions 与 prompts | 能力依具体 Copilot 宿主而异 |
 | ZCode | `AGENTS.md` 托管区、`.agents/skills/` | provisional `$man*` skills | 项目级发现与命令路径仍需真实 UI 验证 |
+| Kimi Code | `AGENTS.md` 托管区、`.agents/skills/` | provisional `/skill:man*` skills（桌面端/CLI 共用） | 项目级 skill 发现与命令路径仍需真实宿主验证 |
+| Qoder | `AGENTS.md` 托管区、`.qoder/commands/` | provisional `/man*` commands（IDE/CLI 共用） | 命令发现与传播仍需真实宿主验证 |
 
 安装示例：
 
@@ -58,4 +60,4 @@ MANCODE_SPIKE_SECOND_SESSION_ID=<window-b-session> \
 
 ## 发布声明
 
-“文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode 在完成该验证前保持 provisional 描述。
+“文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode、Kimi Code 和 Qoder 在完成该验证前保持 provisional 描述。

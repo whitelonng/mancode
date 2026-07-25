@@ -3,6 +3,8 @@ import { installClaudeCode } from './claude-code.js';
 import { installCodex } from './codex.js';
 import { installCopilot } from './copilot.js';
 import { installCursor } from './cursor.js';
+import { installKimiCode } from './kimi-code.js';
+import { installQoder } from './qoder.js';
 import { installZcode } from './zcode.js';
 
 export type PlatformName =
@@ -10,7 +12,9 @@ export type PlatformName =
   | 'cursor'
   | 'codex'
   | 'copilot'
-  | 'zcode';
+  | 'zcode'
+  | 'kimi-code'
+  | 'qoder';
 
 export interface PlatformCapabilities {
   slashCommands: 'native' | 'partial' | 'none';
@@ -92,6 +96,28 @@ export const PLATFORM_INSTALLERS: Record<PlatformName, PlatformInstaller> = {
       skills: 'agents-skills',
     },
     install: installZcode,
+  },
+  'kimi-code': {
+    name: 'kimi-code',
+    displayName: 'Kimi Code (desktop/CLI)',
+    capabilities: {
+      slashCommands: 'partial',
+      subagents: false,
+      hooks: false,
+      skills: 'agents-skills',
+    },
+    install: installKimiCode,
+  },
+  qoder: {
+    name: 'qoder',
+    displayName: 'Qoder (IDE/CLI)',
+    capabilities: {
+      slashCommands: 'partial',
+      subagents: false,
+      hooks: false,
+      skills: 'rules',
+    },
+    install: installQoder,
   },
 };
 

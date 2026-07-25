@@ -100,7 +100,7 @@ program
 program
   .command('install [platform]')
   .description(
-    'Install platform adapter (claude-code, cursor, codex, copilot, zcode)',
+    'Install platform adapter (claude-code, cursor, codex, copilot, zcode, kimi-code, qoder)',
   )
   .option('--force', 'Reinstall even if already installed')
   .option('--minimal', 'Minimal install (MVP-2)')
@@ -324,7 +324,7 @@ contextSessionProgram
   .description('Record real-host session evidence without persisting host keys')
   .requiredOption(
     '--platform <platform>',
-    'claude-code, codex, cursor, copilot, or zcode',
+    'claude-code, codex, cursor, copilot, zcode, kimi-code, or qoder',
   )
   .requiredOption('--session-mode <mode>', 'Evidence path: host or explicit')
   .requiredOption(

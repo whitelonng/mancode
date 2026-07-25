@@ -161,4 +161,6 @@ const BETA_PLATFORMS: PlatformName[] = [
   'cursor',
   'copilot',
   'zcode',
+  'kimi-code',
+  'qoder',
 ];

@@ -13,7 +13,7 @@
 - 在最终 main 候选运行 `npm run release:check -- --candidate <完整提交 SHA>`；该命令必须从 `origin/main` 创建干净 checkout，运行 `npm ci`、`npm run prepublishOnly`、跨 clone、legacy、audit、pack 和安装 smoke，并输出绑定提交与 tarball SHA-256 的本地 JSON 证据。
 - release-check 先运行 `npm pack --dry-run`，再执行实际 `npm pack`，保留生成的 tarball 并完成 CLI/module smoke；npm beta/rc 不能替代该字节级验证。
 - GitHub Quality gate 与 Windows required check 必须在同一个 main 候选成功；Windows 覆盖 CMD、PowerShell 和 Git Bash。
-- Claude Code、Codex、Cursor、GitHub Copilot 和 ZCode 都完成真实双窗口 session 验证。每个平台可证明受信宿主 session，或证明两个真实显式 session 隔离；显式证据只满足发布验收，不授权运行时信任宿主 key。
+- Claude Code、Codex、Cursor、GitHub Copilot、ZCode、Kimi Code 和 Qoder 都完成真实双窗口 session 验证。每个平台可证明受信宿主 session，或证明两个真实显式 session 隔离；显式证据只满足发布验收，不授权运行时信任宿主 key。
 - 每个平台证明子命令传播；支持子 agent 的平台还需证明继承，或记录合法的 `not_applicable` 原因。缺失、伪造、错误 client、关闭或碰撞的显式 session 证据必须拒绝。
 - 完成跨真实宿主 resume、claim、handoff 和恢复路径。
 - release-check 中两个真实独立 clone 完成 git-ref pull、并发 CAS、handoff、receipt recovery、代码基线交接，以及原子 mutation 投影提交后的同 revision code-head rebind 和第二 clone resume。
@@ -44,8 +44,9 @@ session evidence 不保存原始 key、token、绝对业务路径或任务正文
 - 将 0.4.2 实现、测试和文档合并为最终 `origin/main` candidate。
 - 在最终 main 候选上完成 Quality gate 与 Windows CMD、PowerShell、Git Bash required gate。
 - 在最终 main 候选上完成 release-check，包括自动双 clone git-ref、code-head rebind、legacy、tarball SHA-256、安装和 CLI/module smoke。
-- 五个平台在最终候选上的完整 session spike，以及跨真实宿主协作与恢复验收。
+- 全部登记平台在最终候选上的完整 session spike，以及跨真实宿主协作与恢复验收。
 - ZCode 项目级 skill 发现和 workspace command 路径确认。
+- Kimi Code 项目级 skill 发现（桌面端/CLI）与 Qoder `.qoder/commands/` 命令发现（IDE/CLI）的真实宿主确认。
 - 汇总全部证据后的最终 Beta gate。
 - npm registry version/integrity/`gitHead` 核对，以及绑定同一提交的 `v0.4.2` tag 和 GitHub Release。
 

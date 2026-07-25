@@ -7,6 +7,8 @@ export const SESSION_SPIKE_PLATFORMS = [
   'cursor',
   'copilot',
   'zcode',
+  'kimi-code',
+  'qoder',
 ] as const;
 
 export type SessionSpikePlatform = (typeof SESSION_SPIKE_PLATFORMS)[number];

@@ -66,26 +66,35 @@ describe('platform session identity spike contract', () => {
   });
 
   it('accepts proven explicit-session isolation without trusting host identity', () => {
-    const spikes = ['claude-code', 'codex', 'cursor', 'copilot', 'zcode'].map(
-      (platform, index) =>
-        createPlatformSessionSpike({
-          platform: platform as
-            | 'claude-code'
-            | 'codex'
-            | 'cursor'
-            | 'copilot'
-            | 'zcode',
-          observedAt: '2026-07-17T12:00:00.000Z',
-          sessionMode: 'explicit',
-          hostSessionSource: 'none',
-          firstWindowSessionKey: `session-${index}-a`,
-          secondWindowSessionKey: `session-${index}-b`,
-          commandPropagation: 'proven',
-          subagentInheritance: 'not_applicable',
-          subagentInheritanceReason: 'This host exposes no child-agent API.',
-          hookApproval: 'not_applicable',
-          evidence: evidence(),
-        }),
+    const spikes = [
+      'claude-code',
+      'codex',
+      'cursor',
+      'copilot',
+      'zcode',
+      'kimi-code',
+      'qoder',
+    ].map((platform, index) =>
+      createPlatformSessionSpike({
+        platform: platform as
+          | 'claude-code'
+          | 'codex'
+          | 'cursor'
+          | 'copilot'
+          | 'zcode'
+          | 'kimi-code'
+          | 'qoder',
+        observedAt: '2026-07-17T12:00:00.000Z',
+        sessionMode: 'explicit',
+        hostSessionSource: 'none',
+        firstWindowSessionKey: `session-${index}-a`,
+        secondWindowSessionKey: `session-${index}-b`,
+        commandPropagation: 'proven',
+        subagentInheritance: 'not_applicable',
+        subagentInheritanceReason: 'This host exposes no child-agent API.',
+        hookApproval: 'not_applicable',
+        evidence: evidence(),
+      }),
     );
 
     const firstSpike = spikes[0];
@@ -104,6 +113,8 @@ describe('platform session identity spike contract', () => {
         'cursor',
         'copilot',
         'zcode',
+        'kimi-code',
+        'qoder',
       ],
     });
   });

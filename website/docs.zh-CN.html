@@ -56,7 +56,7 @@
         <section class="docs-hero" id="overview" data-searchable>
           <p class="eyebrow">从日常训练到关键比赛</p>
           <h1>给你的编程 Agent<br />一套真正可执行的战术。</h1>
-          <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot 或 ZCode，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
+          <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code 或 Qoder，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
           <div class="docs-note"><strong>两个层次</strong><p>日常使用时，你在 Agent 对话中调用 <code>solo</code>、<code>/manba</code> 或 <code>/man</code>。安装好的适配器会在背后调用 <code>mancode workflow</code> 维护持久记录。后面的 CLI 参考用于解释这份记录，并不是要求你手工再做一遍流程。</p></div>
         </section>
 
@@ -80,7 +80,7 @@
           <table class="docs-table"><thead><tr><th>选项</th><th>适用场景</th><th>实际效果</th></tr></thead><tbody>
             <tr><td><code>--force</code></td><td>修复生成配置</td><td>重新安装 mancode 管理的内容，同时保留已扫描的样式 token 和受控标记之外的用户内容。</td></tr>
             <tr><td><code>--yes</code></td><td>CI 或非交互终端</td><td>接受安全默认值并跳过通用项目确认；建议同时给出 <code>--platform</code>。</td></tr>
-            <tr><td><code>--platform LIST</code></td><td>已经知道目标 Agent</td><td>安装 <code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code> 中的一个或多个。</td></tr>
+            <tr><td><code>--platform LIST</code></td><td>已经知道目标 Agent</td><td>安装 <code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code>、<code>kimi-code</code>、<code>qoder</code> 中的一个或多个。</td></tr>
             <tr><td><code>--empty</code></td><td>目录有意保持为空</td><td>无需先执行 <code>git init</code> 或创建 manifest，也能初始化通用项目。</td></tr>
             <tr><td><code>--team</code> / <code>--no-team</code></td><td>不采用自动判断结果</td><td>强制开启或关闭团队共享上下文。</td></tr>
             <tr><td><code>--style NAME</code></td><td>显式使用 <code>--legacy</code> 初始化</td><td>保存旧版自由文本样式偏好。Continuity 项目改用带 revision 的 <code>mancode design</code> 策略。</td></tr>
@@ -190,6 +190,12 @@ mansolo.prompt.md</code></pre><button type="button" data-copy-code>复制</butto
             <article class="command-card"><header><h3>ZCode</h3><span>预览</span></header><p>适配器会安装项目 skills，但能否发现和如何调用取决于当前 ZCode 版本，请结合 <code>mancode status</code> 实测。</p><div class="code-wrap"><pre><code>$man
 $manba
 $manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>Kimi Code</h3><span>预览</span></header><p>适配器在 <code>.agents/skills/</code> 下安装项目 skills，桌面端与 CLI 共用，请结合 <code>mancode status</code> 实测发现路径。</p><div class="code-wrap"><pre><code>/skill:man
+/skill:manba
+/skill:manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>Qoder</h3><span>预览</span></header><p>适配器在 <code>.qoder/commands/</code> 下安装项目 commands，IDE 与 CLI 共用，请结合 <code>mancode status</code> 实测发现路径。</p><div class="code-wrap"><pre><code>/man
+/manba
+/manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
         </section>
 
@@ -328,6 +334,8 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <tr><td>Codex</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code>。</td><td>在 App、CLI、IDE 中用 <code>$man*</code> 显式提及 skill。</td></tr>
             <tr><td>GitHub Copilot</td><td><code>.github/copilot-instructions.md</code> 和 <code>.github/prompts/*.prompt.md</code>。</td><td>包含持久 instructions 与仓库 prompt 文件；不同客户端的 prompt 文件支持度可能不同。</td></tr>
             <tr><td>ZCode（预览）</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code> 中的项目 skills。</td><td>请在已安装的 ZCode 版本中验证 skill 发现和调用。</td></tr>
+            <tr><td>Kimi Code（预览）</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code> 中的项目 skills。</td><td>用 <code>/skill:man*</code> 调用；请在已安装的 Kimi Code 桌面端或 CLI 中验证发现路径。</td></tr>
+            <tr><td>Qoder（预览）</td><td><code>AGENTS.md</code> 和 <code>.qoder/commands/</code> 中的项目 commands。</td><td>用 <code>/man*</code> 调用；请在已安装的 Qoder IDE 或 CLI 中验证发现路径。</td></tr>
           </tbody></table>
         </section>
 
@@ -337,7 +345,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-project
 <span class="command-prompt">$</span> mancode refresh-style
 <span class="command-prompt">$</span> mancode adapter upgrade --platform cursor --dry-run</code></pre><button type="button" data-copy-code>复制</button></div>
-          <ul class="docs-checklist"><li><code>refresh-project</code> 更新项目事实并报告 stale adapter。</li><li>Claude Code 通过 hooks 读取刷新后的上下文。</li><li>Cursor、Codex、Copilot 和 ZCode 使用静态文件；从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布 staging 修复。</li><li>只有 UI 项目会生成设计 token 相关指导。</li></ul>
+          <ul class="docs-checklist"><li><code>refresh-project</code> 更新项目事实并报告 stale adapter。</li><li>Claude Code 通过 hooks 读取刷新后的上下文。</li><li>Cursor、Codex、Copilot、ZCode、Kimi Code 和 Qoder 使用静态文件；从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布 staging 修复。</li><li>只有 UI 项目会生成设计 token 相关指导。</li></ul>
         </section>
 
         <section class="doc-section" id="uninstall" data-searchable>
@@ -357,7 +365,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h3><code>mancode init</code> 拒绝当前目录</h3>
           <p>安全的空目录支持交互初始化，也可以显式使用 <code>--empty</code>。非空目录仍需存在可识别的项目标记或 Git 元数据，防止 mancode 意外初始化任意文件夹。</p>
           <h3>Agent 看不到刚安装的模式</h3>
-          <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，先运行 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>，再从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 修复。ZCode 和 Copilot 还需要确认当前客户端版本支持仓库 skills 或 prompt files。</p>
+          <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，先运行 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>，再从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 修复。ZCode、Copilot、Kimi Code 和 Qoder 还需要确认当前客户端版本支持仓库 skills、prompt files 或项目 commands。</p>
           <h3>Claude Code hooks 没有触发</h3>
           <p>初始化后重启 Claude Code，再用 <code>mancode status</code> 检查状态。V3 managed content 通过上面的 adapter 预览与确认流程修复；legacy hook 架构使用 <code>mancode init --legacy --force</code>。hooks 使用 Node.js，不依赖 Bash 或 jq。</p>
           <h3>Cursor rules 没有触发</h3>

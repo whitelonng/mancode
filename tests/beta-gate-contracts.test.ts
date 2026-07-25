@@ -32,6 +32,8 @@ describe('V3 Beta gate', () => {
         cursor: '3',
         copilot: '3',
         zcode: '3',
+        'kimi-code': '3',
+        qoder: '3',
       },
       operationId: id(1),
       workspaceId: id(2),
@@ -206,6 +208,8 @@ async function makeBetaReady(
     'cursor',
     'copilot',
     'zcode',
+    'kimi-code',
+    'qoder',
   ] as const) {
     await installV3Adapter(projectRoot, platform);
   }

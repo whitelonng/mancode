@@ -7,13 +7,23 @@ import {
   removeClaudeGeneratedContent,
 } from '../installers/claude-code.js';
 import { removeCursorGeneratedRules } from '../installers/cursor.js';
+import {
+  KIMI_MANCODE_END_MARKER,
+  KIMI_MANCODE_START_MARKER,
+} from '../installers/kimi-code.js';
 import { removeManagedBlock } from '../installers/managed-block.js';
 import {
   removeCodexSkills,
   removeCopilotPrompts,
   removeCursorCommands,
+  removeKimiSkills,
+  removeQoderCommands,
   removeZcodeSkills,
 } from '../installers/mode-skills.js';
+import {
+  QODER_MANCODE_END_MARKER,
+  QODER_MANCODE_START_MARKER,
+} from '../installers/qoder.js';
 import {
   formatPlatformName,
   getPlatformInstaller,
@@ -155,6 +165,10 @@ async function uninstallPlatform(
     await uninstallCopilot(rootDir);
   } else if (platform === 'zcode') {
     await uninstallZcode(rootDir);
+  } else if (platform === 'kimi-code') {
+    await uninstallKimiCode(rootDir);
+  } else if (platform === 'qoder') {
+    await uninstallQoder(rootDir);
   }
 
   await removeFromConfig(rootDir, platform);
@@ -329,6 +343,46 @@ async function uninstallZcode(rootDir: string): Promise<void> {
     // AGENTS.md doesn't exist — nothing to do
   }
   await removeZcodeSkills(rootDir);
+}
+
+async function uninstallKimiCode(rootDir: string): Promise<void> {
+  const agentsPath = path.join(rootDir, 'AGENTS.md');
+  try {
+    const content = await readFile(agentsPath, 'utf-8');
+    const cleaned = removeManagedBlock(
+      content,
+      KIMI_MANCODE_START_MARKER,
+      KIMI_MANCODE_END_MARKER,
+    );
+    if (cleaned.trim()) {
+      await writeFile(agentsPath, `${cleaned}\n`, 'utf-8');
+    } else {
+      await rm(agentsPath, { force: true });
+    }
+  } catch {
+    // AGENTS.md doesn't exist — nothing to do
+  }
+  await removeKimiSkills(rootDir);
+}
+
+async function uninstallQoder(rootDir: string): Promise<void> {
+  const agentsPath = path.join(rootDir, 'AGENTS.md');
+  try {
+    const content = await readFile(agentsPath, 'utf-8');
+    const cleaned = removeManagedBlock(
+      content,
+      QODER_MANCODE_START_MARKER,
+      QODER_MANCODE_END_MARKER,
+    );
+    if (cleaned.trim()) {
+      await writeFile(agentsPath, `${cleaned}\n`, 'utf-8');
+    } else {
+      await rm(agentsPath, { force: true });
+    }
+  } catch {
+    // AGENTS.md doesn't exist — nothing to do
+  }
+  await removeQoderCommands(rootDir);
 }
 
 async function removeFromConfig(

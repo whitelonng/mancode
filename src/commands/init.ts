@@ -1147,7 +1147,11 @@ function getInitManagedFilePaths(
       files.push(`.cursor/commands/${mode}.md`);
     }
   }
-  if (platforms.includes('codex') || platforms.includes('zcode')) {
+  if (
+    platforms.includes('codex') ||
+    platforms.includes('zcode') ||
+    platforms.includes('kimi-code')
+  ) {
     files.push(
       'AGENTS.md',
       '.agents/skills/mamba/SKILL.md',
@@ -1167,6 +1171,12 @@ function getInitManagedFilePaths(
     files.push('.zcode/skills/mamba/SKILL.md', '.zcode/skills/man8/SKILL.md');
     for (const mode of MODE_NAMES) {
       files.push(`.zcode/skills/${mode}/SKILL.md`);
+    }
+  }
+  if (platforms.includes('qoder')) {
+    files.push('AGENTS.md');
+    for (const mode of MODE_NAMES) {
+      files.push(`.qoder/commands/${mode}.md`);
     }
   }
   if (platforms.includes('copilot')) {
@@ -1284,6 +1294,16 @@ function printPlatformCreatedFiles(
   if (platform === 'zcode') {
     console.log('  AGENTS.md                   # ZCode managed block');
     console.log('  .agents/skills/             # ZCode mode skills');
+    return;
+  }
+  if (platform === 'kimi-code') {
+    console.log('  AGENTS.md                   # Kimi Code managed block');
+    console.log('  .agents/skills/             # Kimi Code mode skills');
+    return;
+  }
+  if (platform === 'qoder') {
+    console.log('  AGENTS.md                   # Qoder managed block');
+    console.log('  .qoder/commands/            # Qoder mode commands');
     return;
   }
   console.log('  .github/copilot-instructions.md # Copilot instructions');
