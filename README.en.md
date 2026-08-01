@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.2-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.2" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.3-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.3" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder" />
 </p>
 
@@ -155,7 +155,7 @@ the quality gate for models that need explicit review structure.
 
 ## Installation
 
-**Status**: mancode Continuity v0.5.2. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.5.3. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -511,7 +511,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.5.2
+mancode v0.5.3
 
 Project:     my-app
 Runtime:     ready
