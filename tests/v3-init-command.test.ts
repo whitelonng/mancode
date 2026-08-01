@@ -1,7 +1,16 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {
   EXIT_ALREADY_INITIALIZED,
   EXIT_INIT_FAILED,
@@ -14,7 +23,21 @@ import { parseSchemaManifest } from '../src/context/manifest.js';
 import { runtimeCheckoutRecordPath } from '../src/runtime/project-runtime.js';
 import { VERSION } from '../src/version.js';
 
+const PLATFORM_HINT_ENV_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE',
+  'CODEX_HOME',
+  'CURSOR_TRACE_ID',
+  'COPILOT_AGENT',
+  'GITHUB_COPILOT',
+] as const;
+
 describe('journaled V3 init command', () => {
+  beforeAll(() => {
+    for (const name of PLATFORM_HINT_ENV_VARS) vi.stubEnv(name, undefined);
+  });
+  afterAll(() => vi.unstubAllEnvs());
+
   let root: string;
 
   beforeEach(async () => {
@@ -234,5 +257,39 @@ describe('journaled V3 init command', () => {
     await expect(
       readFile(path.join(root, '.mancode', 'config.json'), 'utf8'),
     ).resolves.toBe('{}\n');
+  });
+
+  it('requires an explicit platform for a non-interactive V3 CLI with no detected hints', async () => {
+    await mkdir(path.join(root, '.git'));
+
+    expect(await init(root, { fromCli: true, interactive: false })).toBe(
+      EXIT_INIT_FAILED,
+    );
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+    ).rejects.toThrow();
+  });
+
+  it('auto-selects a single detected platform hint on the V3 CLI path', async () => {
+    await mkdir(path.join(root, '.git'));
+    await mkdir(path.join(root, '.cursor'));
+
+    expect(await init(root, { fromCli: true, interactive: false })).toBe(
+      EXIT_OK,
+    );
+    await expect(
+      readFile(path.join(root, '.cursor', 'commands', 'man.md'), 'utf8'),
+    ).resolves.toContain('mancode workflow create man');
+  });
+
+  it('keeps --yes from silently choosing an adapter on a non-interactive V3 CLI', async () => {
+    await mkdir(path.join(root, '.git'));
+
+    expect(
+      await init(root, { fromCli: true, interactive: false, yes: true }),
+    ).toBe(EXIT_INIT_FAILED);
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+    ).rejects.toThrow();
   });
 });

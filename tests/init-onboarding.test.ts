@@ -8,7 +8,15 @@ import {
 } from 'node:fs/promises';
 import os, { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {
   EXIT_INIT_FAILED,
   EXIT_NOT_A_PROJECT_DIR,
@@ -24,11 +32,26 @@ import type { InitPrompter } from '../src/system/init-onboarding.js';
 import {
   detectInitLocale,
   detectNativeSystemLocale,
+  detectPlatformHints,
   parsePlatformSelection,
 } from '../src/system/init-onboarding.js';
 
+const PLATFORM_HINT_ENV_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE',
+  'CODEX_HOME',
+  'CURSOR_TRACE_ID',
+  'COPILOT_AGENT',
+  'GITHUB_COPILOT',
+] as const;
+
 describe('init onboarding', () => {
   const dirs: string[] = [];
+
+  beforeAll(() => {
+    for (const name of PLATFORM_HINT_ENV_VARS) vi.stubEnv(name, undefined);
+  });
+  afterAll(() => vi.unstubAllEnvs());
 
   afterEach(async () => {
     await Promise.all(
@@ -143,6 +166,19 @@ describe('init onboarding', () => {
       'qoder',
     ]);
     expect(parsePlatformSelection('unknown')).toBeNull();
+  });
+
+  it('treats ambient CLAUDECODE and CLAUDE_CODE as intentional claude-code hints', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-hints-'));
+    dirs.push(dir);
+
+    expect(await detectPlatformHints(dir, { CLAUDECODE: '1' })).toContain(
+      'claude-code',
+    );
+    expect(await detectPlatformHints(dir, { CLAUDE_CODE: 'x' })).toContain(
+      'claude-code',
+    );
+    expect(await detectPlatformHints(dir, {})).toEqual([]);
   });
 
   it('initializes a safe empty directory after an explicit confirmation', async () => {
