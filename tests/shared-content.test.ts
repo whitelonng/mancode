@@ -49,7 +49,13 @@ describe('generateSharedContent', () => {
     expect(content).toContain('read `.mancode/aesthetics/style-tokens.json`');
     expect(content).toContain('present 2-3 distinct product-appropriate');
     expect(content).toContain('then wait for the user to choose');
-    expect(content).toContain('continue directly for scoped UI fixes');
+    expect(content).toContain('do not count as a selected visual direction');
+    expect(content).toContain('Continue directly for scoped UI fixes');
+    expect(content).toContain('Never use emoji as interface icons');
+    expect(content).toContain(
+      'Emoji remain allowed inside user-authored content',
+    );
+    expect(content).toContain('never fall back to emoji');
     expect(content).toContain('YAGNI ladder');
     expect(content).toContain('manba: diagnose bugs');
     expect(content).toContain('Platform Downgrade');

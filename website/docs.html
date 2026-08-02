@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.5.3</span>
+      <span class="docs-wordmark">Documentation / v0.5.4</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -133,7 +133,7 @@
 
         <section class="doc-section" id="design" data-searchable>
           <h2>Set a design policy</h2>
-          <p>The design policy is an explicit, opt-in Continuity feature for UI work. <code>mancode init</code> does not create it. When no valid policy is active, design context fails open to <code>preserve</code>, so ordinary coding and workflow recovery are not blocked.</p>
+          <p>The design policy is an explicit, opt-in Continuity feature for UI work. <code>mancode init</code> does not create it. When no valid policy is active, design context fails open to <code>preserve</code>, so ordinary coding and workflow recovery are not blocked. Regardless of policy state, emoji cannot serve as interface icons in navigation, buttons, actions, controls, or status indicators. Emoji remain allowed in user-authored content, chat messages, editorial copy, and domain data.</p>
           <div class="mode-guide design-presets">
             <article><small>Lowest disruption</small><h3>preserve</h3><p>Keeps the existing hierarchy, layout, component system, and interaction patterns. The agent makes only the UI changes required by the task.</p></article>
             <article><small>Recommended default</small><h3>refine</h3><p>Improves hierarchy, typography, spacing, states, and responsive behavior without changing the product structure.</p></article>
@@ -141,7 +141,7 @@
           </div>
 
           <h3>Choose a direction before implementation</h3>
-          <p>For a new UI surface or aesthetic redesign, if the user has not chosen a visual direction, the agent presents 2–3 distinct, product-appropriate directions with concise tradeoffs and a recommendation, then waits for a choice. Scoped UI fixes, work inside an established design system, and tasks with an already selected direction continue directly.</p>
+          <p>For a new UI surface or aesthetic redesign, if the user has not chosen a visual direction, the agent presents 2–3 distinct, product-appropriate directions with concise tradeoffs and a recommendation, then waits for a choice. Broad adjectives or quality constraints such as enterprise, clean, modern, premium, or not flashy do not count as a selected visual direction. Scoped UI fixes, work inside an established design system, and tasks with an already selected direction continue directly.</p>
           <div class="docs-note"><strong>Context decides the intensity</strong><p>Brand, campaign, editorial, portfolio, and launch surfaces may use a memorable first viewport and one visual motif across the page. Task-oriented products keep workflow clarity ahead of spectacle.</p></div>
 
           <h3>Configure and inspect</h3>
@@ -153,7 +153,7 @@
           <table class="docs-table"><thead><tr><th>Control</th><th>Accepted values</th><th>Boundary</th></tr></thead><tbody>
             <tr><td><code>--preset</code></td><td><code>preserve</code>, <code>refine</code>, <code>experimental</code></td><td><code>experimental</code> requires explicit confirmation every time it is enabled.</td></tr>
             <tr><td><code>--icons</code></td><td><code>existing-first</code>, <code>lucide</code></td><td>Choosing Lucide does not install a package; dependency changes still require task approval.</td></tr>
-            <tr><td><code>--emoji</code></td><td><code>allow</code>, <code>forbid-as-interface-icon</code></td><td>The stricter value prevents emoji from replacing interface icons.</td></tr>
+            <tr><td><code>--emoji</code></td><td><code>forbid-as-interface-icon</code></td><td>Emoji cannot replace interface icons; user-authored content, chat, and editorial copy remain unaffected.</td></tr>
             <tr><td><code>--motion</code></td><td><code>minimal</code>, <code>purposeful</code></td><td>Motion must support hierarchy, feedback, or narrative—not obscure the core workflow.</td></tr>
             <tr><td><code>--browser-validation</code></td><td><code>off</code>, <code>when-available</code>, <code>required</code></td><td><code>required</code> creates a hard quality gate when browser verification cannot run.</td></tr>
           </tbody></table>

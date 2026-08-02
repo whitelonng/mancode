@@ -1040,7 +1040,10 @@ designProgram
   )
   .option('--preset <preset>', 'preserve, refine, or experimental')
   .option('--icons <policy>', 'existing-first or lucide')
-  .option('--emoji <policy>', 'allow or forbid-as-interface-icon')
+  .option(
+    '--emoji <policy>',
+    'forbid-as-interface-icon; legacy allow is normalized',
+  )
   .option('--motion <policy>', 'minimal or purposeful')
   .option('--browser-validation <mode>', 'off, when-available, or required')
   .option('--confirm-experimental', 'Explicitly allow the experimental preset')

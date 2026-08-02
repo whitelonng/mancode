@@ -40,6 +40,72 @@ describe('design commands', () => {
       policyStatus: 'missing',
       policy: null,
       effectivePreset: 'preserve',
+      effectiveEmojiPolicy: 'forbid-as-interface-icon',
+    });
+  });
+
+  it('keeps emoji out of interface icons while allowing content emoji by default', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    expect(await designContext(root, { json: true })).toBe(EXIT_OK);
+
+    expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+      policySource: 'built-in-safe-default',
+      policy: { emojiPolicy: 'forbid-as-interface-icon' },
+      constraints: {
+        interfaceEmojiIconsForbidden: true,
+        contentEmojiAllowed: true,
+        iconFallbackMustNotBeEmoji: true,
+      },
+      guidance: expect.arrayContaining([
+        expect.stringContaining('navigation, buttons, controls, actions'),
+        expect.stringContaining('user-authored content, chat messages'),
+        expect.stringContaining('never fall back to emoji'),
+      ]),
+      qualityGates: expect.arrayContaining([
+        expect.stringContaining('no emoji is used as an interface icon'),
+      ]),
+    });
+  });
+
+  it('normalizes the legacy allow option and constrains existing allow policies', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    expect(
+      await designConfigure(root, {
+        json: true,
+        expectedRevision: '0',
+        emoji: 'allow',
+      }),
+    ).toBe(EXIT_OK);
+    const configured = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+    expect(configured.policy.emojiPolicy).toBe('forbid-as-interface-icon');
+    expect(configured.warning).toContain('--emoji allow is deprecated');
+
+    await writeFile(
+      designPolicyPath(root),
+      JSON.stringify({
+        schemaVersion: 1,
+        revision: 2,
+        enabled: true,
+        preset: 'preserve',
+        iconPolicy: 'existing-first',
+        emojiPolicy: 'allow',
+        motionPolicy: 'minimal',
+        browserValidation: 'off',
+        lastOperationId: null,
+        updatedAt: '2026-08-03T00:00:00.000Z',
+      }),
+      'utf8',
+    );
+
+    expect(await designContext(root, { json: true })).toBe(EXIT_OK);
+    expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+      policySource: 'project',
+      policy: { emojiPolicy: 'forbid-as-interface-icon' },
+      warning: expect.stringContaining(
+        'legacy emoji policy "allow" is constrained',
+      ),
     });
   });
 
@@ -83,6 +149,31 @@ describe('design commands', () => {
     ).toBe(EXIT_OK);
   });
 
+  it('keeps the interface emoji baseline after a project policy is disabled', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    expect(
+      await designConfigure(root, {
+        json: true,
+        expectedRevision: '0',
+        preset: 'refine',
+      }),
+    ).toBe(EXIT_OK);
+    expect(
+      await designDisable(root, { json: true, expectedRevision: '1' }),
+    ).toBe(EXIT_OK);
+
+    expect(await designContext(root, { json: true })).toBe(EXIT_OK);
+    expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+      policySource: 'built-in-safe-default',
+      policy: {
+        enabled: false,
+        preset: 'preserve',
+        emojiPolicy: 'forbid-as-interface-icon',
+      },
+      constraints: { interfaceEmojiIconsForbidden: true },
+    });
+  });
+
   it('sanitizes manually edited style cache and keeps output bounded', async () => {
     const cache = path.join(root, '.mancode', 'local', 'cache');
     await mkdir(cache, { recursive: true });
@@ -119,7 +210,11 @@ describe('design commands', () => {
     expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
       policyStatus: 'invalid',
       policySource: 'built-in-safe-default',
-      policy: { enabled: false, preset: 'preserve' },
+      policy: {
+        enabled: false,
+        preset: 'preserve',
+        emojiPolicy: 'forbid-as-interface-icon',
+      },
     });
   });
 
@@ -227,11 +322,15 @@ describe('design commands', () => {
     expect(parsed.guidance).toEqual(
       expect.arrayContaining([
         expect.stringContaining('present 2-3 distinct'),
-        expect.stringContaining('then wait for the user to choose'),
+        expect.stringContaining(
+          'wait for the user to choose before implementation',
+        ),
+        expect.stringContaining('do not count as a selected visual direction'),
         expect.stringContaining('first viewport'),
         expect.stringContaining('workflow clarity over spectacle'),
         expect.stringContaining('Use Lucide'),
-        'Do not use emoji as interface icons.',
+        expect.stringContaining('Do not use emoji as interface icons'),
+        expect.stringContaining('Emoji remain allowed'),
         expect.stringContaining('reduced-motion'),
       ]),
     );

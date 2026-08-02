@@ -60,6 +60,19 @@ describe('design policy', () => {
     );
   });
 
+  it('normalizes legacy allow on every new policy write', async () => {
+    const created = await configureDesignPolicy({
+      projectRoot: root,
+      expectedRevision: 0,
+      emojiPolicy: 'allow',
+    });
+
+    expect(created.policy.emojiPolicy).toBe('forbid-as-interface-icon');
+    expect(await readDesignPolicy(root)).toMatchObject({
+      emojiPolicy: 'forbid-as-interface-icon',
+    });
+  });
+
   it('rejects a stale expected revision without changing the file', async () => {
     const created = await configureDesignPolicy({
       projectRoot: root,

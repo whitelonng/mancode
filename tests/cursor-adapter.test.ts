@@ -66,7 +66,11 @@ describe('Cursor adapter', () => {
     expect(solo).toContain('read `.mancode/aesthetics/style-tokens.json`');
     expect(solo).toContain('present 2-3 distinct product-appropriate');
     expect(solo).toContain('then wait for the user to choose');
-    expect(solo).toContain('continue directly for scoped UI fixes');
+    expect(solo).toContain('do not count as a selected visual direction');
+    expect(solo).toContain('Continue directly for scoped UI fixes');
+    expect(solo).toContain('Never use emoji as interface icons');
+    expect(solo).toContain('Emoji remain allowed inside user-authored content');
+    expect(solo).toContain('never fall back to emoji');
     expect(solo).toContain('one bounded self-check');
     expect(solo).toContain('Do not start another reviewer');
     expect(solo).toContain('semantic owner or source of truth is unclear');
@@ -80,6 +84,9 @@ describe('Cursor adapter', () => {
     expect(man).toContain('/mansolo');
     expect(man).toContain('targeted review');
     expect(man).toContain('one remediation round');
+    expect(man).toContain('Never use emoji as interface icons');
+    expect(man).toContain('Emoji remain allowed inside user-authored content');
+    expect(man).toContain('do not count as a selected visual direction');
   });
 
   it('preserves user rules on repeat install', async () => {

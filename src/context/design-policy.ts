@@ -176,6 +176,10 @@ export async function configureDesignPolicy(
     if (currentRevision !== input.expectedRevision) {
       throw new Error('MANCODE_EXPECTED_REVISION_CONFLICT');
     }
+    const emojiPolicy =
+      input.emojiPolicy ??
+      current?.emojiPolicy ??
+      DEFAULT_DESIGN_POLICY.emojiPolicy;
     const next = parseDesignPolicy({
       ...(current ?? DEFAULT_DESIGN_POLICY),
       revision: currentRevision + 1,
@@ -186,9 +190,7 @@ export async function configureDesignPolicy(
         current?.iconPolicy ??
         DEFAULT_DESIGN_POLICY.iconPolicy,
       emojiPolicy:
-        input.emojiPolicy ??
-        current?.emojiPolicy ??
-        DEFAULT_DESIGN_POLICY.emojiPolicy,
+        emojiPolicy === 'allow' ? 'forbid-as-interface-icon' : emojiPolicy,
       motionPolicy:
         input.motionPolicy ??
         current?.motionPolicy ??

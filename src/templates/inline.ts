@@ -2,6 +2,11 @@
  * Hook 和 Skill 模板（内联，避免打包后路径问题）
  */
 
+import {
+  INTERFACE_EMOJI_ICON_GUIDANCE,
+  VISUAL_DIRECTION_SELECTION_GUIDANCE,
+} from '../context/design-guidance.js';
+
 export const SESSION_START_HOOK = String.raw`#!/usr/bin/env node
 // .mancode/hooks/session-start.mjs
 // mancode SessionStart hook - cross-platform project context
@@ -125,6 +130,8 @@ const state = readJson(path.join(mancodeDir, 'state.json')) || {};
 const profile = readJson(path.join(mancodeDir, 'project-profile.json')) || {};
 const mode = typeof state.currentMode === 'string' ? state.currentMode : '';
 const output = [];
+const interfaceEmojiIconGuidance = ${JSON.stringify(INTERFACE_EMOJI_ICON_GUIDANCE)};
+const visualDirectionSelectionGuidance = ${JSON.stringify(VISUAL_DIRECTION_SELECTION_GUIDANCE)};
 
 if (mode === 'solo') {
   output.push(
@@ -188,9 +195,25 @@ if (
   );
 }
 
-const uiPattern = /\b(?:button|component|page|style|ui|design|layout|css|color|font|theme|card|input|modal|dialog|header|footer|sidebar|dropdown|tooltip|toast|avatar|badge)\b|界面|页面|按钮|样式|颜色|字体|布局|组件|弹窗|导航|卡片|输入框|主题|美化|优化.*界面|调整.*样式/iu;
+const strongUiPattern = /\b(?:ui|ux|front-?end|html|web ?page|page|button|icon|lucide|layout|css|card|modal|dialog|header|footer|sidebar|navigation|navbar|menu|dropdown|tooltip|toast|avatar|badge|dashboard|status indicator)s?\b|界面|页面|网页|前端|按钮|图标|布局|弹窗|导航|菜单|卡片|状态标识|状态图标|美化|优化.*界面|调整.*样式/iu;
+const weakVisualPattern = /\b(?:component|style|design|color|font|theme|input|visual|aesthetic)s?\b|样式|颜色|字体|主题|组件|输入框|审美|视觉|美观|好看/iu;
+const hasStrongUiSignal = strongUiPattern.test(userPrompt);
+const hasWeakVisualSignal = weakVisualPattern.test(userPrompt);
+const isUiPrompt =
+  hasStrongUiSignal ||
+  (profile.uiAssets === 'detected' && hasWeakVisualSignal);
 
-if (profile.uiAssets === 'detected' && uiPattern.test(userPrompt)) {
+if (isUiPrompt) {
+  output.push(
+    '## mancode UI design baseline',
+    '',
+    interfaceEmojiIconGuidance,
+    visualDirectionSelectionGuidance,
+    '',
+  );
+}
+
+if (profile.uiAssets === 'detected' && isUiPrompt) {
   appendAestheticSummary(
     output,
     readJson(path.join(mancodeDir, 'aesthetics', 'style-tokens.json')),
@@ -333,11 +356,13 @@ trigger: <具体事实>
 这是只读诊断。保留 requirements、plan、review/verification ledger、claims、handoff 和 metadata；不调用通用 \`workflow update\`，不写 blocked/currentStep/planning，不归档旧文件，不释放 claim，不取消 handoff，也不宣称已回到 Step 2。
 
 ### UI 任务（条件执行）
-仅当 project-profile 确认有 UI 资产且任务确实涉及界面时：
-1. UserPromptSubmit hook 会注入项目审美 token（如有）
-2. 严格使用已有 token 和组件；没有可靠 token 时先检查现有界面，再提出最小一致方案
-3. 不把特定框架、组件名、色板或交互范式当作默认
-4. 以项目既有的无障碍、响应式与反馈方式为准
+任务涉及界面时：
+- ${INTERFACE_EMOJI_ICON_GUIDANCE}
+- ${VISUAL_DIRECTION_SELECTION_GUIDANCE}
+- project-profile 确认有 UI 资产时，UserPromptSubmit hook 会注入项目审美 token（如有）
+- 严格使用已有 token 和组件；没有可靠 token 时先检查现有界面，再提出最小一致方案
+- 不把特定框架、组件名、色板或交互范式当作默认
+- 以项目既有的无障碍、响应式与反馈方式为准
 
 ### 界面质量检查（条件执行）
 只检查本次 diff 新增或改变的界面行为：复用已有层级、token 和组件；新增异步或交互路径时才检查对应的加载、失败和可达性状态。不要借 UI 自检巡查未改动页面或补齐推测性状态。

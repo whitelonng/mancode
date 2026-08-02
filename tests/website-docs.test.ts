@@ -179,11 +179,15 @@ describe('website documentation', () => {
       expect(html).toContain('mancode design status --json');
       expect(html).toContain('mancode design context --json');
       expect(html).toContain('--icons lucide');
+      expect(html).toContain('forbid-as-interface-icon');
+      expect(html).not.toContain('<code>allow</code>');
       expect(html).toContain('.mancode/shared/context/design-policy.json');
     }
 
     expect(await readPage('docs.html')).toContain('does not install a package');
+    expect(await readPage('docs.html')).toContain('user-authored content');
     expect(await readPage('docs.zh-CN.html')).toContain('不会自动安装依赖');
+    expect(await readPage('docs.zh-CN.html')).toContain('用户输入');
   });
 
   it('documents the cross-session boundary in both languages', async () => {

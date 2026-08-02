@@ -2,6 +2,10 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import {
+  INTERFACE_EMOJI_ICON_GUIDANCE,
+  VISUAL_DIRECTION_SELECTION_GUIDANCE,
+} from '../context/design-guidance.js';
+import {
   DEFAULT_DESIGN_POLICY,
   type DesignBrowserValidation,
   type DesignEmojiPolicy,
@@ -75,12 +79,14 @@ export async function designStatus(
       policyResult.policy?.enabled === true
         ? policyResult.policy.preset
         : 'preserve',
+    effectiveEmojiPolicy: 'forbid-as-interface-icon',
     policyPath: relativePath(rootDir, designPolicyPath(rootDir)),
-    warning: policyResult.warning,
+    warning: effectivePolicyWarning(policyResult.policy, policyResult.warning),
   };
   return printResult(options.json, payload, [
     `Design policy: ${payload.policyStatus}`,
     `Effective preset: ${payload.effectivePreset}`,
+    `Effective emoji policy: ${payload.effectiveEmojiPolicy}`,
     `Revision: ${payload.policy?.revision ?? 0}`,
     ...(payload.warning === null ? [] : [`Warning: ${payload.warning}`]),
   ]);
@@ -107,7 +113,7 @@ export async function designContext(
     ]);
     const configured = policyResult.policy;
     const active = configured?.enabled === true;
-    const policy = active ? configured : disabledPolicy();
+    const policy = effectivePolicy(active ? configured : disabledPolicy());
     const rootUiDetected = profile?.uiAssets === 'detected';
     const scopedUiDetected =
       style.scopeRoot !== '.' && style.lastScanned !== null;
@@ -137,10 +143,16 @@ export async function designContext(
             reuseExistingDesignSystem: true,
             dependencyChangesRequireTaskApproval: true,
             experimentalDoesNotAuthorizeProductChanges: true,
+            interfaceEmojiIconsForbidden: true,
+            contentEmojiAllowed: true,
+            iconFallbackMustNotBeEmoji: true,
           }
         : {
             doNotExpandTaskScope: true,
             reuseExistingDesignSystem: true,
+            interfaceEmojiIconsForbidden: true,
+            contentEmojiAllowed: true,
+            iconFallbackMustNotBeEmoji: true,
           },
       project: {
         kind: profile?.projectKind ?? 'unknown',
@@ -150,7 +162,7 @@ export async function designContext(
       guidance: designGuidance(policy),
       qualityGates: designQualityGates(policy),
       style,
-      warning: policyResult.warning,
+      warning: effectivePolicyWarning(configured, policyResult.warning),
     };
     return printResult(options.json, payload, [
       `Applicable: ${payload.applicable ? 'yes' : 'no'}`,
@@ -196,6 +208,7 @@ export async function designConfigure(
     );
   }
   try {
+    const legacyEmojiAllow = options.emoji === 'allow';
     const result = await configureDesignPolicy({
       projectRoot: rootDir,
       expectedRevision,
@@ -203,9 +216,13 @@ export async function designConfigure(
       confirmExperimental: options.confirmExperimental,
       ...values,
     });
-    return printResult(options.json, { schemaVersion: 1, ...result }, [
+    const warning = legacyEmojiAllow
+      ? '--emoji allow is deprecated and was normalized to forbid-as-interface-icon; emoji remains allowed in user-authored content, chat messages, editorial copy, and domain data.'
+      : null;
+    return printResult(options.json, { schemaVersion: 1, ...result, warning }, [
       `Design policy configured: ${result.policy.preset}`,
       `Revision: ${result.policy.revision}`,
+      ...(warning === null ? [] : [`Warning: ${warning}`]),
     ]);
   } catch (error) {
     const code = errorCode(error, 'MANCODE_DESIGN_CONFIGURE_FAILED');
@@ -283,7 +300,8 @@ function parseConfigureValues(options: DesignConfigureOptions): {
   return {
     preset: options.preset,
     iconPolicy: options.icons,
-    emojiPolicy: options.emoji,
+    emojiPolicy:
+      options.emoji === 'allow' ? 'forbid-as-interface-icon' : options.emoji,
     motionPolicy: options.motion,
     browserValidation: options.browserValidation,
   };
@@ -398,10 +416,26 @@ async function styleFreshness(
 function disabledPolicy(): DesignPolicyV1 {
   return {
     ...DEFAULT_DESIGN_POLICY,
-    emojiPolicy: 'allow',
     motionPolicy: 'minimal',
     browserValidation: 'off',
   };
+}
+
+function effectivePolicy(policy: DesignPolicyV1): DesignPolicyV1 {
+  return policy.emojiPolicy === 'forbid-as-interface-icon'
+    ? policy
+    : { ...policy, emojiPolicy: 'forbid-as-interface-icon' };
+}
+
+function effectivePolicyWarning(
+  policy: DesignPolicyV1 | null,
+  warning: string | null,
+): string | null {
+  const legacyWarning =
+    policy?.emojiPolicy === 'allow'
+      ? 'The legacy emoji policy "allow" is constrained to forbid-as-interface-icon; emoji remains allowed in user-authored content, chat messages, editorial copy, and domain data.'
+      : null;
+  return [warning, legacyWarning].filter(Boolean).join(' ') || null;
 }
 
 function designGuidance(policy: DesignPolicyV1): string[] {
@@ -409,13 +443,13 @@ function designGuidance(policy: DesignPolicyV1): string[] {
     directionSelectionGuidance(),
     presetGuidance(policy.preset),
     iconGuidance(policy.iconPolicy),
-    emojiGuidance(policy.emojiPolicy),
+    emojiGuidance(),
     motionGuidance(policy.motionPolicy),
   ];
 }
 
 function directionSelectionGuidance(): string {
-  return 'Before implementing a new UI surface or an aesthetic redesign when the user has not chosen a visual direction, present 2-3 distinct, product-appropriate directions with concise tradeoffs and a recommendation, then wait for the user to choose. Continue directly for scoped UI fixes or work within an established or already selected direction.';
+  return VISUAL_DIRECTION_SELECTION_GUIDANCE;
 }
 
 function presetGuidance(preset: DesignPreset): string {
@@ -434,10 +468,8 @@ function iconGuidance(policy: DesignIconPolicy): string {
     : "Reuse the project's existing icon system; do not introduce another icon library without explicit task approval.";
 }
 
-function emojiGuidance(policy: DesignEmojiPolicy): string {
-  return policy === 'forbid-as-interface-icon'
-    ? 'Do not use emoji as interface icons.'
-    : 'Follow the existing product conventions for emoji.';
+function emojiGuidance(): string {
+  return INTERFACE_EMOJI_ICON_GUIDANCE.replace('Never use', 'Do not use');
 }
 
 function motionGuidance(policy: DesignMotionPolicy): string {
@@ -456,6 +488,7 @@ function designQualityGates(policy: DesignPolicyV1): string[] {
   return [
     'Preserve task-critical workflows, keyboard access, visible focus, readable contrast, and responsive behavior on changed surfaces.',
     'Check changed surfaces for clipping, unintended overlap, horizontal overflow, and unstable layout.',
+    'Inspect changed navigation, buttons, controls, actions, and status indicators to confirm that no emoji is used as an interface icon; do not flag emoji in user-authored content, chat messages, editorial copy, or domain data.',
     browserGate,
   ];
 }

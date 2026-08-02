@@ -165,8 +165,18 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain('mancode status --brief --json');
       expect(bootstrap).toContain('mancode design context --json');
       expect(bootstrap).toContain('present 2-3 distinct product-appropriate');
-      expect(bootstrap).toContain('wait for a selection before implementation');
-      expect(bootstrap).toContain('Do not pause for scoped UI fixes');
+      expect(bootstrap).toContain(
+        'wait for the user to choose before implementation',
+      );
+      expect(bootstrap).toContain(
+        'do not count as a selected visual direction',
+      );
+      expect(bootstrap).toContain('Continue directly for scoped UI fixes');
+      expect(bootstrap).toContain('Never use emoji as interface icons');
+      expect(bootstrap).toContain(
+        'Emoji remain allowed inside user-authored content',
+      );
+      expect(bootstrap).toContain('never fall back to emoji');
       expect(bootstrap).toContain(
         'snapshot already obtained in this conversation',
       );

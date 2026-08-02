@@ -103,6 +103,61 @@ describe('UserPromptSubmit hook context budget', () => {
     expect(output).not.toContain('primary=#111111');
   });
 
+  it.each([
+    '把图标统一为 Lucide',
+    'Use Lucide icons for navigation',
+    '把状态标识改一下',
+    '创建一个设置页面',
+  ])(
+    'injects the UI safety baseline without detected UI assets: %s',
+    async (prompt) => {
+      await writeFile(
+        path.join(dir, '.mancode', 'project-profile.json'),
+        `${JSON.stringify({ uiAssets: 'none' })}\n`,
+        'utf-8',
+      );
+
+      const output = await runHook(dir, {}, { prompt });
+
+      expect(output).toContain('Never use emoji as interface icons');
+      expect(output).toContain(
+        'Emoji remain allowed inside user-authored content',
+      );
+      expect(output).toContain('never fall back to emoji');
+      expect(output).toContain('present 2-3 distinct product-appropriate');
+      expect(output).toContain('do not count as a selected visual direction');
+      expect(output).not.toContain('## 审美 token 摘要');
+    },
+  );
+
+  it.each([
+    'Design a database schema for input validation',
+    'Change API input validation',
+    'Analyze the theme of this article',
+  ])('does not treat non-UI wording as a UI task: %s', async (prompt) => {
+    await writeFile(
+      path.join(dir, '.mancode', 'project-profile.json'),
+      `${JSON.stringify({ uiAssets: 'none' })}\n`,
+      'utf-8',
+    );
+
+    const output = await runHook(dir, {}, { prompt });
+
+    expect(output).not.toContain('## mancode UI design baseline');
+    expect(output).not.toContain('Never use emoji as interface icons');
+  });
+
+  it('uses weak visual signals only when the project has detected UI assets', async () => {
+    await writeTokens(dir, { colors: { primary: '#111111' } });
+
+    const output = await runHook(dir, {}, { prompt: 'Change the theme color' });
+
+    expect(output).toContain('## mancode UI design baseline');
+    expect(output).toContain('Never use emoji as interface icons');
+    expect(output).toContain('## 审美 token 摘要');
+    expect(output).toContain('primary=#111111');
+  });
+
   it('keeps frontend hook output below the 800-token budget', async () => {
     await writeTokens(dir, {
       colors: Object.fromEntries(
