@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.3-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.3" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.4-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.4" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder" />
 </p>
 
@@ -155,7 +155,7 @@ the quality gate for models that need explicit review structure.
 
 ## Installation
 
-**Status**: mancode Continuity v0.5.3. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.5.4. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder adapters are included.
 
 Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -511,7 +511,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.5.3
+mancode v0.5.4
 
 Project:     my-app
 Runtime:     ready
@@ -587,6 +587,10 @@ the policy is missing, disabled, or corrupt, `design context` safely resolves to
 `preserve`; ordinary coding and workflow recovery continue normally.
 Legacy projects can read this safe context, but only current Continuity projects
 can configure the shared policy.
+Regardless of whether the policy is enabled, emoji cannot serve as interface
+icons in navigation, buttons, actions, controls, or status indicators. Emoji
+remain allowed in user-authored content, chat messages, editorial copy, and
+domain data.
 
 - `preserve` retains the existing hierarchy, layout, component system, and
   interaction patterns while making only task-required UI changes.
@@ -602,6 +606,8 @@ visual direction, the agent first presents 2-3 distinct,
 product-appropriate directions with concise tradeoffs and a recommendation,
 then waits for the user to choose. Scoped UI fixes, changes within an existing
 design system, and tasks with an already selected direction continue directly.
+Broad adjectives or quality constraints such as enterprise, clean, modern,
+premium, or not flashy do not count as a selected visual direction.
 For brand, campaign, editorial, portfolio, and launch surfaces, `experimental`
 emphasizes a memorable first viewport and a visual motif carried through the
 full page; task-oriented products still prioritize workflow clarity.
@@ -611,6 +617,9 @@ validation, never free-form prompt text. Agents read code-generated guidance,
 quality gates, and a sanitized style summary through `mancode design context
 --json`. `--icons lucide` does not install Lucide; dependency changes still need
 explicit task approval.
+The legacy `--emoji allow` value from version 0.5.3 and earlier remains readable,
+but effective context constrains it to `forbid-as-interface-icon`; new writes
+normalize it to the same value.
 
 ```bash
 mancode design status --json

@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.3-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.3" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.4-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.4" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder" />
 </p>
 
@@ -124,7 +124,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.5.3。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.5.4。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -455,7 +455,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.5.3
+mancode v0.5.4
 
 Project:     my-app
 Runtime:     ready
@@ -528,16 +528,20 @@ Issue DB: .mancode/local/preseason-issues.json
 项目设计策略是显式启用功能。`mancode init` 不会创建策略；策略缺失、禁用或损坏时，
 `design context` 会安全降级为 `preserve`，普通编码和工作流恢复不受影响。
 Legacy 项目也可读取这个安全上下文，但只有当前 Continuity 项目能配置共享策略。
+无论策略是否启用，界面图标、导航、按钮、操作和状态标识都不得使用表情符号；
+用户输入、聊天消息、正文和业务数据仍可包含表情。
 
 - `preserve`：保持现有层级、布局、组件系统和交互模式，只完成任务要求的 UI 改动。
 - `refine`：在不改变产品结构的前提下改善层级、排版、间距、状态和响应式行为。
 - `experimental`：允许一个符合产品语境的统一视觉方向和更高级的构图/动效，但必须显式传入 `--confirm-experimental`；它不授权新增产品功能、改变信息架构或扩大任务范围。
 
-新建 UI 或视觉重做时，如果用户尚未选定视觉方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，等待用户选择后再实现。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。`experimental` 对品牌、活动、编辑、作品集和发布型页面强调首屏记忆点与贯穿全页的视觉母题；对任务型产品仍优先保证工作流清晰度。
+新建 UI 或视觉重做时，如果用户尚未选定视觉方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，等待用户选择后再实现。“企业级”“简洁”“现代”“高级”“不花哨”等宽泛形容词只是约束，不算已经选定视觉方向。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。`experimental` 对品牌、活动、编辑、作品集和发布型页面强调首屏记忆点与贯穿全页的视觉母题；对任务型产品仍优先保证工作流清晰度。
 
 策略只保存 preset、图标、表情、动效和浏览器验证的严格枚举，不保存自由文本提示词。
 Agent 通过 `mancode design context --json` 获取代码生成的固定指导、质量门槛和经过清洗的
 样式摘要。`--icons lucide` 不会自动安装 Lucide；依赖变更仍需任务明确授权。
+0.5.3 及更早版本保存的 `--emoji allow` 仍可读取，但有效上下文会将其收紧为
+`forbid-as-interface-icon`；新的配置写入也会自动归一化为该值。
 
 ```bash
 mancode design status --json

@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.5.3</span>
+      <span class="docs-wordmark">文档 / v0.5.4</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -133,7 +133,7 @@
 
         <section class="doc-section" id="design" data-searchable>
           <h2>设置设计策略</h2>
-          <p>设计策略是面向 UI 任务的显式启用 Continuity 能力。<code>mancode init</code> 不会自动创建它；策略缺失、禁用或损坏时，设计上下文会安全降级为 <code>preserve</code>，不会阻塞普通编码或工作流恢复。</p>
+          <p>设计策略是面向 UI 任务的显式启用 Continuity 能力。<code>mancode init</code> 不会自动创建它；策略缺失、禁用或损坏时，设计上下文会安全降级为 <code>preserve</code>，不会阻塞普通编码或工作流恢复。无论策略是否启用，界面图标、导航、按钮、操作和状态标识都不得使用表情符号；用户输入、聊天消息、正文和业务数据仍可包含表情。</p>
           <div class="mode-guide design-presets">
             <article><small>改动最小</small><h3>preserve</h3><p>保留现有层级、布局、组件系统和交互模式，只完成任务真正要求的 UI 改动。</p></article>
             <article><small>推荐默认</small><h3>refine</h3><p>改善层级、排版、间距、状态和响应式行为，但不改变产品结构。</p></article>
@@ -141,7 +141,7 @@
           </div>
 
           <h3>实现前先选视觉方向</h3>
-          <p>新建 UI 或视觉重做时，如果用户尚未选定方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，再等待用户选择。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。</p>
+          <p>新建 UI 或视觉重做时，如果用户尚未选定方向，Agent 会先给出 2–3 个差异明确、符合产品语境的方向，简述取舍并推荐一个，再等待用户选择。“企业级”“简洁”“现代”“高级”“不花哨”等宽泛形容词只是约束，不算已经选定视觉方向。局部 UI 修复、既有设计系统内的改动，以及用户已经选定方向的任务不会被这一步打断。</p>
           <div class="docs-note"><strong>产品语境决定强度</strong><p>品牌、活动、编辑、作品集和发布型页面可以强化首屏记忆点，并让一个视觉母题贯穿全页；任务型产品仍然把工作流清晰度放在视觉奇观之前。</p></div>
 
           <h3>配置与检查</h3>
@@ -153,7 +153,7 @@
           <table class="docs-table"><thead><tr><th>控制项</th><th>可选值</th><th>边界</th></tr></thead><tbody>
             <tr><td><code>--preset</code></td><td><code>preserve</code>、<code>refine</code>、<code>experimental</code></td><td>每次启用 <code>experimental</code> 都需要显式确认。</td></tr>
             <tr><td><code>--icons</code></td><td><code>existing-first</code>、<code>lucide</code></td><td>选择 Lucide 不会自动安装依赖；依赖变更仍需任务明确授权。</td></tr>
-            <tr><td><code>--emoji</code></td><td><code>allow</code>、<code>forbid-as-interface-icon</code></td><td>严格模式禁止用表情符号代替界面图标。</td></tr>
+            <tr><td><code>--emoji</code></td><td><code>forbid-as-interface-icon</code></td><td>表情不能代替界面图标；用户输入、聊天和正文内容不受影响。</td></tr>
             <tr><td><code>--motion</code></td><td><code>minimal</code>、<code>purposeful</code></td><td>动效必须服务于层级、反馈或叙事，不能遮蔽核心工作流。</td></tr>
             <tr><td><code>--browser-validation</code></td><td><code>off</code>、<code>when-available</code>、<code>required</code></td><td><code>required</code> 会在无法执行浏览器验证时形成硬质量门槛。</td></tr>
           </tbody></table>

@@ -108,6 +108,13 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).toContain('NEEDS_REALIGNMENT');
     expect(SOLO_SKILL).toContain('MANCODE_REFRAME_REQUIRED');
     expect(SOLO_SKILL).toMatch(/这是只读诊断/);
+    expect(SOLO_SKILL).toContain('Never use emoji as interface icons');
+    expect(SOLO_SKILL).toContain(
+      'Emoji remain allowed inside user-authored content',
+    );
+    expect(SOLO_SKILL).toContain('never fall back to emoji');
+    expect(SOLO_SKILL).toContain('present 2-3 distinct product-appropriate');
+    expect(SOLO_SKILL).toContain('do not count as a selected visual direction');
   });
 
   it('defines manba diagnosis and real browser validation boundaries', () => {
@@ -200,6 +207,13 @@ describe('mvp-2 skills', () => {
 
   it('installs the redesigned Claude skills', async () => {
     await installClaudeCode(dir, { techStack: [], uiLibrary: null });
+    const solo = await readFile(
+      path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(solo).toContain('Never use emoji as interface icons');
+    expect(solo).toContain('Emoji remain allowed inside user-authored content');
+    expect(solo).toContain('present 2-3 distinct product-appropriate');
     for (const skill of MVP2_SKILLS) {
       const content = await readFile(
         path.join(dir, '.claude', 'skills', skill.name, 'SKILL.md'),
