@@ -50,15 +50,17 @@ export const MANTEAM_SKILL: SkillSpec = {
 
 按 \`/man\` 的 9 步流程执行（含澄清、计划关卡和增强收尾），但每一步增加团队约束：
 
-1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件，并按事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；authority 与 Markdown/adapter 等 derived copy 必须区分。
-2. 澄清：沿用 /man 的需求就绪门槛，不设固定轮数或每批问题数量；问出所有会改变决策且无法从项目事实查清的疑问，不重复已确认内容。有合适方案时直接给出选项、优缺点和明确推荐。通过 \`workflow requirements ... finalize\` 固化七个 coverage 维度、结构化需求和带验证方式的验收 ID，只有 CLI 判定 ready 才进入计划。
-3. Game Plan：Plan Coach 先做输入就绪检查；所有选项必须解决同一目标和验收边界，写明 complexity bearer，只保留一个 recommendation 和 stop conditions；简单任务可以只有一个真实方向。计划里必须包含变更边界、技术选择理由、兼容性风险、回滚方式；高风险或跨 team/transport/owner/authority 的任务在 plan.md 内加入非权威 Domain Matrix。禁止提前修改业务文件或团队 memory。
+1. Scout Report：必须列出共享文件、近期相关提交、潜在冲突文件，并按事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；authority 与 Markdown/adapter 等 derived copy 必须区分。最多保留三个会改变决策的 finding，使用稳定 ID F-1…F-3 和 Type：premise / scope / technical / risk / acceptance。
+2. 澄清：沿用 /man 的需求就绪门槛，不设固定轮数或每批问题数量；问出所有会改变决策且无法从项目事实查清的疑问，不重复已确认内容。有合适方案时直接给出选项、优缺点和明确推荐。发现只产生建议权，不产生执行权：接受的范围或行为进入 confirmedScope 和匹配的 acceptanceCriteria；接受的技术选择进入 technicalDecisions；只有明确排除的行为进入 excludedScope；未接受的建议仍无执行权，但不得自动塞入 excludedScope；低影响可逆默认值进入 defaults 且不得扩张范围。通过 \`workflow requirements ... finalize\` 固化七个 coverage 维度、结构化需求和带验证方式的验收 ID，只有 CLI 判定 ready 才进入计划。
+3. Game Plan：Plan Coach 先做输入就绪检查；所有选项必须解决同一目标和验收边界，写明 complexity bearer，只保留一个 recommendation 和 stop conditions；简单任务可以只有一个真实方向。计划里必须包含用户可见的 \`implementationScope\`（repo-relative include/exclude/modules）、技术选择理由、兼容性风险、回滚方式；include 是文件写入上限，modules 不单独授权。高风险或跨 team/transport/owner/authority 的任务在 plan.md 内加入非权威 Domain Matrix。禁止提前修改业务文件或团队 memory。
 4. 计划关卡：用户可只保留计划、继续完整团队执行、明确交给 solo 轻量执行或重写计划；Active Plans 按 taskId 更新。团队共享文件或交接风险存在时推荐完整团队执行。
 5. 实施：改动前再次检查 \`git status --short\`，避免踩用户或队友改动。
 6. Self-test：在 Step 6 初始化 verification ledger，把每个 required 验收 ID 的自动、人工或 hybrid 结果和证据通过 CLI 记录；自动结果包含命令与退出码，未全部通过不得进入 review。优先跑项目已有验证命令；失败两次停下诊断根因。需要人工验证时标记 require-manual 并等待用户明确确认，不得自动恢复。remediation 后在 Step 9 重新登记全部验收。
-7. Review scope + Film #1：基于实际 diff 写 \`review-scope.md\`，用 \`workflow review ... init\` 选择 targeted 或 full；重点审查行为、可维护性、团队风格与测试，finding 必须有证据和稳定 ID。
+7. Review scope + Film #1：基于实际 diff 写 \`review-scope.md\`，用 \`workflow review ... init\` 选择 targeted 或 full；先检查每一处改动是否能追溯到已确认范围且同时位于 \`implementationScope\` include 内、不匹配 exclude，未经授权的改动作为 blocker，再审查行为、可维护性、团队风格与测试；finding 必须有证据和稳定 ID。
 8. Film #2：仅 full 执行，先读 Film #1 报告并去重，只审查边界、安全、性能、并发和兼容性。targeted 的第二审是不适用，不能记为 skipped；只有用户明确要求才可跳过全部 review，并写入 \`review\` 和残余风险。
 9. Post-game：汇总 blocker，只做一轮修复并用 \`workflow review ... remediate\` 记录；复验后写 summary 与 hand-off。验证失败、审查不完整或仍有 blocker 时标记 blocked，不得标 completed。
+
+实施期间若只需调整文件边界、不改变已确认行为或验收，先向用户展示完整新边界并取得明确同意，再通过专用 \`workflow scope change\` mutation 更新；它必须递增 plan authority、使旧 review/verification 失效并重签兼容 claim。行为或验收变化仍走 reframe，不能用 scope change 绕过需求确认。
 
 实施中新证据若推翻已确认的目标、owner、source of truth 或验收，入口/流程会产生不同语义，status/contract/policy/transition 含义要变，发现 stale adapter、writer 不兼容、未完成 operation、active child/open handoff/active solo assignment，或变化超出 requirements/plan scope，立即停止，只返回 \`NEEDS_REALIGNMENT\` 和 \`MANCODE_REFRAME_REQUIRED\`。这是只读诊断：不得调用通用 workflow update 写 blocker，不改 metadata/step/policy/requirements/plan/claims/handoff，不归档或释放 authority。
 

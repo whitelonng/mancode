@@ -29,9 +29,11 @@ import { assertManteamPlanContent } from './manteam-plan.js';
 import { assertSharedTextSafe } from './privacy.js';
 import {
   type RequirementsLedgerV1,
+  assertRequirementsScopeConsistent,
   requirementsAreReady,
 } from './requirements-ledger.js';
 import type { ReviewLedgerV1 } from './review-ledger.js';
+import { normalizeImplementationScope } from './scope-change.js';
 import {
   assertTaskCodeHeadUnchanged,
   markTaskReviewStale,
@@ -44,7 +46,9 @@ import type { VerificationLedgerV1 } from './verification-ledger.js';
 import {
   type PlanDecision,
   type WorkflowMetadataV3,
+  assertExecutableImplementationScope,
   assertWorkflowMetadataTransition,
+  implementationScopeIsExecutable,
   parseWorkflowMetadata,
 } from './workflow-metadata.js';
 
@@ -56,6 +60,8 @@ export interface ReviseV3PlanInput {
   sessionId: Ulid;
   expectedTaskRevision: number;
   plan: string;
+  /** User-visible file/module boundary confirmed with this plan revision. */
+  implementationScope?: unknown;
   /** Omitting the decision leaves the workflow at the step-four plan gate. */
   planDecision?: V3PlanDecision;
   operationId?: Ulid;
@@ -73,8 +79,8 @@ export interface RevisedV3Plan {
 }
 
 /**
- * Writes a new plan version when content changes, or records a plan decision
- * against the existing content without invalidating its evidence.
+ * Writes one plan authority version when content or execution scope changes,
+ * or records a plan decision against unchanged authority.
  */
 export async function reviseV3Plan(
   input: ReviseV3PlanInput,
@@ -82,6 +88,10 @@ export async function reviseV3Plan(
   const taskRef = parseTaskRefValue(input.taskRef);
   const plan = requirePlan(input.plan);
   const planDecision = parsePlanDecision(input.planDecision);
+  const submittedScope =
+    input.implementationScope === undefined
+      ? null
+      : normalizeImplementationScope(input.implementationScope);
   if (taskRef.namespace === 'shared') {
     assertSharedTextSafe(plan, 'plan');
   }
@@ -97,20 +107,46 @@ export async function reviseV3Plan(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    const planChanged = context.task.plan?.content !== plan;
+    const executionScopeBinding = assertExecutionScopeBindingAttempt({
+      metadata: context.task.metadata,
+      currentPlan: context.task.plan?.content ?? null,
+      submittedPlan: plan,
+      submittedScope,
+      planDecisionSupplied: input.planDecision !== undefined,
+      sessionActorId: context.session.actorId,
+    });
     assertPlanRevisionEligible(
       context.task.metadata,
       context.task.requirements,
+      executionScopeBinding,
     );
+    const implementationScope =
+      submittedScope ?? context.task.metadata.implementationScope;
+    const scopeChanged =
+      submittedScope !== null &&
+      submittedScope.digest !==
+        context.task.metadata.implementationScope.digest;
+    if (planDecision === 'governed_execution') {
+      assertExecutableImplementationScope(implementationScope);
+    }
+    if (executionScopeBinding) {
+      assertExecutableImplementationScope(implementationScope);
+    }
     if (
       context.task.metadata.workflowMode === 'manteam' &&
       planDecision === 'governed_execution'
     ) {
       assertManteamPlanContent(plan);
     }
-    if (context.task.plan?.content === plan && planDecision === null) {
+    if (
+      context.task.plan?.content === plan &&
+      planDecision === null &&
+      !scopeChanged
+    ) {
       throw new Error('MANCODE_PLAN_CONTENT_UNCHANGED');
     }
-    const planChanged = context.task.plan?.content !== plan;
+    const authorityChanged = planChanged || scopeChanged;
     const timestamp = context.now.toISOString();
     const planDigest = planChanged
       ? digestCanonicalJson({
@@ -121,10 +157,10 @@ export async function reviseV3Plan(
     if (planDigest === undefined) {
       throw new Error('MANCODE_PLAN_FILE_REQUIRED');
     }
-    const review = planChanged
+    const review = authorityChanged
       ? markTaskReviewStale(context.task.review, context.operationId, timestamp)
       : context.task.review;
-    const verification = planChanged
+    const verification = authorityChanged
       ? markTaskVerificationStale(
           context.task.verification,
           context.operationId,
@@ -136,8 +172,10 @@ export async function reviseV3Plan(
       context.task.requirements,
       review,
       verification,
-      planChanged,
+      implementationScope,
+      authorityChanged,
       planDecision,
+      executionScopeBinding,
       context.operationId,
       timestamp,
     );
@@ -195,7 +233,7 @@ export async function reviseV3Plan(
             beforeContent: serializeTaskAuthority(context.task.metadata),
             targetContent: serializeTaskAuthority(metadata),
           }),
-          ...(planChanged
+          ...(authorityChanged
             ? [
                 createTaskAuthorityFileRecoveryAction({
                   stepId: 'mark-review-verification-stale',
@@ -226,9 +264,8 @@ export async function reviseV3Plan(
               ]),
         ],
         noOpStepIds: [
-          ...(planChanged
-            ? []
-            : ['write-plan', 'mark-review-verification-stale']),
+          ...(planChanged ? [] : ['write-plan']),
+          ...(authorityChanged ? [] : ['mark-review-verification-stale']),
           ...(taskHeadFence === null ? ['update-task-head-fence'] : []),
         ],
       },
@@ -258,7 +295,7 @@ export async function reviseV3Plan(
       'mark-review-verification-stale',
       false,
     );
-    if (planChanged) {
+    if (authorityChanged) {
       await writeTaskAuthorityFile(
         context,
         'review-ledger.json',
@@ -334,7 +371,12 @@ function parsePlanDecision(value: unknown): V3PlanDecision | null {
 function assertPlanRevisionEligible(
   metadata: WorkflowMetadataV3,
   requirements: RequirementsLedgerV1,
+  executionScopeBinding: boolean,
 ): void {
+  if (executionScopeBinding) {
+    assertReadyPlanRequirements(metadata, requirements);
+    return;
+  }
   if (metadata.workflowMode !== 'man' && metadata.workflowMode !== 'manteam') {
     throw new Error('MANCODE_PLAN_WORKFLOW_MODE_INVALID');
   }
@@ -344,8 +386,17 @@ function assertPlanRevisionEligible(
   if (metadata.currentStep < 2 || metadata.currentStep > 4) {
     throw new Error('MANCODE_PLAN_STEP_INVALID');
   }
+  if (metadata.governance.planDecision !== null) {
+    throw new Error('MANCODE_PLAN_REQUIREMENTS_OR_DECISION_INVALID');
+  }
+  assertReadyPlanRequirements(metadata, requirements);
+}
+
+function assertReadyPlanRequirements(
+  metadata: WorkflowMetadataV3,
+  requirements: RequirementsLedgerV1,
+): void {
   if (
-    metadata.governance.planDecision !== null ||
     metadata.governance.requirementsStatus !== 'ready' ||
     metadata.governance.requirementsDigest !== requirements.contentDigest ||
     requirements.status !== 'confirmed' ||
@@ -353,6 +404,56 @@ function assertPlanRevisionEligible(
   ) {
     throw new Error('MANCODE_PLAN_REQUIREMENTS_OR_DECISION_INVALID');
   }
+  assertRequirementsScopeConsistent(requirements);
+}
+
+function assertExecutionScopeBindingAttempt(input: {
+  metadata: WorkflowMetadataV3;
+  currentPlan: string | null;
+  submittedPlan: string;
+  submittedScope: WorkflowMetadataV3['implementationScope'] | null;
+  planDecisionSupplied: boolean;
+  sessionActorId: Ulid | null;
+}): boolean {
+  const decision = input.metadata.governance.planDecision;
+  if (decision !== 'governed_execution' && decision !== 'solo_handoff') {
+    return false;
+  }
+  if (
+    input.metadata.workflowMode !== 'man' ||
+    input.metadata.coordination !== 'single' ||
+    input.metadata.taskRef.namespace !== 'local'
+  ) {
+    throw new Error('MANCODE_EXECUTION_SCOPE_BINDING_LOCAL_MAN_ONLY');
+  }
+  const activeExecution =
+    (decision === 'governed_execution' &&
+      input.metadata.status === 'in_progress' &&
+      input.metadata.currentStep >= 5) ||
+    (decision === 'solo_handoff' &&
+      input.metadata.status === 'planned' &&
+      input.metadata.currentStep === 4 &&
+      input.metadata.soloExecution?.state === 'active');
+  if (!activeExecution) {
+    throw new Error('MANCODE_EXECUTION_SCOPE_BINDING_NOT_ACTIVE');
+  }
+  if (input.metadata.ownerActorId !== input.sessionActorId) {
+    throw new Error('MANCODE_TASK_OWNER_REQUIRED');
+  }
+  if (implementationScopeIsExecutable(input.metadata.implementationScope)) {
+    throw new Error('MANCODE_EXECUTION_SCOPE_ALREADY_BOUND');
+  }
+  if (input.submittedScope === null) {
+    throw new Error('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+  }
+  if (input.currentPlan === null || input.currentPlan !== input.submittedPlan) {
+    throw new Error('MANCODE_EXECUTION_SCOPE_BINDING_PLAN_CHANGED');
+  }
+  if (input.planDecisionSupplied) {
+    throw new Error('MANCODE_EXECUTION_SCOPE_BINDING_DECISION_INVALID');
+  }
+  assertExecutableImplementationScope(input.submittedScope);
+  return true;
 }
 
 function updateMetadata(
@@ -360,13 +461,25 @@ function updateMetadata(
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
   verification: VerificationLedgerV1,
-  planChanged: boolean,
+  implementationScope: WorkflowMetadataV3['implementationScope'],
+  authorityChanged: boolean,
   planDecision: V3PlanDecision | null,
+  executionScopeBinding: boolean,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {
-  const status = planDecision === 'plan_only' ? 'planned' : 'in_progress';
-  const currentStep = planDecision === 'governed_execution' ? 5 : 4;
+  const status = executionScopeBinding
+    ? previous.status
+    : planDecision === 'plan_only'
+      ? 'planned'
+      : 'in_progress';
+  const currentStep = executionScopeBinding
+    ? previous.currentStep
+    : planDecision === 'governed_execution'
+      ? 5
+      : 4;
+  const nextPlanVersion =
+    previous.governance.planVersion + (authorityChanged ? 1 : 0);
   const next = parseWorkflowMetadata({
     ...previous,
     status,
@@ -374,19 +487,28 @@ function updateMetadata(
     revision: previous.revision + 1,
     transitionState: 'stable',
     lastOperationId: operationId,
+    implementationScope,
     governance: {
       ...previous.governance,
       requirementsStatus: 'ready',
       requirementsDigest: requirements.contentDigest,
-      planVersion: previous.governance.planVersion + (planChanged ? 1 : 0),
-      planDecision,
-      reviewStatus: planChanged ? 'stale' : previous.governance.reviewStatus,
+      planVersion: nextPlanVersion,
+      planDecision: executionScopeBinding
+        ? previous.governance.planDecision
+        : planDecision,
+      reviewStatus: authorityChanged
+        ? 'stale'
+        : previous.governance.reviewStatus,
       reviewLedgerDigest: review.contentDigest,
-      verificationStatus: planChanged
+      verificationStatus: authorityChanged
         ? 'stale'
         : previous.governance.verificationStatus,
       verificationLedgerDigest: verification.contentDigest,
     },
+    soloExecution:
+      executionScopeBinding && previous.soloExecution !== null
+        ? { ...previous.soloExecution, planVersion: nextPlanVersion }
+        : previous.soloExecution,
     updatedAt,
   });
   assertWorkflowMetadataTransition(previous, next, 'ordinary');

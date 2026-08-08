@@ -172,17 +172,29 @@ export function parseRequirementsLedger(
       'requirements need at least one required acceptance criterion',
     );
   }
+  const confirmedScope = normalizeStrings(value.confirmedScope);
+  const excludedScope = normalizeStrings(value.excludedScope);
   return {
     version: 1,
     goal: value.goal.trim(),
-    confirmedScope: normalizeStrings(value.confirmedScope),
-    excludedScope: normalizeStrings(value.excludedScope),
+    confirmedScope,
+    excludedScope,
     technicalDecisions: normalizeStrings(value.technicalDecisions),
     defaults: normalizeStrings(value.defaults),
     blockingUnknowns: normalizeStrings(value.blockingUnknowns),
     coverage,
     acceptanceCriteria,
   };
+}
+
+/** Validate new authority without making old contradictory ledgers unreadable. */
+export function assertRequirementsScopeConsistent(
+  ledger: Pick<RequirementsLedger, 'confirmedScope' | 'excludedScope'>,
+): void {
+  const confirmed = new Set(ledger.confirmedScope);
+  if (ledger.excludedScope.some((item) => confirmed.has(item))) {
+    throw new Error('requirements scope cannot be both confirmed and excluded');
+  }
 }
 
 export function requirementsAreReady(ledger: RequirementsLedger): boolean {

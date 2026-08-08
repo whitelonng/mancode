@@ -47,6 +47,7 @@ describe('coaching staff agents', () => {
       expect(SCOUT_AGENT.body).toMatch(/调研|investigat/i);
       expect(SCOUT_AGENT.tools).toContain('Read');
       expect(SCOUT_AGENT.tools).not.toContain('Edit');
+      expect(SCOUT_AGENT.tools).not.toContain('Bash');
       expect(SCOUT_AGENT.body).toMatch(/shared\/context\/glossary\.json/);
       expect(SCOUT_AGENT.body).toMatch(/仅建议，不写入术语表/);
     });
@@ -70,6 +71,17 @@ describe('coaching staff agents', () => {
       expect(SCOUT_AGENT.body).not.toMatch(
         /workflow update[^\n]*--status blocked/,
       );
+      expect(SCOUT_AGENT.body).toContain('Decision-impact Findings');
+      expect(SCOUT_AGENT.body).toMatch(
+        /blocking \| recommendable \| defaultable/,
+      );
+      expect(SCOUT_AGENT.body).toMatch(/Finding ID: F-1/);
+      expect(SCOUT_AGENT.body).toMatch(
+        /premise \| scope \| technical \| risk \| acceptance/,
+      );
+      expect(SCOUT_AGENT.body).toMatch(/repository_fact \| domain_hypothesis/);
+      expect(SCOUT_AGENT.body).toMatch(/domain_hypothesis.*聚焦问题/);
+      expect(SCOUT_AGENT.body).toMatch(/发现只提供证据和建议权/);
     });
 
     it('plan coach is read-only and owns pre-confirmation plans', () => {
@@ -102,6 +114,17 @@ describe('coaching staff agents', () => {
       expect(PLAN_COACH_AGENT.body).not.toMatch(
         /workflow update[^\n]*--status blocked/,
       );
+      expect(PLAN_COACH_AGENT.body).toMatch(
+        /范围.*confirmedScope.*验收.*acceptanceCriteria/,
+      );
+      expect(PLAN_COACH_AGENT.body).toMatch(/技术选择.*technicalDecisions/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/明确排除.*excludedScope/);
+      expect(PLAN_COACH_AGENT.body).toMatch(/未接受.*自动塞入 excludedScope/);
+      expect(PLAN_COACH_AGENT.body).toMatch(
+        /domain_hypothesis.*聚焦问题.*不能当成已确认事实/,
+      );
+      expect(PLAN_COACH_AGENT.body).toMatch(/每个实施步骤.*验收 ID/);
+      expect(PLAN_COACH_AGENT.body).toContain('implementationScope');
     });
 
     it('head coach keeps solo escalation advisory and realignment read-only', () => {
@@ -153,6 +176,12 @@ describe('coaching staff agents', () => {
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/本次 diff/);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/证据/);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/最多 3 个/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('授权一致性');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain(
+        'functionalScope.inScope',
+      );
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('implementationScope');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/未经授权.*🔴.*blocker/);
       expect(FILM_ANALYST_OFFENSE_AGENT.tools).not.toContain('Edit');
     });
 
@@ -176,7 +205,8 @@ describe('coaching staff agents', () => {
       expect(rendered.startsWith('---\n')).toBe(true);
       expect(rendered).toMatch(/name: scout/);
       expect(rendered).toMatch(/description:/);
-      expect(rendered).toMatch(/tools: Read, Grep, Glob, Bash/);
+      expect(rendered).toMatch(/tools: Read, Grep, Glob/);
+      expect(rendered).not.toMatch(/tools:.*Bash/);
       // frontmatter 结束后再有空行 + body
       expect(rendered).toMatch(/---\n\n/);
     });

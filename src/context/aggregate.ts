@@ -3,6 +3,7 @@ import { digestCanonicalJson } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
 import {
   type RequirementsLedgerV1,
+  assertRequirementsScopeConsistent,
   requirementsAreReady,
 } from './requirements-ledger.js';
 import {
@@ -18,6 +19,7 @@ import {
 } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
+  assertExecutableImplementationScope,
   workflowMetadataDigest,
 } from './workflow-metadata.js';
 
@@ -185,6 +187,7 @@ export function assertTaskCompletionGate(
 ): void {
   assertTaskAggregateConsistency(input);
   const { metadata, requirements, review, verification } = input;
+  assertRequirementsScopeConsistent(requirements);
   if (metadata.status !== 'in_progress' && metadata.status !== 'planned') {
     throw new Error('only active workflows may pass the task completion gate');
   }
@@ -193,6 +196,12 @@ export function assertTaskCompletionGate(
   }
   if (metadata.governance.planDecision === null) {
     throw new Error('task completion requires a plan decision');
+  }
+  if (
+    metadata.governance.planDecision === 'governed_execution' ||
+    metadata.governance.planDecision === 'solo_handoff'
+  ) {
+    assertExecutableImplementationScope(metadata.implementationScope);
   }
   if (metadata.governance.planDecision === 'solo_handoff') {
     assertSoloHandoffCompletionGate(input, context);

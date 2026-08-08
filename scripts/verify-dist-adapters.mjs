@@ -27,6 +27,7 @@ try {
     '.agents/skills/man/SKILL.md',
     '.github/copilot-instructions.md',
     '.github/prompts/man.prompt.md',
+    '.qoder/commands/man.md',
   ];
 
   for (const relativePath of generatedFiles) {

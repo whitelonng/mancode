@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertRequirementsScopeConsistent,
   parseRequirementsLedger,
   renderRequirementsMarkdown,
   requirementsAreReady,
@@ -105,6 +106,34 @@ describe('requirements ledger', () => {
         }),
       ),
     ).toThrow(/coverage is missing/);
+  });
+
+  it('reads old contradictory scope but rejects it as a new confirmation', () => {
+    const ledger = parseRequirementsLedger(
+      JSON.stringify({
+        version: 1,
+        goal: 'Change login behavior',
+        confirmedScope: ['Update the login form'],
+        excludedScope: ['Update the login form'],
+        technicalDecisions: ['Use the existing stack'],
+        defaults: [],
+        blockingUnknowns: [],
+        coverage: completeCoverage(),
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            description: 'The authorized login behavior works',
+            required: true,
+            method: 'automated',
+          },
+        ],
+      }),
+    );
+
+    expect(ledger.confirmedScope).toEqual(['Update the login form']);
+    expect(() => assertRequirementsScopeConsistent(ledger)).toThrow(
+      /both confirmed and excluded/,
+    );
   });
 });
 

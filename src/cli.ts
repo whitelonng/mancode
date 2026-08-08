@@ -259,6 +259,10 @@ program
     '--file <path>',
     'Semantic requirements JSON, plan Markdown, or ledger input file',
   )
+  .option(
+    '--scope-file <path>',
+    'Plan implementation scope JSON {include,exclude,modules}',
+  )
   .option('--acceptance <id>', 'Acceptance criterion id (for example AC-1)')
   .option('--method <method>', 'Verification method: automated or manual')
   .option('--result <result>', 'Verification result')

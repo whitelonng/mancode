@@ -70,10 +70,17 @@ describe('V3 Context Resolver', () => {
     expect(result.pack.activeTask).toMatchObject({
       taskRef: { namespace: 'shared', taskId: TASK_ID },
       revision: 1,
+      implementationScope: {
+        include: ['src/**'],
+        exclude: ['src/generated/**'],
+      },
     });
     expect(result.pack.governance.requirements).toMatchObject({
       taskRef: { namespace: 'shared', taskId: TASK_ID },
       status: 'draft',
+      functionalScope: {
+        outOfScope: ['Do not change account recovery.'],
+      },
     });
     expect(result.pack.governance.review).toBeNull();
     expect(result.pack.snapshot).toMatchObject({
@@ -94,17 +101,48 @@ describe('V3 Context Resolver', () => {
       ]),
     );
 
-    await expect(
-      fixture.resolver.resolve({
-        session: fixture.session,
-        taskRef: `shared:${TASK_ID}`,
-        level: 'task',
-        purpose: 'implement',
-        compatibility: fixture.compatibility,
-        codeHead: 'abc1234',
-        intent: 'mutate',
-      }),
-    ).resolves.toMatchObject({ mutatingAllowed: true });
+    const implementation = await fixture.resolver.resolve({
+      session: fixture.session,
+      taskRef: `shared:${TASK_ID}`,
+      level: 'task',
+      purpose: 'implement',
+      compatibility: fixture.compatibility,
+      codeHead: 'abc1234',
+      intent: 'mutate',
+    });
+    expect(implementation).toMatchObject({ mutatingAllowed: true });
+    expect(implementation.pack.governance.requirements).toMatchObject({
+      functionalScope: {
+        outOfScope: ['Do not change account recovery.'],
+      },
+    });
+    expect(implementation.pack.activeTask).toMatchObject({
+      implementationScope: { include: ['src/**'] },
+    });
+
+    const review = await fixture.resolver.resolve({
+      session: fixture.session,
+      taskRef: `shared:${TASK_ID}`,
+      level: 'task',
+      purpose: 'review',
+      compatibility: fixture.compatibility,
+      codeHead: 'abc1234',
+    });
+    expect(review.pack).toMatchObject({
+      activeTask: {
+        implementationScope: {
+          include: ['src/**'],
+          exclude: ['src/generated/**'],
+        },
+      },
+      governance: {
+        requirements: {
+          functionalScope: {
+            outOfScope: ['Do not change account recovery.'],
+          },
+        },
+      },
+    });
   });
 
   it('returns a minimal repair envelope for a durable unfinished operation and refuses mutation', async () => {
@@ -372,7 +410,10 @@ function requirementsLedger(): RequirementsLedgerV1 {
     revision: 1,
     status: 'draft',
     goal: 'Plan a safe rate limit.',
-    functionalScope: { inScope: [], outOfScope: [] },
+    functionalScope: {
+      inScope: [],
+      outOfScope: ['Do not change account recovery.'],
+    },
     technicalDecisions: [],
     defaults: [],
     coverage: [],
@@ -437,7 +478,7 @@ function workflowMetadata(
   const scope = {
     source: 'explicit' as const,
     include: ['src/**'],
-    exclude: [],
+    exclude: ['src/generated/**'],
     modules: [],
   };
   return {

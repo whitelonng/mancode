@@ -361,6 +361,11 @@ export const OPERATION_DEFINITIONS: Record<
         expectedRevisionPrefixes: ['claim:'],
         requiredLockPrefixes: ['claim:'],
       }),
+      write(
+        'mark-review-verification-stale',
+        ['review:', 'verification:', 'task:'],
+        ['task:'],
+      ),
       write('update-metadata-scope', ['task:'], ['task:']),
       write('activate-successor-claims', ['task:'], ['task:'], {
         expectedRevisionPrefixes: ['claim:'],

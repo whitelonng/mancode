@@ -73,6 +73,23 @@ describe('requirements ledger V3 contract', () => {
       ),
     ).toThrow(/MANCODE_PRIVACY_BLOCKED/);
   });
+
+  it('keeps previously persisted contradictory scope readable for migration or repair', () => {
+    expect(
+      parseRequirementsLedger(
+        withDigest({
+          ...ledger(),
+          functionalScope: {
+            inScope: ['Limit repeated login attempts.'],
+            outOfScope: ['Limit repeated login attempts.'],
+          },
+        }),
+      ).functionalScope,
+    ).toEqual({
+      inScope: ['Limit repeated login attempts.'],
+      outOfScope: ['Limit repeated login attempts.'],
+    });
+  });
 });
 
 function ledger(): RequirementsLedgerV1 {

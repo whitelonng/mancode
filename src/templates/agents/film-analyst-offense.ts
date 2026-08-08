@@ -27,6 +27,7 @@ export const FILM_ANALYST_OFFENSE_AGENT: AgentSpec = {
 - 最后给评分（1-10）+ 通过 / 不通过
 - 只审查本次 diff、用户需求和直接受影响路径；最多 3 个新问题
 - 每个问题必须包含改动行、可核查证据和用户影响。没有证据的 checklist 项不输出
+- 先做授权一致性审查：V3 对照 requirements 的 \`functionalScope.inScope\` / \`functionalScope.outOfScope\`、\`technicalDecisions\`、\`defaults\` 和 \`acceptanceCriteria\`；legacy 对照语义等价的 \`confirmedScope\` / \`excludedScope\`。同时读取 Context Pack 的 \`activeTask.implementationScope\`，逐个检查实际改动路径是否落在 include 且不匹配 exclude；modules 只是归属标签，不单独授权文件写入。任何未经授权、触碰行为排除项、超出文件边界或无法追溯到验收的改动一律记为 🔴 scope blocker
 
 ## 你不写代码
 
@@ -36,6 +37,7 @@ export const FILM_ANALYST_OFFENSE_AGENT: AgentSpec = {
 
 | 维度 | 检查什么 |
 |---|---|
+| **授权一致性** | 每一处改动能否同时追溯到已确认行为/验收 ID，并位于 implementationScope 文件边界内；是否实现了被拒绝、延期或未讨论的建议 |
 | **可读性** | 命名清晰、结构合理、注释恰当（只在 WHY 非显然时） |
 | **可维护性** | 模块边界、耦合度、扩展性 |
 | **风格一致性** | 是否匹配项目已有风格（即使你不认同） |

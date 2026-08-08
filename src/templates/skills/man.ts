@@ -19,7 +19,7 @@ export const MAN_SKILL: SkillSpec = {
 
 ### Step 1: Scout 调研
 
-先读 \`.mancode/shared/context/glossary.json\`（若存在），调研、报告与后续沟通优先使用其中已确认术语。调用 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”，并按可验证事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；字段不相关或无法验证时可以省略，不能编造。Current Behavior Evidence 至少有一个可复现观察和仓库路径、测试或命令证据；owner 写置信度与冲突；source of truth 区分 authority 和 derived copy；兼容影响覆盖旧 workflow、legacy fixture、transport、迁移和 rollback。运行 \`mancode workflow update <taskId> --step 2\`。
+先读 \`.mancode/shared/context/glossary.json\`（若存在），调研、报告与后续沟通优先使用其中已确认术语。调用只读 \`scout\`，写 \`scout-report.md\`。报告必须包含“**不确定的地方**”和最多 3 个会改变决策的 Decision-impact Findings；使用稳定 ID F-1…F-3，标注 Type：premise / scope / technical / risk / acceptance，并区分 repository_fact 与 domain_hypothesis。前者必须有仓库证据；后者只根据端到端目标和常见领域失败/边界路径提出聚焦问题，不能写成事实。按可验证事实补充 Current Behavior Evidence、Candidate Semantic Owner、Source of Truth、Historical / Compatibility Impact；字段不相关或无法验证时可以省略，不能编造。Current Behavior Evidence 至少有一个可复现观察和仓库路径、测试或调用方提供的命令证据；owner 写置信度与冲突；source of truth 区分 authority 和 derived copy；兼容影响覆盖旧 workflow、legacy fixture、transport、迁移和 rollback。主动核验用户前提并指出关键盲点，但发现只产生建议权，不产生执行权。运行 \`mancode workflow update <taskId> --step 2\`。
 
 ### Step 2: 需求澄清
 
@@ -29,6 +29,8 @@ export const MAN_SKILL: SkillSpec = {
 - **blocking**：技术栈、核心范围、持久化、主要交互、关键性能/兼容性/安全目标等会改变方案的决策，必须确认。
 - **recommendable**：有合适方案时直接给 2–3 个方案、优缺点和明确推荐，让用户接受或调整；不要只把选择题抛给用户。
 - **defaultable**：命名、微小样式等低影响细节，可采用默认值，但写明默认值和理由。
+
+为每个 F-1…F-3 明确且按类型处置：blocking 写入 \`blockingUnknowns\`；用户接受的范围或行为写入 \`confirmedScope\` 并补上相应 \`acceptanceCriteria\`；用户接受的技术选择写入 \`technicalDecisions\`；只有用户明确排除的行为写入 \`excludedScope\`；\`defaults\` 只能描述已确认范围内低影响、可逆且符合仓库约定的实现细节，不能扩大范围。未接受的建议仍无执行权，但不得自动塞入 \`excludedScope\`，也不得复制进所有字段。
 
 按任务实际适用范围检查：用户目标与平台、核心流程、首期范围、排除项、技术与运行约束、数据/状态/集成、性能/兼容性/安全、可验证完成标准。连续澄清没有减少 blocking 项时，不散问；让用户选择缩小首期范围、接受列明的推荐默认值或暂停。
 
@@ -40,7 +42,7 @@ export const MAN_SKILL: SkillSpec = {
 
 Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope；逐项写明 complexity bearer 及可观察成本；给出且只给出一个 recommendation、拒绝其他方向的主要理由和 stop conditions。简单任务没有真实替代时只列一个方向并说明原因，不制造伪选项。两个同等 owner 候选或 authority writer 未决时返回 \`NEEDS_CLARIFICATION\`。
 
-计划必须含需求摘要、任务分级、技术选择及理由、模块索引、复用资源与 scout 行号、核心行为、最小策略、不做什么、步骤、风险/回退、完成定义、真实验证与 smoke test、预估和非阻塞默认值。入口/流程跨平台不一致、owner/source of truth 不清、状态或 contract 语义变化、跨 workflow/child/team/transport，或迁移/兼容影响超过一个版本时，在 \`plan.md\` 内加入可选 Domain Matrix，列出 Domain、当前行为/证据、候选 owner、source of truth、contract/state 影响、compatibility/history、validation 和 rollback/stop；它不是新的 authority。首次计划写入成功后运行 \`mancode workflow update <taskId> --step 4\`；重写计划时保持 Step 4，运行 \`--plan-version <当前版本+1>\`，不得直接编辑 planVersion。
+计划必须含需求摘要、任务分级、技术选择及理由、模块索引、复用资源与 scout 行号、核心行为、最小策略、不做什么、步骤、风险/回退、完成定义、真实验证与 smoke test、预估和非阻塞默认值，还要有用户可见的 \`implementationScope\`：repo-relative \`include\`、\`exclude\`、\`modules\`。include 是文件写入上限且必须非空，exclude 优先，modules 只描述归属、不单独授权。每个实施步骤必须映射到已确认范围或验收 ID；优先复用已有代码和依赖，选择能满足验收的最小、直接、可验证方案，不为单次用途新增抽象、可配置性或推测性防御。入口/流程跨平台不一致、owner/source of truth 不清、状态或 contract 语义变化、跨 workflow/child/team/transport，或迁移/兼容影响超过一个版本时，在 \`plan.md\` 内加入可选 Domain Matrix，列出 Domain、当前行为/证据、候选 owner、source of truth、contract/state 影响、compatibility/history、validation 和 rollback/stop；它不是新的 authority。首次计划与边界通过 CLI 一起写入后运行 \`mancode workflow update <taskId> --step 4\`；兼容旧入口重写计划时保持 Step 4，使用 \`--plan-version <当前版本+1>\`，并让旧审查/验证失效，不得直接编辑 planVersion。
 
 ### Step 4: 计划关卡
 
@@ -62,7 +64,9 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 
 ### Step 5: 实施
 
-调用 \`head-coach\` 按确认计划实施。多文件、新模块或高风险任务可建议 worktree，必须先获用户同意。实施完成后通过 CLI 更新至 Step 6。
+调用 \`head-coach\` 按确认计划实施。先明确仍存在的实质假设和可验证成功标准；每一处改动都必须追溯到已确认范围、技术决策或验收 ID。只改为满足计划所必需的文件，不顺手重构、格式化、清理相邻代码或增加未请求功能。多文件、新模块或高风险任务可建议 worktree，必须先获用户同意。实施完成后通过 CLI 更新至 Step 6。
+
+若升级前已经进入执行阶段的本地 Man 任务缺少可执行 \`implementationScope\`，完成门仍会拒绝。先向用户展示完整边界并等待明确确认，再使用内容完全不变的当前 plan 和 \`--scope-file\` 重新执行 plan revise。这个兼容补绑只允许递增 plan authority 并使旧 review/verification 失效；不得修改 plan、行为、验收或已经可执行的边界。
 
 ### Step 6: 自测、诊断与回归
 
@@ -74,7 +78,7 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 
 ### Step 7: Film #1 代码质量审查与修复
 
-未跳过 review 时调用 \`film-analyst-offense\`，只审查本次 diff 的行为正确性、复用、复杂度和测试，写 \`film-report-1.md\`。每条 finding 必须引用改动行、给出证据和用户影响；最多 3 个新 finding。用稳定 ID（如 Q1）标记 🔴 blocker，并运行 \`mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1,Q2\`；没有 blocker 时传空字符串。此时不修复，先完成所需审查领域，再更新至 Step 8。
+未跳过 review 时调用 \`film-analyst-offense\`，先把实际 diff 对照 \`confirmedScope\`、\`excludedScope\`、\`technicalDecisions\`、\`acceptanceCriteria\` 和 \`implementationScope\` 做授权一致性审查，再检查行为正确性、复用、复杂度和测试，写 \`film-report-1.md\`。实现被拒绝、延期、未讨论、无法追溯到已确认行为，或改动路径落在 include 外 / 匹配 exclude 的内容一律作为 🔴 scope blocker。每条 finding 必须引用改动行、给出证据和用户影响；最多 3 个新 finding。用稳定 ID（如 Q1）标记 🔴 blocker，并运行 \`mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1,Q2\`；没有 blocker 时传空字符串。此时不修复，先完成所需审查领域，再更新至 Step 8。
 
 ### Step 8: Film #2 安全与边界审查
 

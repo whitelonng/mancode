@@ -949,6 +949,11 @@ describe('git-ref coordination across independent clones', () => {
       metadata: {
         revision: created.metadata.revision + 2,
         transitionState: 'stable',
+        governance: {
+          planVersion: created.metadata.governance.planVersion + 1,
+          reviewStatus: 'stale',
+          verificationStatus: 'stale',
+        },
       },
       remoteRevision: 3,
       materialization: { status: 'updated' },
@@ -960,6 +965,8 @@ describe('git-ref coordination across independent clones', () => {
         revision: created.metadata.revision + 2,
         implementationScope: { include: ['docs/**', 'src/**', 'tests/**'] },
       },
+      review: { status: 'stale', lastOperationId: id(43) },
+      verification: { status: 'stale', lastOperationId: id(43) },
     });
 
     const blocked = await updateGitRefWorkflow({

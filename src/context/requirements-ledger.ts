@@ -328,6 +328,23 @@ function parseFunctionalScope(
   };
 }
 
+/**
+ * Rejects contradictory scope at an authority-changing gate while keeping
+ * older persisted ledgers readable for repair and migration.
+ */
+export function assertRequirementsScopeConsistent(
+  ledger: Pick<RequirementsLedgerV1, 'functionalScope'>,
+): void {
+  const inScope = new Set(
+    ledger.functionalScope.inScope.map((item) => item.trim()),
+  );
+  if (
+    ledger.functionalScope.outOfScope.some((item) => inScope.has(item.trim()))
+  ) {
+    throw new Error('MANCODE_REQUIREMENTS_SCOPE_CONFLICT');
+  }
+}
+
 function parseTechnicalDecisions(
   value: unknown,
 ): RequirementsLedgerV1['technicalDecisions'] {

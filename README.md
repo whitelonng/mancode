@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.4-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.4" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.5-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.5" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder" />
 </p>
 
@@ -124,7 +124,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.5.4。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.5.5。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder adapter 均已接入。
 
 需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -429,8 +429,9 @@ mancode workflow list --json
 mancode workflow show <namespace:ULID> --json
 mancode context resume <local:ULID|shared:ULID> --session <id>
 mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>
-mancode workflow plan <namespace:ULID> revise --file <plan.md> --expected-revision <n> --session <id>
+mancode workflow plan <namespace:ULID> revise --file <plan.md> --scope-file <scope.json> --expected-revision <n> --session <id>
 mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|governed_execution> --expected-revision <n> --session <id>
+mancode workflow scope change <shared:ULID> --file <scope.json> --expected-revision <n> --session <id>
 mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
@@ -455,7 +456,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.5.4
+mancode v0.5.5
 
 Project:     my-app
 Runtime:     ready
@@ -484,13 +485,21 @@ mancode team identity create --name "Your name"
 mancode context session new --client codex
 mancode workflow create man "refactor auth module" --session <id>
 mancode workflow requirements <local:ULID> finalize --file requirements.json --expected-revision <n> --session <id>
-mancode workflow plan <local:ULID> revise --file plan.md --expected-revision <n> --session <id>
+mancode workflow plan <local:ULID> revise --file plan.md --scope-file scope.json --expected-revision <n> --session <id>
 mancode workflow plan <local:ULID> confirm --plan-decision <plan_only|governed_execution> --expected-revision <n> --session <id>
+mancode workflow scope change <shared:ULID> --file scope.json --expected-revision <n> --session <id>
 mancode workflow review <local:ULID> apply --file review-ledger.json --expected-revision <n> --session <id>
 mancode workflow verify <local:ULID> apply --file verification-ledger.json --expected-revision <n> --session <id>
 mancode workflow complete <local:ULID> --expected-revision <n> --session <id>
 mancode context compact --dry-run
 ```
+
+`scope.json` 使用 `{ "include": ["src/**"], "exclude": ["src/generated/**"], "modules": [] }`。
+`include` 是执行文件边界且必须非空；没有明确边界时，`governed_execution` 与 Solo handoff
+都会被拒绝。只保留计划时可以暂不提供边界。升级前已经进入执行阶段、但旧任务缺少
+边界时，先向用户展示并确认完整 `scope.json`，再用原样未修改的当前 `plan.md` 重新运行
+同一条 `workflow plan ... revise --scope-file` 命令；该兼容补绑会提升 plan version 并使旧
+review/verification 失效，不允许借机修改计划、行为或验收。
 
 ### `mancode manps`
 
