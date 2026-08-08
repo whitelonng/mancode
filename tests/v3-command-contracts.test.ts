@@ -832,6 +832,15 @@ describe('V3 CLI command contracts', () => {
 
       const planPath = path.join(root, 'plan.md');
       await writeFile(planPath, '# V3 plan\n\n1. Commit the operation.\n');
+      const scopePath = path.join(root, 'scope.json');
+      await writeFile(
+        scopePath,
+        JSON.stringify({
+          include: ['src/**', 'tests/**'],
+          exclude: [],
+          modules: [],
+        }),
+      );
       expect(
         await workflow(root, 'plan', [task, 'revise'], {
           session: sessionId,
@@ -839,6 +848,7 @@ describe('V3 CLI command contracts', () => {
           expectedRevision: '2',
           planDecision: 'governed_execution',
           file: planPath,
+          scopeFile: scopePath,
           json: true,
         }),
       ).toBe(0);
@@ -846,6 +856,7 @@ describe('V3 CLI command contracts', () => {
         metadata: {
           revision: number;
           currentStep: number;
+          implementationScope: { source: string; include: string[] };
           governance: { planDecision: string; planVersion: number };
         };
         operation: { type: string; state: string };
@@ -853,6 +864,10 @@ describe('V3 CLI command contracts', () => {
       expect(planResult.metadata).toMatchObject({
         revision: 3,
         currentStep: 5,
+        implementationScope: {
+          source: 'explicit',
+          include: ['src/**', 'tests/**'],
+        },
         governance: { planDecision: 'governed_execution', planVersion: 2 },
       });
       expect(planResult.operation).toMatchObject({

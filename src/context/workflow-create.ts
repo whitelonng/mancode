@@ -826,11 +826,22 @@ function initialScope(
     };
     return { ...inherited, digest: digestCanonicalJson(inherited) };
   }
+  if (explicitScope === undefined) {
+    // An absent boundary is migration-compatible state, never permission to
+    // write anywhere. A plan revision must make it explicit before execution.
+    const unspecified = {
+      source: 'legacy_unspecified' as const,
+      include: [],
+      exclude: [],
+      modules: [],
+    };
+    return { ...unspecified, digest: digestCanonicalJson(unspecified) };
+  }
   const explicit = {
     source: 'explicit' as const,
-    include: [...(explicitScope?.include ?? [])],
-    exclude: [...(explicitScope?.exclude ?? [])],
-    modules: [...(explicitScope?.modules ?? [])],
+    include: [...(explicitScope.include ?? [])],
+    exclude: [...(explicitScope.exclude ?? [])],
+    modules: [...(explicitScope.modules ?? [])],
   };
   return { ...explicit, digest: digestCanonicalJson(explicit) };
 }

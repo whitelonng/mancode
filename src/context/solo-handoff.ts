@@ -21,10 +21,14 @@ import {
   buildTaskAggregateManifest,
 } from './aggregate.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
-import { requirementsAreReady } from './requirements-ledger.js';
+import {
+  assertRequirementsScopeConsistent,
+  requirementsAreReady,
+} from './requirements-ledger.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import {
   type WorkflowMetadataV3,
+  assertExecutableImplementationScope,
   assertWorkflowMetadataTransition,
   parseWorkflowMetadata,
 } from './workflow-metadata.js';
@@ -345,6 +349,8 @@ function assertSoloStartEligible(
   ) {
     throw new Error('MANCODE_SOLO_HANDOFF_NOT_ELIGIBLE');
   }
+  assertRequirementsScopeConsistent(requirements);
+  assertExecutableImplementationScope(metadata.implementationScope);
 }
 
 function assertSoloCompletionEligible(

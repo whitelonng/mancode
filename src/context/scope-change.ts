@@ -48,6 +48,8 @@ import { assertSharedTextSafe } from './privacy.js';
 import { V3ContextStore } from './store.js';
 import {
   assertTaskCodeHeadUnchanged,
+  markTaskReviewStale,
+  markTaskVerificationStale,
   nextTaskHeadFence,
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
@@ -126,6 +128,16 @@ export async function changeV3WorkflowScope(
       context.operationId,
       timestamp,
     );
+    const review = markTaskReviewStale(
+      context.task.review,
+      context.operationId,
+      timestamp,
+    );
+    const verification = markTaskVerificationStale(
+      context.task.verification,
+      context.operationId,
+      timestamp,
+    );
     const branch = (await readCheckoutBranch(context.projectRoot)) ?? 'HEAD';
     const checkpoint = buildScopeChangedCheckpoint(
       context,
@@ -134,12 +146,17 @@ export async function changeV3WorkflowScope(
       input.checkpointSummary,
       input.checkpointNextAction,
       branch,
+      pendingMetadata.governance.planVersion + 1,
+      review.contentDigest,
+      verification.contentDigest,
       timestamp,
     );
     const metadata = completeScopeChangeMetadata(
       pendingMetadata,
       scope,
       checkpoint,
+      review.contentDigest,
+      verification.contentDigest,
       context.operationId,
       timestamp,
     );
@@ -176,8 +193,8 @@ export async function changeV3WorkflowScope(
     const aggregate = buildTaskAggregateManifest({
       metadata,
       requirements: context.task.requirements,
-      review: context.task.review,
-      verification: context.task.verification,
+      review,
+      verification,
       planDigest: context.task.plan?.digest ?? null,
       latestCheckpoint: checkpoint,
     });
@@ -227,6 +244,20 @@ export async function changeV3WorkflowScope(
               before,
               claim,
             });
+          }),
+          createTaskAuthorityFileRecoveryAction({
+            stepId: 'mark-review-verification-stale',
+            taskRef,
+            fileName: 'review-ledger.json',
+            beforeContent: serializeTaskAuthority(context.task.review),
+            targetContent: serializeTaskAuthority(review),
+          }),
+          createTaskAuthorityFileRecoveryAction({
+            stepId: 'mark-review-verification-stale',
+            taskRef,
+            fileName: 'verification-ledger.json',
+            beforeContent: serializeTaskAuthority(context.task.verification),
+            targetContent: serializeTaskAuthority(verification),
           }),
           createTaskAuthorityFileRecoveryAction({
             stepId: 'update-metadata-scope',
@@ -312,6 +343,24 @@ export async function changeV3WorkflowScope(
       }
       await updateClaim(context.homeStore, claim, previous.revision);
     }
+
+    journal = await advanceTaskOperation(
+      context,
+      journal,
+      'mark-review-verification-stale',
+      false,
+    );
+    await assertTaskCodeHeadUnchanged(context.projectRoot, context.codeHead);
+    await writeTaskAuthorityFile(
+      context,
+      'review-ledger.json',
+      `${JSON.stringify(review, null, 2)}\n`,
+    );
+    await writeTaskAuthorityFile(
+      context,
+      'verification-ledger.json',
+      `${JSON.stringify(verification, null, 2)}\n`,
+    );
 
     journal = await advanceTaskOperation(
       context,
@@ -510,6 +559,10 @@ export function normalizeImplementationScope(
     exclude: normalizeScopeValues(value.exclude, 'exclude', true),
     modules: normalizeScopeValues(value.modules, 'modules', false),
   };
+  const included = new Set(scope.include);
+  if (scope.exclude.some((item) => included.has(item))) {
+    throw new Error('MANCODE_SCOPE_INCLUDE_EXCLUDE_CONFLICT');
+  }
   return { ...scope, digest: digestCanonicalJson(scope) };
 }
 
@@ -570,6 +623,8 @@ function completeScopeChangeMetadata(
   previous: WorkflowMetadataV3,
   scope: WorkflowMetadataV3['implementationScope'],
   checkpoint: CheckpointV1,
+  reviewLedgerDigest: string,
+  verificationLedgerDigest: string,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {
@@ -578,6 +633,14 @@ function completeScopeChangeMetadata(
     revision: previous.revision + 1,
     transitionState: 'stable',
     implementationScope: scope,
+    governance: {
+      ...previous.governance,
+      planVersion: previous.governance.planVersion + 1,
+      reviewStatus: 'stale',
+      reviewLedgerDigest,
+      verificationStatus: 'stale',
+      verificationLedgerDigest,
+    },
     latestCheckpointRef: {
       taskRef: checkpoint.taskRef,
       kind: 'checkpoint',
@@ -597,6 +660,9 @@ function buildScopeChangedCheckpoint(
   summary: string | undefined,
   nextAction: string | undefined,
   branch: string,
+  planVersion: number,
+  reviewLedgerDigest: string,
+  verificationLedgerDigest: string,
   timestamp: string,
 ): CheckpointV1 {
   return parseCheckpoint({
@@ -617,9 +683,9 @@ function buildScopeChangedCheckpoint(
       'Changed the implementation scope and replaced affected coordination claims.',
     governance: {
       requirementsDigest: context.task.requirements.contentDigest,
-      planVersion: pendingMetadata.governance.planVersion,
-      reviewLedgerDigest: context.task.review.contentDigest,
-      verificationLedgerDigest: context.task.verification.contentDigest,
+      planVersion,
+      reviewLedgerDigest,
+      verificationLedgerDigest,
     },
     nextAction:
       nextAction ??
@@ -712,6 +778,9 @@ function scopeChangeExpectedRevisions(
 ): Record<string, number> {
   const expected: Record<string, number> = {
     [taskEntityKey(context.taskRef)]: context.task.metadata.revision,
+    [`review:${context.taskRef.taskId}`]: context.task.review.revision,
+    [`verification:${context.taskRef.taskId}`]:
+      context.task.verification.revision,
     [`checkpoint:${checkpointId}`]: 0,
   };
   for (const claim of predecessors) {

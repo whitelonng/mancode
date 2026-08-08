@@ -367,6 +367,11 @@ describe('V3 local workflow reframe', () => {
       sessionId: soloActors.sessionId,
       expectedTaskRevision: soloRequirements.metadata.revision,
       plan: '# Plan\n\n1. Implement the confirmed local change.\n',
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: [],
+        modules: [],
+      },
       operationId: id(43),
       now: NOW,
     });
@@ -589,6 +594,11 @@ async function assertChildReframeRace(
     sessionId: actors.sessionId,
     expectedTaskRevision: finalized.metadata.revision,
     plan: '# Plan\n\n1. Implement and verify the confirmed change.\n',
+    implementationScope: {
+      include: ['src/**', 'tests/**'],
+      exclude: [],
+      modules: [],
+    },
     planDecision: 'governed_execution',
     operationId: id(203),
     now: NOW,
@@ -842,6 +852,11 @@ async function assertSoloReframeRace(
     sessionId: actors.sessionId,
     expectedTaskRevision: finalized.metadata.revision,
     plan: '# Plan\n\n1. Execute the bounded solo change.\n',
+    implementationScope: {
+      include: ['src/**', 'tests/**'],
+      exclude: [],
+      modules: [],
+    },
     operationId: id(403),
     now: NOW,
   });

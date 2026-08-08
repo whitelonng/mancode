@@ -11,6 +11,43 @@ mancode 的实现原则是：外科手术式修改、可验证、可恢复。
 - adapter 只管理自己的文件或明确标记的托管区。
 - 探测失败应安全降级；业务一致性失败应停止写入并进入 repair。
 
+## 主动发现与执行授权
+
+受管 `/man` 与 `/manteam` 把主动发现作为只读证据阶段，而不是隐式扩权：
+
+- Scout 保持只读，核验用户前提并只报告最多三个会改变目标、范围、验收、架构或
+  风险的高影响项。finding 使用稳定 ID `F-1`…`F-3` 和类型 `premise`、`scope`、
+  `technical`、`risk` 或 `acceptance`，并区分有仓库证据的 `repository_fact` 与尚需
+  用户确认的 `domain_hypothesis`。后者用于覆盖行业失败路径和边界条件，但只能触发
+  聚焦问题，不能被写成事实；发现只有证据与建议权。
+- 每个 finding 按语义只落到合适的位置：blocking 进入 `blockingUnknowns`；用户接受
+  的范围或行为进入 V3 `functionalScope.inScope`（legacy `confirmedScope`）和匹配的
+  `acceptanceCriteria`；接受的技术选择进入 `technicalDecisions`；只有明确排除的行为
+  进入 V3 `functionalScope.outOfScope`（legacy `excludedScope`）；低影响、可逆细节才
+  进入 `defaults`。未接受的建议仍未获授权，但不会被自动复制到排除范围或所有字段。
+- confirmed requirements、confirmed plan 与同次计划修订绑定的 `implementationScope`
+  共同构成现有执行授权。`include` 是 repo-relative 文件写入上限，`exclude` 优先，
+  `modules` 只描述归属、不单独授权写文件；没有非空 include 时不能开始 governed
+  execution 或 Solo handoff。
+- 升级前已经进入执行阶段的本地 Man 任务若缺少可执行 scope，完成门同样拒绝它。
+  用户确认完整边界后，可以用内容完全不变的当前 plan 和 `--scope-file` 走一次兼容
+  plan revision；该操作只补绑 scope、递增 plan version、使旧 review/verification 失效，
+  不允许改变 plan、行为、验收或已存在的非空边界。
+- 团队执行中仅调整文件边界、且不改变已确认行为或验收时，必须由用户明确同意后走
+  既有 `workflow scope change` mutation。它递增 plan authority、使旧 review/verification
+  失效并重签兼容 claim；行为或验收变化仍走 reframe。
+- 实施前显式写明实质假设和可验证成功标准，优先复用现有代码和依赖，选择满足验收
+  的最小直接方案；每一处改动必须同时能追溯到已确认行为/验收并位于文件边界内。
+- 实施中新发现的范围外问题只允许返回只读 `NEEDS_REALIGNMENT`。用户明确同意
+  reframe 前，不得修改对应区域。
+- review 必须把实际 diff 同时对照 requirements 与 `implementationScope`；未经授权、
+  触碰行为排除项、落在 include 外或匹配 exclude 的改动都是 blocker，不能作为
+  “顺手修复”带入任务。
+
+默认 Solo 不主动运行这套深入发现；普通小任务仍保持轻量。Solo 接手已有 `/man`
+计划时必须继承其 requirements、plan 和 `implementationScope`，不能重新规划或扩权。
+这些状态写入既有 ledger、plan revision 和 workflow metadata，不建立第二套提示词 authority。
+
 ## 代码地图
 
 | 目录 | 职责 |

@@ -42,6 +42,7 @@ import {
 } from '../runtime/task-operation.js';
 import { detectTeamAssessmentSignals } from '../system/detect-team.js';
 import {
+  assertRequirementsScopeConsistent,
   parseRequirementsLedger,
   readRequirementsLedger,
   requirementsAreReady,
@@ -140,6 +141,7 @@ export interface WorkflowOptions {
   to?: string;
   complete?: boolean;
   file?: string;
+  scopeFile?: string;
   acceptance?: string;
   method?: string;
   result?: string;
@@ -1235,7 +1237,7 @@ async function workflowPlanV3(
     return printV3Error(
       options.json,
       'MANCODE_PLAN_ARGUMENT_INVALID',
-      'Use: workflow plan <namespace:ULID> revise --expected-revision <n> --file <path>, or confirm --expected-revision <n> --plan-decision <plan_only|governed_execution>.',
+      'Use: workflow plan <namespace:ULID> revise --expected-revision <n> --file <path> [--scope-file <path>], or confirm --expected-revision <n> --plan-decision <plan_only|governed_execution>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -1264,6 +1266,14 @@ async function workflowPlanV3(
       EXIT_INVALID_ARG,
     );
   }
+  if (action === 'confirm' && options.scopeFile !== undefined) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_SCOPE_REVISE_REQUIRED',
+      'Bind implementation scope with workflow plan revise before confirmation.',
+      EXIT_INVALID_ARG,
+    );
+  }
   try {
     const project = await readV3CommandProject(rootDir);
     const taskRef = parseTaskRef(task);
@@ -1283,12 +1293,20 @@ async function workflowPlanV3(
     if (plan === undefined || plan === null) {
       throw new Error('MANCODE_PLAN_FILE_REQUIRED');
     }
+    const implementationScope =
+      action === 'revise' && options.scopeFile !== undefined
+        ? await readWorkflowJsonInputFile(
+            project.projectRoot,
+            options.scopeFile,
+          )
+        : undefined;
     const result = await reviseV3Plan({
       projectRoot: project.projectRoot,
       taskRef,
       sessionId: session.sessionId,
       expectedTaskRevision,
       plan,
+      implementationScope,
       planDecision: parseV3PlanDecision(options.planDecision),
     });
     return printV3Result(options.json, {
@@ -1631,6 +1649,7 @@ async function workflowRequirements(
       : path.resolve(rootDir, options.file);
     const input = await readFile(inputPath, 'utf-8');
     const requirements = parseRequirementsLedger(input);
+    assertRequirementsScopeConsistent(requirements);
     [originalJson, originalMarkdown, originalMetadata] = await Promise.all([
       readOptionalText(jsonPath),
       readOptionalText(markdownPath),

@@ -11,7 +11,11 @@ import {
   normalizeImplementationScope,
   scopeSuccessorClaimId,
 } from '../context/scope-change.js';
-import { assertTaskCodeHeadUnchanged } from '../context/task-mutation.js';
+import {
+  assertTaskCodeHeadUnchanged,
+  markTaskReviewStale,
+  markTaskVerificationStale,
+} from '../context/task-mutation.js';
 import {
   type TaskRef,
   parseTaskRefValue,
@@ -173,10 +177,22 @@ export async function changeGitRefWorkflowScope(
       operationId,
       timestamp,
     );
+    const review = markTaskReviewStale(
+      opened.context.task.review,
+      operationId,
+      timestamp,
+    );
+    const verification = markTaskVerificationStale(
+      opened.context.task.verification,
+      operationId,
+      timestamp,
+    );
     const metadata = scopeChangedMetadata(
       pendingMetadata,
       scope,
       checkpointId,
+      review.contentDigest,
+      verification.contentDigest,
       operationId,
       timestamp,
     );
@@ -187,6 +203,9 @@ export async function changeGitRefWorkflowScope(
       summary: input.checkpointSummary,
       nextAction: input.checkpointNextAction,
       codeRef: opened.bundle.codeRef,
+      planVersion: pendingMetadata.governance.planVersion + 1,
+      reviewLedgerDigest: review.contentDigest,
+      verificationLedgerDigest: verification.contentDigest,
       timestamp,
     });
     const finalMetadata = parseWorkflowMetadata({
@@ -200,8 +219,8 @@ export async function changeGitRefWorkflowScope(
     const aggregate = buildTaskAggregateManifest({
       metadata: finalMetadata,
       requirements: opened.context.task.requirements,
-      review: opened.context.task.review,
-      verification: opened.context.task.verification,
+      review,
+      verification,
       planDigest: opened.context.task.plan?.digest ?? null,
       latestCheckpoint: checkpoint,
     });
@@ -224,6 +243,8 @@ export async function changeGitRefWorkflowScope(
       task: {
         ...opened.context.task,
         metadata: finalMetadata,
+        review,
+        verification,
         latestCheckpoint: checkpoint,
         aggregate,
       },
@@ -741,6 +762,8 @@ function scopeChangedMetadata(
   previous: WorkflowMetadataV3,
   scope: WorkflowMetadataV3['implementationScope'],
   checkpointId: Ulid,
+  reviewLedgerDigest: string,
+  verificationLedgerDigest: string,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {
@@ -749,6 +772,14 @@ function scopeChangedMetadata(
     revision: previous.revision + 1,
     transitionState: 'stable',
     implementationScope: scope,
+    governance: {
+      ...previous.governance,
+      planVersion: previous.governance.planVersion + 1,
+      reviewStatus: 'stale',
+      reviewLedgerDigest,
+      verificationStatus: 'stale',
+      verificationLedgerDigest,
+    },
     latestCheckpointRef: {
       taskRef: previous.taskRef,
       kind: 'checkpoint',
@@ -768,6 +799,9 @@ function scopeChangedCheckpoint(input: {
   summary: string | undefined;
   nextAction: string | undefined;
   codeRef: GitRefTaskBundleV1['codeRef'];
+  planVersion: number;
+  reviewLedgerDigest: string;
+  verificationLedgerDigest: string;
   timestamp: string;
 }): CheckpointV1 {
   return parseCheckpoint({
@@ -788,9 +822,9 @@ function scopeChangedCheckpoint(input: {
       'Changed the implementation scope and replaced affected coordination claims.',
     governance: {
       requirementsDigest: input.context.task.requirements.contentDigest,
-      planVersion: input.metadata.governance.planVersion,
-      reviewLedgerDigest: input.context.task.review.contentDigest,
-      verificationLedgerDigest: input.context.task.verification.contentDigest,
+      planVersion: input.planVersion,
+      reviewLedgerDigest: input.reviewLedgerDigest,
+      verificationLedgerDigest: input.verificationLedgerDigest,
     },
     nextAction:
       input.nextAction ??

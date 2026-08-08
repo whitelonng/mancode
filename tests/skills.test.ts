@@ -81,6 +81,14 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toContain('NEEDS_REALIGNMENT');
     expect(MAN_SKILL.body).toContain('MANCODE_REFRAME_REQUIRED');
     expect(MAN_SKILL.body).toMatch(/不得调用通用.*workflow update.*blocked/);
+    expect(MAN_SKILL.body).toMatch(/发现只产生建议权，不产生执行权/);
+    expect(MAN_SKILL.body).toMatch(/repository_fact.*domain_hypothesis/);
+    expect(MAN_SKILL.body).toMatch(/domain_hypothesis.*聚焦问题/);
+    expect(MAN_SKILL.body).toMatch(/范围或行为.*confirmedScope/);
+    expect(MAN_SKILL.body).toMatch(/技术选择.*technicalDecisions/);
+    expect(MAN_SKILL.body).toMatch(/明确排除.*excludedScope/);
+    expect(MAN_SKILL.body).toMatch(/未接受.*自动塞入.*excludedScope/);
+    expect(MAN_SKILL.body).toMatch(/implementationScope/);
   });
 
   it('keeps solo review bounded and lightweight', () => {
@@ -115,6 +123,7 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).toContain('never fall back to emoji');
     expect(SOLO_SKILL).toContain('present 2-3 distinct product-appropriate');
     expect(SOLO_SKILL).toContain('do not count as a selected visual direction');
+    expect(SOLO_SKILL).not.toContain('发现只产生建议权，不产生执行权');
   });
 
   it('defines manba diagnosis and real browser validation boundaries', () => {
@@ -149,6 +158,8 @@ describe('mvp-2 skills', () => {
     expect(MANTEAM_SKILL.body).toMatch(/planVersion/);
     expect(MANTEAM_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
     expect(MANSOLO_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
+    expect(MANTEAM_SKILL.body).toMatch(/发现只产生建议权，不产生执行权/);
+    expect(MANSOLO_SKILL.body).not.toContain('发现只产生建议权，不产生执行权');
   });
 
   it('keeps non-Claude mode files on the same validated workflow contract', () => {
@@ -173,6 +184,10 @@ describe('mvp-2 skills', () => {
     expect(man).toContain('NEEDS_REALIGNMENT');
     expect(man).toContain('MANCODE_REFRAME_REQUIRED');
     expect(man).toMatch(/Do not call generic workflow update/);
+    expect(man).toContain(
+      'Discovery produces evidence and recommendations, never execution authority.',
+    );
+    expect(man).toMatch(/implementation scope/);
 
     const manba = renderModeSkill('manba', '/');
     expect(manba).toMatch(/workflow create manba/);
@@ -189,6 +204,9 @@ describe('mvp-2 skills', () => {
     const manteam = renderModeSkill('manteam', '/');
     expect(manteam).toMatch(/Step 1 through Step 9/);
     expect(manteam).toMatch(/linked manba child/);
+    expect(manteam).toContain(
+      'Discovery produces evidence and recommendations, never execution authority.',
+    );
 
     const mansolo = renderModeSkill('mansolo', '/');
     expect(mansolo).toMatch(/workflow show/);
@@ -197,6 +215,9 @@ describe('mvp-2 skills', () => {
     expect(mansolo).toContain('NEEDS_REALIGNMENT');
     expect(mansolo).toContain('MANCODE_REFRAME_REQUIRED');
     expect(mansolo).toMatch(/This is read-only/);
+    expect(mansolo).not.toContain(
+      'Discovery produces evidence and recommendations, never execution authority.',
+    );
   });
 
   it('renders skill frontmatter', () => {

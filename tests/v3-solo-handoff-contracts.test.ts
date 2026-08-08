@@ -1,8 +1,9 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
+import { digestCanonicalJson } from '../src/context/canonical.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
@@ -16,7 +17,9 @@ import {
   completeV3SoloHandoff,
   startV3SoloHandoff,
 } from '../src/context/solo-handoff.js';
+import { taskRootPath } from '../src/context/task-locator.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
+import { parseWorkflowMetadata } from '../src/context/workflow-metadata.js';
 import { createSession, readSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
 
@@ -67,6 +70,11 @@ describe('V3 solo handoff', () => {
       sessionId,
       expectedTaskRevision: finalized.metadata.revision,
       plan: '# Plan\n\n1. Implement and verify the change.\n',
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: [],
+        modules: [],
+      },
       operationId: id(13),
       now: NOW,
     });
@@ -138,6 +146,176 @@ describe('V3 solo handoff', () => {
         now: NOW,
       }),
     ).rejects.toThrow('MANCODE_SOLO_HANDOFF_NOT_ELIGIBLE');
+  });
+
+  it('refuses to hand an unbounded plan to solo execution', async () => {
+    const { sessionId } = await bootstrap(root);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Do not execute a plan without an implementation boundary.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(30),
+      operationId: id(31),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(32),
+      now: NOW,
+    });
+    const planned = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan: '# Plan\n\n1. Implement the requested change.\n',
+      operationId: id(33),
+      now: NOW,
+    });
+
+    await expect(
+      startV3SoloHandoff({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: planned.metadata.revision,
+        operationId: id(34),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+  });
+
+  it('rebinds a missing scope for an active legacy solo assignment before completion', async () => {
+    const { sessionId } = await bootstrap(root);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Restore the missing scope of an active solo assignment.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(70),
+      operationId: id(71),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(72),
+      now: NOW,
+    });
+    const plan = '# Plan\n\n1. Implement the confirmed solo change.\n';
+    const planned = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: [],
+        modules: [],
+      },
+      operationId: id(73),
+      now: NOW,
+    });
+    const started = await startV3SoloHandoff({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: planned.metadata.revision,
+      operationId: id(74),
+      now: NOW,
+    });
+    const unspecified = {
+      source: 'legacy_unspecified' as const,
+      include: [],
+      exclude: [],
+      modules: [],
+    };
+    const legacyActive = parseWorkflowMetadata({
+      ...started.metadata,
+      implementationScope: {
+        ...unspecified,
+        digest: digestCanonicalJson(unspecified),
+      },
+    });
+    await writeFile(
+      path.join(taskRootPath(root, created.taskRef), 'metadata.json'),
+      `${JSON.stringify(legacyActive, null, 2)}\n`,
+    );
+
+    await expect(
+      completeV3SoloHandoff({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: legacyActive.revision,
+        operationId: id(75),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+
+    const bound = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: legacyActive.revision,
+      plan,
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: ['src/generated/**'],
+        modules: [],
+      },
+      operationId: id(76),
+      now: NOW,
+    });
+    expect(bound.metadata).toMatchObject({
+      status: 'planned',
+      currentStep: 4,
+      governance: {
+        planDecision: 'solo_handoff',
+        planVersion: planned.metadata.governance.planVersion + 1,
+        reviewStatus: 'stale',
+        verificationStatus: 'stale',
+      },
+      soloExecution: {
+        state: 'active',
+        planVersion: planned.metadata.governance.planVersion + 1,
+        assignedSessionId: sessionId,
+      },
+    });
+
+    const completed = await completeV3SoloHandoff({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: bound.metadata.revision,
+      operationId: id(77),
+      now: NOW,
+    });
+    expect(completed.metadata).toMatchObject({
+      status: 'completed',
+      currentStep: 9,
+      soloExecution: {
+        state: 'completed',
+        planVersion: bound.metadata.governance.planVersion,
+      },
+    });
   });
 });
 

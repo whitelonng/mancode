@@ -17,6 +17,7 @@ import { parseSchemaManifest } from '../src/context/manifest.js';
 import { upgradeV3Adapters } from '../src/installers/adapter-upgrade.js';
 import type { PlatformName } from '../src/installers/registry.js';
 import {
+  V3_ADAPTER_PLATFORMS,
   V3_MODE_NAMES,
   inspectV3Adapter,
   installV3Adapter,
@@ -132,7 +133,7 @@ describe('V3 adapter bootstrap integration', () => {
     }
   });
 
-  it.each(['claude-code', 'codex', 'cursor', 'copilot', 'zcode'] as const)(
+  it.each(V3_ADAPTER_PLATFORMS)(
     'applies the common V3 bootstrap contract for %s',
     async (platform: PlatformName) => {
       await init(root, { v3: true });
@@ -229,6 +230,9 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).not.toMatch(/\bV3\b/);
       expect(bootstrap).not.toContain('.mancode/state.json');
       expect(bootstrap).not.toContain('currentMode');
+      expect(bootstrap).not.toContain(
+        'Discovery produces evidence and recommendations, never execution authority.',
+      );
       const bootstrapSessionCommands = Array.from(
         bootstrap.matchAll(/`(mancode [^`\n]*--session <id>[^`\n]*)`/g),
         (match) => match[1] ?? '',
@@ -375,6 +379,32 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('.mancode/shared/context/glossary.json');
           expect(entry).toContain('prefer its confirmed terms');
         }
+        if (mode === 'man' || mode === 'manteam') {
+          expect(entry).toContain(
+            'Discovery produces evidence and recommendations, never execution authority.',
+          );
+          expect(entry).toContain('`repository_fact`');
+          expect(entry).toContain('`domain_hypothesis`');
+          expect(entry).toContain(
+            'an unverified domain hypothesis becomes a focused question, never a fact',
+          );
+          expect(entry).toContain(
+            'Accepted scope or behavior findings enter `confirmedScope` and the matching `acceptanceCriteria`',
+          );
+          expect(entry).toContain(
+            'accepted technical choices enter `technicalDecisions`',
+          );
+          expect(entry).toContain(
+            'Only explicitly excluded behavior enters `excludedScope`',
+          );
+          expect(entry).toContain('`implementationScope`');
+        }
+        if (mode === 'man') {
+          expect(entry).toContain(
+            'upgraded, already-running local `man` task has no executable implementation scope',
+          );
+          expect(entry).toContain('exact unchanged current plan');
+        }
         if (mode === 'manteam') {
           expect(entry).toContain(
             'same decision-readiness gate as `man` before finalizing requirements',
@@ -393,6 +423,14 @@ describe('V3 adapter bootstrap integration', () => {
           );
           expect(entry).toContain(
             'do not leave ownership questions or partial answers only in chat history',
+          );
+        }
+        if (mode === 'mansolo') {
+          expect(entry).not.toContain(
+            'Discovery produces evidence and recommendations, never execution authority.',
+          );
+          expect(entry).not.toContain(
+            'Accepted scope or behavior findings enter `confirmedScope`',
           );
         }
         if (mode === 'man' || mode === 'manba' || mode === 'manteam') {
@@ -415,7 +453,11 @@ describe('V3 adapter bootstrap integration', () => {
         installed: false,
         ready: false,
       });
-      if (platform !== 'codex' && platform !== 'zcode') {
+      if (
+        platform !== 'codex' &&
+        platform !== 'zcode' &&
+        platform !== 'kimi-code'
+      ) {
         await expect(
           readFile(v3ModeEntryPath(root, platform, 'man'), 'utf8'),
         ).rejects.toThrow();
@@ -505,7 +547,7 @@ describe('V3 adapter bootstrap integration', () => {
     const man = await readFile(v3ModeEntryPath(root, 'codex', 'man'), 'utf8');
 
     expect(man).toContain(
-      'revise --expected-revision <n> --file <plan.md> --session <id> --client <active-client>',
+      'revise --expected-revision <n> --file <plan.md> --scope-file <scope.json> --session <id> --client <active-client>',
     );
     expect(man).toContain(
       'confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id> --client <active-client>',

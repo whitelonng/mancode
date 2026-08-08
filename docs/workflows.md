@@ -48,7 +48,7 @@ draft 的 `blockingUnknowns` 必须列出开放决定；scope、coverage、techn
 8. 仅在 full 深度执行安全与边界审查。
 9. 最多一轮 blocker 修复、复验、summary 和完成。
 
-需求未 ready、计划未确认、验证失败、审查 blocker 未清零、存在活动子任务或未完成 repair 时，任务不能完成。
+需求未 ready、计划未确认、执行任务缺少非空 implementation scope、验证失败、审查 blocker 未清零、存在活动子任务或未完成 repair 时，任务不能完成。升级前已进入执行阶段的本地 Man 任务可在用户确认完整边界后，用内容不变的当前 plan 和 `--scope-file` 执行一次兼容 plan revision；它只补绑 scope，并使旧 review/verification 失效。
 
 ## 状态与 revision
 
@@ -65,12 +65,19 @@ mancode workflow create man "添加导出功能" --session <SESSION_ID> --json
 mancode workflow requirements local:<ULID> finalize \
   --file requirements.json --expected-revision 1 --session <SESSION_ID>
 mancode workflow plan local:<ULID> revise \
-  --file plan.md --expected-revision 2 --session <SESSION_ID>
+  --file plan.md --scope-file scope.json \
+  --expected-revision 2 --session <SESSION_ID>
 mancode workflow plan local:<ULID> confirm \
   --plan-decision governed_execution --expected-revision 3 --session <SESSION_ID>
 ```
 
-`plan revise` 必须通过 `--file <plan.md>` 读取 Markdown 计划。修订与确认是两个独立写操作；每次写入后都应从命令结果或 `mancode workflow show <TaskRef> --json` 获取最新 revision，再用于下一次 `--expected-revision`。只保留计划时把确认参数改为 `--plan-decision plan_only`。不要手工编辑 metadata 或 ledger。
+`plan revise` 必须通过 `--file <plan.md>` 读取 Markdown 计划。准备执行时同时通过
+`--scope-file <scope.json>` 绑定 `{ include, exclude, modules }`；`include` 是非空的
+repo-relative 文件边界，`exclude` 优先，`modules` 不单独授权写文件。修订与确认是两个
+独立写操作；每次写入后都应从命令结果或 `mancode workflow show <TaskRef> --json`
+获取最新 revision，再用于下一次 `--expected-revision`。没有明确边界时不能选择
+`governed_execution` 或 Solo handoff；只保留计划时可以暂不提供边界并使用
+`--plan-decision plan_only`。不要手工编辑 metadata 或 ledger。
 
 ## Policy 2 与需求重新对齐
 

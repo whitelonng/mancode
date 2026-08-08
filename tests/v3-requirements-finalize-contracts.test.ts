@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
+import { assertTaskCompletionGate } from '../src/context/aggregate.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
@@ -26,6 +27,7 @@ import {
 import { applyV3ReviewLedger } from '../src/context/review-remediation.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { completeV3Task } from '../src/context/task-complete.js';
+import { taskRootPath } from '../src/context/task-locator.js';
 import {
   type VerificationLedgerV1,
   parseVerificationLedger,
@@ -33,6 +35,7 @@ import {
 } from '../src/context/verification-ledger.js';
 import { recordV3Verification } from '../src/context/verification-record.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
+import { parseWorkflowMetadata } from '../src/context/workflow-metadata.js';
 import { resolveTaskEntityHomeStore } from '../src/runtime/entity-home-store.js';
 import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
 import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
@@ -163,6 +166,300 @@ describe('V3 requirements finalization operation', () => {
         now: NOW,
       }),
     ).rejects.toThrow('MANCODE_EXPECTED_REVISION_CONFLICT');
+  });
+
+  it('rejects a newly confirmed exact scope contradiction without making old ledgers unreadable', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Reject contradictory confirmed scope.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(130),
+      operationId: id(131),
+      now: NOW,
+    });
+    const confirmed = finalizedRequirements(
+      created.requirements,
+      created.taskRef,
+    );
+    const contradictory = {
+      ...confirmed,
+      functionalScope: {
+        inScope: ['Change login behavior.'],
+        outOfScope: ['Change login behavior.'],
+      },
+      contentDigest: '',
+    };
+
+    await expect(
+      finalizeV3Requirements({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: created.metadata.revision,
+        requirements: {
+          ...contradictory,
+          contentDigest: requirementsLedgerDigest(contradictory),
+        },
+        operationId: id(132),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REQUIREMENTS_SCOPE_CONFLICT');
+  });
+
+  it('binds governed execution to an explicit implementation scope in the plan authority', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Persist an executable path boundary with the plan.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      taskId: id(133),
+      operationId: id(134),
+      now: NOW,
+    });
+    expect(created.metadata.implementationScope.source).toBe(
+      'legacy_unspecified',
+    );
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(135),
+      now: NOW,
+    });
+    const plan =
+      '# Plan\n\n1. Change only the authorized source and test files.\n';
+
+    await expect(
+      reviseV3Plan({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: finalized.metadata.revision,
+        plan,
+        planDecision: 'governed_execution',
+        operationId: id(136),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+
+    const firstPlan = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      implementationScope: {
+        include: ['src/auth/**', 'tests/auth/**'],
+        exclude: ['src/auth/generated/**'],
+        modules: ['auth'],
+      },
+      operationId: id(137),
+      now: NOW,
+    });
+    const rebound = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: firstPlan.metadata.revision,
+      plan,
+      implementationScope: {
+        include: ['src/auth/**', 'tests/auth/**'],
+        exclude: ['src/auth/generated/**', 'tests/auth/fixtures/**'],
+        modules: ['auth'],
+      },
+      operationId: id(138),
+      now: NOW,
+    });
+    expect(rebound).toMatchObject({
+      metadata: {
+        currentStep: 4,
+        governance: { planVersion: 3, planDecision: null },
+      },
+      review: { revision: 4, status: 'stale' },
+      verification: { revision: 4, status: 'stale' },
+    });
+    expect(
+      (await new V3ContextStore(root).readTaskSnapshot(created.taskRef)).plan
+        ?.content,
+    ).toBe(plan);
+
+    const planned = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: rebound.metadata.revision,
+      plan,
+      planDecision: 'governed_execution',
+      operationId: id(139),
+      now: NOW,
+    });
+
+    expect(planned.metadata).toMatchObject({
+      currentStep: 5,
+      implementationScope: {
+        source: 'explicit',
+        include: ['src/auth/**', 'tests/auth/**'],
+        exclude: ['src/auth/generated/**', 'tests/auth/fixtures/**'],
+        modules: ['auth'],
+      },
+      governance: {
+        planVersion: 3,
+        planDecision: 'governed_execution',
+      },
+    });
+  });
+
+  it('binds a missing scope to an already-running local Man plan without changing the plan', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Bind a legacy execution boundary without changing behavior.',
+      workflowMode: 'man',
+      sessionId,
+      client: 'vitest',
+      implementationScope: { include: [], exclude: [], modules: [] },
+      taskId: id(140),
+      operationId: id(141),
+      now: NOW,
+    });
+    const finalized = await finalizeV3Requirements({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      requirements: finalizedRequirements(
+        created.requirements,
+        created.taskRef,
+      ),
+      operationId: id(142),
+      now: NOW,
+    });
+    const plan = '# Plan\n\n1. Preserve the confirmed behavior.\n';
+    const planned = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: finalized.metadata.revision,
+      plan,
+      operationId: id(143),
+      now: NOW,
+    });
+    const legacyActive = parseWorkflowMetadata({
+      ...planned.metadata,
+      currentStep: 5,
+      governance: {
+        ...planned.metadata.governance,
+        planDecision: 'governed_execution',
+      },
+    });
+    await writeFile(
+      path.join(taskRootPath(root, created.taskRef), 'metadata.json'),
+      `${JSON.stringify(legacyActive, null, 2)}\n`,
+    );
+    const legacySnapshot = await new V3ContextStore(root).readTaskSnapshot(
+      created.taskRef,
+    );
+    expect(() =>
+      assertTaskCompletionGate(
+        {
+          metadata: legacySnapshot.metadata,
+          requirements: legacySnapshot.requirements,
+          review: legacySnapshot.review,
+          verification: legacySnapshot.verification,
+          planDigest: legacySnapshot.plan?.digest ?? null,
+          latestCheckpoint: legacySnapshot.latestCheckpoint,
+        },
+        {
+          activeChildTaskRefs: [],
+          hasPendingRepairOperation: false,
+          activeClaimCount: 0,
+        },
+      ),
+    ).toThrow('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+
+    await expect(
+      reviseV3Plan({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: legacyActive.revision,
+        plan: `${plan}\n2. Change behavior.\n`,
+        implementationScope: {
+          include: ['src/**', 'tests/**'],
+          exclude: [],
+          modules: [],
+        },
+        operationId: id(144),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_EXECUTION_SCOPE_BINDING_PLAN_CHANGED');
+
+    const bound = await reviseV3Plan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId,
+      expectedTaskRevision: legacyActive.revision,
+      plan,
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: ['src/generated/**'],
+        modules: ['core'],
+      },
+      operationId: id(145),
+      now: NOW,
+    });
+    expect(bound).toMatchObject({
+      metadata: {
+        status: 'in_progress',
+        currentStep: 5,
+        implementationScope: {
+          source: 'explicit',
+          include: ['src/**', 'tests/**'],
+          exclude: ['src/generated/**'],
+          modules: ['core'],
+        },
+        governance: {
+          planVersion: planned.metadata.governance.planVersion + 1,
+          planDecision: 'governed_execution',
+          reviewStatus: 'stale',
+          verificationStatus: 'stale',
+        },
+      },
+      review: { status: 'stale', lastOperationId: id(145) },
+      verification: { status: 'stale', lastOperationId: id(145) },
+      operation: { type: 'plan_revision', state: 'committed' },
+    });
+    expect(
+      (await new V3ContextStore(root).readTaskSnapshot(created.taskRef)).plan
+        ?.content,
+    ).toBe(plan);
+
+    await expect(
+      reviseV3Plan({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: bound.metadata.revision,
+        plan,
+        implementationScope: {
+          include: ['src/**', 'tests/**', 'docs/**'],
+          exclude: [],
+          modules: [],
+        },
+        operationId: id(146),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_EXECUTION_SCOPE_ALREADY_BOUND');
   });
 
   it('requires an open blocker for an incomplete clarification draft', async () => {
@@ -358,6 +655,11 @@ describe('V3 requirements finalization operation', () => {
       sessionId,
       expectedTaskRevision: finalized.metadata.revision,
       plan: '# Plan\n\n1. Implement the V3 operation.\n',
+      implementationScope: {
+        include: ['src/**', 'tests/**'],
+        exclude: [],
+        modules: [],
+      },
       planDecision: 'governed_execution',
       operationId: id(73),
       now: NOW,
@@ -855,6 +1157,11 @@ describe('V3 requirements finalization operation', () => {
             sessionId,
             expectedTaskRevision: finalized.metadata.revision,
             plan: '# Recovered plan\n\n1. Finish the interrupted operation.\n',
+            implementationScope: {
+              include: ['src/**', 'tests/**'],
+              exclude: [],
+              modules: [],
+            },
             planDecision: 'governed_execution',
             operationId,
             now: NOW,

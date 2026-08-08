@@ -25,7 +25,11 @@ export const PLAN_COACH_AGENT: AgentSpec = {
 
 ## 输入就绪检查
 
-先读取 \`requirements.json\`，以其中的 confirmedScope、excludedScope、technicalDecisions、defaults、blockingUnknowns、coverage 和 acceptanceCriteria 为权威输入；\`requirements.md\` 只用于阅读。逐项检查 platform、core_scope、technical_stack、data_and_persistence、performance、compatibility、security 的状态和理由是否与事实一致。检查需求是否覆盖任务实际适用的用户目标、核心流程、首期范围、排除项、技术与运行约束、数据/状态/集成、关键性能/兼容性/安全要求和验收标准。blockingUnknowns 非空、coverage 用无根据的 not_applicable 掩盖决策、核心行为缺少验收 ID，或文档与结构化输入矛盾时必须返回 NEEDS_CLARIFICATION。
+先读取 \`requirements.json\`。V3 以 \`functionalScope.inScope\`、\`functionalScope.outOfScope\`、\`technicalDecisions\`、\`defaults\`、\`blockingUnknowns\`、\`coverage\` 和 \`acceptanceCriteria\` 为权威输入；legacy 输入中的语义对应字段是 \`confirmedScope\` 与 \`excludedScope\`；\`requirements.md\` 只用于阅读。逐项检查 platform、core_scope、technical_stack、data_and_persistence、performance、compatibility、security 的状态和理由是否与事实一致。检查需求是否覆盖任务实际适用的用户目标、核心流程、首期范围、排除项、技术与运行约束、数据/状态/集成、关键性能/兼容性/安全要求和验收标准。blockingUnknowns 非空、coverage 用无根据的 not_applicable 掩盖决策、核心行为缺少验收 ID，或文档与结构化输入矛盾时必须返回 NEEDS_CLARIFICATION。
+
+逐项核对 Scout 的 F-1…F-3 是否已有按类型处置：\`repository_fact\` 可以纠正错误前提；\`domain_hypothesis\` 必须先转成聚焦问题，不能当成已确认事实。blocking 写入 \`blockingUnknowns\`；用户接受的范围或行为 finding 写入 \`confirmedScope\`（V3 为 \`functionalScope.inScope\`）并补上匹配的验收 \`acceptanceCriteria\`；用户接受的技术选择写入 \`technicalDecisions\`；低影响、可逆的实现细节才写入 \`defaults\`；只有用户明确排除的行为写入 \`excludedScope\`（V3 为 \`functionalScope.outOfScope\`）。未接受的建议仍然没有执行权，但不得自动塞入 excludedScope，更不能复制进所有字段。错误前提或风险若会改变计划，必须先作为 blocking 澄清，再按最终语义落入上述唯一合适位置。发现只产生建议权，confirmed requirements 才产生行为授权。
+
+计划还必须读取或提出一份用户可见的 \`implementationScope\`（repo-relative \`include\`、\`exclude\`、\`modules\`），作为文件改动上限。它不能由 Scout 建议自动生成授权，也不能用模块标签代替非空 include；它与行为需求共同约束执行。
 
 同时执行方案完整性检查：
 
@@ -33,6 +37,7 @@ export const PLAN_COACH_AGENT: AgentSpec = {
 2. 每个方案必须说明复杂度由谁承担以及可观察成本，承担者可以是实现代码、迁移、运行维护、用户操作、兼容层或测试；不能只写“更简单”。
 3. 必须给出唯一 recommendation，并说明拒绝其他方向的主要理由；不能把多个未决方向原样交给用户。
 4. 简单任务没有真实替代方案时只列一个明显可行方向，并解释为什么不存在真实替代；不得制造伪选项。这个单一方向仍必须成为 recommendation 并有 stop conditions。
+5. 每个实施步骤必须映射到已确认范围或验收 ID。优先复用现有实现和依赖，选择能满足验收的最小直接方案；不为单次用途增加抽象、可配置性、相邻清理或推测性防御。
 
 Scout 若给出两个同等候选 semantic owner、无法确定 authority/writer，或 evidence 与 confirmed requirements 冲突，不能自行选一个继续。
 
@@ -66,6 +71,10 @@ stop_conditions: <conditions that invalidate this plan>
 ## 模块索引
 ## 技术与交付约束（仅新项目或技术选择未定时）
 - 已确认方案、选择理由和取舍；尚未确认会改变架构的技术选择时返回 NEEDS_CLARIFICATION；已有项目写“沿用检测到的项目约定”
+## 执行边界（implementationScope）
+- include：<允许修改的 repo-relative 路径/glob>
+- exclude：<即使匹配 include 也不得修改的路径/glob>
+- modules：<语义归属标签；不单独授权文件写入>
 ## 模块：<名称>
 ### 改动文件 / 新建文件
 ### 复用资源（引用 scout-report.md 行号）

@@ -23,6 +23,7 @@ import type { Ulid } from './ids.js';
 import {
   type RequirementsLedgerV1,
   assertRequirementsLedgerTransition,
+  assertRequirementsScopeConsistent,
   parseRequirementsLedger,
   requirementsLedgerDigest,
 } from './requirements-ledger.js';
@@ -99,6 +100,9 @@ async function writeV3Requirements(
   }
   if (action === 'finalize' && submitted.status !== 'confirmed') {
     throw new Error('MANCODE_REQUIREMENTS_CONFIRMATION_REQUIRED');
+  }
+  if (action === 'finalize') {
+    assertRequirementsScopeConsistent(submitted);
   }
   if (action === 'draft' && submitted.status !== 'draft') {
     throw new Error('MANCODE_REQUIREMENTS_DRAFT_REQUIRED');

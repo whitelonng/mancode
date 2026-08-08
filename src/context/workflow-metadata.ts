@@ -143,6 +143,24 @@ export interface WorkflowMetadataV3 {
   updatedAt: string;
 }
 
+/**
+ * Execution needs a user-visible, non-empty file boundary. `modules` are
+ * descriptive ownership labels and cannot authorize file writes on their own.
+ */
+export function assertExecutableImplementationScope(
+  scope: WorkflowMetadataV3['implementationScope'],
+): void {
+  if (!implementationScopeIsExecutable(scope)) {
+    throw new Error('MANCODE_IMPLEMENTATION_SCOPE_REQUIRED');
+  }
+}
+
+export function implementationScopeIsExecutable(
+  scope: WorkflowMetadataV3['implementationScope'],
+): boolean {
+  return scope.source !== 'legacy_unspecified' && scope.include.length > 0;
+}
+
 const TRANSITION_STATES = new Set<WorkflowTransitionState>([
   'stable',
   'operation_pending',

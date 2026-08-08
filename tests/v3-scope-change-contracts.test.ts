@@ -8,6 +8,7 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { workflow as workflowCommand } from '../src/commands/workflow.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { changeV3WorkflowScope } from '../src/context/scope-change.js';
+import { normalizeImplementationScope } from '../src/context/scope-change.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { resolveTaskEntityHomeStore } from '../src/runtime/entity-home-store.js';
@@ -47,6 +48,16 @@ describe('V3 journaled workflow scope change and re-claim', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('rejects an exact path as both included and excluded in new scope input', () => {
+    expect(() =>
+      normalizeImplementationScope({
+        include: ['src/auth/**'],
+        exclude: ['src/auth/**'],
+        modules: [],
+      }),
+    ).toThrow('MANCODE_SCOPE_INCLUDE_EXCLUDE_CONFLICT');
   });
 
   it('checkpoints the change, terminates old claims, and activates only compatible successors', async () => {
@@ -105,7 +116,6 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       operationId: id(15),
       now: NOW,
     });
-
     const changed = await changeV3WorkflowScope({
       projectRoot: root,
       taskRef: workflow.taskRef,
@@ -134,12 +144,18 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         },
         latestCheckpointRef: { artifactId: id(16) },
         lastOperationId: id(18),
+        governance: {
+          planVersion: 3,
+          reviewStatus: 'stale',
+          verificationStatus: 'stale',
+        },
       },
       checkpoint: {
         checkpointId: id(16),
         operationId: id(18),
         kind: 'scope_changed',
         taskRevision: 4,
+        governance: { planVersion: 3 },
       },
       terminatedClaims: [
         {
@@ -185,6 +201,8 @@ describe('V3 journaled workflow scope change and re-claim', () => {
     await expect(readOperationJournal(home, id(18))).resolves.toMatchObject({
       expectedRevisions: {
         [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`review:${workflow.taskRef.taskId}`]: 3,
+        [`verification:${workflow.taskRef.taskId}`]: 3,
         [`checkpoint:${id(16)}`]: 0,
         [`claim:${id(12)}`]: 1,
         [`claim:${id(14)}`]: 1,
@@ -215,6 +233,16 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         predecessorClaimId: authClaim.claim.claimId,
       },
     ]);
+    await expect(
+      new V3ContextStore(root).readTaskSnapshot(workflow.taskRef),
+    ).resolves.toMatchObject({
+      review: { revision: 4, status: 'stale', lastOperationId: id(18) },
+      verification: {
+        revision: 4,
+        status: 'stale',
+        lastOperationId: id(18),
+      },
+    });
   });
 
   it('refuses a no-op replacement scope before it creates a checkpoint', async () => {
@@ -306,6 +334,11 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         metadata: {
           revision: number;
           implementationScope: { modules: string[] };
+          governance: {
+            planVersion: number;
+            reviewStatus: string;
+            verificationStatus: string;
+          };
         };
         checkpoint: { kind: string };
         operation: { type: string; state: string };
@@ -314,6 +347,11 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         metadata: {
           revision: 5,
           implementationScope: { modules: ['auth'] },
+          governance: {
+            planVersion: 3,
+            reviewStatus: 'stale',
+            verificationStatus: 'stale',
+          },
         },
         checkpoint: { kind: 'scope_changed' },
         operation: { type: 'scope_change_reclaim', state: 'committed' },
