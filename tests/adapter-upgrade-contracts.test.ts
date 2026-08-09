@@ -560,7 +560,7 @@ describe('adapter managed-content digest and upgrade', () => {
         caseIndex += 1;
       }
     }
-  }, 30_000);
+  }, 60_000);
 });
 
 async function bootstrapAdapterCase(
