@@ -30,7 +30,6 @@ export type RetentionCandidateKind =
   | 'completed_session'
   | 'terminal_operation'
   | 'checkpoint'
-  | 'local_overlay_artifact'
   | 'local_cache';
 
 export interface RetentionCandidate {
@@ -105,7 +104,7 @@ export async function planContextCompaction(
     input.taskRef === undefined
       ? await listTaskRefs(root)
       : [parseTaskRefValue(input.taskRef)];
-  const [checkpointPlan, sessions, overlays, cache] = await Promise.all([
+  const [checkpointPlan, sessions, cache] = await Promise.all([
     planCheckpointCompaction(
       store,
       coordinationStore,
@@ -118,13 +117,6 @@ export async function planContextCompaction(
       now,
       protectedSessionIds,
     ),
-    planLocalOverlayRetention(
-      root,
-      store,
-      taskRefs,
-      project.policy.retention.localRawArtifactDays,
-      now,
-    ),
     planLocalCacheRetention(root, project.policy.retention.localCacheDays, now),
   ]);
   return {
@@ -135,7 +127,6 @@ export async function planContextCompaction(
       ...operationPlan.candidates,
       ...gitRefWorkflowRepairPlan.candidates,
       ...checkpointPlan.candidates,
-      ...overlays,
       ...cache,
     ].sort((left, right) =>
       Buffer.from(left.target, 'utf8').compare(
@@ -144,49 +135,6 @@ export async function planContextCompaction(
     ),
     skippedReferencedCheckpoints: checkpointPlan.skippedReferencedCheckpoints,
   };
-}
-
-/**
- * Local overlays are never shared ArtifactRefs.  They can therefore be
- * compacted only after the corresponding shared task is terminal; an active,
- * planned, or blocked task retains every private trace regardless of age.
- */
-async function planLocalOverlayRetention(
-  root: string,
-  store: V3ContextStore,
-  taskRefs: readonly TaskRef[],
-  localRawArtifactDays: number,
-  now: Date,
-): Promise<RetentionCandidate[]> {
-  const threshold = now.getTime() - localRawArtifactDays * 86_400_000;
-  const candidates: RetentionCandidate[] = [];
-  for (const taskRef of taskRefs) {
-    if (taskRef.namespace !== 'shared') continue;
-    const task = await store.readTaskSnapshot(taskRef);
-    if (!isTerminalTaskStatus(task.metadata.status)) continue;
-    const directory = path.join(
-      root,
-      '.mancode',
-      'local',
-      'overlays',
-      taskRef.taskId,
-      'artifacts',
-    );
-    for (const entry of await readDirectoryOrEmpty(directory)) {
-      const target = path.join(directory, entry);
-      const metadata = await regularFileMetadataOrNull(target);
-      if (metadata === null || metadata.mtimeMs >= threshold) continue;
-      candidates.push({
-        kind: 'local_overlay_artifact',
-        target,
-        reason: `terminal task raw artifact exceeds ${localRawArtifactDays} day retention`,
-        // The artifact is local-only even though it is grouped by shared task.
-        taskRef: null,
-        relatedTargets: [],
-      });
-    }
-  }
-  return candidates;
 }
 
 /** Cache records are disposable projections; retain no nested path authority. */
@@ -431,12 +379,6 @@ function taskRefKeyFromEntityKey(entityKey: string): string | null {
     entityKey,
   );
   return match === null ? null : `${match[1]}:${match[2]}`;
-}
-
-function isTerminalTaskStatus(status: string): boolean {
-  return (
-    status === 'completed' || status === 'abandoned' || status === 'superseded'
-  );
 }
 
 async function listTaskRefs(root: string): Promise<TaskRef[]> {

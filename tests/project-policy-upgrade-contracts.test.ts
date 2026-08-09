@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectUpgrade } from '../src/commands/project.js';
 import { status } from '../src/commands/status.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
@@ -276,6 +277,69 @@ describe('project Policy 2 upgrade', () => {
       manifest: { manifestVersion: 2 },
     });
     await expect(listUnfinishedOperationRecoveries(root)).resolves.toEqual([]);
+  });
+
+  it('validates the public command policy and operation id', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await expect(
+        projectUpgrade(root, { policy: '1', json: true }),
+      ).resolves.toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_POLICY_VERSION_UNSUPPORTED' },
+      });
+
+      await expect(
+        projectUpgrade(root, {
+          policy: '2',
+          operationId: 'not-an-operation-id',
+          json: true,
+        }),
+      ).resolves.toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_PROJECT_UPGRADE_FAILED' },
+      });
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('drives dry-run and commit through the public project command', async () => {
+    const { sessionId } = await bootstrap(root, 60);
+    const operationId = id(70);
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await expect(
+        projectUpgrade(root, {
+          policy: '2',
+          dryRun: true,
+          operationId,
+          json: true,
+        }),
+      ).resolves.toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        policy: 2,
+        willUpgrade: true,
+        operationId,
+      });
+
+      await expect(
+        projectUpgrade(root, {
+          policy: '2',
+          operationId,
+          session: sessionId,
+          client: 'vitest',
+          json: true,
+        }),
+      ).resolves.toBe(0);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        state: 'committed',
+        manifest: { manifestVersion: 2 },
+        operation: { operationId, state: 'committed' },
+      });
+    } finally {
+      logs.mockRestore();
+    }
   });
 });
 

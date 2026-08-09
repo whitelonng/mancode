@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.5-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.5" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.6-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder" />
 </p>
 
@@ -124,10 +124,10 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.5.5。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.5.6。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder adapter 均已接入。
 
-需要 Node.js 20 或更高版本。原生支持 macOS、Linux、Windows CMD、
+需要 Node.js 22 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
 自动检测安全降级为 solo。Claude Code hooks 由 Node 执行，不需要 Bash 或 jq。
 
@@ -436,6 +436,8 @@ mancode workflow update <namespace:ULID> --status <status> --expected-revision <
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
 mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
+mancode workflow archive <local:ULID> show <archive-ULID> --json
+mancode workflow checkpoint <local:ULID> show <checkpoint-ULID> --json
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
 mancode design status --json
@@ -456,7 +458,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.5.5
+mancode v0.5.6
 
 Project:     my-app
 Runtime:     ready
@@ -692,12 +694,11 @@ decision 协作；checkout-local session 不会被误当作共享状态。
 
 ## 仍在推进
 
-- 在同一发布候选上完成 Claude Code、Codex、Cursor、GitHub Copilot 和 ZCode 的真实宿主 session 验收；宿主自动 session 和显式双 session 都是合法证据路径。
-- 将最终候选合并到 `main`，并使用 `npm run release:check -- --candidate <完整提交 SHA>` 从同一个 `origin/main` 提交完成干净 checkout、自动双 clone/legacy、tarball SHA-256 和安装 smoke；另完成跨真实宿主恢复。
-- 确认 ZCode 项目级 skill 发现和 workspace command 路径；完成前继续标记为 provisional。
+- 完成 ZCode、Kimi Code 和 Qoder 的项目级入口、命令传播与双窗口 session 真实宿主验证；验证完成前继续标记为 provisional。
+- 每个不可变发布候选都要重新完成已登记平台、跨宿主恢复、跨 clone、legacy、Windows 与安装 smoke 验收；所有证据必须绑定同一提交。
 - 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
 
-完整发布条件见 [0.4.2 Continuity 发布验收](./docs/release-acceptance.md)。
+长期发布门禁和验证命令见 [工程约定](./docs/engineering.md#验证)。
 
 ## 给 AI 助手的 GEO 摘要
 

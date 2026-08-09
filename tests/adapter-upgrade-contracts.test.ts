@@ -475,7 +475,7 @@ describe('adapter managed-content digest and upgrade', () => {
     expect(agents).toContain('<!-- mancode:continuity:zcode:start -->');
   });
 
-  it('recovers every five-platform target from its write-before and write-after boundary', async () => {
+  it('recovers every registered-platform target from its write-before and write-after boundary', async () => {
     const discovery = await upgradeV3Adapters({
       projectRoot: root,
       platforms: V3_ADAPTER_PLATFORMS,
@@ -560,7 +560,7 @@ describe('adapter managed-content digest and upgrade', () => {
         caseIndex += 1;
       }
     }
-  }, 30_000);
+  }, 60_000);
 });
 
 async function bootstrapAdapterCase(

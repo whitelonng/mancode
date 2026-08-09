@@ -103,6 +103,13 @@ import {
   resolveV3CommandSession,
   v3ErrorCode,
 } from './v3-support.js';
+import {
+  CONTINUITY_COMPATIBILITY_SUBCOMMANDS,
+  type ContinuityCompatibilitySubcommand,
+  WORKFLOW_SUBCOMMANDS,
+  WORKFLOW_SUBCOMMAND_SET,
+  type WorkflowSubcommand,
+} from './workflow-subcommands.js';
 
 export const EXIT_OK = 0;
 export const EXIT_NOT_INITIALIZED = 1;
@@ -233,65 +240,63 @@ export async function workflow(
   }
 }
 
+type WorkflowV3Handler = (
+  rootDir: string,
+  args: string[],
+  options: WorkflowOptions,
+) => number | Promise<number>;
+
+const WORKFLOW_V3_HANDLERS = {
+  create: workflowCreateV3,
+  list: workflowListV3,
+  show: workflowShowV3,
+  update: workflowUpdateV3,
+  requirements: workflowRequirementsV3,
+  plan: workflowPlanV3,
+  review: workflowReviewV3,
+  verify: workflowVerifyV3,
+  complete: workflowCompleteV3,
+  scope: workflowScopeChangeV3,
+  reframe: workflowReframeV3,
+  archive: (rootDir, args, options) =>
+    workflowArtifactShowV3(rootDir, 'archive', args, options),
+  checkpoint: (rootDir, args, options) =>
+    workflowArtifactShowV3(rootDir, 'checkpoint', args, options),
+  child: workflowChildResultMergeV3,
+  promote: workflowPromoteV3,
+  handoff: workflowSoloHandoffV3,
+} satisfies Record<WorkflowSubcommand, WorkflowV3Handler>;
+
+const CONTINUITY_COMPATIBILITY_HANDLERS = {
+  clean: (_rootDir, _args, options) => workflowCleanV3(options),
+} satisfies Record<ContinuityCompatibilitySubcommand, WorkflowV3Handler>;
+
 async function workflowV3(
   rootDir: string,
   subcommand: string,
   args: string[],
   options: WorkflowOptions,
 ): Promise<number> {
-  if (subcommand === 'list') {
-    return workflowListV3(rootDir, args, options);
+  if (
+    !WORKFLOW_SUBCOMMAND_SET.has(subcommand) &&
+    !CONTINUITY_COMPATIBILITY_SUBCOMMANDS.has(subcommand)
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
+      `Unknown workflow subcommand: ${subcommand}. Use one of: ${WORKFLOW_SUBCOMMANDS.join(', ')}.`,
+    );
   }
-  if (subcommand === 'show') {
-    return workflowShowV3(rootDir, args, options);
+  if (WORKFLOW_SUBCOMMAND_SET.has(subcommand)) {
+    return WORKFLOW_V3_HANDLERS[subcommand as WorkflowSubcommand](
+      rootDir,
+      args,
+      options,
+    );
   }
-  if (subcommand === 'clean') {
-    return workflowCleanV3(options);
-  }
-  if (subcommand === 'create') {
-    return workflowCreateV3(rootDir, args, options);
-  }
-  if (subcommand === 'update') {
-    return workflowUpdateV3(rootDir, args, options);
-  }
-  if (subcommand === 'requirements') {
-    return workflowRequirementsV3(rootDir, args, options);
-  }
-  if (subcommand === 'plan') {
-    return workflowPlanV3(rootDir, args, options);
-  }
-  if (subcommand === 'review') {
-    return workflowReviewV3(rootDir, args, options);
-  }
-  if (subcommand === 'verify') {
-    return workflowVerifyV3(rootDir, args, options);
-  }
-  if (subcommand === 'complete') {
-    return workflowCompleteV3(rootDir, args, options);
-  }
-  if (subcommand === 'scope') {
-    return workflowScopeChangeV3(rootDir, args, options);
-  }
-  if (subcommand === 'reframe') {
-    return workflowReframeV3(rootDir, args, options);
-  }
-  if (subcommand === 'archive' || subcommand === 'checkpoint') {
-    return workflowArtifactShowV3(rootDir, subcommand, args, options);
-  }
-  if (subcommand === 'child') {
-    return workflowChildResultMergeV3(rootDir, args, options);
-  }
-  if (subcommand === 'promote') {
-    return workflowPromoteV3(rootDir, args, options);
-  }
-  if (subcommand === 'handoff') {
-    return workflowSoloHandoffV3(rootDir, args, options);
-  }
-  return printV3Error(
-    options.json,
-    'MANCODE_V3_OPERATION_NOT_IMPLEMENTED',
-    `workflow ${subcommand} is not yet implemented for mancode authority.`,
-  );
+  return CONTINUITY_COMPATIBILITY_HANDLERS[
+    subcommand as ContinuityCompatibilitySubcommand
+  ](rootDir, args, options);
 }
 
 async function workflowListV3(

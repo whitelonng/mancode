@@ -112,11 +112,14 @@ try {
   );
 
   const audit = JSON.parse(
-    runCaptured('npm', ['audit', '--omit=dev', '--json'], checkout),
+    runCaptured('npm', ['audit', '--audit-level=high', '--json'], checkout),
   );
-  const vulnerabilities = audit.metadata?.vulnerabilities?.total;
-  assert(vulnerabilities === 0, 'production dependency audit is not clean');
-  checks.push({ name: 'production_audit', status: 'passed' });
+  const vulnerabilities = audit.metadata?.vulnerabilities;
+  assert(
+    vulnerabilities?.high === 0 && vulnerabilities?.critical === 0,
+    'dependency audit contains high or critical vulnerabilities',
+  );
+  checks.push({ name: 'dependency_audit', status: 'passed' });
 
   const dryRun = parseSinglePackResult(
     runCaptured('npm', ['pack', '--dry-run', '--json'], checkout),

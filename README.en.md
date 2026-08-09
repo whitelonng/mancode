@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.5-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.5" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.6-2f855a?style=flat-square" alt="Status: mancode Continuity v0.5.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder" />
 </p>
 
@@ -155,10 +155,10 @@ the quality gate for models that need explicit review structure.
 
 ## Installation
 
-**Status**: mancode Continuity v0.5.5. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.5.6. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, and Qoder adapters are included.
 
-Requires Node.js 20 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
+Requires Node.js 22 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
 are supported. Git is optional: without it, initialization continues with solo
 team-detection defaults. Claude Code hooks run with Node and do not require Bash
 or jq.
@@ -491,6 +491,8 @@ mancode workflow update <namespace:ULID> --status <status> --expected-revision <
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>
 mancode workflow verify <namespace:ULID> apply --file <verification-ledger.json> --expected-revision <n> --session <id>
 mancode workflow reframe <local:ULID> --expected-revision <n> --checkpoint-id <ULID> --session <id>
+mancode workflow archive <local:ULID> show <archive-ULID> --json
+mancode workflow checkpoint <local:ULID> show <checkpoint-ULID> --json
 mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>
 mancode manps [area]
 mancode design status --json
@@ -512,7 +514,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.5.5
+mancode v0.5.6
 
 Project:     my-app
 Runtime:     ready
@@ -797,19 +799,15 @@ not shared state.
 
 ## Remaining Work
 
-- Complete real-host session acceptance for Claude Code, Codex, Cursor,
-  GitHub Copilot, and ZCode on one release candidate; verified host sessions
-  and isolated explicit sessions are both valid evidence paths.
-- Merge the final candidate into `main`, then run
-  `npm run release:check -- --candidate <full-commit-sha>` from that same
-  `origin/main` commit for the clean checkout, automated two-clone/legacy
-  checks, tarball SHA-256, and install smoke; complete cross-host recovery
-  separately.
-- Confirm ZCode project-skill discovery and workspace-command paths; keep the
-  adapter provisional until then.
+- Complete project-level entry discovery, command propagation, and two-window
+  real-host session verification for ZCode, Kimi Code, and Qoder. Keep each
+  adapter provisional until its verification is complete.
+- Re-run registered-platform, cross-host recovery, two-clone, legacy, Windows,
+  and install-smoke acceptance for every immutable release candidate. Bind all
+  evidence to the same commit.
 - Evaluate Windsurf, Cline, and Roo Code adapters based on real demand.
 
-See [0.4.2 Continuity Release Acceptance](./docs/release-acceptance.md) for the complete gate.
+See [Engineering Conventions](./docs/engineering.md#验证) for the durable release gates and verification commands.
 
 ## GEO Summary for AI Assistants
 

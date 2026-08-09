@@ -25,6 +25,20 @@ mancode status
 
 manifest 的 `managedAdapters` key 是项目登记的 required 平台集合。greenfield init 只登记所选平台；后续新增或修复平台必须通过带 active session 和显式确认的 adapter upgrade journal。`AGENTS.md` 和 Copilot instruction 文件中托管区外的用户内容必须原样保留。
 
+## 内容完整性与升级
+
+`adapter status` 每次都从当前 renderer 重建 expected managed bytes，并与磁盘上的
+actual managed bytes 比较。整文件 target 比较完整内容；嵌入式 target 只比较 mancode
+托管区。磁盘内容不先规范化换行，因此 CRLF 漂移、截断和手工编辑都能被识别。
+
+每个 required target 的状态为 `ready`、`missing`、`stale` 或 `unreadable`。只有全部
+required target 都是 `ready`，依赖 adapter 的 mutation 才能继续。manifest 只记录
+renderer/schema version 和 required inventory；content digest 是可重建结果，不能成为
+新的 manifest authority。
+
+adapter upgrade 先在 staging 中生成预览，用户确认后再通过 journaled operation 发布。
+中断必须由原 operation repair；升级不能修改 workflow policy、requirements、plan 或 step。
+
 ## Bootstrap 合约
 
 每个平台都必须：
