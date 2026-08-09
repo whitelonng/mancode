@@ -179,7 +179,8 @@ describe('mancode status', () => {
     expect(output).toContain(`mancode Continuity v${VERSION}`);
     expect(output).toContain('Activation:  active');
     expect(output).toContain('mancode adapter status:');
-    expect(output).not.toContain('V3');
+    expect(output).not.toContain('(V3 authority)');
+    expect(output).not.toContain('V3 adapter status:');
     expect(output).not.toContain('v3_active');
   });
 
