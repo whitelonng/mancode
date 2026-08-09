@@ -28,6 +28,7 @@ export interface TeamPolicyV1 {
   defaultVisibility: 'local' | 'shared';
   shareConfirmedDecisions: boolean;
   retention: {
+    /** @deprecated Retained in schema V1 for backward-compatible policy exchange. */
     localRawArtifactDays: number;
     localCacheDays: number;
     completedSessionDays: number;

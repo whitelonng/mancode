@@ -62,4 +62,5 @@ smoke，并把报告和候选 tarball 保存在 `.mancode/local/release-evidence
 等于本地 HEAD 和 `origin/main`，检查期间 main 不得变化。该命令不会执行 `npm publish`
 或修改 dist-tag。
 
-尚未完成的验收见 [release-acceptance.md](./release-acceptance.md)。
+长期发布门禁见 [engineering.md](./engineering.md#验证)，平台证据要求见
+[platform-adapters.md](./platform-adapters.md#session-发布证据)。

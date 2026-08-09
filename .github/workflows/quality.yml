@@ -10,11 +10,14 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - name: Lint
@@ -25,5 +28,7 @@ jobs:
         run: npm run build
       - name: Verify compiled adapters
         run: npm run test:dist
-      - name: Test
-        run: npm test
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Test with coverage
+        run: npm run test:coverage

@@ -1,23 +1,11 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
-import {
-  localOverlayArtifactPath,
-  readLocalOverlayArtifact,
-  writeLocalOverlayArtifact,
-} from '../src/context/local-overlay.js';
 import {
   previewV3TaskPromotion,
   promoteV3Task,
@@ -208,76 +196,6 @@ describe('V3 local-to-shared publish/promote', () => {
       taskRevision: 1,
       lastOperationId: id(13),
     });
-  });
-
-  it('keeps shared-task raw evidence in the local overlay only', async () => {
-    const { sessionId } = await bootstrap(root);
-    const shared = await createV3Workflow({
-      projectRoot: root,
-      task: 'Coordinate a shared task while retaining private diagnostics.',
-      workflowMode: 'manteam',
-      sessionId,
-      client: 'vitest',
-      sharedPrivacyConfirmed: true,
-      taskId: id(16),
-      operationId: id(17),
-      now: NOW,
-    });
-    const store = new V3ContextStore(root);
-    const before = await store.readTaskSnapshot(shared.taskRef);
-    const sharedFilesBefore = await readdir(taskRootPath(root, shared.taskRef));
-    const rawEvidence =
-      'Authorization: Bearer overlay-only-secret\ntrace=/Users/alice/private.log';
-
-    const artifact = await writeLocalOverlayArtifact({
-      projectRoot: root,
-      taskRef: shared.taskRef,
-      artifactId: id(18),
-      content: rawEvidence,
-    });
-
-    expect(artifact).toMatchObject({
-      taskRef: shared.taskRef,
-      artifactId: id(18),
-      byteLength: Buffer.byteLength(rawEvidence),
-      contentDigest: expect.stringMatching(/^sha256:/),
-      path: localOverlayArtifactPath(root, shared.taskRef, id(18)),
-    });
-    expect(path.relative(root, artifact.path)).toBe(
-      path.join(
-        '.mancode',
-        'local',
-        'overlays',
-        shared.taskRef.taskId,
-        'artifacts',
-        id(18),
-      ),
-    );
-    await expect(
-      readLocalOverlayArtifact(root, shared.taskRef, id(18)),
-    ).resolves.toEqual(Buffer.from(rawEvidence));
-    await expect(
-      writeLocalOverlayArtifact({
-        projectRoot: root,
-        taskRef: shared.taskRef,
-        artifactId: id(18),
-        content: 'different raw evidence',
-      }),
-    ).rejects.toThrow('MANCODE_OVERLAY_ARTIFACT_CONFLICT');
-    await expect(
-      writeLocalOverlayArtifact({
-        projectRoot: root,
-        taskRef: { namespace: 'local', taskId: shared.taskRef.taskId },
-        artifactId: id(19),
-        content: rawEvidence,
-      }),
-    ).rejects.toThrow('MANCODE_OVERLAY_REQUIRES_SHARED_TASK');
-    const after = await store.readTaskSnapshot(shared.taskRef);
-    expect(after.fingerprint).toBe(before.fingerprint);
-    expect(await readdir(taskRootPath(root, shared.taskRef))).toEqual(
-      sharedFilesBefore,
-    );
-    expect(JSON.stringify(after)).not.toContain('overlay-only-secret');
   });
 
   it('does not publish a shared destination when the source contains private text', async () => {

@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.5.5</span>
+      <span class="docs-wordmark">Documentation / v0.5.6</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -62,7 +62,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>Install &amp; initialize</h2>
-          <p>Node.js 20 or newer is required. Run the initializer inside an existing project or a safe empty directory, then choose one or more agent adapters. Windows CMD, PowerShell, and Git Bash are supported; Git is optional and only improves team-mode detection.</p>
+          <p>Node.js 22 or newer is required. Run the initializer inside an existing project or a safe empty directory, then choose one or more agent adapters. Windows CMD, PowerShell, and Git Bash are supported; Git is optional and only improves team-mode detection.</p>
           <div class="docs-steps">
             <article class="docs-step"><b>01</b><strong>Install</strong><p>Install the CLI once on your machine.</p></article>
             <article class="docs-step"><b>02</b><strong>Enter</strong><p>Open the project the agent should understand.</p></article>
@@ -217,6 +217,120 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one Continuity adapter. Continuity protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version for upgrade checks and issue reports.</p></article>
           </div>
+
+          <h3>Complete public command index</h3>
+          <p>This index is checked against the executable Commander tree. Compatibility-only spellings and hidden release plumbing are intentionally excluded.</p>
+          <table class="docs-table"><thead><tr><th>Family</th><th>Public command entries</th></tr></thead><tbody>
+            <tr><td>Setup and inspection</td><td>
+              <code data-cli-command="init">mancode init</code> ·
+              <code data-cli-command="install">mancode install</code> ·
+              <code data-cli-command="status">mancode status</code> ·
+              <code data-cli-command="list-platforms">mancode list-platforms</code> ·
+              <code data-cli-command="uninstall">mancode uninstall</code> ·
+              <code data-cli-command="manps">mancode manps</code> ·
+              <code data-cli-command="refresh-project">mancode refresh-project</code> ·
+              <code data-cli-command="refresh-style">mancode refresh-style</code> ·
+              <code data-cli-command="version">mancode version</code>
+            </td></tr>
+            <tr><td>Adapters and policy</td><td>
+              <code data-cli-command="adapter">mancode adapter</code> ·
+              <code data-cli-command="adapter status">mancode adapter status</code> ·
+              <code data-cli-command="adapter upgrade">mancode adapter upgrade</code> ·
+              <code data-cli-command="project">mancode project</code> ·
+              <code data-cli-command="project upgrade">mancode project upgrade</code> ·
+              <code data-cli-command="design">mancode design</code> ·
+              <code data-cli-command="design status">mancode design status</code> ·
+              <code data-cli-command="design context">mancode design context</code> ·
+              <code data-cli-command="design configure">mancode design configure</code> ·
+              <code data-cli-command="design disable">mancode design disable</code>
+            </td></tr>
+            <tr><td>Workflow</td><td>
+              <code data-cli-command="workflow create">mancode workflow create</code> ·
+              <code data-cli-command="workflow list">mancode workflow list</code> ·
+              <code data-cli-command="workflow show">mancode workflow show</code> ·
+              <code data-cli-command="workflow update">mancode workflow update</code> ·
+              <code data-cli-command="workflow requirements">mancode workflow requirements</code> ·
+              <code data-cli-command="workflow plan">mancode workflow plan</code> ·
+              <code data-cli-command="workflow review">mancode workflow review</code> ·
+              <code data-cli-command="workflow verify">mancode workflow verify</code> ·
+              <code data-cli-command="workflow complete">mancode workflow complete</code> ·
+              <code data-cli-command="workflow scope">mancode workflow scope</code> ·
+              <code data-cli-command="workflow reframe">mancode workflow reframe</code> ·
+              <code data-cli-command="workflow archive">mancode workflow archive</code> ·
+              <code data-cli-command="workflow checkpoint">mancode workflow checkpoint</code> ·
+              <code data-cli-command="workflow child">mancode workflow child</code> ·
+              <code data-cli-command="workflow promote">mancode workflow promote</code> ·
+              <code data-cli-command="workflow handoff">mancode workflow handoff</code>
+            </td></tr>
+            <tr><td>Context and sessions</td><td>
+              <code data-cli-command="context">mancode context</code> ·
+              <code data-cli-command="context show">mancode context show</code> ·
+              <code data-cli-command="context session">mancode context session</code> ·
+              <code data-cli-command="context session new">mancode context session new</code> ·
+              <code data-cli-command="context session show">mancode context session show</code> ·
+              <code data-cli-command="context session spike">mancode context session spike</code> ·
+              <code data-cli-command="context resume">mancode context resume</code> ·
+              <code data-cli-command="context close">mancode context close</code> ·
+              <code data-cli-command="context doctor">mancode context doctor</code> ·
+              <code data-cli-command="context diagnostics">mancode context diagnostics</code> ·
+              <code data-cli-command="context compact">mancode context compact</code> ·
+              <code data-cli-command="context publish">mancode context publish</code> ·
+              <code data-cli-command="context reconcile-task-head">mancode context reconcile-task-head</code> ·
+              <code data-cli-command="context glossary">mancode context glossary</code> ·
+              <code data-cli-command="context worktree">mancode context worktree</code> ·
+              <code data-cli-command="context worktree register">mancode context worktree register</code>
+            </td></tr>
+            <tr><td>Operation recovery</td><td>
+              <code data-cli-command="operation">mancode operation</code> ·
+              <code data-cli-command="operation show">mancode operation show</code> ·
+              <code data-cli-command="operation repair">mancode operation repair</code> ·
+              <code data-cli-command="operation abort">mancode operation abort</code>
+            </td></tr>
+            <tr><td>Team coordination</td><td>
+              <code data-cli-command="team">mancode team</code> ·
+              <code data-cli-command="team status">mancode team status</code> ·
+              <code data-cli-command="team policy">mancode team policy</code> ·
+              <code data-cli-command="team conflicts">mancode team conflicts</code> ·
+              <code data-cli-command="team join">mancode team join</code> ·
+              <code data-cli-command="team checkpoint">mancode team checkpoint</code> ·
+              <code data-cli-command="team identity">mancode team identity</code> ·
+              <code data-cli-command="team identity create">mancode team identity create</code> ·
+              <code data-cli-command="team identity show">mancode team identity show</code> ·
+              <code data-cli-command="team decision">mancode team decision</code> ·
+              <code data-cli-command="team decision publish">mancode team decision publish</code>
+            </td></tr>
+            <tr><td>Claims</td><td>
+              <code data-cli-command="team claim">mancode team claim</code> ·
+              <code data-cli-command="team renew">mancode team renew</code> ·
+              <code data-cli-command="team release">mancode team release</code> ·
+              <code data-cli-command="team transfer">mancode team transfer</code> ·
+              <code data-cli-command="team reclaim">mancode team reclaim</code> ·
+              <code data-cli-command="team revalidate">mancode team revalidate</code>
+            </td></tr>
+            <tr><td>Transport and sync</td><td>
+              <code data-cli-command="team transport">mancode team transport</code> ·
+              <code data-cli-command="team transport status">mancode team transport status</code> ·
+              <code data-cli-command="team transport set">mancode team transport set</code> ·
+              <code data-cli-command="team transport migrate">mancode team transport migrate</code> ·
+              <code data-cli-command="team transport recover">mancode team transport recover</code> ·
+              <code data-cli-command="team sync">mancode team sync</code> ·
+              <code data-cli-command="team sync pull">mancode team sync pull</code> ·
+              <code data-cli-command="team sync push">mancode team sync push</code>
+            </td></tr>
+            <tr><td>Handoffs</td><td>
+              <code data-cli-command="team handoff">mancode team handoff</code> ·
+              <code data-cli-command="team handoff draft">mancode team handoff draft</code> ·
+              <code data-cli-command="team handoff offer">mancode team handoff offer</code> ·
+              <code data-cli-command="team handoff accept">mancode team handoff accept</code> ·
+              <code data-cli-command="team handoff reject">mancode team handoff reject</code> ·
+              <code data-cli-command="team handoff cancel">mancode team handoff cancel</code>
+            </td></tr>
+            <tr><td>Migration</td><td>
+              <code data-cli-command="migrate">mancode migrate</code> ·
+              <code data-cli-command="migrate context">mancode migrate context</code> ·
+              <code data-cli-command="migrate context resolve">mancode migrate context resolve</code>
+            </td></tr>
+          </tbody></table>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
@@ -292,7 +406,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
 <span class="command-prompt"># Requirements and plan gates (use the revision returned by each command)</span>
 <span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
-<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --scope-file scope.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 <span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 
 <span class="command-prompt"># Record canonical review and verification ledgers</span>
@@ -316,12 +430,13 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <table class="docs-table"><thead><tr><th>Command</th><th>Purpose</th><th>Important options</th></tr></thead><tbody>
             <tr><td><code>create</code></td><td>Start a <code>man</code>, <code>manba</code>, or <code>manteam</code> record.</td><td><code>--parent &lt;TaskRef&gt;</code> links a diagnostic child; <code>--json</code> exposes the TaskRef.</td></tr>
             <tr><td><code>requirements</code></td><td>Finalize the structured requirements ledger.</td><td><code>finalize --file --expected-revision --session</code>.</td></tr>
-            <tr><td><code>plan</code></td><td>Revise a plan or confirm its execution decision.</td><td><code>revise --file</code>; <code>confirm --plan-decision</code>; both require revision and session.</td></tr>
-            <tr><td><code>update</code></td><td>Change lifecycle status or a blocking reason.</td><td><code>--status --expected-revision --session</code>; governed fields use dedicated commands.</td></tr>
+            <tr><td><code>plan</code></td><td>Revise a plan or confirm its execution decision.</td><td><code>revise --file --scope-file</code>; <code>confirm --plan-decision</code>; both require revision and session.</td></tr>
+            <tr><td><code>update</code></td><td>Change lifecycle status or its blocking reason.</td><td><code>--status --expected-revision --session</code>; governed fields use their dedicated commands.</td></tr>
             <tr><td><code>handoff</code></td><td>Transfer a confirmed local plan to solo and later close it.</td><td><code>--to solo</code> or <code>--complete</code>, with revision and session.</td></tr>
             <tr><td><code>verify / review</code></td><td>Apply canonical Continuity ledgers.</td><td><code>apply --file --expected-revision --session</code>.</td></tr>
             <tr><td><code>reframe</code></td><td>Archive confirmed local planning authority and return to requirements alignment.</td><td><code>--expected-revision --checkpoint-id --session</code>; active child, handoff, solo assignment, and git-ref are rejected.</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>List or inspect Continuity TaskRefs. <code>clean</code> is not a Continuity authority deletion command.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
+            <tr><td><code>archive / checkpoint</code></td><td>Inspect the immutable evidence created by reframe.</td><td><code>show &lt;namespace:ULID&gt; &lt;evidence-ULID&gt; --json</code>; read-only and session-free.</td></tr>
+            <tr><td><code>list / show</code></td><td>List or inspect Continuity TaskRefs. The compatibility-only <code>clean</code> spelling does not delete Continuity authority.</td><td><code>show &lt;namespace:ULID&gt; --json</code>; use <code>context compact --dry-run</code> for retention.</td></tr>
           </tbody></table>
         </section>
 

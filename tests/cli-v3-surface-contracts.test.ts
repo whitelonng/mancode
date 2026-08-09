@@ -1,13 +1,18 @@
-import type { Command } from 'commander';
+import { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
+import { WORKFLOW_SUBCOMMANDS } from '../src/commands/workflow-subcommands.js';
 
 describe('V3 CLI command surface', () => {
   it('registers coordination, migration, recovery, and explicit-sync commands', async () => {
-    const originalArgv = process.argv;
-    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    process.argv = ['node', 'mancode', 'version'];
+    const parse = vi.spyOn(Command.prototype, 'parse');
     try {
-      const { cliProgram } = await import('../src/cli.js');
+      const { createCliProgram } = await import('../src/cli.js');
+      expect(parse).not.toHaveBeenCalled();
+
+      const cliProgram = createCliProgram();
+      const secondProgram = createCliProgram();
+      expect(secondProgram).not.toBe(cliProgram);
+      expect(secondProgram.commands).not.toBe(cliProgram.commands);
 
       expect(cliProgram.commands.map((command) => command.name())).toEqual(
         expect.arrayContaining([
@@ -81,13 +86,24 @@ describe('V3 CLI command surface', () => {
       expect(commandAt(cliProgram, 'init').helpInformation()).not.toContain(
         '--v3',
       );
+      expect(
+        optionDescription(commandAt(cliProgram, 'init'), '--style'),
+      ).toContain('only supported with mancode init --legacy');
+      expect(
+        optionDescription(commandAt(cliProgram, 'install'), '--minimal'),
+      ).toContain('Continuity bootstrap is already minimal');
       expect(commandAt(cliProgram, 'context').helpInformation()).not.toMatch(
         /\bbeta\b/i,
       );
+      expect(renderedHelp(commandAt(cliProgram, 'workflow'))).toContain(
+        WORKFLOW_SUBCOMMANDS.join(', '),
+      );
+      expect(WORKFLOW_SUBCOMMANDS).toEqual(
+        expect.arrayContaining(['update', 'archive']),
+      );
       expect(publicHelpText(cliProgram).join('\n')).not.toMatch(/\bV3\b/);
     } finally {
-      process.argv = originalArgv;
-      log.mockRestore();
+      parse.mockRestore();
     }
   });
 });
@@ -108,6 +124,23 @@ function requiredOptions(command: Command): string[] {
     .filter((option) => option.mandatory)
     .map((option) => option.long)
     .filter((option): option is string => option !== undefined);
+}
+
+function optionDescription(command: Command, name: string): string {
+  const option = command.options.find((candidate) => candidate.long === name);
+  if (option === undefined) throw new Error(`missing CLI option: ${name}`);
+  return option.description;
+}
+
+function renderedHelp(command: Command): string {
+  let output = '';
+  command.configureOutput({
+    writeOut: (value) => {
+      output += value;
+    },
+  });
+  command.outputHelp();
+  return output;
 }
 
 function publicHelpText(command: Command): string[] {

@@ -59,7 +59,11 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 
 ## 版本与兼容
 
-`schema.json` 支持 manifest version 1 和 2，layout version 固定为 3。0.4.0 新初始化项目直接写入 V2；历史 V1 项目只有完成显式 Policy 2 upgrade 后才写入 V2。激活状态包括 `initializing`、`dual_read`、`activating`、`v3_active` 和 `repair_required`。
+`schema.json` 支持 manifest version 1 和 2，layout version 固定为 3。新初始化项目直接写入 V2；历史 V1 项目只有完成显式 Policy 2 upgrade 后才写入 V2。激活状态包括 `initializing`、`dual_read`、`activating`、`v3_active` 和 `repair_required`。
+
+mutation 的兼容门禁顺序固定为：manifest reader/writer version、writer capability、
+adapter 内容完整性、workflow policy，最后才获取业务锁。任一门禁失败都不得创建 journal
+或写入业务权威；未知 policy 不能降级为已知旧版本。
 
 Reader 和 writer 必须先通过兼容门禁。legacy 迁移采用隔离 stage、显式确认和 journaled activation；不能把当前 Git HEAD 或当前用户伪装成历史事实。
 

@@ -409,6 +409,24 @@ async function validateWorkflowMeta(
   existing: WorkflowMeta,
   options: UpdateWorkflowOptions,
 ): Promise<void> {
+  validateImmutableWorkflowFields(updated, existing);
+  validateWorkflowShapeAndSkipPolicy(updated);
+  validateWorkflowLifecycle(updated, existing);
+  validateWorkflowOutcome(updated);
+  validateWorkflowPolicyVersions(updated);
+  validateWorkflowPolicyState(updated);
+  validatePlanDecisionTransition(updated, existing);
+  await validatePlanningArtifactGate(projectRoot, updated);
+  await validateVerificationGate(projectRoot, updated, existing, options);
+  validatePlanVersionTransition(updated, existing);
+  await validateWorkflowFamilyState(projectRoot, updated);
+  await validateWorkflowCompletionGates(projectRoot, updated);
+}
+
+function validateImmutableWorkflowFields(
+  updated: WorkflowMeta,
+  existing: WorkflowMeta,
+): void {
   if (updated.mode !== existing.mode) {
     throw new Error('workflow mode cannot be changed');
   }
@@ -437,6 +455,9 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('workflow verification policy version cannot be changed');
   }
+}
+
+function validateWorkflowShapeAndSkipPolicy(updated: WorkflowMeta): void {
   if (
     !Number.isInteger(updated.currentStep) ||
     updated.currentStep < 1 ||
@@ -463,6 +484,12 @@ async function validateWorkflowMeta(
       'workflow policy v2 only allows skipping clarification or review',
     );
   }
+}
+
+function validateWorkflowLifecycle(
+  updated: WorkflowMeta,
+  existing: WorkflowMeta,
+): void {
   if (!canTransition(existing.status, updated.status)) {
     throw new Error(
       `invalid workflow status transition: ${existing.status} -> ${updated.status}`,
@@ -496,6 +523,9 @@ async function validateWorkflowMeta(
   } else if (updated.blockingReason !== undefined) {
     throw new Error('only blocked workflows can have a blocking reason');
   }
+}
+
+function validateWorkflowOutcome(updated: WorkflowMeta): void {
   if (updated.mode !== 'mamba' && updated.outcome !== undefined) {
     throw new Error('only manba workflows can have an outcome');
   }
@@ -512,6 +542,9 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('completed manba workflows require an outcome');
   }
+}
+
+function validateWorkflowPolicyVersions(updated: WorkflowMeta): void {
   if (updated.mode === 'mamba' && updated.planVersion !== undefined) {
     throw new Error('manba workflows cannot have a plan version');
   }
@@ -549,6 +582,9 @@ async function validateWorkflowMeta(
       'manba workflows cannot have a verification policy version',
     );
   }
+}
+
+function validateWorkflowPolicyState(updated: WorkflowMeta): void {
   if (
     updated.verificationStatus !== undefined &&
     !isVerificationStatus(updated.verificationStatus)
@@ -585,6 +621,12 @@ async function validateWorkflowMeta(
   if (updated.mode === 'mamba' && updated.planDecision !== undefined) {
     throw new Error('manba workflows cannot have a plan decision');
   }
+}
+
+function validatePlanDecisionTransition(
+  updated: WorkflowMeta,
+  existing: WorkflowMeta,
+): void {
   if (
     updated.planDecision !== existing.planDecision &&
     existing.planDecision !== undefined
@@ -597,6 +639,12 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('workflow plan decision can only be set at step 4');
   }
+}
+
+async function validatePlanningArtifactGate(
+  projectRoot: string,
+  updated: WorkflowMeta,
+): Promise<void> {
   if (
     updated.planningPolicyVersion === 1 ||
     updated.planningPolicyVersion === 2
@@ -654,6 +702,14 @@ async function validateWorkflowMeta(
       throw new Error('governed execution must be confirmed before step 5');
     }
   }
+}
+
+async function validateVerificationGate(
+  projectRoot: string,
+  updated: WorkflowMeta,
+  existing: WorkflowMeta,
+  options: UpdateWorkflowOptions,
+): Promise<void> {
   if (
     updated.verificationPolicyVersion === 1 &&
     updated.currentStep >= 7 &&
@@ -680,6 +736,12 @@ async function validateWorkflowMeta(
       'verification-blocked workflows must resume through verify',
     );
   }
+}
+
+function validatePlanVersionTransition(
+  updated: WorkflowMeta,
+  existing: WorkflowMeta,
+): void {
   if (
     updated.planVersion !== undefined &&
     (!Number.isInteger(updated.planVersion) || updated.planVersion < 1)
@@ -699,6 +761,12 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('workflow plan version can only change at step 4');
   }
+}
+
+async function validateWorkflowFamilyState(
+  projectRoot: string,
+  updated: WorkflowMeta,
+): Promise<void> {
   await validateParentTask(projectRoot, updated.mode, updated.parentTaskId);
   if (
     (isTerminalWorkflowStatus(updated.status) ||
@@ -707,6 +775,12 @@ async function validateWorkflowMeta(
   ) {
     throw new Error('cannot finish workflow with an active manba child');
   }
+}
+
+async function validateWorkflowCompletionGates(
+  projectRoot: string,
+  updated: WorkflowMeta,
+): Promise<void> {
   if (
     updated.status === 'completed' &&
     updated.reviewPolicyVersion === 1 &&

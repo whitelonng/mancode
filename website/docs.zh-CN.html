@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.5.5</span>
+      <span class="docs-wordmark">文档 / v0.5.6</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -62,7 +62,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>安装与初始化</h2>
-          <p>需要 Node.js 20 或更高版本。你可以在现有项目或安全的空目录中初始化，然后选择一个或多个 Agent 适配器。Windows CMD、PowerShell 和 Git Bash 均受支持；Git 不是必需依赖，只会帮助 mancode 更准确地判断团队模式。</p>
+          <p>需要 Node.js 22 或更高版本。你可以在现有项目或安全的空目录中初始化，然后选择一个或多个 Agent 适配器。Windows CMD、PowerShell 和 Git Bash 均受支持；Git 不是必需依赖，只会帮助 mancode 更准确地判断团队模式。</p>
           <div class="docs-steps">
             <article class="docs-step"><b>01</b><strong>安装</strong><p>在本机全局安装一次 CLI。</p></article>
             <article class="docs-step"><b>02</b><strong>进入项目</strong><p>进入希望 Agent 理解的项目目录。</p></article>
@@ -217,6 +217,120 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 Continuity 适配器。Continuity 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>输出已安装 CLI 版本，便于升级检查和提交问题。</p></article>
           </div>
+
+          <h3>完整公开命令索引</h3>
+          <p>此索引会与实际可执行的 Commander 命令树进行校验。仅用于兼容的旧写法和隐藏的发布内部命令不会列入。</p>
+          <table class="docs-table"><thead><tr><th>命令族</th><th>公开命令入口</th></tr></thead><tbody>
+            <tr><td>初始化与检查</td><td>
+              <code data-cli-command="init">mancode init</code> ·
+              <code data-cli-command="install">mancode install</code> ·
+              <code data-cli-command="status">mancode status</code> ·
+              <code data-cli-command="list-platforms">mancode list-platforms</code> ·
+              <code data-cli-command="uninstall">mancode uninstall</code> ·
+              <code data-cli-command="manps">mancode manps</code> ·
+              <code data-cli-command="refresh-project">mancode refresh-project</code> ·
+              <code data-cli-command="refresh-style">mancode refresh-style</code> ·
+              <code data-cli-command="version">mancode version</code>
+            </td></tr>
+            <tr><td>适配器与策略</td><td>
+              <code data-cli-command="adapter">mancode adapter</code> ·
+              <code data-cli-command="adapter status">mancode adapter status</code> ·
+              <code data-cli-command="adapter upgrade">mancode adapter upgrade</code> ·
+              <code data-cli-command="project">mancode project</code> ·
+              <code data-cli-command="project upgrade">mancode project upgrade</code> ·
+              <code data-cli-command="design">mancode design</code> ·
+              <code data-cli-command="design status">mancode design status</code> ·
+              <code data-cli-command="design context">mancode design context</code> ·
+              <code data-cli-command="design configure">mancode design configure</code> ·
+              <code data-cli-command="design disable">mancode design disable</code>
+            </td></tr>
+            <tr><td>工作流</td><td>
+              <code data-cli-command="workflow create">mancode workflow create</code> ·
+              <code data-cli-command="workflow list">mancode workflow list</code> ·
+              <code data-cli-command="workflow show">mancode workflow show</code> ·
+              <code data-cli-command="workflow update">mancode workflow update</code> ·
+              <code data-cli-command="workflow requirements">mancode workflow requirements</code> ·
+              <code data-cli-command="workflow plan">mancode workflow plan</code> ·
+              <code data-cli-command="workflow review">mancode workflow review</code> ·
+              <code data-cli-command="workflow verify">mancode workflow verify</code> ·
+              <code data-cli-command="workflow complete">mancode workflow complete</code> ·
+              <code data-cli-command="workflow scope">mancode workflow scope</code> ·
+              <code data-cli-command="workflow reframe">mancode workflow reframe</code> ·
+              <code data-cli-command="workflow archive">mancode workflow archive</code> ·
+              <code data-cli-command="workflow checkpoint">mancode workflow checkpoint</code> ·
+              <code data-cli-command="workflow child">mancode workflow child</code> ·
+              <code data-cli-command="workflow promote">mancode workflow promote</code> ·
+              <code data-cli-command="workflow handoff">mancode workflow handoff</code>
+            </td></tr>
+            <tr><td>上下文与会话</td><td>
+              <code data-cli-command="context">mancode context</code> ·
+              <code data-cli-command="context show">mancode context show</code> ·
+              <code data-cli-command="context session">mancode context session</code> ·
+              <code data-cli-command="context session new">mancode context session new</code> ·
+              <code data-cli-command="context session show">mancode context session show</code> ·
+              <code data-cli-command="context session spike">mancode context session spike</code> ·
+              <code data-cli-command="context resume">mancode context resume</code> ·
+              <code data-cli-command="context close">mancode context close</code> ·
+              <code data-cli-command="context doctor">mancode context doctor</code> ·
+              <code data-cli-command="context diagnostics">mancode context diagnostics</code> ·
+              <code data-cli-command="context compact">mancode context compact</code> ·
+              <code data-cli-command="context publish">mancode context publish</code> ·
+              <code data-cli-command="context reconcile-task-head">mancode context reconcile-task-head</code> ·
+              <code data-cli-command="context glossary">mancode context glossary</code> ·
+              <code data-cli-command="context worktree">mancode context worktree</code> ·
+              <code data-cli-command="context worktree register">mancode context worktree register</code>
+            </td></tr>
+            <tr><td>操作恢复</td><td>
+              <code data-cli-command="operation">mancode operation</code> ·
+              <code data-cli-command="operation show">mancode operation show</code> ·
+              <code data-cli-command="operation repair">mancode operation repair</code> ·
+              <code data-cli-command="operation abort">mancode operation abort</code>
+            </td></tr>
+            <tr><td>团队协调</td><td>
+              <code data-cli-command="team">mancode team</code> ·
+              <code data-cli-command="team status">mancode team status</code> ·
+              <code data-cli-command="team policy">mancode team policy</code> ·
+              <code data-cli-command="team conflicts">mancode team conflicts</code> ·
+              <code data-cli-command="team join">mancode team join</code> ·
+              <code data-cli-command="team checkpoint">mancode team checkpoint</code> ·
+              <code data-cli-command="team identity">mancode team identity</code> ·
+              <code data-cli-command="team identity create">mancode team identity create</code> ·
+              <code data-cli-command="team identity show">mancode team identity show</code> ·
+              <code data-cli-command="team decision">mancode team decision</code> ·
+              <code data-cli-command="team decision publish">mancode team decision publish</code>
+            </td></tr>
+            <tr><td>认领</td><td>
+              <code data-cli-command="team claim">mancode team claim</code> ·
+              <code data-cli-command="team renew">mancode team renew</code> ·
+              <code data-cli-command="team release">mancode team release</code> ·
+              <code data-cli-command="team transfer">mancode team transfer</code> ·
+              <code data-cli-command="team reclaim">mancode team reclaim</code> ·
+              <code data-cli-command="team revalidate">mancode team revalidate</code>
+            </td></tr>
+            <tr><td>传输与同步</td><td>
+              <code data-cli-command="team transport">mancode team transport</code> ·
+              <code data-cli-command="team transport status">mancode team transport status</code> ·
+              <code data-cli-command="team transport set">mancode team transport set</code> ·
+              <code data-cli-command="team transport migrate">mancode team transport migrate</code> ·
+              <code data-cli-command="team transport recover">mancode team transport recover</code> ·
+              <code data-cli-command="team sync">mancode team sync</code> ·
+              <code data-cli-command="team sync pull">mancode team sync pull</code> ·
+              <code data-cli-command="team sync push">mancode team sync push</code>
+            </td></tr>
+            <tr><td>交接</td><td>
+              <code data-cli-command="team handoff">mancode team handoff</code> ·
+              <code data-cli-command="team handoff draft">mancode team handoff draft</code> ·
+              <code data-cli-command="team handoff offer">mancode team handoff offer</code> ·
+              <code data-cli-command="team handoff accept">mancode team handoff accept</code> ·
+              <code data-cli-command="team handoff reject">mancode team handoff reject</code> ·
+              <code data-cli-command="team handoff cancel">mancode team handoff cancel</code>
+            </td></tr>
+            <tr><td>迁移</td><td>
+              <code data-cli-command="migrate">mancode migrate</code> ·
+              <code data-cli-command="migrate context">mancode migrate context</code> ·
+              <code data-cli-command="migrate context resolve">mancode migrate context resolve</code>
+            </td></tr>
+          </tbody></table>
         </section>
 
         <section class="doc-section" id="workflow" data-searchable>
@@ -292,7 +406,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
 <span class="command-prompt"># 需求和计划闸门（每次使用上一个命令返回的 revision）</span>
 <span class="command-prompt">$</span> mancode workflow requirements &lt;local:ULID&gt; finalize --file requirements-input.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
-<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; revise --file plan.md --scope-file scope.json --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 <span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
 
 <span class="command-prompt"># 记录规范化评审和验证台账</span>
@@ -316,12 +430,13 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <table class="docs-table"><thead><tr><th>命令</th><th>用途</th><th>关键选项</th></tr></thead><tbody>
             <tr><td><code>create</code></td><td>创建 <code>man</code>、<code>manba</code> 或 <code>manteam</code> 记录。</td><td><code>--parent &lt;TaskRef&gt;</code> 关联诊断子任务；<code>--json</code> 输出 TaskRef。</td></tr>
             <tr><td><code>requirements</code></td><td>完成结构化需求台账。</td><td><code>finalize --file --expected-revision --session</code>。</td></tr>
-            <tr><td><code>plan</code></td><td>修订计划或确认执行决策。</td><td><code>revise --file</code>；<code>confirm --plan-decision</code>；两者都需要 revision 和 session。</td></tr>
-            <tr><td><code>update</code></td><td>改变生命周期状态或阻塞原因。</td><td><code>--status --expected-revision --session</code>；治理字段使用专用命令。</td></tr>
+            <tr><td><code>plan</code></td><td>修订计划或确认执行决策。</td><td><code>revise --file --scope-file</code>；<code>confirm --plan-decision</code>；两者都需要 revision 和 session。</td></tr>
+            <tr><td><code>update</code></td><td>修改生命周期状态或对应的阻塞原因。</td><td><code>--status --expected-revision --session</code>；治理字段使用对应的专用命令。</td></tr>
             <tr><td><code>handoff</code></td><td>把已确认的本地计划交给 solo，随后关闭。</td><td><code>--to solo</code> 或 <code>--complete</code>，并传 revision 与 session。</td></tr>
             <tr><td><code>verify / review</code></td><td>应用规范化 Continuity 台账。</td><td><code>apply --file --expected-revision --session</code>。</td></tr>
             <tr><td><code>reframe</code></td><td>归档已确认的本地规划权威并返回需求对齐。</td><td><code>--expected-revision --checkpoint-id --session</code>；active child、handoff、solo assignment 和 git-ref 都会被拒绝。</td></tr>
-            <tr><td><code>list / show / clean</code></td><td>列出或检查 Continuity TaskRef；<code>clean</code> 不是删除 Continuity 权威数据的命令。</td><td><code>show &lt;namespace:ULID&gt; --json</code>；保留清理使用 <code>context compact --dry-run</code>。</td></tr>
+            <tr><td><code>archive / checkpoint</code></td><td>检查 reframe 创建的不可变证据。</td><td><code>show &lt;namespace:ULID&gt; &lt;evidence-ULID&gt; --json</code>；只读且不需要 session。</td></tr>
+            <tr><td><code>list / show</code></td><td>列出或检查 Continuity TaskRef；仅为兼容保留的 <code>clean</code> 不会删除 Continuity 权威数据。</td><td><code>show &lt;namespace:ULID&gt; --json</code>；保留清理使用 <code>context compact --dry-run</code>。</td></tr>
           </tbody></table>
         </section>
 

@@ -522,7 +522,6 @@ async function writeGreenfieldLayout(
       recursive: true,
     }),
     mkdir(path.join(stagingRoot, 'local', 'workflows'), { recursive: true }),
-    mkdir(path.join(stagingRoot, 'local', 'overlays'), { recursive: true }),
     mkdir(path.join(stagingRoot, 'local', 'quarantine'), { recursive: true }),
     mkdir(path.join(stagingRoot, 'local', 'publish'), { recursive: true }),
     mkdir(path.join(stagingRoot, 'local', 'cache'), { recursive: true }),

@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { Command } from 'commander';
 import { describe, expect, it } from 'vitest';
+import { createCliProgram } from '../src/cli.js';
+import { WORKFLOW_SUBCOMMANDS } from '../src/commands/workflow-subcommands.js';
 
 const root = process.cwd();
 const website = path.join(root, 'website');
@@ -26,6 +29,38 @@ function ids(html: string): Set<string> {
   );
 }
 
+function documentedCommands(html: string): string[] {
+  return [...html.matchAll(/\bdata-cli-command="([^"]+)"/g)]
+    .map((match) => match[1])
+    .sort();
+}
+
+function publicCommands(program: Command): string[] {
+  const result: string[] = [];
+
+  function visit(parent: Command, path: string[]): void {
+    for (const command of parent.commands) {
+      const metadata = command as Command & {
+        _hidden?: boolean;
+      };
+      if (metadata._hidden === true) continue;
+
+      const commandPath = [...path, command.name()];
+      if (command.name() === 'workflow') {
+        result.push(
+          ...WORKFLOW_SUBCOMMANDS.map((subcommand) => `workflow ${subcommand}`),
+        );
+      } else {
+        result.push(commandPath.join(' '));
+      }
+      visit(command, commandPath);
+    }
+  }
+
+  visit(program, []);
+  return result.sort();
+}
+
 describe('website documentation', () => {
   it('keeps every internal page anchor resolvable', async () => {
     for (const name of [
@@ -43,7 +78,24 @@ describe('website documentation', () => {
     }
   });
 
-  it('documents the complete public CLI surface in both languages', async () => {
+  it('documents every public CLI command in both languages', async () => {
+    const commands = publicCommands(createCliProgram());
+
+    // `context beta` is Commander-hidden release plumbing. `workflow clean`
+    // remains an internal compatibility spelling and is intentionally absent
+    // from the public Continuity registry.
+    expect(commands).not.toContain('context beta');
+    expect(commands).not.toContain('workflow clean');
+    expect(commands).toContain('workflow update');
+    expect(commands).toContain('workflow archive');
+
+    expect(documentedCommands(await readPage('docs.html'))).toEqual(commands);
+    expect(documentedCommands(await readPage('docs.zh-CN.html'))).toEqual(
+      commands,
+    );
+  });
+
+  it('documents the core setup and Continuity workflows', async () => {
     for (const name of ['docs.html', 'docs.zh-CN.html']) {
       const html = await readPage(name);
       for (const requiredText of [
@@ -119,6 +171,9 @@ describe('website documentation', () => {
         );
         previous = current;
       }
+      expect(example).toMatch(
+        /workflow plan &lt;local:ULID&gt; revise[^\n]*--scope-file scope\.json/,
+      );
       expect(example).not.toMatch(/workflow update[^\n]*--step/);
       expect(example).not.toContain('workflow decide');
       expect(example).not.toContain('verify &lt;taskId&gt;');

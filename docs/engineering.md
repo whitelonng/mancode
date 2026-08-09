@@ -44,6 +44,18 @@ mancode 的实现原则是：外科手术式修改、可验证、可恢复。
   触碰行为排除项、落在 include 外或匹配 exclude 的改动都是 blocker，不能作为
   “顺手修复”带入任务。
 
+Plan Coach 在写计划前先返回 `READY_FOR_PLAN` 或 `NEEDS_CLARIFICATION`。所有真实选项
+必须解决同一个目标、验收边界和 scope，写明复杂度由谁承担及可观察成本，并只给出一个
+推荐和明确的停止条件。简单任务可以只有一个真实方向，不为凑数制造伪选项。
+
+入口跨平台不一致、semantic owner 或 source of truth 不清、状态/contract 语义变化，
+或者涉及跨 workflow、团队、transport、迁移与多版本兼容时，可以在 `plan.md` 中加入
+Domain Matrix。它只辅助计划审查，不是新的 authority。
+
+实施中返回 `NEEDS_REALIGNMENT` 与 `MANCODE_REFRAME_REQUIRED` 是只读诊断。它必须保留
+metadata、requirements、plan、ledger、claim 和 handoff；只有受支持的 reframe operation
+才能归档旧权威、释放 claim 并返回需求澄清步骤。
+
 默认 Solo 不主动运行这套深入发现；普通小任务仍保持轻量。Solo 接手已有 `/man`
 计划时必须继承其 requirements、plan 和 `implementationScope`，不能重新规划或扩权。
 这些状态写入既有 ledger、plan revision 和 workflow metadata，不建立第二套提示词 authority。
@@ -68,7 +80,8 @@ mancode 的实现原则是：外科手术式修改、可验证、可恢复。
 npx vitest run tests/<affected-file>.test.ts
 npm run typecheck
 npm run lint
-npm test
+npm audit --audit-level=high
+npm run test:coverage
 npm run build
 npm run test:dist
 ```
@@ -87,7 +100,7 @@ npm run test:dist
 ## 文档与发布
 
 - `README.md` 和 `README.en.md` 面向用户并保持功能声明一致。
-- `docs/` 只描述当前契约和未完成验收，不保存已完成实施计划。
+- `docs/` 只描述当前契约和长期发布门禁，不保存版本候选清单或已完成实施计划。
 - 新 CLI 入口必须同步 help、测试和公开参考。
 - 平台能力声明必须区分自动化 contract 与真实宿主证据。
 - 发布版本由 `package.json` 与 `src/version.ts` 共同约束。

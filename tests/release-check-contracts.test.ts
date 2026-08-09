@@ -27,16 +27,25 @@ describe('release candidate check', () => {
     expect(script).toMatch(/'clone',[\s\S]*'--branch',\s*'main'/);
     expect(script).toContain("branch: 'main'");
     expect(script).toContain("createHash('sha256')");
+    expect(script).toContain("['audit', '--audit-level=high', '--json']");
+    expect(script).toContain("'dependency_audit'");
+    expect(script).not.toContain("'--omit=dev'");
     expect(script).not.toMatch(/['"]publish['"]/);
     expect(script).not.toContain('dist-tag');
   });
 
-  it('is registered as an explicit package script', async () => {
+  it('registers release and publish quality gates explicitly', async () => {
     const packageMetadata = JSON.parse(
       await readFile(path.join(root, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
     expect(packageMetadata.scripts['release:check']).toBe(
       'node scripts/release-check.mjs',
+    );
+    expect(packageMetadata.scripts.prepublishOnly).toContain(
+      'npm audit --audit-level=high',
+    );
+    expect(packageMetadata.scripts.prepublishOnly).toContain(
+      'npm run test:coverage',
     );
   });
 });

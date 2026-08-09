@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "AI coding agent workflow harness with mancode Continuity for cross-conversation tasks, decisions, verification, and team coordination.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -37,7 +37,7 @@
     "zcode"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "mancode": "dist/cli.js"
@@ -67,7 +67,7 @@
     "lint": "biome check src tests",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src tests",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run build && npm run test:dist && npm test"
+    "prepublishOnly": "npm audit --audit-level=high && npm run lint && npm run typecheck && npm run build && npm run test:dist && npm run test:coverage"
   },
   "dependencies": {
     "commander": "^12.1.0",
