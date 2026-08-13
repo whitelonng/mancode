@@ -2349,10 +2349,10 @@ async function readAdapterTarget(
   return readFile(filePath, 'utf8');
 }
 
-async function assertPlatformAdapterPathsSafe(
+function fixedAdapterTargetPaths(
   root: string,
   platform: PlatformName,
-): Promise<void> {
+): string[] {
   const targets = new Set<string>([
     path.join(root, targetFor(platform)),
     ...V3_MODE_NAMES.map((mode) => v3ModeEntryPath(root, platform, mode)),
@@ -2365,8 +2365,72 @@ async function assertPlatformAdapterPathsSafe(
       targets.add(retired.filePath);
     }
   }
-  for (const target of targets) {
+  return [...targets];
+}
+
+async function assertPlatformAdapterPathsSafe(
+  root: string,
+  platform: PlatformName,
+): Promise<void> {
+  for (const target of fixedAdapterTargetPaths(root, platform)) {
     await assertAdapterPathSafe(root, target);
+  }
+}
+
+/** One unsafe fixed adapter path, reported without writing anything. */
+export interface V3UnsafeAdapterPath {
+  /** Absolute path of the offending entry. */
+  target: string;
+  /** Path relative to the project root. */
+  relative: string;
+  kind: 'symlink' | 'not-directory' | 'outside-root' | 'root-symlink';
+  /** True when the entry is the final fixed target (a file), false for parents. */
+  finalTarget: boolean;
+  /** For symlinks: the resolved absolute path, or null when unresolvable. */
+  resolvedTo: string | null;
+}
+
+/**
+ * Reports every unsafe fixed adapter path for a platform without writing
+ * anything, so interactive flows can offer a remediation before installing.
+ */
+export async function inspectUnsafeV3AdapterPaths(
+  projectRoot: string,
+  platform: PlatformName,
+): Promise<V3UnsafeAdapterPath[]> {
+  const root = path.resolve(projectRoot);
+  const found: V3UnsafeAdapterPath[] = [];
+  const seen = new Set<string>();
+  for (const target of fixedAdapterTargetPaths(root, platform)) {
+    if (seen.has(target)) continue;
+    seen.add(target);
+    const unsafe = await findUnsafeAdapterPathEntry(root, target);
+    if (unsafe !== null) found.push(unsafe);
+  }
+  return found;
+}
+
+/**
+ * Materializes fixable final-target symlinks as regular files that copy the
+ * resolved content, so a confirmed init can continue without losing what the
+ * link used to expose. Escaping parents and broken links are left untouched.
+ */
+export async function replaceUnsafeV3AdapterSymlinks(
+  entries: readonly V3UnsafeAdapterPath[],
+): Promise<void> {
+  for (const entry of entries) {
+    if (
+      entry.kind !== 'symlink' ||
+      !entry.finalTarget ||
+      entry.resolvedTo === null
+    ) {
+      continue;
+    }
+    const resolvedEntry = await lstat(entry.resolvedTo).catch(() => null);
+    if (resolvedEntry === null || !resolvedEntry.isFile()) continue;
+    const content = await readFile(entry.resolvedTo);
+    await rm(entry.target, { force: true });
+    await writeFile(entry.target, content);
   }
 }
 
@@ -2375,17 +2439,58 @@ async function assertAdapterPathSafe(
   root: string,
   target: string,
 ): Promise<void> {
-  const relative = path.relative(root, target);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+  const unsafe = await findUnsafeAdapterPathEntry(root, target);
+  if (unsafe === null) return;
+  if (unsafe.kind === 'outside-root') {
     throw new Error(
       `MANCODE_ARTIFACT_PATH_UNSAFE: adapter target must stay inside the project root: ${target}`,
     );
   }
-  const rootEntry = await lstat(root);
-  if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+  if (unsafe.kind === 'root-symlink') {
     throw new Error(
       `MANCODE_ARTIFACT_PATH_UNSAFE: project root must be a real directory, not a symbolic link: ${root}`,
     );
+  }
+  if (unsafe.kind === 'not-directory') {
+    throw new Error(
+      `MANCODE_ARTIFACT_PATH_UNSAFE: ${unsafe.relative} cannot be used because ${path.basename(unsafe.target)} is not a directory`,
+    );
+  }
+  const detail = unsafe.resolvedTo
+    ? ` (resolves to ${unsafe.resolvedTo})`
+    : ' (broken link)';
+  const replacement = unsafe.finalTarget
+    ? 'a regular file'
+    : 'a real directory';
+  throw new Error(
+    `MANCODE_ARTIFACT_PATH_UNSAFE: ${unsafe.relative} is a symbolic link${detail}; mancode never writes through links. Replace it with ${replacement} before initializing the adapter.`,
+  );
+}
+
+/** Finds the first unsafe entry in one fixed adapter path, or null when safe. */
+async function findUnsafeAdapterPathEntry(
+  root: string,
+  target: string,
+): Promise<V3UnsafeAdapterPath | null> {
+  const relative = path.relative(root, target);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return {
+      target,
+      relative,
+      kind: 'outside-root',
+      finalTarget: false,
+      resolvedTo: null,
+    };
+  }
+  const rootEntry = await lstat(root);
+  if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+    return {
+      target: root,
+      relative,
+      kind: 'root-symlink',
+      finalTarget: false,
+      resolvedTo: null,
+    };
   }
   const segments = relative.split(path.sep);
   let current = root;
@@ -2394,31 +2499,36 @@ async function assertAdapterPathSafe(
     try {
       const entry = await lstat(current);
       if (entry.isSymbolicLink()) {
-        const detail = await describeAdapterSymlink(current);
-        const replacement =
-          index === segments.length - 1 ? 'a regular file' : 'a real directory';
-        throw new Error(
-          `MANCODE_ARTIFACT_PATH_UNSAFE: ${relative} is a symbolic link${detail}; mancode never writes through links. Replace it with ${replacement} before initializing the adapter.`,
-        );
+        return {
+          target: current,
+          relative,
+          kind: 'symlink',
+          finalTarget: index === segments.length - 1,
+          resolvedTo: await resolveAdapterSymlink(current),
+        };
       }
       if (index < segments.length - 1 && !entry.isDirectory()) {
-        throw new Error(
-          `MANCODE_ARTIFACT_PATH_UNSAFE: ${relative} cannot be used because ${segments[index]} is not a directory`,
-        );
+        return {
+          target: current,
+          relative,
+          kind: 'not-directory',
+          finalTarget: false,
+          resolvedTo: null,
+        };
       }
     } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') return;
+      if (isNodeError(error) && error.code === 'ENOENT') return null;
       throw error;
     }
   }
+  return null;
 }
 
-async function describeAdapterSymlink(linkPath: string): Promise<string> {
+async function resolveAdapterSymlink(linkPath: string): Promise<string | null> {
   try {
-    const resolved = await realpath(linkPath);
-    return ` (resolves to ${resolved})`;
+    return await realpath(linkPath);
   } catch {
-    return ' (broken link)';
+    return null;
   }
 }
 

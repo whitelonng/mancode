@@ -1,4 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os, { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -16,6 +23,7 @@ import {
   EXIT_INIT_FAILED,
   EXIT_NOT_A_PROJECT_DIR,
   EXIT_OK,
+  EXIT_USER_CANCEL,
   init,
   resolveInitAuthority,
 } from '../src/commands/init.js';
@@ -30,6 +38,7 @@ const PLATFORM_HINT_ENV_VARS = [
   'CURSOR_TRACE_ID',
   'COPILOT_AGENT',
   'GITHUB_COPILOT',
+  'DSH_SHELL',
 ] as const;
 
 describe('journaled V3 init command', () => {
@@ -98,6 +107,7 @@ describe('journaled V3 init command', () => {
           return true;
         },
         selectPlatforms: async () => ['cursor'],
+        resolveUnsafeAdapterPaths: async () => 'exit',
       },
     });
 
@@ -281,6 +291,7 @@ describe('journaled V3 init command', () => {
             platformPrompted = true;
             return ['codex'];
           },
+          resolveUnsafeAdapterPaths: async () => 'exit',
         },
       }),
     ).toBe(EXIT_INIT_FAILED);
@@ -323,4 +334,67 @@ describe('journaled V3 init command', () => {
       readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
     ).rejects.toThrow();
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'replaces a symlinked adapter target with a regular file when confirmed',
+    async () => {
+      await mkdir(path.join(root, '.git'));
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+      let promptedPaths: string[] = [];
+
+      const result = await init(root, {
+        fromCli: true,
+        interactive: true,
+        prompter: {
+          confirmGenericProject: async () => true,
+          selectPlatforms: async () => ['claude-code'],
+          resolveUnsafeAdapterPaths: async (context) => {
+            promptedPaths = context.paths.map((item) => item.relative);
+            return 'replace';
+          },
+        },
+      });
+
+      expect(result).toBe(EXIT_OK);
+      expect(promptedPaths).toContain('CLAUDE.md');
+      const entry = await lstat(path.join(root, 'CLAUDE.md'));
+      expect(entry.isSymbolicLink()).toBe(false);
+      const content = await readFile(path.join(root, 'CLAUDE.md'), 'utf8');
+      expect(content).toContain('# shared agent instructions');
+      expect(content).toContain('mancode:continuity:claude:start');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'lets the user exit cleanly instead of touching the symlink',
+    async () => {
+      await mkdir(path.join(root, '.git'));
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      const result = await init(root, {
+        fromCli: true,
+        interactive: true,
+        prompter: {
+          confirmGenericProject: async () => true,
+          selectPlatforms: async () => ['claude-code'],
+          resolveUnsafeAdapterPaths: async () => 'exit',
+        },
+      });
+
+      expect(result).toBe(EXIT_USER_CANCEL);
+      const entry = await lstat(path.join(root, 'CLAUDE.md'));
+      expect(entry.isSymbolicLink()).toBe(true);
+      await expect(
+        readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+      ).rejects.toThrow();
+    },
+  );
 });

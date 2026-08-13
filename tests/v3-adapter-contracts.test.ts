@@ -1,4 +1,11 @@
-import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,9 +26,11 @@ import type { PlatformName } from '../src/installers/registry.js';
 import {
   V3_ADAPTER_PLATFORMS,
   V3_MODE_NAMES,
+  inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
   installV3Adapter,
   removeV3Adapter,
+  replaceUnsafeV3AdapterSymlinks,
   stageV3Adapter,
   v3ModeEntryPath,
 } from '../src/installers/v3-adapter.js';
@@ -662,6 +671,74 @@ describe('V3 adapter bootstrap integration', () => {
       await expect(
         readFile(path.join(root, 'CLAUDE.md'), 'utf8'),
       ).resolves.toBe('# shared agent instructions\n');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'reports an in-repo symlinked fixed target through the inspection API',
+    async () => {
+      await init(root, { v3: true, platform: 'codex' });
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      const found = await inspectUnsafeV3AdapterPaths(root, 'claude-code');
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatchObject({
+        relative: 'CLAUDE.md',
+        kind: 'symlink',
+        finalTarget: true,
+      });
+      expect(found[0]?.resolvedTo?.endsWith('AGENTS.md')).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'materializes a symlinked fixed target as a regular file with preserved content',
+    async () => {
+      await init(root, { v3: true, platform: 'codex' });
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      const found = await inspectUnsafeV3AdapterPaths(root, 'claude-code');
+      await replaceUnsafeV3AdapterSymlinks(found);
+
+      const entry = await lstat(path.join(root, 'CLAUDE.md'));
+      expect(entry.isSymbolicLink()).toBe(false);
+      await expect(
+        readFile(path.join(root, 'CLAUDE.md'), 'utf8'),
+      ).resolves.toBe('# shared agent instructions\n');
+
+      const status = await installV3Adapter(root, 'claude-code');
+      expect(status.ready).toBe(true);
+      const content = await readFile(path.join(root, 'CLAUDE.md'), 'utf8');
+      expect(content).toContain('# shared agent instructions');
+      expect(content).toContain('mancode:continuity:claude:start');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'leaves an escaping symlinked parent unreplaced and still rejects install',
+    async () => {
+      await init(root, { v3: true });
+      const outside = `${root}-outside`;
+      await mkdir(outside, { recursive: true });
+      try {
+        await symlink(outside, path.join(root, '.agents'));
+
+        const found = await inspectUnsafeV3AdapterPaths(root, 'codex');
+        expect(found.some((entry) => entry.kind === 'symlink')).toBe(true);
+        await replaceUnsafeV3AdapterSymlinks(found);
+        await expect(installV3Adapter(root, 'codex')).rejects.toThrow(
+          'MANCODE_ARTIFACT_PATH_UNSAFE',
+        );
+        await expect(
+          readFile(path.join(outside, 'AGENTS.md')),
+        ).rejects.toThrow();
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
     },
   );
 

@@ -15,9 +15,12 @@ import {
   getPlatformInstallers,
 } from '../installers/registry.js';
 import {
+  type V3UnsafeAdapterPath,
   V3_ADAPTER_VERSION,
   assertV3AdapterInstallable,
+  inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
+  replaceUnsafeV3AdapterSymlinks,
 } from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
@@ -753,6 +756,14 @@ async function initializeV3(
     return EXIT_INIT_FAILED;
   }
   try {
+    if (!existingV3) {
+      const unsafeExit = await resolveUnsafeInitAdapterPaths(
+        rootDir,
+        options,
+        selectedPlatforms,
+      );
+      if (unsafeExit !== null) return unsafeExit;
+    }
     if (
       existingV3 &&
       selectedPlatforms.some((platform) => !registeredAdapters.has(platform))
@@ -806,6 +817,48 @@ async function initializeV3(
     printV3InitError(error);
     return EXIT_INIT_FAILED;
   }
+}
+
+/**
+ * Interactive greenfield init: when a fixed adapter target is a symlink,
+ * offer the user a clean exit or replace the link with a regular file that
+ * preserves the resolved content, then let installation continue.
+ */
+async function resolveUnsafeInitAdapterPaths(
+  rootDir: string,
+  options: InitOptions,
+  selectedPlatforms: PlatformName[],
+): Promise<number | null> {
+  const prompter =
+    options.prompter ?? (options.interactive ? createTerminalPrompter() : null);
+  if (!prompter) return null;
+  const locale = detectInitLocale(options.lang) ?? 'en';
+  const found: V3UnsafeAdapterPath[] = [];
+  const seen = new Set<string>();
+  for (const platform of selectedPlatforms) {
+    for (const entry of await inspectUnsafeV3AdapterPaths(rootDir, platform)) {
+      if (seen.has(entry.target)) continue;
+      seen.add(entry.target);
+      found.push(entry);
+    }
+  }
+  const fixable = found.filter(
+    (entry) => entry.kind === 'symlink' && entry.finalTarget,
+  );
+  if (fixable.length === 0) return null;
+
+  const choice = await prompter.resolveUnsafeAdapterPaths({
+    locale,
+    paths: found.map(({ relative, resolvedTo }) => ({ relative, resolvedTo })),
+  });
+  if (choice === 'exit') {
+    console.log(
+      locale === 'zh-CN' ? '已取消初始化。' : 'Initialization cancelled.',
+    );
+    return EXIT_USER_CANCEL;
+  }
+  await replaceUnsafeV3AdapterSymlinks(fixable);
+  return null;
 }
 
 function printV3InitError(error: unknown): void {

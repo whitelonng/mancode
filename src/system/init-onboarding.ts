@@ -20,6 +20,10 @@ export interface InitPrompter {
     locale: InitLocale;
     detected: PlatformName[];
   }): Promise<PlatformName[] | null>;
+  resolveUnsafeAdapterPaths(context: {
+    locale: InitLocale;
+    paths: readonly { relative: string; resolvedTo: string | null }[];
+  }): Promise<'replace' | 'exit'>;
 }
 
 const ALL_PLATFORMS = Object.keys(PLATFORM_INSTALLERS) as PlatformName[];
@@ -258,6 +262,36 @@ export function createTerminalPrompter(): InitPrompter {
           selected.push(platform);
         }
         return [...new Set(selected)];
+      } finally {
+        rl.close();
+      }
+    },
+    async resolveUnsafeAdapterPaths({ locale, paths }) {
+      const rl = createInterface({ input: stdin, output: stdout });
+      try {
+        console.log(
+          locale === 'zh-CN'
+            ? '\n检测到适配器目标路径是符号链接（mancode 不会写入链接）：'
+            : '\nAdapter target paths are symbolic links (mancode never writes through links):',
+        );
+        for (const item of paths) {
+          const detail = item.resolvedTo ? ` -> ${item.resolvedTo}` : '';
+          console.log(`  ${item.relative}${detail}`);
+        }
+        console.log(locale === 'zh-CN' ? '1. 退出' : '1. Exit');
+        console.log(
+          locale === 'zh-CN'
+            ? '2. 将符号链接替换为普通文件（保留原内容）并继续初始化'
+            : '2. Replace the symbolic link(s) with regular file(s) (content preserved) and continue',
+        );
+        const answer = (
+          await rl.question(
+            locale === 'zh-CN' ? '选择 [1/2]: ' : 'Choose [1/2]: ',
+          )
+        )
+          .trim()
+          .toLowerCase();
+        return answer === '2' ? 'replace' : 'exit';
       } finally {
         rl.close();
       }

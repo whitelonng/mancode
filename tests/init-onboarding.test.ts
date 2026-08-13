@@ -43,6 +43,7 @@ const PLATFORM_HINT_ENV_VARS = [
   'CURSOR_TRACE_ID',
   'COPILOT_AGENT',
   'GITHUB_COPILOT',
+  'DSH_SHELL',
 ] as const;
 
 describe('init onboarding', () => {
