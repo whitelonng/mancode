@@ -58,6 +58,7 @@ describe('adapter status command contracts', () => {
       'zcode',
       'kimi-code',
       'qoder',
+      'dsh',
     ]);
   });
 

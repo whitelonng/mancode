@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.5.6</span>
+      <span class="docs-wordmark">Documentation / v0.6.0</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -56,7 +56,7 @@
         <section class="docs-hero" id="overview" data-searchable>
           <p class="eyebrow">Practice to playoffs</p>
           <h1>Give your coding agent<br />a real playbook.</h1>
-          <p>mancode is a local-first workflow harness for the coding agent you already use. It adds project context, task intensity, durable artifacts, acceptance evidence, and review gates without replacing Claude Code, Cursor, Codex, Copilot, ZCode, Kimi Code, or Qoder.</p>
+          <p>mancode is a local-first workflow harness for the coding agent you already use. It adds project context, task intensity, durable artifacts, acceptance evidence, and review gates without replacing Claude Code, Cursor, Codex, Copilot, ZCode, Kimi Code, Qoder, or DeepSeek Harness.</p>
           <div class="docs-note"><strong>Two layers</strong><p>You normally talk to your agent with <code>solo</code>, <code>/manba</code>, or <code>/man</code>. The installed adapter then uses <code>mancode workflow</code> to maintain the durable record. The CLI reference below explains that record; it is not a second workflow you must perform by hand.</p></div>
         </section>
 
@@ -102,7 +102,7 @@
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>Detected stack, validation commands, and local UI tokens.</td><td>Inspect for internal project details and decide whether reproducibility justifies sharing.</td></tr>
             <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>Requirements, plans, review and verification ledgers, reports, checkpoints, and summaries.</td><td>Review carefully. Evidence and reports may contain sensitive data; shared workflows pass the Continuity privacy boundary.</td></tr>
             <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>Confirmed decisions and durable coordination authority.</td><td>Commit only information intentionally written for the team.</td></tr>
-            <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
+            <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.dsh/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>Safety boundary</strong><p><code>mancode manps</code> scans and reports by default. Remediation is explicit. Irreversible project operations still require human confirmation; installing mancode does not grant the agent permission to publish, delete, or rewrite unrelated work.</p></div>
         </section>
@@ -194,6 +194,9 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 /skill:manba
 /skill:manteam</code></pre><button type="button" data-copy-code>Copy</button></div></article>
             <article class="command-card"><header><h3>Qoder</h3><span>Preview</span></header><p>The adapter installs project commands in <code>.qoder/commands/</code> for the IDE and CLI. Verify discovery with <code>mancode status</code>.</p><div class="code-wrap"><pre><code>/man
+/manba
+/manteam</code></pre><button type="button" data-copy-code>Copy</button></div></article>
+            <article class="command-card"><header><h3>DeepSeek Harness</h3><span>Preview</span></header><p>The adapter installs user-invoked project skills in <code>.dsh/skills/</code>. Refresh the workspace and verify discovery with <code>mancode status</code>.</p><div class="code-wrap"><pre><code>/man
 /manba
 /manteam</code></pre><button type="button" data-copy-code>Copy</button></div></article>
           </div>
@@ -451,6 +454,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <tr><td>ZCode (preview)</td><td><code>AGENTS.md</code> plus project skills in <code>.agents/skills/</code>.</td><td>Verify skill discovery and invocation in your installed ZCode release.</td></tr>
             <tr><td>Kimi Code (preview)</td><td><code>AGENTS.md</code> plus project skills in <code>.agents/skills/</code>.</td><td>Invoke <code>/skill:man*</code> skills; verify discovery in your installed Kimi Code desktop or CLI release.</td></tr>
             <tr><td>Qoder (preview)</td><td><code>AGENTS.md</code> plus project commands in <code>.qoder/commands/</code>.</td><td>Invoke <code>/man*</code> commands; verify discovery in your installed Qoder IDE or CLI release.</td></tr>
+            <tr><td>DeepSeek Harness (preview)</td><td><code>AGENTS.md</code> plus isolated project skills in <code>.dsh/skills/</code>.</td><td>Invoke <code>/man*</code> skills explicitly; GUI discovery, two-window sessions, and subagent propagation remain provisional.</td></tr>
           </tbody></table>
         </section>
 
@@ -460,7 +464,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-project
 <span class="command-prompt">$</span> mancode refresh-style
 <span class="command-prompt">$</span> mancode adapter upgrade --platform cursor --dry-run</code></pre><button type="button" data-copy-code>Copy</button></div>
-          <ul class="docs-checklist"><li><code>refresh-project</code> updates detected project facts and reports stale adapters.</li><li>Claude Code reads refreshed context through hooks.</li><li>Cursor, Codex, Copilot, ZCode, Kimi Code, and Qoder use static files; publish a staged repair from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>.</li><li>Only UI projects receive design-token-specific guidance.</li></ul>
+          <ul class="docs-checklist"><li><code>refresh-project</code> updates detected project facts and reports stale adapters.</li><li>Claude Code reads refreshed context through hooks.</li><li>Cursor, Codex, Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness use static files; publish a staged repair from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>.</li><li>Only UI projects receive design-token-specific guidance.</li></ul>
         </section>
 
         <section class="doc-section" id="uninstall" data-searchable>
@@ -480,7 +484,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3><code>mancode init</code> rejects the directory</h3>
           <p>A safely empty directory is supported interactively, or explicitly with <code>--empty</code>. A non-empty directory still needs a recognized project marker or Git metadata so mancode does not initialize an arbitrary folder by accident.</p>
           <h3>The agent does not see a newly installed mode</h3>
-          <p>Reload or restart the agent so it rereads repository instructions. Run <code>mancode status</code>; if the adapter is not ready, preview <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>, then repair it from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>. For ZCode, Copilot, Kimi Code, and Qoder, also confirm that the installed client release supports repository skills, prompt files, or project commands.</p>
+          <p>Reload or restart the agent so it rereads repository instructions. Run <code>mancode status</code>; if the adapter is not ready, preview <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>, then repair it from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>. For ZCode, Copilot, Kimi Code, Qoder, and DeepSeek Harness, also confirm that the installed client release supports repository skills, prompt files, or project commands.</p>
           <h3>Claude Code hooks do not run</h3>
           <p>Restart Claude Code after initialization, then check <code>mancode status</code>. Repair V3 managed content through the adapter preview and confirmation flow above; the legacy hook architecture uses <code>mancode init --legacy --force</code>. The hooks use Node.js and do not require Bash or jq.</p>
           <h3>Cursor rules do not trigger</h3>

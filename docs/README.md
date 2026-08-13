@@ -20,7 +20,7 @@
 | [architecture.md](./architecture.md) | Continuity 权威模型、目录、Task Aggregate 和一致性 |
 | [workflows.md](./workflows.md) | 模式、工作流状态、治理门禁与团队协作 |
 | [project-intelligence.md](./project-intelligence.md) | 项目检测、设计资产扫描和 preseason |
-| [platform-adapters.md](./platform-adapters.md) | 七个平台的 bootstrap、能力差异与边界 |
+| [platform-adapters.md](./platform-adapters.md) | 八个平台的 bootstrap、能力差异与边界 |
 | [12-lifecycle.md](./12-lifecycle.md) | 初始化、会话、任务、恢复和迁移生命周期 |
 | [engineering.md](./engineering.md) | 开发原则、验证要求和代码地图 |
 

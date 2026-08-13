@@ -3,6 +3,7 @@ import { installClaudeCode } from './claude-code.js';
 import { installCodex } from './codex.js';
 import { installCopilot } from './copilot.js';
 import { installCursor } from './cursor.js';
+import { installDsh } from './dsh.js';
 import { installKimiCode } from './kimi-code.js';
 import { installQoder } from './qoder.js';
 import { installZcode } from './zcode.js';
@@ -14,13 +15,20 @@ export type PlatformName =
   | 'copilot'
   | 'zcode'
   | 'kimi-code'
-  | 'qoder';
+  | 'qoder'
+  | 'dsh';
 
 export interface PlatformCapabilities {
   slashCommands: 'native' | 'partial' | 'none';
   subagents: boolean;
   hooks: boolean;
-  skills: 'native' | 'rules' | 'single-file' | 'instructions' | 'agents-skills';
+  skills:
+    | 'native'
+    | 'rules'
+    | 'single-file'
+    | 'instructions'
+    | 'agents-skills'
+    | 'dsh-skills';
 }
 
 export interface InstallAdapterOptions {
@@ -118,6 +126,17 @@ export const PLATFORM_INSTALLERS: Record<PlatformName, PlatformInstaller> = {
       skills: 'rules',
     },
     install: installQoder,
+  },
+  dsh: {
+    name: 'dsh',
+    displayName: 'DeepSeek Harness',
+    capabilities: {
+      slashCommands: 'partial',
+      subagents: true,
+      hooks: false,
+      skills: 'dsh-skills',
+    },
+    install: installDsh,
   },
 };
 

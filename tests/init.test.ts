@@ -488,6 +488,7 @@ describe('mancode init', () => {
       'zcode',
       'kimi-code',
       'qoder',
+      'dsh',
     ]);
   });
 

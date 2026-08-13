@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SESSION_SPIKE_PLATFORMS,
   createPlatformSessionSpike,
   evaluatePlatformSessionCapability,
   platformSpikeFreezeStatus,
@@ -66,24 +67,9 @@ describe('platform session identity spike contract', () => {
   });
 
   it('accepts proven explicit-session isolation without trusting host identity', () => {
-    const spikes = [
-      'claude-code',
-      'codex',
-      'cursor',
-      'copilot',
-      'zcode',
-      'kimi-code',
-      'qoder',
-    ].map((platform, index) =>
+    const spikes = SESSION_SPIKE_PLATFORMS.map((platform, index) =>
       createPlatformSessionSpike({
-        platform: platform as
-          | 'claude-code'
-          | 'codex'
-          | 'cursor'
-          | 'copilot'
-          | 'zcode'
-          | 'kimi-code'
-          | 'qoder',
+        platform,
         observedAt: '2026-07-17T12:00:00.000Z',
         sessionMode: 'explicit',
         hostSessionSource: 'none',
@@ -115,6 +101,7 @@ describe('platform session identity spike contract', () => {
         'zcode',
         'kimi-code',
         'qoder',
+        'dsh',
       ],
     });
   });

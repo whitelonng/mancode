@@ -174,6 +174,9 @@ function renderModes(options: SharedContentOptions): string {
   } else if (options.platform === 'qoder') {
     commandLabel =
       'Invoke mode commands with `/man`, `/manba`, `/manteam`, `/manps`, `/mansolo`.';
+  } else if (options.platform === 'dsh') {
+    commandLabel =
+      'Invoke user-only mode skills with `/man`, `/manba`, `/manteam`, `/manps`, `/mansolo`.';
   } else if (options.capabilities.skills === 'agents-skills') {
     commandLabel =
       'Invoke mode skills with `$man`, `$manba`, `$manteam`, `$manps`, `$mansolo`.';

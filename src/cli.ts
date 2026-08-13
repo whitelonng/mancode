@@ -110,7 +110,7 @@ export function createCliProgram(): Command {
   program
     .command('install [platform]')
     .description(
-      'Install platform adapter (claude-code, cursor, codex, copilot, zcode, kimi-code, qoder)',
+      'Install platform adapter (claude-code, cursor, codex, copilot, zcode, kimi-code, qoder, dsh)',
     )
     .option('--force', 'Reinstall even if already installed')
     .option(
@@ -365,7 +365,7 @@ export function createCliProgram(): Command {
     )
     .requiredOption(
       '--platform <platform>',
-      'claude-code, codex, cursor, copilot, zcode, kimi-code, or qoder',
+      'claude-code, codex, cursor, copilot, zcode, kimi-code, qoder, or dsh',
     )
     .requiredOption('--session-mode <mode>', 'Evidence path: host or explicit')
     .requiredOption(

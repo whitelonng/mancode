@@ -1179,6 +1179,12 @@ function getInitManagedFilePaths(
       files.push(`.qoder/commands/${mode}.md`);
     }
   }
+  if (platforms.includes('dsh')) {
+    files.push('AGENTS.md');
+    for (const mode of MODE_NAMES) {
+      files.push(`.dsh/skills/${mode}/SKILL.md`);
+    }
+  }
   if (platforms.includes('copilot')) {
     files.push(
       '.github/copilot-instructions.md',
@@ -1304,6 +1310,13 @@ function printPlatformCreatedFiles(
   if (platform === 'qoder') {
     console.log('  AGENTS.md                   # Qoder managed block');
     console.log('  .qoder/commands/            # Qoder mode commands');
+    return;
+  }
+  if (platform === 'dsh') {
+    console.log(
+      '  AGENTS.md                   # DeepSeek Harness managed block',
+    );
+    console.log('  .dsh/skills/                # DeepSeek Harness mode skills');
     return;
   }
   console.log('  .github/copilot-instructions.md # Copilot instructions');

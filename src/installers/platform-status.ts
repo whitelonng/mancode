@@ -11,6 +11,7 @@ import {
   MANCODE_CURSOR_CORE_RULE_FILES,
   MANCODE_CURSOR_RULE_FILES,
 } from './cursor.js';
+import { DSH_MANCODE_END_MARKER, DSH_MANCODE_START_MARKER } from './dsh.js';
 import {
   KIMI_MANCODE_END_MARKER,
   KIMI_MANCODE_START_MARKER,
@@ -22,6 +23,7 @@ import {
 } from './managed-block.js';
 import {
   MANCODE_AGENT_SKILL_MARKERS,
+  MANCODE_DSH_SKILL_MARKERS,
   MODE_FILE_MANAGED_MARKER,
   MODE_NAMES,
 } from './mode-skills.js';
@@ -290,6 +292,44 @@ async function checkPlatformReadiness(
       readyDetail: hasCommands
         ? 'managed block and commands present'
         : 'mode commands are missing, incomplete, or user-authored',
+    };
+  }
+
+  if (platform === 'dsh') {
+    const hasBlock = await fileHasManagedBlock(
+      path.join(rootDir, 'AGENTS.md'),
+      DSH_MANCODE_START_MARKER,
+      DSH_MANCODE_END_MARKER,
+    );
+    if (!hasBlock) {
+      return {
+        present: false,
+        ready: false,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block missing',
+      };
+    }
+    if (await isPlatformMinimal(rootDir, 'dsh')) {
+      return {
+        present: true,
+        ready: true,
+        target: 'AGENTS.md',
+        readyDetail: 'managed block present',
+      };
+    }
+
+    const skillsDir = path.join(rootDir, '.dsh', 'skills');
+    const hasSkills = await allManagedSkills(
+      MODE_NAMES.map((mode) => path.join(skillsDir, mode, 'SKILL.md')),
+      MANCODE_DSH_SKILL_MARKERS,
+    );
+    return {
+      present: true,
+      ready: hasSkills,
+      target: 'AGENTS.md + .dsh/skills/',
+      readyDetail: hasSkills
+        ? 'managed block and skills present'
+        : 'mode skills are missing, incomplete, or user-authored',
     };
   }
 
