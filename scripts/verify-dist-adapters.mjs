@@ -25,6 +25,7 @@ try {
     '.cursor/commands/man.md',
     'AGENTS.md',
     '.agents/skills/man/SKILL.md',
+    '.dsh/skills/man/SKILL.md',
     '.github/copilot-instructions.md',
     '.github/prompts/man.prompt.md',
     '.qoder/commands/man.md',

@@ -163,4 +163,5 @@ const BETA_PLATFORMS: PlatformName[] = [
   'zcode',
   'kimi-code',
   'qoder',
+  'dsh',
 ];

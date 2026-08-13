@@ -11,14 +11,14 @@
 
 <p align="center">
   适配常见编程代理工具，包括 Claude Code、Cursor、ChatGPT 桌面端中的 Codex、
-  Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder。
+  Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness。
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.5.6-2f855a?style=flat-square" alt="状态：mancode Continuity v0.5.6" />
-  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.0" />
+  <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
 <p align="center">
@@ -124,8 +124,8 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.5.6。Claude Code、Cursor、ChatGPT 桌面端中的
-Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder adapter 均已接入。
+**状态**：mancode Continuity v0.6.0。Claude Code、Cursor、ChatGPT 桌面端中的
+Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
 需要 Node.js 22 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
@@ -163,6 +163,9 @@ mancode init --platform all
   下提供 `/skill:man*` 项目 skills；宿主发现路径仍需真实验证
 - Qoder（IDE、CLI）：托管 `AGENTS.md` block，并在 `.qoder/commands/` 下提供
   `/man*` 项目 commands；宿主发现路径仍需真实验证
+- DeepSeek Harness：托管独立的 `AGENTS.md` block，并在优先级更高且与其他 agent
+  隔离的 `.dsh/skills/` 下提供用户显式 `/man*` skills；官方文件发现契约已确认，
+  GUI 发现、双窗口 session 和 subagent 传播仍需真实宿主验证
 - Windsurf、Cline、Roo Code：后续计划
 
 ### 安装参数
@@ -171,7 +174,7 @@ mancode init --platform all
 mancode init --yes        # 跳过通用项目确认（CI 中仍需 --platform）
 mancode init --team       # 强制启用团队模式
 mancode init --no-team    # 强制禁用团队模式
-mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,copilot,zcode,kimi-code,qoder，或 all
+mancode init --platform PLATFORMS # 一个或多个：claude-code,cursor,codex,copilot,zcode,kimi-code,qoder,dsh，或 all
 mancode init --empty      # 非交互脚本中允许安全的空目录
 mancode init --lang zh-CN # 显式指定初始化语言（zh-CN 或 en）
 mancode init --legacy --force # 仅 legacy：重装旧 state/hook 架构
@@ -197,9 +200,10 @@ mancode adapter upgrade --platform codex --confirm --operation-id <operationId> 
 
 .claude/skills/                  # Claude Code：bootstrap + 原 mode skills
 .cursor/rules/ + commands/       # Cursor：bootstrap + 原 mode commands
-AGENTS.md                        # Codex / ZCode / Kimi Code / Qoder：各自托管 instructions block
+AGENTS.md                        # Codex / ZCode / Kimi Code / Qoder / DeepSeek Harness：各自托管 instructions block
 .agents/skills/                  # Codex / ZCode / Kimi Code：原 mode skills
 .qoder/commands/                 # Qoder：原 mode commands
+.dsh/skills/                     # DeepSeek Harness：用户显式原 mode skills
 .github/copilot-instructions.md  # GitHub Copilot：托管 instruction block
 .github/prompts/                 # GitHub Copilot：原 mode prompts
 ```
@@ -235,6 +239,9 @@ slash command 列表，因此发现并启用 `man` 后可从列表中选择 `/ma
 和 [slash command 文档](https://learn.chatgpt.com/docs/reference/slash-commands)。
 已有 workflow 元数据继续兼容，不需要迁移。
 
+DeepSeek Harness 从 `.dsh/skills/` 发现入口，使用 `/man`、`/manba` 等名称显式调用。
+这些 skill 被标记为仅用户调用，不会让宿主自动切换 mancode mode。
+
 ```bash
 # Claude Code / Cursor
 /manba                     # 定位 bug 并验证真实用户路径
@@ -249,6 +256,13 @@ $man
 $manps
 $manteam
 $mansolo
+
+# DeepSeek Harness
+/manba
+/man
+/manps
+/manteam
+/mansolo
 ```
 
 ### `/man` 如何工作：季后赛模式
@@ -458,7 +472,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.5.6
+mancode v0.6.0
 
 Project:     my-app
 Runtime:     ready
@@ -474,6 +488,7 @@ mancode adapter status:
   ○ ZCode: not installed
   ○ Kimi Code (desktop/CLI): not installed
   ○ Qoder (IDE/CLI): not installed
+  ○ DeepSeek Harness: not installed
 ```
 
 ### `mancode workflow`
@@ -612,12 +627,12 @@ Monorepo 可显式选择一个仓库内 UI 根目录，例如 `mancode refresh-s
 `mancode adapter upgrade --platform <platform> --dry-run`，确认 staging 结果后再用
 该预览返回的 `--operation-id` 和 active session 执行 `--confirm`。确认成功后会删除
 该 operation 的 staging 预览，避免内部临时文件让后续 Git 同步误判工作区不干净。
-对于 Codex、ZCode 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
+对于 Codex、ZCode、DeepSeek Harness 和 Copilot，`AGENTS.md` 或 `.github/copilot-instructions.md`
 中的受控区可能被手动编辑或删除了。
 
 ### AGENTS.md 或 copilot-instructions.md 受控区被误删
 
-运行 `mancode adapter upgrade --platform codex --dry-run`（或 `zcode`、`kimi-code`、`qoder`、`copilot`）
+运行 `mancode adapter upgrade --platform codex --dry-run`（或 `zcode`、`kimi-code`、`qoder`、`dsh`、`copilot`）
 检查差异，再用该预览返回的 `--operation-id` 和 active session 执行 `--confirm`
 重新插入受控区。
 对应 mancode 受控标记外的用户内容会被保留。
@@ -627,6 +642,13 @@ Monorepo 可显式选择一个仓库内 UI 根目录，例如 `mancode refresh-s
 确认 `.agents/skills/manba/SKILL.md` 到 `.agents/skills/mansolo/SKILL.md`
 都存在，然后重启或刷新 ZCode。当前尚不生成 ZCode `/man*` slash commands，
 因为 workspace command 的文件路径仍需显式验证。
+
+### DeepSeek Harness skills 未出现
+
+确认 `.dsh/skills/manba/SKILL.md` 到 `.dsh/skills/mansolo/SKILL.md` 都存在，
+然后刷新或重启 DeepSeek Harness，并从项目根目录重新打开 workspace。DSH 使用自己的
+`.dsh/skills/`，不要把这些入口移动到共享的 `.agents/skills/`。适配器在完成 GUI、
+双窗口 session 和 subagent 传播验证前保持 provisional。
 
 ### Cursor rules 不触发
 
@@ -680,7 +702,8 @@ mancode 还提供 mode skills、持久化工作流和独立审查 subagents。
 ### mancode 支持 Claude Code 以外的平台吗？
 
 支持。mancode 通过静态 bootstrap 和原 mode 入口支持 Claude Code、Cursor、
-ChatGPT 桌面端中的 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code 和 Qoder。
+ChatGPT 桌面端中的 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和
+DeepSeek Harness。
 mancode 默认不把任何平台的 hook 当成已批准能力。
 
 ### mancode 能改善前端一致性吗？
@@ -694,7 +717,7 @@ decision 协作；checkout-local session 不会被误当作共享状态。
 
 ## 仍在推进
 
-- 完成 ZCode、Kimi Code 和 Qoder 的项目级入口、命令传播与双窗口 session 真实宿主验证；验证完成前继续标记为 provisional。
+- 完成 ZCode、Kimi Code、Qoder 和 DeepSeek Harness 的项目级入口、命令传播与双窗口 session 真实宿主验证；验证完成前继续标记为 provisional。
 - 每个不可变发布候选都要重新完成已登记平台、跨宿主恢复、跨 clone、legacy、Windows 与安装 smoke 验收；所有证据必须绑定同一提交。
 - 根据真实需求评估 Windsurf、Cline 和 Roo Code adapter。
 
@@ -705,7 +728,7 @@ decision 协作；checkout-local session 不会被误当作共享状态。
 mancode 最适合被描述为：
 
 > 面向 Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、
-> ZCode、Kimi Code 和 Qoder 的 AI 编码代理工作流调度工具和 npm CLI，安装静态
+> ZCode、Kimi Code、Qoder 和 DeepSeek Harness 的 AI 编码代理工作流调度工具和 npm CLI，安装静态
 > bootstrap、原 skills/modes 与 instruction 文件，用于
 > 项目感知 AI 编码流程、YAGNI 约束、设计 token 感知前端改动、本地团队记忆、季前赛
 > 项目健康扫描和多 agent 代码审查。
@@ -714,7 +737,7 @@ mancode 最适合被描述为：
 
 - 如何防止 AI 编码代理过度设计
 - 如何给 AI 编码代理加结构化工作流
-- Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code 与 Qoder 的原 mode skills/commands
+- Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code、Qoder 与 DeepSeek Harness 的原 mode skills/commands
 - Cursor、Codex（ChatGPT 桌面端/CLI）或 Copilot workflow adapters
 - 如何对 AI 生成代码做多 agent 审查
 - 如何让 AI agent 复用已有项目组件

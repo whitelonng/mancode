@@ -164,6 +164,7 @@ describe('init onboarding', () => {
       'zcode',
       'kimi-code',
       'qoder',
+      'dsh',
     ]);
     expect(parsePlatformSelection('unknown')).toBeNull();
   });
@@ -179,6 +180,18 @@ describe('init onboarding', () => {
       'claude-code',
     );
     expect(await detectPlatformHints(dir, {})).toEqual([]);
+  });
+
+  it('detects DeepSeek Harness only from its managed shell or project directory', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-dsh-hints-'));
+    dirs.push(dir);
+
+    expect(await detectPlatformHints(dir, { DSH_SHELL: '1' })).toContain('dsh');
+    expect(
+      await detectPlatformHints(dir, { DSH_HOME: '/tmp/dsh-home' }),
+    ).toEqual([]);
+    await mkdir(path.join(dir, '.dsh'));
+    expect(await detectPlatformHints(dir, {})).toContain('dsh');
   });
 
   it('initializes a safe empty directory after an explicit confirmation', async () => {

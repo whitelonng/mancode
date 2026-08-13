@@ -15,7 +15,8 @@ export type ManagedAdapter =
   | 'copilot'
   | 'zcode'
   | 'kimi-code'
-  | 'qoder';
+  | 'qoder'
+  | 'dsh';
 
 export type ManagedAdapterInventory = Partial<Record<ManagedAdapter, string>>;
 
@@ -70,6 +71,7 @@ const MANAGED_ADAPTERS: ManagedAdapter[] = [
   'zcode',
   'kimi-code',
   'qoder',
+  'dsh',
 ];
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;

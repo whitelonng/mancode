@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contextBeta } from '../src/commands/context.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createUlid } from '../src/context/ids.js';
-import { installV3Adapter } from '../src/installers/v3-adapter.js';
+import {
+  V3_ADAPTER_PLATFORMS,
+  installV3Adapter,
+} from '../src/installers/v3-adapter.js';
 import { writePlatformSessionSpike } from '../src/runtime/platform-spike-store.js';
 import {
   SESSION_SPIKE_PLATFORMS,
@@ -34,6 +37,7 @@ describe('V3 Beta gate', () => {
         zcode: '3',
         'kimi-code': '3',
         qoder: '3',
+        dsh: '3',
       },
       operationId: id(1),
       workspaceId: id(2),
@@ -202,15 +206,7 @@ async function makeBetaReady(
   subagentInheritance: 'proven' | 'not_proven' = 'proven',
   releaseCandidate = RELEASE_CANDIDATE,
 ): Promise<void> {
-  for (const platform of [
-    'claude-code',
-    'codex',
-    'cursor',
-    'copilot',
-    'zcode',
-    'kimi-code',
-    'qoder',
-  ] as const) {
+  for (const platform of V3_ADAPTER_PLATFORMS) {
     await installV3Adapter(projectRoot, platform);
   }
   await Promise.all(

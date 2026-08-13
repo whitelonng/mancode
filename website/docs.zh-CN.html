@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.5.6</span>
+      <span class="docs-wordmark">文档 / v0.6.0</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -56,7 +56,7 @@
         <section class="docs-hero" id="overview" data-searchable>
           <p class="eyebrow">从日常训练到关键比赛</p>
           <h1>给你的编程 Agent<br />一套真正可执行的战术。</h1>
-          <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code 或 Qoder，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
+          <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code、Qoder 或 DeepSeek Harness，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
           <div class="docs-note"><strong>两个层次</strong><p>日常使用时，你在 Agent 对话中调用 <code>solo</code>、<code>/manba</code> 或 <code>/man</code>。安装好的适配器会在背后调用 <code>mancode workflow</code> 维护持久记录。后面的 CLI 参考用于解释这份记录，并不是要求你手工再做一遍流程。</p></div>
         </section>
 
@@ -102,7 +102,7 @@
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>识别出的技术栈、验证命令和本地 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
             <tr><td><code>.mancode/local/workflows/</code><br /><code>.mancode/shared/workflows/</code></td><td>需求、计划、评审和验证台账、报告、checkpoint 与总结。</td><td>重点检查。证据和报告可能含敏感数据；shared workflow 必须通过 Continuity 隐私边界。</td></tr>
             <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>已确认决策与持久化协调权威。</td><td>只提交有意写给团队的内容。</td></tr>
-            <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
+            <tr><td><code>.claude/</code>、<code>.cursor/</code>、<code>.agents/</code>、<code>.dsh/</code>、<code>.github/</code>、<code>AGENTS.md</code></td><td>平台 instructions、命令或 prompt、skills、hooks 与受控区块。</td><td>团队确实把该适配器作为开发流程的一部分时再共享；mancode 管理标记之外的内容仍归用户所有。</td></tr>
           </tbody></table>
           <div class="docs-note"><strong>安全边界</strong><p><code>mancode manps</code> 默认只扫描和报告，修复必须显式进入 remediation 路径。安装 mancode 也不会赋予 Agent 发布、删除或重写无关工作的权限；不可逆操作仍需人工确认。</p></div>
         </section>
@@ -194,6 +194,9 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 /skill:manba
 /skill:manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
             <article class="command-card"><header><h3>Qoder</h3><span>预览</span></header><p>适配器在 <code>.qoder/commands/</code> 下安装项目 commands，IDE 与 CLI 共用，请结合 <code>mancode status</code> 实测发现路径。</p><div class="code-wrap"><pre><code>/man
+/manba
+/manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
+            <article class="command-card"><header><h3>DeepSeek Harness</h3><span>预览</span></header><p>适配器在 <code>.dsh/skills/</code> 下安装用户显式调用的项目 skills。刷新 workspace 后结合 <code>mancode status</code> 验证发现路径。</p><div class="code-wrap"><pre><code>/man
 /manba
 /manteam</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
@@ -451,6 +454,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <tr><td>ZCode（预览）</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code> 中的项目 skills。</td><td>请在已安装的 ZCode 版本中验证 skill 发现和调用。</td></tr>
             <tr><td>Kimi Code（预览）</td><td><code>AGENTS.md</code> 和 <code>.agents/skills/</code> 中的项目 skills。</td><td>用 <code>/skill:man*</code> 调用；请在已安装的 Kimi Code 桌面端或 CLI 中验证发现路径。</td></tr>
             <tr><td>Qoder（预览）</td><td><code>AGENTS.md</code> 和 <code>.qoder/commands/</code> 中的项目 commands。</td><td>用 <code>/man*</code> 调用；请在已安装的 Qoder IDE 或 CLI 中验证发现路径。</td></tr>
+            <tr><td>DeepSeek Harness（预览）</td><td><code>AGENTS.md</code> 和 <code>.dsh/skills/</code> 中隔离的项目 skills。</td><td>显式调用 <code>/man*</code>；GUI 发现、双窗口 session 和 subagent 传播仍为 provisional。</td></tr>
           </tbody></table>
         </section>
 
@@ -460,7 +464,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode refresh-project
 <span class="command-prompt">$</span> mancode refresh-style
 <span class="command-prompt">$</span> mancode adapter upgrade --platform cursor --dry-run</code></pre><button type="button" data-copy-code>复制</button></div>
-          <ul class="docs-checklist"><li><code>refresh-project</code> 更新项目事实并报告 stale adapter。</li><li>Claude Code 通过 hooks 读取刷新后的上下文。</li><li>Cursor、Codex、Copilot、ZCode、Kimi Code 和 Qoder 使用静态文件；从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布 staging 修复。</li><li>只有 UI 项目会生成设计 token 相关指导。</li></ul>
+          <ul class="docs-checklist"><li><code>refresh-project</code> 更新项目事实并报告 stale adapter。</li><li>Claude Code 通过 hooks 读取刷新后的上下文。</li><li>Cursor、Codex、Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness 使用静态文件；从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布 staging 修复。</li><li>只有 UI 项目会生成设计 token 相关指导。</li></ul>
         </section>
 
         <section class="doc-section" id="uninstall" data-searchable>
@@ -480,7 +484,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h3><code>mancode init</code> 拒绝当前目录</h3>
           <p>安全的空目录支持交互初始化，也可以显式使用 <code>--empty</code>。非空目录仍需存在可识别的项目标记或 Git 元数据，防止 mancode 意外初始化任意文件夹。</p>
           <h3>Agent 看不到刚安装的模式</h3>
-          <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，先运行 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>，再从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 修复。ZCode、Copilot、Kimi Code 和 Qoder 还需要确认当前客户端版本支持仓库 skills、prompt files 或项目 commands。</p>
+          <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，先运行 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>，再从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 修复。ZCode、Copilot、Kimi Code、Qoder 和 DeepSeek Harness 还需要确认当前客户端版本支持仓库 skills、prompt files 或项目 commands。</p>
           <h3>Claude Code hooks 没有触发</h3>
           <p>初始化后重启 Claude Code，再用 <code>mancode status</code> 检查状态。V3 managed content 通过上面的 adapter 预览与确认流程修复；legacy hook 架构使用 <code>mancode init --legacy --force</code>。hooks 使用 Node.js，不依赖 Bash 或 jq。</p>
           <h3>Cursor rules 没有触发</h3>

@@ -130,7 +130,8 @@ function platformForClient(client: string): SessionSpikePlatform | null {
     client === 'copilot' ||
     client === 'zcode' ||
     client === 'kimi-code' ||
-    client === 'qoder'
+    client === 'qoder' ||
+    client === 'dsh'
     ? client
     : null;
 }

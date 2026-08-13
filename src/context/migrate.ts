@@ -275,6 +275,7 @@ const MANAGED_ADAPTERS: ManagedAdapter[] = [
   'zcode',
   'kimi-code',
   'qoder',
+  'dsh',
 ];
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const STAGE_STATES = new Set<MigrationStageState>([

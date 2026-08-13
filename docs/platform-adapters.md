@@ -13,6 +13,7 @@
 | ZCode | `AGENTS.md` 托管区、`.agents/skills/` | provisional `$man*` skills | 项目级发现与命令路径仍需真实 UI 验证 |
 | Kimi Code | `AGENTS.md` 托管区、`.agents/skills/` | provisional `/skill:man*` skills（桌面端/CLI 共用） | 项目级 skill 发现与命令路径仍需真实宿主验证 |
 | Qoder | `AGENTS.md` 托管区、`.qoder/commands/` | provisional `/man*` commands（IDE/CLI 共用） | 命令发现与传播仍需真实宿主验证 |
+| DeepSeek Harness | `AGENTS.md` 托管区、`.dsh/skills/` | provisional 用户显式 `/man*` skills 与原生 subagents | 官方文件发现契约已确认；GUI 发现、session 与 subagent 传播仍需真实宿主验证 |
 
 安装示例：
 
@@ -24,6 +25,11 @@ mancode status
 ```
 
 manifest 的 `managedAdapters` key 是项目登记的 required 平台集合。greenfield init 只登记所选平台；后续新增或修复平台必须通过带 active session 和显式确认的 adapter upgrade journal。`AGENTS.md` 和 Copilot instruction 文件中托管区外的用户内容必须原样保留。
+
+DeepSeek Harness 的 mode entry 只安装到 `.dsh/skills/`，不复用
+`.agents/skills/`，以遵守 DSH 的目录优先级并避免不同宿主清理彼此的托管 skill。
+每个入口都标记为仅用户调用；在 host session 传播得到真实证据前，Continuity mutation
+继续要求显式 `--session`，不会把环境中的 `DSH_SESSION_ID` 自动升级为可信身份。
 
 ## 内容完整性与升级
 
@@ -74,4 +80,4 @@ MANCODE_SPIKE_SECOND_SESSION_ID=<window-b-session> \
 
 ## 发布声明
 
-“文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode、Kimi Code 和 Qoder 在完成该验证前保持 provisional 描述。
+“文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode、Kimi Code、Qoder 和 DeepSeek Harness 在完成该验证前保持 provisional 描述。

@@ -8,6 +8,12 @@ import {
 } from '../installers/claude-code.js';
 import { removeCursorGeneratedRules } from '../installers/cursor.js';
 import {
+  DSH_MANCODE_END_MARKER,
+  DSH_MANCODE_START_MARKER,
+  assertDshAdapterPathsSafe,
+  writeDshAgentsFile,
+} from '../installers/dsh.js';
+import {
   KIMI_MANCODE_END_MARKER,
   KIMI_MANCODE_START_MARKER,
 } from '../installers/kimi-code.js';
@@ -16,6 +22,7 @@ import {
   removeCodexSkills,
   removeCopilotPrompts,
   removeCursorCommands,
+  removeDshSkills,
   removeKimiSkills,
   removeQoderCommands,
   removeZcodeSkills,
@@ -169,6 +176,8 @@ async function uninstallPlatform(
     await uninstallKimiCode(rootDir);
   } else if (platform === 'qoder') {
     await uninstallQoder(rootDir);
+  } else if (platform === 'dsh') {
+    await uninstallDsh(rootDir);
   }
 
   await removeFromConfig(rootDir, platform);
@@ -383,6 +392,28 @@ async function uninstallQoder(rootDir: string): Promise<void> {
     // AGENTS.md doesn't exist — nothing to do
   }
   await removeQoderCommands(rootDir);
+}
+
+async function uninstallDsh(rootDir: string): Promise<void> {
+  await assertDshAdapterPathsSafe(rootDir);
+  const agentsPath = path.join(rootDir, 'AGENTS.md');
+  try {
+    const content = await readFile(agentsPath, 'utf-8');
+    const cleaned = removeManagedBlock(
+      content,
+      DSH_MANCODE_START_MARKER,
+      DSH_MANCODE_END_MARKER,
+    );
+    if (cleaned.trim()) {
+      await writeDshAgentsFile(rootDir, `${cleaned}\n`);
+    } else {
+      await rm(agentsPath, { force: true });
+    }
+  } catch {
+    // AGENTS.md doesn't exist — nothing to do
+  }
+  await assertDshAdapterPathsSafe(rootDir);
+  await removeDshSkills(rootDir);
 }
 
 async function removeFromConfig(

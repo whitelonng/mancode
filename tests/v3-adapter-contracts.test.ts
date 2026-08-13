@@ -247,6 +247,11 @@ describe('V3 adapter bootstrap integration', () => {
         expect(installed.target).toBe('CLAUDE.md');
         expect(bootstrap).toContain('mancode:continuity:claude:start');
       }
+      if (platform === 'dsh') {
+        expect(installed.target).toBe('AGENTS.md');
+        expect(bootstrap).toContain('mancode:continuity:dsh:start');
+        expect(bootstrap).toContain('--client dsh');
+      }
 
       for (const mode of V3_MODE_NAMES) {
         const entry = await readFile(
@@ -256,9 +261,18 @@ describe('V3 adapter bootstrap integration', () => {
         if (
           platform === 'claude-code' ||
           platform === 'codex' ||
-          platform === 'zcode'
+          platform === 'zcode' ||
+          platform === 'dsh'
         ) {
           expect(entry).toContain(`name: ${mode}`);
+        }
+        if (platform === 'dsh') {
+          expect(entry).toContain('disable-model-invocation: true');
+          expect(entry).toContain('user-invocable: true');
+          if (mode !== 'manps') expect(entry).toContain('--client dsh');
+          expect(v3ModeEntryPath(root, platform, mode)).toContain(
+            path.join('.dsh', 'skills'),
+          );
         }
         const description = entry.match(/^description: "([^"]+)"$/m)?.[1];
         expect(description).toContain('mancode');
@@ -540,6 +554,28 @@ describe('V3 adapter bootstrap integration', () => {
     expect(agentsAfterZcode).toContain('--client codex');
     expect(agentsAfterZcode).toContain('--client zcode');
     expect(agentsAfterCodex).toContain('Codex, ZCode, or Kimi Code');
+  });
+
+  it('keeps DSH mode entries isolated from shared agent skills', async () => {
+    await init(root, { v3: true });
+    await installV3Adapter(root, 'codex');
+    const codexModePath = v3ModeEntryPath(root, 'codex', 'man');
+    const codexMode = await readFile(codexModePath, 'utf8');
+
+    await installV3Adapter(root, 'dsh');
+
+    await expect(readFile(codexModePath, 'utf8')).resolves.toBe(codexMode);
+    const dshModePath = v3ModeEntryPath(root, 'dsh', 'man');
+    await expect(readFile(dshModePath, 'utf8')).resolves.toContain(
+      'disable-model-invocation: true',
+    );
+    const agents = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('mancode:continuity:codex:start');
+    expect(agents).toContain('mancode:continuity:dsh:start');
+
+    await removeV3Adapter(root, 'dsh');
+    await expect(readFile(codexModePath, 'utf8')).resolves.toBe(codexMode);
+    await expect(readFile(dshModePath, 'utf8')).rejects.toThrow();
   });
 
   it('renders the complete plan and local reframe command contracts', async () => {

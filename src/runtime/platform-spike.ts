@@ -9,6 +9,7 @@ export const SESSION_SPIKE_PLATFORMS = [
   'zcode',
   'kimi-code',
   'qoder',
+  'dsh',
 ] as const;
 
 export type SessionSpikePlatform = (typeof SESSION_SPIKE_PLATFORMS)[number];

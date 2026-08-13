@@ -167,6 +167,7 @@ export async function detectPlatformHints(
   if (environment.CURSOR_TRACE_ID) hints.add('cursor');
   if (environment.COPILOT_AGENT || environment.GITHUB_COPILOT)
     hints.add('copilot');
+  if (environment.DSH_SHELL === '1') hints.add('dsh');
   const exists = async (relative: string): Promise<boolean> => {
     try {
       await fs.access(path.join(rootDir, relative));
@@ -179,6 +180,7 @@ export async function detectPlatformHints(
   if (await exists('.cursor')) hints.add('cursor');
   if (await exists('.github/copilot-instructions.md')) hints.add('copilot');
   if (await exists('.qoder')) hints.add('qoder');
+  if (await exists('.dsh')) hints.add('dsh');
   return ALL_PLATFORMS.filter((platform) => hints.has(platform));
 }
 
