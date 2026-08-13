@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.6.0</span>
+      <span class="docs-wordmark">文档 / v0.6.1</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -62,7 +62,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>安装与初始化</h2>
-          <p>需要 Node.js 22 或更高版本。你可以在现有项目或安全的空目录中初始化，然后选择一个或多个 Agent 适配器。Windows CMD、PowerShell 和 Git Bash 均受支持；Git 不是必需依赖，只会帮助 mancode 更准确地判断团队模式。</p>
+          <p>需要 Node.js 22 或更高版本。你可以在现有项目或安全的空目录中初始化，然后选择一个或多个 Agent 适配器。Windows CMD、PowerShell 和 Git Bash 均受支持；Git 不是必需依赖，只会帮助 mancode 更准确地判断团队模式。当前目录存在 manifest、顶层源码文件或常见源码目录时，同样会被识别为项目。</p>
           <div class="docs-steps">
             <article class="docs-step"><b>01</b><strong>安装</strong><p>在本机全局安装一次 CLI。</p></article>
             <article class="docs-step"><b>02</b><strong>进入项目</strong><p>进入希望 Agent 理解的项目目录。</p></article>
@@ -81,7 +81,7 @@
             <tr><td><code>--force</code></td><td>修复生成配置</td><td>重新安装 mancode 管理的内容，同时保留已扫描的样式 token 和受控标记之外的用户内容。</td></tr>
             <tr><td><code>--yes</code></td><td>CI 或非交互终端</td><td>接受安全默认值并跳过通用项目确认；建议同时给出 <code>--platform</code>。</td></tr>
             <tr><td><code>--platform LIST</code></td><td>已经知道目标 Agent</td><td>安装 <code>claude-code</code>、<code>cursor</code>、<code>codex</code>、<code>copilot</code>、<code>zcode</code>、<code>kimi-code</code>、<code>qoder</code> 中的一个或多个。</td></tr>
-            <tr><td><code>--empty</code></td><td>目录有意保持为空</td><td>无需先执行 <code>git init</code> 或创建 manifest，也能初始化通用项目。</td></tr>
+            <tr><td><code>--empty</code></td><td>目录有意保持为空</td><td>无需先执行 <code>git init</code>、创建 manifest 或源码证据，也能初始化通用项目。</td></tr>
             <tr><td><code>--team</code> / <code>--no-team</code></td><td>不采用自动判断结果</td><td>强制开启或关闭团队共享上下文。</td></tr>
             <tr><td><code>--style NAME</code></td><td>显式使用 <code>--legacy</code> 初始化</td><td>保存旧版自由文本样式偏好。Continuity 项目改用带 revision 的 <code>mancode design</code> 策略。</td></tr>
             <tr><td><code>--lang en|zh-CN</code></td><td>需要稳定的生成语言</td><td>指定生成内容的语言。</td></tr>
@@ -215,7 +215,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 Continuity 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；Continuity workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
             <article class="command-card"><header><h3>mancode design status | context | configure | disable</h3><span>设计</span></header><p>检查有效 UI 指导，或修改带 revision 的项目设计策略。配置必须传入 <code>--expected-revision &lt;n&gt;</code>；experimental 还需要 <code>--confirm-experimental</code>。</p></article>
-            <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、框架或验证命令后刷新项目事实，并报告 stale adapter。</p></article>
+            <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、源码、框架或验证命令后刷新项目事实，并报告 stale adapter。</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>设计上下文</span></header><p>刷新项目画像和设计 token；adapter 修复先用 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code> 预览。</p></article>
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>移除</span></header><p>移除一个 Continuity 适配器。Continuity 会保护权威数据不被批量删除；用 <code>context compact --dry-run</code> 检查保留候选。<code>--all</code> 只适用于 legacy 项目。</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>版本</span></header><p>输出已安装 CLI 版本，便于升级检查和提交问题。</p></article>
@@ -482,7 +482,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
         <section class="doc-section" id="troubleshooting" data-searchable>
           <h2>故障排查</h2>
           <h3><code>mancode init</code> 拒绝当前目录</h3>
-          <p>安全的空目录支持交互初始化，也可以显式使用 <code>--empty</code>。非空目录仍需存在可识别的项目标记或 Git 元数据，防止 mancode 意外初始化任意文件夹。</p>
+          <p>Git 不是必需条件。常见 manifest、顶层源码文件（如 <code>.html</code>、<code>.js</code>、<code>.py</code>、<code>.go</code>）或源码目录（如 <code>src/</code>、<code>app/</code>、<code>web/</code>）都会被视为项目证据。检测只查看当前目录顶层，因此素材包父目录不会因为深层子项目而被误判；请进入实际源码目录。安全的空目录支持交互初始化或显式使用 <code>--empty</code>，但只有素材、文档且没有项目证据的非空目录仍会被拒绝。Home 与磁盘根目录继续受保护。</p>
           <h3>Agent 看不到刚安装的模式</h3>
           <p>重载或重启 Agent，让它重新读取仓库 instructions。执行 <code>mancode status</code>；如果平台未 ready，先运行 <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>，再从 active session 用 <code>--confirm --operation-id &lt;operationId&gt;</code> 修复。ZCode、Copilot、Kimi Code、Qoder 和 DeepSeek Harness 还需要确认当前客户端版本支持仓库 skills、prompt files 或项目 commands。</p>
           <h3>Claude Code hooks 没有触发</h3>
@@ -492,7 +492,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <h3>workflow 命令被拒绝</h3>
           <p>把拒绝当作流程闸门，而不是元数据损坏。先用 <code>mancode workflow list --json</code> 找到 TaskRef，再用 <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> 检查元数据、revision、aggregate 和 blocker。不要手工编辑 Continuity metadata。</p>
           <h3>项目事实已经过期</h3>
-          <p>添加 Git、manifest、依赖或验证脚本后执行 <code>mancode refresh-project</code>；UI token 改变时执行 <code>refresh-style</code>。只有静态适配器的生成文件需要更新时，才重新安装对应平台。</p>
+          <p>添加 Git、manifest、源码、依赖或验证脚本后执行 <code>mancode refresh-project</code>；UI token 改变时执行 <code>refresh-style</code>。只有静态适配器的生成文件需要更新时，才重新安装对应平台。</p>
         </section>
 
         <p class="docs-search-empty" data-search-empty>没有找到匹配的文档章节。</p>

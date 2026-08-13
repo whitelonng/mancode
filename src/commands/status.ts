@@ -36,7 +36,7 @@ import {
   detectTeamAssessmentSignals,
   detectTeamStatus,
 } from '../system/detect-team.js';
-import { PROJECT_MANIFESTS } from '../system/project-profile.js';
+import { hasProjectEvidence } from '../system/project-profile.js';
 import {
   type WorkflowMode,
   type WorkflowOutcome,
@@ -556,10 +556,7 @@ async function shouldRefreshProject(
   if (state.projectMode !== 'generic') return false;
   const hasGit = await pathExists(path.join(rootDir, '.git'));
   if (hasGit) return true;
-  for (const manifest of PROJECT_MANIFESTS) {
-    if (await pathExists(path.join(rootDir, manifest))) return true;
-  }
-  return false;
+  return hasProjectEvidence(rootDir);
 }
 
 async function checkPlatformStatus(

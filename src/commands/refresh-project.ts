@@ -13,8 +13,8 @@ import {
 } from '../installers/registry.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import {
-  PROJECT_MANIFESTS,
   detectProjectProfile,
+  hasProjectEvidence,
   primaryUiLibrary,
 } from '../system/project-profile.js';
 
@@ -23,7 +23,7 @@ export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_CORRUPT_STATE = 2;
 export const EXIT_REFRESH_FAILED = 3;
 
-/** Refresh facts that can change after a generic project later gains Git or a manifest. */
+/** Refresh facts that can change after a generic project later gains Git or source evidence. */
 export async function refreshProject(
   rootDir: string = process.cwd(),
 ): Promise<number> {
@@ -47,11 +47,11 @@ export async function refreshProject(
 
   let factsWritten = false;
   try {
-    const [profile, team, hasGit, hasManifest] = await Promise.all([
+    const [profile, team, hasGit, hasEvidence] = await Promise.all([
       detectProjectProfile(rootDir),
       detectTeamStatus(rootDir),
       pathExists(path.join(rootDir, '.git')),
-      hasProjectManifest(rootDir),
+      hasProjectEvidence(rootDir),
     ]);
     const uiLibrary = primaryUiLibrary(profile);
     const stack = [...profile.languages, ...profile.frameworks];
@@ -68,7 +68,7 @@ export async function refreshProject(
       ...state,
       techStack: stack.join(' + ') || profile.projectKind,
       uiLibrary: uiLibrary ?? 'None',
-      projectMode: hasGit || hasManifest ? 'detected' : 'generic',
+      projectMode: hasGit || hasEvidence ? 'detected' : 'generic',
       teamModeAutoDetected: configuredTeam,
       contributors: team.contributors,
     };
@@ -90,7 +90,7 @@ export async function refreshProject(
     );
     console.log('✓  Project facts refreshed.');
     console.log(
-      `   ${hasGit ? 'Git detected' : 'No Git repository'} | ${hasManifest ? 'project manifest detected' : 'generic project'}`,
+      `   ${hasGit ? 'Git detected' : 'No Git repository'} | ${hasEvidence ? 'project source detected' : 'generic project'}`,
     );
     console.log(
       `   Stack: ${nextState.techStack} | UI: ${nextState.uiLibrary}`,
@@ -138,13 +138,6 @@ async function refreshV3Project(rootDir: string): Promise<number> {
     console.error(`✗  mancode project facts refresh failed: ${message}`);
     return EXIT_REFRESH_FAILED;
   }
-}
-
-async function hasProjectManifest(rootDir: string): Promise<boolean> {
-  for (const manifest of PROJECT_MANIFESTS) {
-    if (await pathExists(path.join(rootDir, manifest))) return true;
-  }
-  return false;
 }
 
 async function writeProjectFacts(

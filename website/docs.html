@@ -24,7 +24,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.6.0</span>
+      <span class="docs-wordmark">Documentation / v0.6.1</span>
       <div class="docs-top-links">
         <a href="./index.html">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -62,7 +62,7 @@
 
         <section class="doc-section" id="install" data-searchable>
           <h2>Install &amp; initialize</h2>
-          <p>Node.js 22 or newer is required. Run the initializer inside an existing project or a safe empty directory, then choose one or more agent adapters. Windows CMD, PowerShell, and Git Bash are supported; Git is optional and only improves team-mode detection.</p>
+          <p>Node.js 22 or newer is required. Run the initializer inside an existing project or a safe empty directory, then choose one or more agent adapters. Windows CMD, PowerShell, and Git Bash are supported; Git is optional and only improves team-mode detection. A manifest, top-level source file, or common source root in the current directory also counts as project evidence.</p>
           <div class="docs-steps">
             <article class="docs-step"><b>01</b><strong>Install</strong><p>Install the CLI once on your machine.</p></article>
             <article class="docs-step"><b>02</b><strong>Enter</strong><p>Open the project the agent should understand.</p></article>
@@ -81,7 +81,7 @@
             <tr><td><code>--force</code></td><td>Repair generated configuration</td><td>Reinstalls managed content while preserving detected style tokens and content outside managed blocks.</td></tr>
             <tr><td><code>--yes</code></td><td>CI or a non-interactive shell</td><td>Accepts safe defaults and skips generic-project confirmation; pair it with <code>--platform</code>.</td></tr>
             <tr><td><code>--platform LIST</code></td><td>You know the target agents</td><td>Installs one or more of <code>claude-code</code>, <code>cursor</code>, <code>codex</code>, <code>copilot</code>, <code>zcode</code>, <code>kimi-code</code>, and <code>qoder</code>.</td></tr>
-            <tr><td><code>--empty</code></td><td>The directory is intentionally empty</td><td>Allows generic-project initialization without <code>git init</code> or a package manifest.</td></tr>
+            <tr><td><code>--empty</code></td><td>The directory is intentionally empty</td><td>Allows generic-project initialization without <code>git init</code>, a package manifest, or source evidence.</td></tr>
             <tr><td><code>--team</code> / <code>--no-team</code></td><td>Auto-detection is not the policy you want</td><td>Forces shared-memory mode on or off.</td></tr>
             <tr><td><code>--style NAME</code></td><td>You explicitly initialize with <code>--legacy</code></td><td>Stores the old free-text style preference. Continuity projects use the revisioned <code>mancode design</code> policy instead.</td></tr>
             <tr><td><code>--lang en|zh-CN</code></td><td>You need deterministic generated text</td><td>Sets the generated-content locale.</td></tr>
@@ -215,7 +215,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>Govern</span></header><p>Creates and validates Continuity requirements, plans, verification evidence, reviews, remediation, and completion.</p><ul><li>Inspect with <code>list</code> and <code>show &lt;namespace:ULID&gt; [--json]</code>.</li><li>Use <code>context compact --dry-run</code> to inspect removable runtime records; Continuity workflow authority is not deleted by <code>workflow clean</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>Scan</span></header><p>Runs a deterministic health scan for <code>all</code>, <code>deps</code>, <code>security</code>, <code>dead-code</code>, <code>config</code>.</p><ul><li><code>--json</code> emits machine-readable output.</li><li><code>--remediate</code> enters the explicit remediation path; the default is scan-only.</li></ul></article>
             <article class="command-card"><header><h3>mancode design status | context | configure | disable</h3><span>Design</span></header><p>Inspects effective UI guidance or changes the revisioned project design policy. Configuration requires <code>--expected-revision &lt;n&gt;</code>; experimental mode also requires <code>--confirm-experimental</code>.</p></article>
-            <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, a framework, or validation commands, then reports stale adapters.</p></article>
+            <article class="command-card"><header><h3>mancode refresh-project</h3><span>Rescan</span></header><p>Refreshes project facts after adding Git, a manifest, source, a framework, or validation commands, then reports stale adapters.</p></article>
             <article class="command-card"><header><h3>mancode refresh-style</h3><span>Design</span></header><p>Refreshes the project profile and design tokens. Preview any adapter repair with <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>.</p></article>
             <article class="command-card"><header><h3>mancode uninstall [platform]</h3><span>Remove</span></header><p>Removes one Continuity adapter. Continuity protects authority from bulk removal; use <code>context compact --dry-run</code> for retention candidates. The <code>--all</code> form is legacy-only.</p></article>
             <article class="command-card"><header><h3>mancode version</h3><span>Version</span></header><p>Prints the installed CLI version for upgrade checks and issue reports.</p></article>
@@ -482,7 +482,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
         <section class="doc-section" id="troubleshooting" data-searchable>
           <h2>Troubleshooting</h2>
           <h3><code>mancode init</code> rejects the directory</h3>
-          <p>A safely empty directory is supported interactively, or explicitly with <code>--empty</code>. A non-empty directory still needs a recognized project marker or Git metadata so mancode does not initialize an arbitrary folder by accident.</p>
+          <p>Git is not required. A common manifest, top-level source file such as <code>.html</code>, <code>.js</code>, <code>.py</code>, or <code>.go</code>, or source root such as <code>src/</code>, <code>app/</code>, or <code>web/</code> counts as project evidence. Detection inspects only the current directory's top level, so enter the actual source directory rather than an asset-pack parent. Safe empty directories are supported interactively or explicitly with <code>--empty</code>; non-empty directories containing only assets or documentation are still rejected. Home and filesystem root directories remain protected.</p>
           <h3>The agent does not see a newly installed mode</h3>
           <p>Reload or restart the agent so it rereads repository instructions. Run <code>mancode status</code>; if the adapter is not ready, preview <code>mancode adapter upgrade --platform &lt;platform&gt; --dry-run</code>, then repair it from an active session with <code>--confirm --operation-id &lt;operationId&gt;</code>. For ZCode, Copilot, Kimi Code, Qoder, and DeepSeek Harness, also confirm that the installed client release supports repository skills, prompt files, or project commands.</p>
           <h3>Claude Code hooks do not run</h3>
@@ -492,7 +492,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <h3>A workflow command is rejected</h3>
           <p>Treat the rejection as a gate, not a file-corruption problem. Use <code>mancode workflow list --json</code> to discover TaskRefs, then <code>mancode workflow show &lt;namespace:ULID&gt; --json</code> to inspect metadata, revision, aggregate, and blockers. Do not edit Continuity metadata manually.</p>
           <h3>Project facts became stale</h3>
-          <p>After adding Git, a manifest, dependencies, or validation scripts, run <code>mancode refresh-project</code>. Use <code>refresh-style</code> for UI tokens. Then repair a static adapter only if its generated files need regeneration.</p>
+          <p>After adding Git, a manifest, source, dependencies, or validation scripts, run <code>mancode refresh-project</code>. Use <code>refresh-style</code> for UI tokens. Then repair a static adapter only if its generated files need regeneration.</p>
         </section>
 
         <p class="docs-search-empty" data-search-empty>No documentation sections match your search.</p>
