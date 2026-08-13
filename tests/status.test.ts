@@ -103,6 +103,16 @@ describe('mancode status', () => {
     expect(result.project).toBe(path.basename(dir));
   });
 
+  it('recommends refreshing a generic project after source is added', async () => {
+    await rm(path.join(dir, '.git'), { recursive: true, force: true });
+    await silentInit(dir, { empty: true, platform: 'codex' });
+    await writeFile(path.join(dir, 'game.js'), 'console.log("game");\n');
+
+    const logs = await captureLog(() => status(dir, { json: true }));
+    const result: StatusResult = JSON.parse(logs.join('\n'));
+    expect(result.projectRefreshRecommended).toBe(true);
+  });
+
   it('detects missing hook files', async () => {
     await silentInit(dir);
 

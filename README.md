@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.0-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.0" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.1-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
@@ -124,7 +124,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.6.0。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.6.1。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
 需要 Node.js 22 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -143,8 +143,9 @@ mancode init --platform all
 ```
 
 `init` 会引导选择 Agent，并把检测到的 Agent 仅作为提示；不会悄悄安装全部适配器。
-可以选择一个、多个或“全部平台”。全新空目录会询问是否初始化为通用项目，因此用户不必
-先知道 `git init` 或 `npm init -y`。之后再加入 Git 或项目 manifest 也安全，执行
+可以选择一个、多个或“全部平台”。Git 不是初始化前提；已有 manifest、顶层源码文件或
+常见源码目录的项目可直接初始化。全新空目录会询问是否初始化为通用项目，因此用户不必
+先知道 `git init` 或 `npm init -y`。之后再加入 Git 或项目源码也安全，执行
 `mancode refresh-project` 即可刷新项目事实和已安装的静态适配器。
 
 初始化后，继续正常使用你的编码代理。`solo` 默认自动生效：日常训练，零仪式感。遇到需要
@@ -472,7 +473,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.6.0
+mancode v0.6.1
 
 Project:     my-app
 Runtime:     ready
@@ -609,9 +610,13 @@ Monorepo 可显式选择一个仓库内 UI 根目录，例如 `mancode refresh-s
 
 ### `mancode init` 提示"not a project directory"
 
-交互式终端中的空目录会询问是否初始化为通用项目，不需要 Git 或 npm 命令。为了保护已有
-文件，未识别且非空的目录仍会被拒绝；请进入真正的项目目录。脚本里只应针对明确为空的
-目录使用 `mancode init --empty --platform <platform>`。
+Git 不是初始化前提。mancode 会把常见 manifest、顶层源码文件（如 `.html`、`.js`、
+`.py`、`.go`）或源码目录（如 `src/`、`app/`、`web/`）视为项目证据。检测只看当前目录
+顶层，不会因为子目录里有代码而把素材包父目录误认为项目；此时请进入实际源码目录。
+
+交互式终端中的空目录会询问是否初始化为通用项目。为了保护已有文件，只有素材、文档等
+内容且没有项目证据的非空目录仍会被拒绝。脚本里只应针对明确为空的目录使用
+`mancode init --empty --platform <platform>`。Home 与磁盘根目录始终不能初始化。
 
 ### Claude Code hooks 不生效
 

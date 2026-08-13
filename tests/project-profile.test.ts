@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   detectProjectProfile,
+  hasProjectEvidence,
   primaryUiLibrary,
 } from '../src/system/project-profile.js';
 
@@ -22,6 +23,31 @@ describe('project profile', () => {
     expect(profile.projectKind).toBe('unknown');
     expect(profile.uiAssets).toBe('none');
     expect(profile.browserAutomation).toBe('unavailable');
+  });
+
+  it('recognizes top-level source files as project evidence', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-profile-'));
+    dirs.push(dir);
+    await Promise.all([
+      writeFile(path.join(dir, 'index.html'), '<canvas id="game"></canvas>\n'),
+      writeFile(path.join(dir, 'game.js'), 'console.log("game");\n'),
+      writeFile(path.join(dir, 'style.css'), 'body { margin: 0; }\n'),
+    ]);
+
+    await expect(hasProjectEvidence(dir)).resolves.toBe(true);
+  });
+
+  it('does not infer project evidence from assets or nested source files', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-profile-'));
+    dirs.push(dir);
+    await mkdir(path.join(dir, 'game'));
+    await Promise.all([
+      writeFile(path.join(dir, 'Preview.png'), 'asset\n'),
+      writeFile(path.join(dir, 'License.txt'), 'license\n'),
+      writeFile(path.join(dir, 'game', 'game.js'), 'console.log("game");\n'),
+    ]);
+
+    await expect(hasProjectEvidence(dir)).resolves.toBe(false);
   });
 
   it('recognizes a Go backend without package.json', async () => {

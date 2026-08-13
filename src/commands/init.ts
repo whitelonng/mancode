@@ -30,8 +30,8 @@ import {
   parsePlatformSelection,
 } from '../system/init-onboarding.js';
 import {
-  PROJECT_MANIFESTS,
   detectProjectProfile,
+  hasProjectEvidence,
   primaryUiLibrary,
 } from '../system/project-profile.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
@@ -229,13 +229,17 @@ export async function init(
     return initializeV3(rootDir, options);
   }
 
-  // 2.1 校验是项目目录（git 或任一常见项目 manifest）。空目录可明确作为通用项目初始化。
+  // 2.1 校验是项目目录（git、manifest 或源码证据）。空目录可明确作为通用项目初始化。
+  const genericSafety = await canInitializeGenericProject(rootDir);
+  if (!genericSafety.ok && genericSafety.reason === 'unsafe') {
+    printNotProjectDirectory(rootDir, locale, 'unsafe');
+    return EXIT_NOT_A_PROJECT_DIR;
+  }
   const isGitRepo = await pathExists(path.join(rootDir, '.git'));
-  const hasManifest = await hasProjectManifest(rootDir);
+  const hasEvidence = await hasProjectEvidence(rootDir);
   let isGenericProject = false;
 
-  if (!isGitRepo && !hasManifest) {
-    const genericSafety = await canInitializeGenericProject(rootDir);
+  if (!isGitRepo && !hasEvidence) {
     if (
       !genericSafety.ok &&
       !(wasInitialized && genericSafety.reason === 'nonempty')
@@ -305,12 +309,12 @@ export async function init(
       if (uiLibrary) {
         console.log(`   UI: ${uiLibraryStr}`);
       }
-    } else if (hasManifest) {
+    } else if (hasEvidence) {
       console.log(
         localize(
           locale,
-          '   已发现项目 manifest，未识别到框架依赖',
-          '   Project manifest found; no known framework dependencies',
+          '   已发现项目源码，未识别到框架依赖',
+          '   Project source found; no known framework dependencies',
         ),
       );
     } else {
@@ -975,13 +979,6 @@ async function selectInitPlatforms(input: {
   return [DEFAULT_INIT_PLATFORM];
 }
 
-async function hasProjectManifest(rootDir: string): Promise<boolean> {
-  for (const name of PROJECT_MANIFESTS) {
-    if (await pathExists(path.join(rootDir, name))) return true;
-  }
-  return false;
-}
-
 async function canInitializeGenericProject(
   rootDir: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'unsafe' | 'nonempty' }> {
@@ -1012,16 +1009,20 @@ async function validateV3CliProjectBoundary(
   locale: InitLocale,
   legacyInitialized: boolean,
 ): Promise<number | null> {
+  const genericSafety = await canInitializeGenericProject(rootDir);
+  if (!genericSafety.ok && genericSafety.reason === 'unsafe') {
+    printNotProjectDirectory(rootDir, locale, 'unsafe');
+    return EXIT_NOT_A_PROJECT_DIR;
+  }
   const isGitRepo = await pathExists(path.join(rootDir, '.git'));
-  const hasManifest = await hasProjectManifest(rootDir);
-  if (isGitRepo || hasManifest) return null;
+  const hasEvidence = await hasProjectEvidence(rootDir);
+  if (isGitRepo || hasEvidence) return null;
 
   const v3Initialized = await pathExists(
     path.join(rootDir, '.mancode', 'schema.json'),
   );
   const legacyAuthorityPresent =
     legacyInitialized || (await scanLegacyAuthority(rootDir)).authorityPresent;
-  const genericSafety = await canInitializeGenericProject(rootDir);
   if (
     !genericSafety.ok &&
     !(
@@ -1060,7 +1061,7 @@ function printNotProjectDirectory(
       console.error('   为避免误写，不能在 Home 目录或磁盘根目录初始化。');
     } else if (reason === 'nonempty') {
       console.error(
-        '   未识别到项目文件，且目录中已有文件。请先进入项目目录。',
+        '   未识别到顶层项目清单、源码文件或源码目录。请先进入实际项目根目录。',
       );
     } else {
       console.error(
@@ -1076,7 +1077,7 @@ function printNotProjectDirectory(
     );
   } else if (reason === 'nonempty') {
     console.error(
-      '   No project files were detected and the directory is not empty.',
+      '   No top-level manifest, source file, or source directory was detected.',
     );
   } else {
     console.error(

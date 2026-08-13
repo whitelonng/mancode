@@ -17,7 +17,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.0-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.0" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.1-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.1" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -155,7 +155,7 @@ the quality gate for models that need explicit review structure.
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.0. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.1. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
 Requires Node.js 22 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -176,10 +176,14 @@ mancode init --platform all
 
 `init` guides you through the agent choice and marks a detected agent as a hint;
 it never silently installs every adapter. Choose one or more adapters, or choose
-**All platforms**. In a brand-new empty folder it asks whether to initialize a
-generic project, so users do not need to know `git init` or `npm init -y` first.
-Adding Git or a manifest later is safe; run `mancode refresh-project` to update
-the detected project facts and installed static adapters.
+**All platforms**. Git is not an initialization prerequisite. A non-empty
+directory is recognized as a project when its top level contains a common
+manifest, source file (such as `.html`, `.js`, `.py`, or `.go`), or source root
+(such as `src/`, `app/`, or `web/`). Detection intentionally inspects only the
+current directory's top level, so a nested project does not make an asset-pack
+parent directory look like a project. In a brand-new empty folder, `init` asks
+whether to initialize a generic project. Run `mancode refresh-project` after
+adding Git, manifests, source, dependencies, or validation commands.
 
 After initialization, keep using your coding agent normally. `solo` mode runs by
 default: practice day, no ceremony. Use `/man` when a task needs planning,
@@ -530,7 +534,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.0
+mancode v0.6.1
 
 Project:     my-app
 Runtime:     ready
@@ -702,11 +706,16 @@ refreshing project facts does not require reinstalling them.
 
 ### `mancode init` says "not a project directory"
 
-In an interactive terminal, an empty directory is offered as a new generic
-project. No Git or package command is required. To protect existing files,
-non-empty unrecognized directories are rejected; enter the project directory
-instead. For scripts, use `mancode init --empty --platform <platform>` only for
-a deliberately empty directory.
+Git is not required. mancode accepts common manifests, top-level source files
+(such as `.html`, `.js`, `.py`, or `.go`), and source roots (such as `src/`,
+`app/`, or `web/`) as project evidence. It inspects only the current directory's
+top level, so enter the actual source directory instead of an asset-pack parent.
+
+An empty directory is offered as a new generic project in an interactive
+terminal. To protect existing files, a non-empty directory containing only
+assets or documentation and no project evidence is still rejected. For scripts,
+use `mancode init --empty --platform <platform>` only for a deliberately empty
+directory. Home and filesystem root directories can never be initialized.
 
 ### Claude Code hooks not triggering
 

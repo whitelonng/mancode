@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   afterAll,
@@ -230,6 +230,37 @@ describe('journaled V3 init command', () => {
         platform: 'codex',
       }),
     ).toBe(EXIT_NOT_A_PROJECT_DIR);
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+    ).rejects.toThrow();
+  });
+
+  it('initializes a static web project without Git or a package manifest', async () => {
+    await Promise.all([
+      writeFile(path.join(root, 'index.html'), '<canvas id="game"></canvas>\n'),
+      writeFile(path.join(root, 'game.js'), 'console.log("game");\n'),
+      writeFile(path.join(root, 'style.css'), 'body { margin: 0; }\n'),
+    ]);
+
+    expect(await init(root, { fromCli: true, platform: 'codex' })).toBe(
+      EXIT_OK,
+    );
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+    ).resolves.toContain('"activationState": "v3_active"');
+  });
+
+  it('still refuses a home directory even when it contains source files', async () => {
+    await writeFile(path.join(root, 'game.js'), 'console.log("game");\n');
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(root);
+
+    try {
+      expect(await init(root, { fromCli: true, platform: 'codex' })).toBe(
+        EXIT_NOT_A_PROJECT_DIR,
+      );
+    } finally {
+      homedir.mockRestore();
+    }
     await expect(
       readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
     ).rejects.toThrow();

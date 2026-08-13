@@ -216,6 +216,22 @@ describe('init onboarding', () => {
     expect(config.platforms).toEqual(['codex', 'cursor']);
   });
 
+  it('initializes an existing source project without Git or a manifest', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-source-project-'));
+    dirs.push(dir);
+    await Promise.all([
+      writeFile(path.join(dir, 'index.html'), '<canvas id="game"></canvas>\n'),
+      writeFile(path.join(dir, 'game.js'), 'console.log("game");\n'),
+      writeFile(path.join(dir, 'style.css'), 'body { margin: 0; }\n'),
+    ]);
+
+    expect(await init(dir, { platform: 'codex' })).toBe(EXIT_OK);
+    const state = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    expect(state.projectMode).toBe('detected');
+  });
+
   it('force reinstalls an initialized generic project without project markers', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'mancode-generic-force-'));
     dirs.push(dir);
@@ -238,6 +254,7 @@ describe('init onboarding', () => {
     await mkdir(path.join(dir, '.mancode'));
     await writeFile(path.join(dir, '.mancode', 'state.json'), '{}\n');
     await writeFile(path.join(dir, 'notes.txt'), 'user content\n');
+    await writeFile(path.join(dir, 'game.js'), 'console.log("game");\n');
     const homedir = vi.spyOn(os, 'homedir').mockReturnValue(dir);
 
     try {
@@ -249,6 +266,9 @@ describe('init onboarding', () => {
     }
     await expect(readFile(path.join(dir, 'notes.txt'), 'utf-8')).resolves.toBe(
       'user content\n',
+    );
+    await expect(readFile(path.join(dir, 'game.js'), 'utf-8')).resolves.toBe(
+      'console.log("game");\n',
     );
   });
 
@@ -312,6 +332,19 @@ describe('init onboarding', () => {
       path.join(dir, 'package.json'),
       '{"name":"later-project"}\n',
     );
+    expect(await refreshProject(dir)).toBe(EXIT_OK);
+    const state = JSON.parse(
+      await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),
+    );
+    expect(state.projectMode).toBe('detected');
+  });
+
+  it('refreshes a generic project after a source file is added', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'mancode-refresh-source-'));
+    dirs.push(dir);
+    expect(await init(dir, { empty: true, platform: 'codex' })).toBe(EXIT_OK);
+    await writeFile(path.join(dir, 'game.js'), 'console.log("game");\n');
+
     expect(await refreshProject(dir)).toBe(EXIT_OK);
     const state = JSON.parse(
       await readFile(path.join(dir, '.mancode', 'state.json'), 'utf-8'),

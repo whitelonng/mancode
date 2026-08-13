@@ -38,25 +38,77 @@ export const PROJECT_MANIFESTS = [
   'pubspec.yaml',
 ] as const;
 
+const PROJECT_SOURCE_EXTENSIONS = new Set([
+  '.c',
+  '.cc',
+  '.cpp',
+  '.cs',
+  '.css',
+  '.dart',
+  '.go',
+  '.html',
+  '.java',
+  '.js',
+  '.jsx',
+  '.kt',
+  '.kts',
+  '.m',
+  '.mm',
+  '.php',
+  '.py',
+  '.rb',
+  '.rs',
+  '.scala',
+  '.sh',
+  '.swift',
+  '.ts',
+  '.tsx',
+  '.vue',
+]);
+
+const PROJECT_SOURCE_ROOTS = [
+  'src',
+  'app',
+  'apps',
+  'packages',
+  'web',
+  'lib',
+  'Sources',
+  'cmd',
+  'server',
+  'backend',
+  'mobile',
+  'ios',
+  'android',
+] as const;
+
+const PROJECT_MANIFEST_NAMES = new Set<string>(PROJECT_MANIFESTS);
+const PROJECT_SOURCE_ROOT_NAMES = new Set<string>(PROJECT_SOURCE_ROOTS);
+
+/** Detect explicit, top-level evidence that the directory itself is a project. */
+export async function hasProjectEvidence(
+  projectRoot: string,
+): Promise<boolean> {
+  const entries = await readdir(projectRoot, { withFileTypes: true }).catch(
+    () => [],
+  );
+  return entries.some((entry) => {
+    if (entry.isDirectory()) return PROJECT_SOURCE_ROOT_NAMES.has(entry.name);
+    if (!entry.isFile()) return false;
+    return (
+      PROJECT_MANIFEST_NAMES.has(entry.name) ||
+      PROJECT_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())
+    );
+  });
+}
+
 export async function detectProjectProfile(
   projectRoot: string,
 ): Promise<ProjectProfile> {
   const entries = await readdir(projectRoot).catch(() => [] as string[]);
   const manifests = PROJECT_MANIFESTS.filter((file) => entries.includes(file));
   const sourceRoots = await existingDirs(projectRoot, [
-    'src',
-    'app',
-    'apps',
-    'packages',
-    'web',
-    'lib',
-    'Sources',
-    'cmd',
-    'server',
-    'backend',
-    'mobile',
-    'ios',
-    'android',
+    ...PROJECT_SOURCE_ROOTS,
     'data',
     'notebooks',
   ]);
