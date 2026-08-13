@@ -644,6 +644,27 @@ describe('V3 adapter bootstrap integration', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'names an in-repo symlinked fixed target instead of a bare path error',
+    async () => {
+      await init(root, { v3: true, platform: 'codex' });
+      // Repo convention (e.g. openai/codex): CLAUDE.md mirrors AGENTS.md.
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      await expect(installV3Adapter(root, 'claude-code')).rejects.toThrow(
+        /MANCODE_ARTIFACT_PATH_UNSAFE: CLAUDE\.md is a symbolic link \(resolves to .*AGENTS\.md\)/,
+      );
+      // The link itself is left untouched: mancode never writes through it.
+      await expect(
+        readFile(path.join(root, 'CLAUDE.md'), 'utf8'),
+      ).resolves.toBe('# shared agent instructions\n');
+    },
+  );
+
   it('retires legacy managed entrypoints when repairing an active V3 adapter', async () => {
     await init(root, { v3: true });
     const legacyCodexAlias = path.join(
