@@ -3,6 +3,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  realpath,
   rename,
   rm,
   rmdir,
@@ -2376,11 +2377,15 @@ async function assertAdapterPathSafe(
 ): Promise<void> {
   const relative = path.relative(root, target);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    throw new Error(
+      `MANCODE_ARTIFACT_PATH_UNSAFE: adapter target must stay inside the project root: ${target}`,
+    );
   }
   const rootEntry = await lstat(root);
   if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
-    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    throw new Error(
+      `MANCODE_ARTIFACT_PATH_UNSAFE: project root must be a real directory, not a symbolic link: ${root}`,
+    );
   }
   const segments = relative.split(path.sep);
   let current = root;
@@ -2388,16 +2393,32 @@ async function assertAdapterPathSafe(
     current = path.join(current, segments[index] ?? '');
     try {
       const entry = await lstat(current);
-      if (
-        entry.isSymbolicLink() ||
-        (index < segments.length - 1 && !entry.isDirectory())
-      ) {
-        throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+      if (entry.isSymbolicLink()) {
+        const detail = await describeAdapterSymlink(current);
+        const replacement =
+          index === segments.length - 1 ? 'a regular file' : 'a real directory';
+        throw new Error(
+          `MANCODE_ARTIFACT_PATH_UNSAFE: ${relative} is a symbolic link${detail}; mancode never writes through links. Replace it with ${replacement} before initializing the adapter.`,
+        );
+      }
+      if (index < segments.length - 1 && !entry.isDirectory()) {
+        throw new Error(
+          `MANCODE_ARTIFACT_PATH_UNSAFE: ${relative} cannot be used because ${segments[index]} is not a directory`,
+        );
       }
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') return;
       throw error;
     }
+  }
+}
+
+async function describeAdapterSymlink(linkPath: string): Promise<string> {
+  try {
+    const resolved = await realpath(linkPath);
+    return ` (resolves to ${resolved})`;
+  } catch {
+    return ' (broken link)';
   }
 }
 
