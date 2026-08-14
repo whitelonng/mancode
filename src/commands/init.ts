@@ -25,6 +25,7 @@ import {
   inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
   replaceUnsafeV3AdapterSymlinks,
+  writeThroughResolvedPath,
 } from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
@@ -840,8 +841,11 @@ async function initializeV3(
 
 /**
  * Interactive greenfield init: when a fixed adapter target is a symlink,
- * offer the user a clean exit or replace the link with a regular file that
- * preserves the resolved content, then let installation continue.
+ * offer a clean exit, replacing the link with a regular file that preserves
+ * the resolved content, or — when every link resolves to an in-root regular
+ * file — keeping the link and writing through it (CLAUDE.md -> AGENTS.md).
+ * Non-interactive runs keep the links: the installable assertion accepts
+ * exactly those write-through links and refuses everything else.
  */
 async function resolveUnsafeInitAdapterPaths(
   rootDir: string,
@@ -865,16 +869,34 @@ async function resolveUnsafeInitAdapterPaths(
     (entry) => entry.kind === 'symlink' && entry.finalTarget,
   );
   if (fixable.length === 0) return null;
+  const writeThroughAvailable =
+    found.length > 0 &&
+    (
+      await Promise.all(
+        found.map((entry) =>
+          writeThroughResolvedPath(path.resolve(rootDir), entry.target),
+        ),
+      )
+    ).every((resolved) => resolved !== null);
 
   const choice = await prompter.resolveUnsafeAdapterPaths({
     locale,
     paths: found.map(({ relative, resolvedTo }) => ({ relative, resolvedTo })),
+    writeThroughAvailable,
   });
   if (choice === 'exit') {
     console.log(
       locale === 'zh-CN' ? '已取消初始化。' : 'Initialization cancelled.',
     );
     return EXIT_USER_CANCEL;
+  }
+  if (choice === 'write-through') {
+    console.log(
+      locale === 'zh-CN'
+        ? 'ℹ️  保留符号链接，mancode 将读写其解析目标。'
+        : 'ℹ️  Keeping the symbolic link(s); mancode reads and writes the resolved target.',
+    );
+    return null;
   }
   await replaceUnsafeV3AdapterSymlinks(fixable);
   return null;

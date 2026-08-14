@@ -23,7 +23,9 @@ export interface InitPrompter {
   resolveUnsafeAdapterPaths(context: {
     locale: InitLocale;
     paths: readonly { relative: string; resolvedTo: string | null }[];
-  }): Promise<'replace' | 'exit'>;
+    /** True when every reported link resolves to an in-root regular file. */
+    writeThroughAvailable: boolean;
+  }): Promise<'replace' | 'write-through' | 'exit'>;
   /**
    * Optional: asked when `.mancode` holds only non-Continuity scratch.
    * Prompters without this method get the safe default (`exit`).
@@ -274,13 +276,13 @@ export function createTerminalPrompter(): InitPrompter {
         rl.close();
       }
     },
-    async resolveUnsafeAdapterPaths({ locale, paths }) {
+    async resolveUnsafeAdapterPaths({ locale, paths, writeThroughAvailable }) {
       const rl = createInterface({ input: stdin, output: stdout });
       try {
         console.log(
           locale === 'zh-CN'
-            ? '\n检测到适配器目标路径是符号链接（mancode 不会写入链接）：'
-            : '\nAdapter target paths are symbolic links (mancode never writes through links):',
+            ? '\n检测到适配器目标路径是符号链接：'
+            : '\nAdapter target paths are symbolic links:',
         );
         for (const item of paths) {
           const detail = item.resolvedTo ? ` -> ${item.resolvedTo}` : '';
@@ -292,14 +294,25 @@ export function createTerminalPrompter(): InitPrompter {
             ? '2. 将符号链接替换为普通文件（保留原内容）并继续初始化'
             : '2. Replace the symbolic link(s) with regular file(s) (content preserved) and continue',
         );
+        if (writeThroughAvailable) {
+          console.log(
+            locale === 'zh-CN'
+              ? '3. 保留链接，mancode 直接读写其解析目标（CLAUDE.md -> AGENTS.md 约定）'
+              : '3. Keep the link(s); mancode reads and writes the resolved file (CLAUDE.md -> AGENTS.md convention)',
+          );
+        }
         const answer = (
           await rl.question(
-            locale === 'zh-CN' ? '选择 [1/2]: ' : 'Choose [1/2]: ',
+            locale === 'zh-CN'
+              ? `选择 [1/${writeThroughAvailable ? '2/3' : '2'}]: `
+              : `Choose [1/${writeThroughAvailable ? '2/3' : '2'}]: `,
           )
         )
           .trim()
           .toLowerCase();
-        return answer === '2' ? 'replace' : 'exit';
+        if (answer === '2') return 'replace';
+        if (answer === '3' && writeThroughAvailable) return 'write-through';
+        return 'exit';
       } finally {
         rl.close();
       }

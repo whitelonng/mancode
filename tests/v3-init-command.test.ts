@@ -29,6 +29,7 @@ import {
   resolveInitAuthority,
 } from '../src/commands/init.js';
 import { parseSchemaManifest } from '../src/context/manifest.js';
+import { inspectV3Adapter } from '../src/installers/v3-adapter.js';
 import { runtimeCheckoutRecordPath } from '../src/runtime/project-runtime.js';
 import { VERSION } from '../src/version.js';
 
@@ -510,6 +511,70 @@ describe('journaled V3 init command', () => {
       await expect(
         readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
       ).rejects.toThrow();
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'keeps a resolvable CLAUDE.md symlink and writes through it when confirmed',
+    async () => {
+      await mkdir(path.join(root, '.git'));
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+      let writeThroughAvailable: boolean | undefined;
+
+      const result = await init(root, {
+        fromCli: true,
+        interactive: true,
+        prompter: {
+          confirmGenericProject: async () => true,
+          selectPlatforms: async () => ['claude-code'],
+          resolveUnsafeAdapterPaths: async (context) => {
+            writeThroughAvailable = context.writeThroughAvailable;
+            return 'write-through';
+          },
+        },
+      });
+
+      expect(result).toBe(EXIT_OK);
+      expect(writeThroughAvailable).toBe(true);
+      // The convention survives: the link stays, the resolved file gets the
+      // managed block alongside the user content.
+      const entry = await lstat(path.join(root, 'CLAUDE.md'));
+      expect(entry.isSymbolicLink()).toBe(true);
+      const content = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+      expect(content).toContain('# shared agent instructions');
+      expect(content).toContain('mancode:continuity:claude:start');
+      // The installed adapter reports ready through the link.
+      const status = await inspectV3Adapter(root, 'claude-code');
+      expect(status.ready).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'writes through a resolvable CLAUDE.md symlink non-interactively',
+    async () => {
+      await mkdir(path.join(root, '.git'));
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      const result = await init(root, {
+        fromCli: true,
+        platform: 'claude-code',
+      });
+
+      expect(result).toBe(EXIT_OK);
+      expect((await lstat(path.join(root, 'CLAUDE.md'))).isSymbolicLink()).toBe(
+        true,
+      );
+      await expect(
+        readFile(path.join(root, 'AGENTS.md'), 'utf8'),
+      ).resolves.toContain('mancode:continuity:claude:start');
     },
   );
 });

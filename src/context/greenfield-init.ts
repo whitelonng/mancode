@@ -773,7 +773,7 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
     assertRecord(candidate, 'greenfield initialization adapter plan');
     assertKnownKeys(
       candidate,
-      ['target', 'beforeContent', 'targetContent'],
+      ['target', 'beforeContent', 'targetContent', 'resolvedTarget'],
       'greenfield initialization adapter plan',
     );
     if (
@@ -785,7 +785,12 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
       (candidate.beforeContent !== null &&
         typeof candidate.beforeContent !== 'string') ||
       typeof candidate.targetContent !== 'string' ||
-      !candidate.targetContent.trim()
+      !candidate.targetContent.trim() ||
+      (candidate.resolvedTarget !== undefined &&
+        (typeof candidate.resolvedTarget !== 'string' ||
+          !candidate.resolvedTarget.trim() ||
+          path.isAbsolute(candidate.resolvedTarget) ||
+          candidate.resolvedTarget.split(/[\\/]/).includes('..')))
     ) {
       throw new Error(
         'greenfield initialization journal adapterPlans is invalid',
@@ -797,6 +802,7 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
       target,
       beforeContent: candidate.beforeContent as string | null,
       targetContent: candidate.targetContent,
+      resolvedTarget: candidate.resolvedTarget as string | undefined,
     };
   });
 }
