@@ -2,6 +2,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -94,6 +95,120 @@ describe('journaled V3 init command', () => {
     await expect(
       readFile(path.join(root, '.agents', 'skills', 'man', 'SKILL.md'), 'utf8'),
     ).resolves.toContain('mancode workflow create man');
+  });
+
+  it('refuses scratch-only .mancode non-interactively with a descriptive error', async () => {
+    await mkdir(path.join(root, '.mancode', 'local', 'release-evidence'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(root, '.mancode', 'local', 'release-evidence', 'x.json'),
+      '{}',
+    );
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(
+      await init(root, { fromCli: true, empty: true, platform: 'codex' }),
+    ).toBe(EXIT_INIT_FAILED);
+    expect(error.mock.calls.flat().join(' ')).toContain(
+      'MANCODE_V3_SCRATCH_TARGET_REQUIRES_CHOICE',
+    );
+    // Nothing moved, nothing deleted.
+    await expect(
+      readFile(
+        path.join(root, '.mancode', 'local', 'release-evidence', 'x.json'),
+        'utf8',
+      ),
+    ).resolves.toBe('{}');
+    error.mockRestore();
+  });
+
+  it('moves scratch-only .mancode aside on consent and restores it after success', async () => {
+    await mkdir(path.join(root, '.mancode', 'local', 'release-evidence'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(root, '.mancode', 'local', 'release-evidence', 'x.json'),
+      '{"sha":"abc"}',
+    );
+    await writeFile(path.join(root, '.mancode', 'tool-notes.txt'), 'keep me');
+    let askedEntries: readonly string[] = [];
+
+    const result = await init(root, {
+      fromCli: true,
+      empty: true,
+      interactive: true,
+      platform: 'codex',
+      prompter: {
+        confirmGenericProject: async () => true,
+        selectPlatforms: async () => ['codex'],
+        resolveUnsafeAdapterPaths: async () => 'exit',
+        resolveScratchMancodeTarget: async ({ entries }) => {
+          askedEntries = entries;
+          return 'relocate';
+        },
+      },
+    });
+
+    expect(result).toBe(EXIT_OK);
+    expect(askedEntries).toEqual(['local', 'tool-notes.txt']);
+    // Scratch keeps its old home inside the fresh layout.
+    await expect(
+      readFile(
+        path.join(root, '.mancode', 'local', 'release-evidence', 'x.json'),
+        'utf8',
+      ),
+    ).resolves.toBe('{"sha":"abc"}');
+    // Unknown top-level entries land in preinit-scratch.
+    await expect(
+      readFile(
+        path.join(
+          root,
+          '.mancode',
+          'local',
+          'preinit-scratch',
+          'tool-notes.txt',
+        ),
+        'utf8',
+      ),
+    ).resolves.toBe('keep me');
+    // No backup directory lingers after a full restore.
+    expect(await readdir(root)).not.toContain(
+      expect.stringMatching(/^\.mancode\.preinit-scratch-/),
+    );
+  });
+
+  it('cancels cleanly when the user declines to move scratch aside', async () => {
+    await mkdir(path.join(root, '.mancode', 'local', 'other-tool'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(root, '.mancode', 'local', 'other-tool', 'note.txt'),
+      'untouched',
+    );
+    const result = await init(root, {
+      fromCli: true,
+      empty: true,
+      interactive: true,
+      platform: 'codex',
+      prompter: {
+        confirmGenericProject: async () => true,
+        selectPlatforms: async () => ['codex'],
+        resolveUnsafeAdapterPaths: async () => 'exit',
+        resolveScratchMancodeTarget: async () => 'exit',
+      },
+    });
+
+    expect(result).toBe(EXIT_USER_CANCEL);
+    await expect(
+      readFile(
+        path.join(root, '.mancode', 'local', 'other-tool', 'note.txt'),
+        'utf8',
+      ),
+    ).resolves.toBe('untouched');
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+    ).rejects.toThrow();
   });
 
   it('keeps ordinary CLI platform onboarding on the V3 path', async () => {

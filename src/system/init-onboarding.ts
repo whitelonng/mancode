@@ -24,6 +24,14 @@ export interface InitPrompter {
     locale: InitLocale;
     paths: readonly { relative: string; resolvedTo: string | null }[];
   }): Promise<'replace' | 'exit'>;
+  /**
+   * Optional: asked when `.mancode` holds only non-Continuity scratch.
+   * Prompters without this method get the safe default (`exit`).
+   */
+  resolveScratchMancodeTarget?(context: {
+    locale: InitLocale;
+    entries: readonly string[];
+  }): Promise<'relocate' | 'exit'>;
 }
 
 const ALL_PLATFORMS = Object.keys(PLATFORM_INSTALLERS) as PlatformName[];
@@ -292,6 +300,33 @@ export function createTerminalPrompter(): InitPrompter {
           .trim()
           .toLowerCase();
         return answer === '2' ? 'replace' : 'exit';
+      } finally {
+        rl.close();
+      }
+    },
+    async resolveScratchMancodeTarget({ locale, entries }) {
+      const rl = createInterface({ input: stdin, output: stdout });
+      try {
+        console.log(
+          locale === 'zh-CN'
+            ? '\n`.mancode` 已存在，但只包含非 Continuity 的本地草稿（发布工件、其他工具备份）：'
+            : '\n`.mancode` exists but contains only non-Continuity local scratch (release artifacts, other-tool backups):',
+        );
+        for (const entry of entries) console.log(`  .mancode/${entry}`);
+        console.log(locale === 'zh-CN' ? '1. 退出' : '1. Exit');
+        console.log(
+          locale === 'zh-CN'
+            ? '2. 把 `.mancode` 移到一边（内容保留）并继续初始化；成功后原样归位到 `.mancode/local/`'
+            : '2. Move `.mancode` aside (content preserved) and continue; it is restored under `.mancode/local/` after success',
+        );
+        const answer = (
+          await rl.question(
+            locale === 'zh-CN' ? '选择 [1/2]: ' : 'Choose [1/2]: ',
+          )
+        )
+          .trim()
+          .toLowerCase();
+        return answer === '2' ? 'relocate' : 'exit';
       } finally {
         rl.close();
       }

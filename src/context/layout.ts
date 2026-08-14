@@ -24,6 +24,21 @@ export const V3_AUTHORITY_PATHS = [
   'runtime',
 ] as const;
 
+/**
+ * `local/` is checkout-local scratch, so its presence alone never blocks a
+ * fresh initialization.  These are the children that mark it as Continuity
+ * business content: a `local/` holding any of them is real user state, never
+ * ignorable scratch.
+ */
+export const LOCAL_CONTINUITY_PATHS = [
+  'sessions',
+  'workflows',
+  'cache',
+  'quarantine',
+  'publish',
+  'runtime',
+] as const;
+
 export type LegacyAuthorityPath = (typeof LEGACY_AUTHORITY_PATHS)[number];
 export type LegacyEntryKind = 'file' | 'directory' | 'symlink' | 'other';
 
@@ -49,6 +64,15 @@ export interface MancodeLayoutInspection {
   legacy: LegacyAuthorityScan;
   v3TargetExists: boolean;
   v3AuthorityPathsPresent: string[];
+  /**
+   * True when `.mancode` exists but holds no Continuity authority: no
+   * schema.json/shared/runtime, and a `local/` with no Continuity business
+   * children.  Such a target is safe to move aside; real V3 or legacy
+   * authority is never scratch.
+   */
+  v3ScratchOnly: boolean;
+  /** Sorted top-level entry names of `.mancode`; empty when it is absent. */
+  v3TargetEntries: string[];
 }
 
 /**
@@ -88,9 +112,10 @@ export async function inspectMancodeLayout(
 ): Promise<MancodeLayoutInspection> {
   const root = path.resolve(projectRoot);
   const mancodeRoot = path.join(root, '.mancode');
-  const [legacy, target] = await Promise.all([
+  const [legacy, target, entries] = await Promise.all([
     scanLegacyAuthority(root),
     lstatOrNull(mancodeRoot),
+    targetEntries(mancodeRoot),
   ]);
   const v3AuthorityPathsPresent = (
     await Promise.all(
@@ -103,14 +128,30 @@ export async function inspectMancodeLayout(
   ).filter(
     (value): value is (typeof V3_AUTHORITY_PATHS)[number] => value !== null,
   );
+  const blockingV3AuthorityPresent = v3AuthorityPathsPresent.some(
+    (relativePath) => relativePath !== 'local',
+  );
+  const v3ScratchOnly =
+    target?.isDirectory() === true &&
+    !blockingV3AuthorityPresent &&
+    !(await localHasContinuityContent(mancodeRoot));
   return {
     legacy,
     v3TargetExists: target !== null,
     v3AuthorityPathsPresent,
+    v3ScratchOnly,
+    v3TargetEntries: entries,
   };
 }
 
-/** Greenfield initialization must not reinterpret an existing legacy project. */
+/**
+ * Greenfield initialization must not reinterpret an existing legacy project.
+ * This preflight is deliberately strict about ANY existing `.mancode`,
+ * scratch included: the journaled initializer never touches a pre-existing
+ * directory.  Callers that want to tolerate scratch-only targets must move
+ * them aside (or remove an empty one) before invoking the initializer; the
+ * inspection's `v3ScratchOnly` flag exists so the command layer can decide.
+ */
 export async function assertGreenfieldInitializationPreflight(
   projectRoot: string,
 ): Promise<MancodeLayoutInspection> {
@@ -261,6 +302,30 @@ async function lstatOrNull(target: string) {
     if (isNotFound(error)) return null;
     throw error;
   }
+}
+
+/** Sorted top-level names of a directory; empty when it is absent or a file. */
+async function targetEntries(root: string): Promise<string[]> {
+  const stat = await lstatOrNull(root);
+  if (stat === null || !stat.isDirectory()) return [];
+  const names = await readdir(root);
+  names.sort(compareUtf8);
+  return names;
+}
+
+/**
+ * `local/` counts as scratch only while it holds none of the Continuity
+ * business children.  A file or symlink named `local` is never scratch.
+ */
+async function localHasContinuityContent(root: string): Promise<boolean> {
+  const localPath = path.join(root, 'local');
+  const stat = await lstatOrNull(localPath);
+  if (stat === null) return false;
+  if (!stat.isDirectory()) return true;
+  const names = await readdir(localPath);
+  return names.some((name) =>
+    (LOCAL_CONTINUITY_PATHS as readonly string[]).includes(name),
+  );
 }
 
 function pathsOverlap(left: string, right: string): boolean {

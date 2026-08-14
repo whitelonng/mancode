@@ -75,6 +75,50 @@ describe('legacy/V3 physical layout contract', () => {
     );
   });
 
+  it('recognizes a .mancode holding only non-Continuity scratch, but keeps the preflight strict', async () => {
+    await mkdir(path.join(root, '.mancode', 'local', 'release-evidence'), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(root, '.mancode', 'local', 'release-evidence', '0.6.2.json'),
+      '{}',
+    );
+    const inspection = await inspectMancodeLayout(root);
+    expect(inspection.v3TargetExists).toBe(true);
+    expect(inspection.v3ScratchOnly).toBe(true);
+    expect(inspection.v3TargetEntries).toEqual(['local']);
+    // The journaled initializer never touches a pre-existing directory;
+    // the command layer owns the move-aside decision.
+    await expect(assertGreenfieldInitializationPreflight(root)).rejects.toThrow(
+      'MANCODE_V3_TARGET_EXISTS',
+    );
+  });
+
+  it('never treats local Continuity content as ignorable scratch', async () => {
+    await mkdir(path.join(root, '.mancode', 'local', 'sessions'), {
+      recursive: true,
+    });
+    const inspection = await inspectMancodeLayout(root);
+    expect(inspection.v3TargetExists).toBe(true);
+    expect(inspection.v3ScratchOnly).toBe(false);
+  });
+
+  it('reports an empty .mancode as removable scratch and sorts target entries', async () => {
+    await mkdir(path.join(root, '.mancode'), { recursive: true });
+    await mkdir(path.join(root, '.mancode', 'local', 'other-tool-backup'), {
+      recursive: true,
+    });
+    await writeFile(path.join(root, '.mancode', 'notes.txt'), 'x');
+    const inspection = await inspectMancodeLayout(root);
+    expect(inspection.v3ScratchOnly).toBe(true);
+    expect(inspection.v3TargetEntries).toEqual(['local', 'notes.txt']);
+    await rm(path.join(root, '.mancode', 'notes.txt'));
+    await rm(path.join(root, '.mancode', 'local'), { recursive: true });
+    const empty = await inspectMancodeLayout(root);
+    expect(empty.v3ScratchOnly).toBe(true);
+    expect(empty.v3TargetEntries).toEqual([]);
+  });
+
   it('treats a legacy symlink as unsafe authority and never follows it', async () => {
     const external = path.join(root, 'outside.json');
     await writeFile(external, 'outside-secret');

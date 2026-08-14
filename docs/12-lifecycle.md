@@ -17,6 +17,8 @@ mancode init
 
 已有 legacy authority 时，普通初始化会拒绝覆盖。使用 `mancode migrate context --dry-run` 检查，再通过 stage、resolve 和显式 activation 迁移。
 
+`.mancode` 已存在但只含非 Continuity 草稿（发布工件、其他工具备份，且 `local/` 下没有 sessions/workflows/cache/quarantine/publish/runtime）时，交互式 `mancode init` 询问是否把它移到一边并继续；成功后内容归位到 `.mancode/local/`（未知顶层条目进 `local/preinit-scratch/`）。非交互调用得到描述性拒绝（`MANCODE_V3_SCRATCH_TARGET_REQUIRES_CHOICE`），空目录则被静默移除。含权威内容的 `.mancode` 永远拒绝覆盖（`MANCODE_V3_TARGET_EXISTS`）。
+
 ## 会话与任务
 
 ```text

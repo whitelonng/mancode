@@ -12,6 +12,9 @@ docs/
 # Claude Code 开发配置（本地测试用）
 .claude/
 
+# 平台 bootstrap 生成物（由 init / adapter upgrade 重装，源在 src/templates）
+.agents/
+
 # 当前维护文档
 !docs/
 docs/*
@@ -39,6 +42,9 @@ build/
 
 # mancode 运行时生成文件
 .mancode/
+
+# 发布门禁证据（release-check 输出，checkout-local）
+.release/
 
 # macOS
 .DS_Store
