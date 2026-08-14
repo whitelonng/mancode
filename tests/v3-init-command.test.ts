@@ -577,4 +577,30 @@ describe('journaled V3 init command', () => {
       ).resolves.toContain('mancode:continuity:claude:start');
     },
   );
+
+  it.skipIf(process.platform === 'win32')(
+    'composes multiple platforms into one shared AGENTS.md through the link',
+    async () => {
+      await mkdir(path.join(root, '.git'));
+      await writeFile(
+        path.join(root, 'AGENTS.md'),
+        '# shared agent instructions\n',
+      );
+      await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+
+      const result = await init(root, {
+        fromCli: true,
+        platform: 'codex,claude-code',
+      });
+
+      expect(result).toBe(EXIT_OK);
+      expect((await lstat(path.join(root, 'CLAUDE.md'))).isSymbolicLink()).toBe(
+        true,
+      );
+      const content = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+      expect(content).toContain('mancode:continuity:codex:start');
+      expect(content).toContain('mancode:continuity:claude:start');
+      expect(content).toContain('# shared agent instructions');
+    },
+  );
 });

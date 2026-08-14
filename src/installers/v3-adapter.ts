@@ -444,6 +444,30 @@ async function annotateWriteThroughPlans(
   );
 }
 
+/**
+ * Physical primary target for a platform: when the primary target is a
+ * write-through symlink landing on AGENTS.md, the platform composes into the
+ * shared `agents` target so several platforms produce ONE plan for ONE
+ * physical file instead of conflicting before-content snapshots.
+ */
+async function effectivePrimaryTarget(
+  root: string,
+  platform: PlatformName,
+): Promise<V3AdapterFileTarget> {
+  const primary = primaryFileTarget(platform);
+  const resolved = await writeThroughResolvedPath(
+    root,
+    v3AdapterTargetPath(root, primary),
+  );
+  if (resolved === null) return primary;
+  const agentsPath = v3AdapterTargetPath(root, 'agents');
+  const realAgents = await resolveAdapterSymlink(agentsPath);
+  if (realAgents !== null && path.resolve(resolved) === path.resolve(realAgents)) {
+    return 'agents';
+  }
+  return primary;
+}
+
 /** Plans a selected-platform repair while composing shared AGENTS targets once. */
 export async function planV3AdapterUpgradeFiles(
   projectRoot: string,
@@ -452,8 +476,11 @@ export async function planV3AdapterUpgradeFiles(
   const root = path.resolve(projectRoot);
   const selected = normalizeUpgradePlatforms(platforms);
   const targetSet = new Set<V3AdapterFileTarget>();
+  const effectivePrimary = new Map<PlatformName, V3AdapterFileTarget>();
   for (const platform of selected) {
-    targetSet.add(primaryFileTarget(platform));
+    const primary = await effectivePrimaryTarget(root, platform);
+    effectivePrimary.set(platform, primary);
+    targetSet.add(primary);
     for (const mode of V3_MODE_NAMES) {
       targetSet.add(modeEntryFileTarget(platform, mode));
     }
@@ -467,7 +494,7 @@ export async function planV3AdapterUpgradeFiles(
   }
   const desired = new Map(existing);
   for (const platform of selected) {
-    planPlatformBootstrapUpgrade(desired, platform);
+    planPlatformBootstrapUpgrade(desired, platform, effectivePrimary.get(platform));
     for (const mode of V3_MODE_NAMES) {
       const target = modeEntryFileTarget(platform, mode);
       const current = desired.get(target) ?? null;
@@ -1441,8 +1468,9 @@ function primaryFileTarget(platform: PlatformName): V3AdapterFileTarget {
 function planPlatformBootstrapUpgrade(
   desired: Map<V3AdapterFileTarget, string | null>,
   platform: PlatformName,
+  targetOverride?: V3AdapterFileTarget,
 ): void {
-  const target = primaryFileTarget(platform);
+  const target = targetOverride ?? primaryFileTarget(platform);
   const current = desired.get(target) ?? null;
   switch (platform) {
     case 'claude-code':
