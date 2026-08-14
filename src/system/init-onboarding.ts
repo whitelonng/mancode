@@ -23,7 +23,17 @@ export interface InitPrompter {
   resolveUnsafeAdapterPaths(context: {
     locale: InitLocale;
     paths: readonly { relative: string; resolvedTo: string | null }[];
-  }): Promise<'replace' | 'exit'>;
+    /** True when every reported link resolves to an in-root regular file. */
+    writeThroughAvailable: boolean;
+  }): Promise<'replace' | 'write-through' | 'exit'>;
+  /**
+   * Optional: asked when `.mancode` holds only non-Continuity scratch.
+   * Prompters without this method get the safe default (`exit`).
+   */
+  resolveScratchMancodeTarget?(context: {
+    locale: InitLocale;
+    entries: readonly string[];
+  }): Promise<'relocate' | 'exit'>;
 }
 
 const ALL_PLATFORMS = Object.keys(PLATFORM_INSTALLERS) as PlatformName[];
@@ -266,13 +276,13 @@ export function createTerminalPrompter(): InitPrompter {
         rl.close();
       }
     },
-    async resolveUnsafeAdapterPaths({ locale, paths }) {
+    async resolveUnsafeAdapterPaths({ locale, paths, writeThroughAvailable }) {
       const rl = createInterface({ input: stdin, output: stdout });
       try {
         console.log(
           locale === 'zh-CN'
-            ? '\n检测到适配器目标路径是符号链接（mancode 不会写入链接）：'
-            : '\nAdapter target paths are symbolic links (mancode never writes through links):',
+            ? '\n检测到适配器目标路径是符号链接：'
+            : '\nAdapter target paths are symbolic links:',
         );
         for (const item of paths) {
           const detail = item.resolvedTo ? ` -> ${item.resolvedTo}` : '';
@@ -284,6 +294,44 @@ export function createTerminalPrompter(): InitPrompter {
             ? '2. 将符号链接替换为普通文件（保留原内容）并继续初始化'
             : '2. Replace the symbolic link(s) with regular file(s) (content preserved) and continue',
         );
+        if (writeThroughAvailable) {
+          console.log(
+            locale === 'zh-CN'
+              ? '3. 保留链接，mancode 直接读写其解析目标（CLAUDE.md -> AGENTS.md 约定）'
+              : '3. Keep the link(s); mancode reads and writes the resolved file (CLAUDE.md -> AGENTS.md convention)',
+          );
+        }
+        const answer = (
+          await rl.question(
+            locale === 'zh-CN'
+              ? `选择 [1/${writeThroughAvailable ? '2/3' : '2'}]: `
+              : `Choose [1/${writeThroughAvailable ? '2/3' : '2'}]: `,
+          )
+        )
+          .trim()
+          .toLowerCase();
+        if (answer === '2') return 'replace';
+        if (answer === '3' && writeThroughAvailable) return 'write-through';
+        return 'exit';
+      } finally {
+        rl.close();
+      }
+    },
+    async resolveScratchMancodeTarget({ locale, entries }) {
+      const rl = createInterface({ input: stdin, output: stdout });
+      try {
+        console.log(
+          locale === 'zh-CN'
+            ? '\n`.mancode` 已存在，但只包含非 Continuity 的本地草稿（发布工件、其他工具备份）：'
+            : '\n`.mancode` exists but contains only non-Continuity local scratch (release artifacts, other-tool backups):',
+        );
+        for (const entry of entries) console.log(`  .mancode/${entry}`);
+        console.log(locale === 'zh-CN' ? '1. 退出' : '1. Exit');
+        console.log(
+          locale === 'zh-CN'
+            ? '2. 把 `.mancode` 移到一边（内容保留）并继续初始化；成功后原样归位到 `.mancode/local/`'
+            : '2. Move `.mancode` aside (content preserved) and continue; it is restored under `.mancode/local/` after success',
+        );
         const answer = (
           await rl.question(
             locale === 'zh-CN' ? '选择 [1/2]: ' : 'Choose [1/2]: ',
@@ -291,7 +339,7 @@ export function createTerminalPrompter(): InitPrompter {
         )
           .trim()
           .toLowerCase();
-        return answer === '2' ? 'replace' : 'exit';
+        return answer === '2' ? 'relocate' : 'exit';
       } finally {
         rl.close();
       }

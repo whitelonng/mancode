@@ -47,9 +47,8 @@ const outputPath = path.resolve(
   sourceRoot,
   options.output ??
     path.join(
-      '.mancode',
-      'local',
-      'release-evidence',
+      '.release',
+      'evidence',
       `${candidate}.json`,
     ),
 );

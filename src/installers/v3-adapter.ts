@@ -230,6 +230,14 @@ export interface V3AdapterFilePlan {
   target: V3AdapterFileTarget;
   beforeContent: string | null;
   targetContent: string;
+  /**
+   * Present only for write-through plans: the live target is a symlink
+   * (CLAUDE.md -> AGENTS.md convention) and this is the resolved target's
+   * path relative to the project root. Publication verifies the link still
+   * resolves here before writing, so recovery replays the plan without any
+   * extra options.
+   */
+  resolvedTarget?: string;
 }
 
 export interface V3StagedAdapterFilePlan {
@@ -410,7 +418,57 @@ export async function planV3AdapterFiles(
     ),
     ...legacyAdapterPlans,
   ];
-  return plans;
+  return annotateWriteThroughPlans(root, plans);
+}
+
+/**
+ * Marks plans whose live target is a write-through symlink with the resolved
+ * relative path, so publication and journal replay can write the resolved
+ * file while verifying the link still points there.
+ */
+async function annotateWriteThroughPlans(
+  root: string,
+  plans: V3AdapterFilePlan[],
+): Promise<V3AdapterFilePlan[]> {
+  return Promise.all(
+    plans.map(async (plan) => {
+      const resolved = await writeThroughResolvedPath(
+        root,
+        v3AdapterTargetPath(root, plan.target),
+      );
+      if (resolved === null) return plan;
+      const relative = await relativeWithinRealRoot(root, resolved);
+      if (relative === null) return plan;
+      return { ...plan, resolvedTarget: relative };
+    }),
+  );
+}
+
+/**
+ * Physical primary target for a platform: when the primary target is a
+ * write-through symlink landing on AGENTS.md, the platform composes into the
+ * shared `agents` target so several platforms produce ONE plan for ONE
+ * physical file instead of conflicting before-content snapshots.
+ */
+async function effectivePrimaryTarget(
+  root: string,
+  platform: PlatformName,
+): Promise<V3AdapterFileTarget> {
+  const primary = primaryFileTarget(platform);
+  const resolved = await writeThroughResolvedPath(
+    root,
+    v3AdapterTargetPath(root, primary),
+  );
+  if (resolved === null) return primary;
+  const agentsPath = v3AdapterTargetPath(root, 'agents');
+  const realAgents = await resolveAdapterSymlink(agentsPath);
+  if (
+    realAgents !== null &&
+    path.resolve(resolved) === path.resolve(realAgents)
+  ) {
+    return 'agents';
+  }
+  return primary;
 }
 
 /** Plans a selected-platform repair while composing shared AGENTS targets once. */
@@ -421,8 +479,11 @@ export async function planV3AdapterUpgradeFiles(
   const root = path.resolve(projectRoot);
   const selected = normalizeUpgradePlatforms(platforms);
   const targetSet = new Set<V3AdapterFileTarget>();
+  const effectivePrimary = new Map<PlatformName, V3AdapterFileTarget>();
   for (const platform of selected) {
-    targetSet.add(primaryFileTarget(platform));
+    const primary = await effectivePrimaryTarget(root, platform);
+    effectivePrimary.set(platform, primary);
+    targetSet.add(primary);
     for (const mode of V3_MODE_NAMES) {
       targetSet.add(modeEntryFileTarget(platform, mode));
     }
@@ -436,7 +497,11 @@ export async function planV3AdapterUpgradeFiles(
   }
   const desired = new Map(existing);
   for (const platform of selected) {
-    planPlatformBootstrapUpgrade(desired, platform);
+    planPlatformBootstrapUpgrade(
+      desired,
+      platform,
+      effectivePrimary.get(platform),
+    );
     for (const mode of V3_MODE_NAMES) {
       const target = modeEntryFileTarget(platform, mode);
       const current = desired.get(target) ?? null;
@@ -458,7 +523,7 @@ export async function planV3AdapterUpgradeFiles(
     (legacyPlan) =>
       !plans.some((candidate) => candidate.target === legacyPlan.target),
   );
-  return [...plans, ...legacyPlans];
+  return annotateWriteThroughPlans(root, [...plans, ...legacyPlans]);
 }
 
 /** Writes immutable upgrade candidates below .mancode staging, never live targets. */
@@ -508,7 +573,28 @@ export async function applyV3AdapterFilePlan(
     throw new Error('MANCODE_V3_ADAPTER_TARGET_INVALID');
   }
   const target = v3AdapterTargetPath(root, plan.target);
-  await assertAdapterPathSafe(root, target);
+  const writePath =
+    plan.resolvedTarget === undefined
+      ? target
+      : path.join(root, plan.resolvedTarget);
+  if (plan.resolvedTarget !== undefined) {
+    // Write-through: the plan stays pinned to the link it was planned
+    // against; a moved or retargeted link is a conflict, never a rewrite.
+    // Both sides are canonicalized because realpath adds a /private prefix
+    // on macOS while the plan path does not.
+    const entry = await lstat(target).catch(() => null);
+    const resolved =
+      entry?.isSymbolicLink() === true
+        ? await resolveAdapterSymlink(target)
+        : null;
+    const realWrite = await resolveAdapterSymlink(writePath);
+    if (resolved === null || realWrite === null || resolved !== realWrite) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    await assertAdapterPathSafe(root, writePath);
+  } else {
+    await assertAdapterPathSafe(root, target);
+  }
   const retiredBootstrapPlatform = retiredBootstrapPlatformFor(plan.target);
   if (retiredBootstrapPlatform !== null) {
     for (const retired of retiredBootstrapSpecs(
@@ -528,8 +614,8 @@ export async function applyV3AdapterFilePlan(
   if (current !== plan.beforeContent) {
     throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
   }
-  await mkdir(path.dirname(target), { recursive: true });
-  await atomicWrite(target, plan.targetContent);
+  await mkdir(path.dirname(writePath), { recursive: true });
+  await atomicWrite(writePath, plan.targetContent);
   if (retiredBootstrapPlatform !== null) {
     // The old bootstrap is non-authoritative and is retired only after its
     // Continuity replacement is durable. A later repair safely retries this.
@@ -660,7 +746,7 @@ export async function installV3Adapter(
   switch (platform) {
     case 'claude-code':
       await replaceManagedV3Block(
-        path.join(root, 'CLAUDE.md'),
+        await writePathThrough(root, path.join(root, 'CLAUDE.md')),
         CONTINUITY_CLAUDE_START_MARKER,
         CONTINUITY_CLAUDE_END_MARKER,
         content,
@@ -669,14 +755,17 @@ export async function installV3Adapter(
       break;
     case 'cursor':
       await writeManagedFile(
-        path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
+        await writePathThrough(
+          root,
+          path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
+        ),
         renderCursorRule(content),
       );
       await removeRetiredBootstrapFiles(root, platform);
       break;
     case 'codex':
       await replaceManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        await writePathThrough(root, path.join(root, 'AGENTS.md')),
         V3_CODEX_START_MARKER,
         V3_CODEX_END_MARKER,
         content,
@@ -689,7 +778,10 @@ export async function installV3Adapter(
       break;
     case 'copilot':
       await replaceManagedV3Block(
-        path.join(root, '.github', 'copilot-instructions.md'),
+        await writePathThrough(
+          root,
+          path.join(root, '.github', 'copilot-instructions.md'),
+        ),
         V3_COPILOT_START_MARKER,
         V3_COPILOT_END_MARKER,
         content,
@@ -701,7 +793,7 @@ export async function installV3Adapter(
       break;
     case 'zcode':
       await replaceManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        await writePathThrough(root, path.join(root, 'AGENTS.md')),
         V3_ZCODE_START_MARKER,
         V3_ZCODE_END_MARKER,
         content,
@@ -714,7 +806,7 @@ export async function installV3Adapter(
       break;
     case 'kimi-code':
       await replaceManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        await writePathThrough(root, path.join(root, 'AGENTS.md')),
         V3_KIMI_START_MARKER,
         V3_KIMI_END_MARKER,
         content,
@@ -723,7 +815,7 @@ export async function installV3Adapter(
       break;
     case 'qoder':
       await replaceManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        await writePathThrough(root, path.join(root, 'AGENTS.md')),
         V3_QODER_START_MARKER,
         V3_QODER_END_MARKER,
         content,
@@ -732,7 +824,7 @@ export async function installV3Adapter(
       break;
     case 'dsh':
       await replaceManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        await writePathThrough(root, path.join(root, 'AGENTS.md')),
         V3_DSH_START_MARKER,
         V3_DSH_END_MARKER,
         content,
@@ -850,112 +942,93 @@ export async function removeV3Adapter(
 ): Promise<void> {
   const root = path.resolve(projectRoot);
   await assertPlatformAdapterPathsSafe(root, platform);
+  const agentsPath = await writePathThrough(root, path.join(root, 'AGENTS.md'));
+  const claudePath = await writePathThrough(root, path.join(root, 'CLAUDE.md'));
+  const copilotPath = await writePathThrough(
+    root,
+    path.join(root, '.github', 'copilot-instructions.md'),
+  );
+  const cursorRulePath = await writePathThrough(
+    root,
+    path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
+  );
   let preserveSharedModeEntries = false;
   switch (platform) {
     case 'claude-code':
       await removeManagedV3Block(
-        path.join(root, 'CLAUDE.md'),
+        claudePath,
         CONTINUITY_CLAUDE_START_MARKER,
         CONTINUITY_CLAUDE_END_MARKER,
       );
       await removeRetiredBootstrapFiles(root, platform);
       break;
     case 'cursor':
-      await removeManagedFile(
-        path.join(root, '.cursor', 'rules', 'mancode-continuity.mdc'),
-      );
+      await removeManagedFile(cursorRulePath);
       await removeRetiredBootstrapFiles(root, platform);
       break;
     case 'codex':
       await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        agentsPath,
         V3_CODEX_START_MARKER,
         V3_CODEX_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
-        ...LEGACY_V3_CODEX_MARKERS,
-      );
-      preserveSharedModeEntries = await anyManagedBlockPresent(
-        path.join(root, 'AGENTS.md'),
-        [
-          [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
-          LEGACY_V3_ZCODE_MARKERS,
-          [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
-        ],
-      );
+      await removeManagedV3Block(agentsPath, ...LEGACY_V3_CODEX_MARKERS);
+      preserveSharedModeEntries = await anyManagedBlockPresent(agentsPath, [
+        [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
+        LEGACY_V3_ZCODE_MARKERS,
+        [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
+      ]);
       break;
     case 'copilot':
       await removeManagedV3Block(
-        path.join(root, '.github', 'copilot-instructions.md'),
+        copilotPath,
         V3_COPILOT_START_MARKER,
         V3_COPILOT_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, '.github', 'copilot-instructions.md'),
-        ...LEGACY_V3_COPILOT_MARKERS,
-      );
+      await removeManagedV3Block(copilotPath, ...LEGACY_V3_COPILOT_MARKERS);
       break;
     case 'zcode':
       await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        agentsPath,
         V3_ZCODE_START_MARKER,
         V3_ZCODE_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
-        ...LEGACY_V3_ZCODE_MARKERS,
-      );
-      preserveSharedModeEntries = await anyManagedBlockPresent(
-        path.join(root, 'AGENTS.md'),
-        [
-          [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
-          LEGACY_V3_CODEX_MARKERS,
-          [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
-        ],
-      );
+      await removeManagedV3Block(agentsPath, ...LEGACY_V3_ZCODE_MARKERS);
+      preserveSharedModeEntries = await anyManagedBlockPresent(agentsPath, [
+        [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
+        LEGACY_V3_CODEX_MARKERS,
+        [V3_KIMI_START_MARKER, V3_KIMI_END_MARKER],
+      ]);
       break;
     case 'kimi-code':
       await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        agentsPath,
         V3_KIMI_START_MARKER,
         V3_KIMI_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
-        ...LEGACY_KIMI_MARKERS,
-      );
-      preserveSharedModeEntries = await anyManagedBlockPresent(
-        path.join(root, 'AGENTS.md'),
-        [
-          [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
-          LEGACY_V3_CODEX_MARKERS,
-          [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
-          LEGACY_V3_ZCODE_MARKERS,
-        ],
-      );
+      await removeManagedV3Block(agentsPath, ...LEGACY_KIMI_MARKERS);
+      preserveSharedModeEntries = await anyManagedBlockPresent(agentsPath, [
+        [V3_CODEX_START_MARKER, V3_CODEX_END_MARKER],
+        LEGACY_V3_CODEX_MARKERS,
+        [V3_ZCODE_START_MARKER, V3_ZCODE_END_MARKER],
+        LEGACY_V3_ZCODE_MARKERS,
+      ]);
       break;
     case 'qoder':
       await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        agentsPath,
         V3_QODER_START_MARKER,
         V3_QODER_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
-        ...LEGACY_QODER_MARKERS,
-      );
+      await removeManagedV3Block(agentsPath, ...LEGACY_QODER_MARKERS);
       break;
     case 'dsh':
       await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
+        agentsPath,
         V3_DSH_START_MARKER,
         V3_DSH_END_MARKER,
       );
-      await removeManagedV3Block(
-        path.join(root, 'AGENTS.md'),
-        ...LEGACY_DSH_MARKERS,
-      );
+      await removeManagedV3Block(agentsPath, ...LEGACY_DSH_MARKERS);
       break;
   }
   if (!preserveSharedModeEntries) {
@@ -1402,8 +1475,9 @@ function primaryFileTarget(platform: PlatformName): V3AdapterFileTarget {
 function planPlatformBootstrapUpgrade(
   desired: Map<V3AdapterFileTarget, string | null>,
   platform: PlatformName,
+  targetOverride?: V3AdapterFileTarget,
 ): void {
-  const target = primaryFileTarget(platform);
+  const target = targetOverride ?? primaryFileTarget(platform);
   const current = desired.get(target) ?? null;
   switch (platform) {
     case 'claude-code':
@@ -2336,6 +2410,12 @@ async function readAdapterTarget(
   target: V3AdapterFileTarget,
 ): Promise<string | null> {
   const filePath = v3AdapterTargetPath(root, target);
+  const resolved = await writeThroughResolvedPath(root, filePath);
+  if (resolved !== null) {
+    // Write-through: the resolved path is already proven to be a regular
+    // file inside the real project root.
+    return readFile(resolved, 'utf8');
+  }
   await assertAdapterPathSafe(root, filePath);
   try {
     const entry = await lstat(filePath);
@@ -2456,6 +2536,15 @@ async function assertAdapterPathSafe(
       `MANCODE_ARTIFACT_PATH_UNSAFE: ${unsafe.relative} cannot be used because ${path.basename(unsafe.target)} is not a directory`,
     );
   }
+  // The one sanctioned link: a final target resolving to a regular file
+  // inside the project root (CLAUDE.md -> AGENTS.md). Everything else is
+  // still refused — mancode never writes through escaping or broken links.
+  if (
+    unsafe.finalTarget &&
+    (await writeThroughResolvedPath(root, unsafe.target)) !== null
+  ) {
+    return;
+  }
   const detail = unsafe.resolvedTo
     ? ` (resolves to ${unsafe.resolvedTo})`
     : ' (broken link)';
@@ -2463,7 +2552,7 @@ async function assertAdapterPathSafe(
     ? 'a regular file'
     : 'a real directory';
   throw new Error(
-    `MANCODE_ARTIFACT_PATH_UNSAFE: ${unsafe.relative} is a symbolic link${detail}; mancode never writes through links. Replace it with ${replacement} before initializing the adapter.`,
+    `MANCODE_ARTIFACT_PATH_UNSAFE: ${unsafe.relative} is a symbolic link${detail}; mancode writes through a link only when it resolves to a regular file inside the project root. Replace it with ${replacement} before initializing the adapter.`,
   );
 }
 
@@ -2532,6 +2621,60 @@ async function resolveAdapterSymlink(linkPath: string): Promise<string | null> {
   }
 }
 
+/**
+ * When a fixed adapter target is a symlink that resolves to a regular file
+ * inside the project root, mancode reads and writes through it — the
+ * CLAUDE.md -> AGENTS.md convention. Returns the absolute resolved path, or
+ * null when the entry is not such a link (broken, escaping, or non-regular).
+ */
+export async function writeThroughResolvedPath(
+  root: string,
+  target: string,
+): Promise<string | null> {
+  const entry = await lstat(target).catch((error) => {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (entry === null || !entry.isSymbolicLink()) return null;
+  const resolved = await resolveAdapterSymlink(target);
+  if (resolved === null) return null;
+  if ((await relativeWithinRealRoot(root, resolved)) === null) return null;
+  const resolvedEntry = await lstat(resolved).catch(() => null);
+  if (resolvedEntry === null || !resolvedEntry.isFile()) return null;
+  return resolved;
+}
+
+/**
+ * Relative path from the real root to an absolute resolved path, or null
+ * when it escapes. realpath can add a /private prefix on macOS while
+ * tmpdir() does not, so both sides are canonicalized before comparing.
+ */
+async function relativeWithinRealRoot(
+  root: string,
+  resolved: string,
+): Promise<string | null> {
+  const realRoot = await resolveAdapterSymlink(root);
+  const base = realRoot ?? root;
+  const relative = path.relative(base, resolved);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+  return relative;
+}
+
+/**
+ * Physical write path for a fixed target: a write-through symlink writes its
+ * resolved file so the link survives; everything else is the path itself.
+ * Callers assert installability first, and this re-resolves right before
+ * the write, so a link flipped between the two steps still cannot escape.
+ */
+async function writePathThrough(
+  root: string,
+  filePath: string,
+): Promise<string> {
+  return (await writeThroughResolvedPath(root, filePath)) ?? filePath;
+}
+
 async function removeManagedV3Block(
   filePath: string,
   startMarker: string,
@@ -2566,9 +2709,13 @@ async function readAdapterBytesIfExists(
   root: string,
   filePath: string,
 ): Promise<Buffer | null> {
-  await assertAdapterPathSafe(root, filePath);
+  const resolved = await writeThroughResolvedPath(root, filePath);
+  const readPath = resolved ?? filePath;
+  if (resolved === null) {
+    await assertAdapterPathSafe(root, filePath);
+  }
   try {
-    const entry = await lstat(filePath);
+    const entry = await lstat(readPath);
     if (!entry.isFile() || entry.isSymbolicLink()) {
       throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
     }
@@ -2578,7 +2725,7 @@ async function readAdapterBytesIfExists(
   }
   for (let attempt = 1; attempt <= ADAPTER_READ_MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await readFile(filePath);
+      return await readFile(readPath);
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') return null;
       if (

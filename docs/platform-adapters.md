@@ -61,6 +61,8 @@ adapter upgrade 先在 staging 中生成预览，用户确认后再通过 journa
 
 Continuity 的 Claude Code bootstrap 位于根目录 `CLAUDE.md` 的 `mancode:continuity:claude` 托管区，确保普通 Solo 请求也会加载；原有 mode skills 仍位于 `.claude/skills/`。Cursor bootstrap 位于 `.cursor/rules/mancode-continuity.mdc`，其他嵌入式托管区同样使用 `mancode:continuity:*` 标记。升级时只自动移除带 mancode 旧管理标记的 `mancode-v3`/旧 Continuity bootstrap 或托管区；用户在 `CLAUDE.md` 和同名旧文件中的自写内容会保留。
 
+固定适配器目标若是符号链接：解析到仓库内常规文件时（`CLAUDE.md -> AGENTS.md` 约定），mancode 读写都穿透到解析目标，链接保持不变——交互式 init 提供「保留链接穿透 / 替换为普通文件 / 退出」三选一，非交互调用直接穿透。解析目标落在 AGENTS.md 时该平台并入共享 `agents` 组合（多平台一次写入、块共存）；落在其他文件时写入计划把解析目标记入 journal，发布与恢复时校验链接仍指向原目标，漂移即 `MANCODE_V3_ADAPTER_TARGET_CONFLICT`。解析到仓库外、断链或非普通文件的链接一律拒绝。
+
 Windows 上的脚本与文件替换不能依赖 Bash、jq 或 Unix rename 行为。发布流程包含 CMD、PowerShell 和 Git Bash smoke test。
 
 ## Session 发布证据

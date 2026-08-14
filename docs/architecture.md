@@ -45,6 +45,8 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 
 旧架构的 `state.json`、`config.json`、`project-profile.json`、`workflows/` 和 `memory/` 与 Continuity 目录物理隔离。普通 `mancode init` 创建 Continuity 布局；只有显式 `--legacy` 才创建旧布局。
 
+`local/` 是 checkout-local 草稿区，但它下面出现 sessions/workflows/cache/quarantine/publish/runtime 任一子目录即视为 Continuity 业务内容。`.mancode` 只有权威内容（schema.json/shared/runtime 或上述 local 子目录）时初始化拒绝覆盖；只含其他工具的草稿时，初始化在命令层把它移开、成功后再归位（见 [12-lifecycle.md](12-lifecycle.md#初始化)）。发布门禁证据（release-check 输出）不属于 Continuity 草稿区，存于 `.release/`。
+
 ## 一致性与恢复
 
 所有跨实体业务写入都使用 durable operation：

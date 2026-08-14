@@ -654,23 +654,29 @@ describe('V3 adapter bootstrap integration', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
-    'names an in-repo symlinked fixed target instead of a bare path error',
+    'writes through an in-repo symlinked fixed target and keeps the link',
     async () => {
       await init(root, { v3: true, platform: 'codex' });
-      // Repo convention (e.g. openai/codex): CLAUDE.md mirrors AGENTS.md.
+      // Repo convention (CLAUDE.md -> AGENTS.md): the link survives and the
+      // resolved file receives the managed block beside user content.
       await writeFile(
         path.join(root, 'AGENTS.md'),
         '# shared agent instructions\n',
       );
       await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
 
-      await expect(installV3Adapter(root, 'claude-code')).rejects.toThrow(
-        /MANCODE_ARTIFACT_PATH_UNSAFE: CLAUDE\.md is a symbolic link \(resolves to .*AGENTS\.md\)/,
-      );
-      // The link itself is left untouched: mancode never writes through it.
+      await expect(
+        installV3Adapter(root, 'claude-code'),
+      ).resolves.toMatchObject({ installed: true });
+      const entry = await lstat(path.join(root, 'CLAUDE.md'));
+      expect(entry.isSymbolicLink()).toBe(true);
+      // Reading the link reads the resolved file, so both views agree.
       await expect(
         readFile(path.join(root, 'CLAUDE.md'), 'utf8'),
-      ).resolves.toBe('# shared agent instructions\n');
+      ).resolves.toContain('# shared agent instructions');
+      const resolved = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+      expect(resolved).toContain('# shared agent instructions');
+      expect(resolved).toContain('mancode:continuity:claude:start');
     },
   );
 

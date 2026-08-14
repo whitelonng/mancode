@@ -1,8 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { scanLegacyAuthority } from '../context/layout.js';
+import {
+  inspectMancodeLayout,
+  scanLegacyAuthority,
+} from '../context/layout.js';
 import { parseSchemaManifest } from '../context/manifest.js';
 import { validateClaudeCodeSettings } from '../installers/claude-code.js';
 import { installMancodeCore } from '../installers/common.js';
@@ -21,6 +25,7 @@ import {
   inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
   replaceUnsafeV3AdapterSymlinks,
+  writeThroughResolvedPath,
 } from '../installers/v3-adapter.js';
 import { detectTeamStatus } from '../system/detect-team.js';
 import { detectSystemDeps } from '../system/detect.js';
@@ -755,6 +760,7 @@ async function initializeV3(
     console.error('   Use one or more supported platform names, or all.');
     return EXIT_INIT_FAILED;
   }
+  let scratchBackup: string | null = null;
   try {
     if (!existingV3) {
       const unsafeExit = await resolveUnsafeInitAdapterPaths(
@@ -789,6 +795,12 @@ async function initializeV3(
       console.log('ℹ️  mancode is already initialized.');
       return EXIT_ALREADY_INITIALIZED;
     }
+    // Last pre-flight check before the journaled initializer: a `.mancode`
+    // that holds only non-Continuity scratch is moved aside here, so the
+    // initializer itself keeps its strict never-touch-existing-target rule.
+    const scratch = await resolveScratchMancodeTarget(rootDir, options);
+    if (scratch.exit !== null) return scratch.exit;
+    scratchBackup = scratch.backupPath;
     const result = await initializeV3Project({
       projectRoot: rootDir,
       managedAdapters: Object.fromEntries(
@@ -800,6 +812,9 @@ async function initializeV3(
     console.log('✓  Initialized mancode project.');
     console.log(`   workspace: ${result.runtime.workspaceId}`);
     console.log(`   operation: ${result.journal.operationId}`);
+    if (scratchBackup !== null) {
+      await restoreScratchBackup(rootDir, scratchBackup);
+    }
     if (options.team !== undefined) {
       console.log(
         `   team policy: ${options.team ? 'on (--team)' : 'off (--no-team)'}`,
@@ -814,6 +829,11 @@ async function initializeV3(
     }
     return EXIT_OK;
   } catch (error) {
+    if (scratchBackup !== null) {
+      console.error(
+        `   Previous .mancode scratch was preserved at ${path.relative(rootDir, scratchBackup)}.`,
+      );
+    }
     printV3InitError(error);
     return EXIT_INIT_FAILED;
   }
@@ -821,8 +841,11 @@ async function initializeV3(
 
 /**
  * Interactive greenfield init: when a fixed adapter target is a symlink,
- * offer the user a clean exit or replace the link with a regular file that
- * preserves the resolved content, then let installation continue.
+ * offer a clean exit, replacing the link with a regular file that preserves
+ * the resolved content, or — when every link resolves to an in-root regular
+ * file — keeping the link and writing through it (CLAUDE.md -> AGENTS.md).
+ * Non-interactive runs keep the links: the installable assertion accepts
+ * exactly those write-through links and refuses everything else.
  */
 async function resolveUnsafeInitAdapterPaths(
   rootDir: string,
@@ -846,10 +869,20 @@ async function resolveUnsafeInitAdapterPaths(
     (entry) => entry.kind === 'symlink' && entry.finalTarget,
   );
   if (fixable.length === 0) return null;
+  const writeThroughAvailable =
+    found.length > 0 &&
+    (
+      await Promise.all(
+        found.map((entry) =>
+          writeThroughResolvedPath(path.resolve(rootDir), entry.target),
+        ),
+      )
+    ).every((resolved) => resolved !== null);
 
   const choice = await prompter.resolveUnsafeAdapterPaths({
     locale,
     paths: found.map(({ relative, resolvedTo }) => ({ relative, resolvedTo })),
+    writeThroughAvailable,
   });
   if (choice === 'exit') {
     console.log(
@@ -857,8 +890,120 @@ async function resolveUnsafeInitAdapterPaths(
     );
     return EXIT_USER_CANCEL;
   }
+  if (choice === 'write-through') {
+    console.log(
+      locale === 'zh-CN'
+        ? 'ℹ️  保留符号链接，mancode 将读写其解析目标。'
+        : 'ℹ️  Keeping the symbolic link(s); mancode reads and writes the resolved target.',
+    );
+    return null;
+  }
   await replaceUnsafeV3AdapterSymlinks(fixable);
   return null;
+}
+
+const SCRATCH_BACKUP_PREFIX = '.mancode.preinit-scratch-';
+
+/**
+ * Interactive greenfield init: a `.mancode` that holds only non-Continuity
+ * scratch (release artifacts, other-tool backups) must never block a fresh
+ * initialization.  Interactive callers choose to move it aside; non-
+ * interactive callers get a descriptive refusal.  An empty `.mancode` is
+ * removed silently — nothing exists to preserve.  Real authority still
+ * refuses later inside the journaled initializer.
+ */
+async function resolveScratchMancodeTarget(
+  rootDir: string,
+  options: InitOptions,
+): Promise<{ exit: number | null; backupPath: string | null }> {
+  const inspection = await inspectMancodeLayout(rootDir);
+  if (!inspection.v3ScratchOnly) {
+    return { exit: null, backupPath: null };
+  }
+  const mancodeRoot = path.join(rootDir, '.mancode');
+  if (inspection.v3TargetEntries.length === 0) {
+    await fs.rmdir(mancodeRoot);
+    console.log(
+      'ℹ️  Removed an empty .mancode directory before initialization.',
+    );
+    return { exit: null, backupPath: null };
+  }
+  const prompter =
+    options.prompter ?? (options.interactive ? createTerminalPrompter() : null);
+  if (!prompter) {
+    throw new Error('MANCODE_V3_SCRATCH_TARGET_REQUIRES_CHOICE');
+  }
+  const locale = detectInitLocale(options.lang) ?? 'en';
+  const choice = prompter.resolveScratchMancodeTarget
+    ? await prompter.resolveScratchMancodeTarget({
+        locale,
+        entries: inspection.v3TargetEntries,
+      })
+    : 'exit';
+  if (choice !== 'relocate') {
+    console.log(
+      locale === 'zh-CN' ? '已取消初始化。' : 'Initialization cancelled.',
+    );
+    return { exit: EXIT_USER_CANCEL, backupPath: null };
+  }
+  const backupPath = path.join(
+    rootDir,
+    `${SCRATCH_BACKUP_PREFIX}${randomUUID()}`,
+  );
+  await fs.rename(mancodeRoot, backupPath);
+  console.log(
+    `ℹ️  Moved non-Continuity .mancode scratch aside: ${path.relative(rootDir, backupPath)}`,
+  );
+  return { exit: null, backupPath };
+}
+
+/**
+ * Best-effort restore after a successful init: the previous scratch keeps its
+ * old home under `.mancode/local/`, anything else lands in
+ * `local/preinit-scratch/`.  Name collisions stay in the backup; a leftover
+ * backup is reported, never deleted.
+ */
+async function restoreScratchBackup(
+  rootDir: string,
+  backupPath: string,
+): Promise<void> {
+  const localTarget = path.join(rootDir, '.mancode', 'local');
+  const leftover = path.relative(rootDir, backupPath);
+  try {
+    await fs.mkdir(localTarget, { recursive: true });
+    const entries = await fs.readdir(backupPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const source = path.join(backupPath, entry.name);
+      if (entry.isDirectory() && entry.name === 'local') {
+        for (const child of await fs.readdir(source)) {
+          const destination = path.join(localTarget, child);
+          if (await pathExists(destination)) continue;
+          await fs.rename(path.join(source, child), destination);
+        }
+      } else {
+        const preinitScratch = path.join(localTarget, 'preinit-scratch');
+        await fs.mkdir(preinitScratch, { recursive: true });
+        const destination = path.join(preinitScratch, entry.name);
+        if (await pathExists(destination)) continue;
+        await fs.rename(source, destination);
+      }
+    }
+    await fs.rmdir(path.join(backupPath, 'local')).catch(() => undefined);
+    await fs.rmdir(backupPath).catch(() => undefined);
+    if (await pathExists(backupPath)) {
+      console.warn(
+        `⚠️  Could not fully restore previous scratch; it remains at ${leftover}.`,
+      );
+    } else {
+      console.log(
+        'ℹ️  Restored previous .mancode scratch into .mancode/local/.',
+      );
+    }
+  } catch {
+    console.warn(
+      `⚠️  Failed to restore previous .mancode scratch; it remains at ${leftover}.`,
+    );
+  }
 }
 
 function printV3InitError(error: unknown): void {
@@ -867,6 +1012,22 @@ function printV3InitError(error: unknown): void {
   console.error(`✗  ${message}`);
   if (message === 'MANCODE_LEGACY_AUTHORITY_PRESENT') {
     console.error('   Run `mancode migrate context --dry-run` instead.');
+  }
+  if (message === 'MANCODE_V3_TARGET_EXISTS') {
+    console.error(
+      '   `.mancode` already exists with Continuity authority content; refusing to overwrite it.',
+    );
+    console.error(
+      '   For an initialized project, use `mancode adapter status` / `mancode adapter upgrade`; otherwise inspect `.mancode` first.',
+    );
+  }
+  if (message === 'MANCODE_V3_SCRATCH_TARGET_REQUIRES_CHOICE') {
+    console.error(
+      '   `.mancode` holds only non-Continuity scratch (release artifacts, other-tool backups).',
+    );
+    console.error(
+      '   Run init interactively to move it aside, or remove/rename the directory yourself.',
+    );
   }
 }
 
@@ -1071,22 +1232,28 @@ async function validateV3CliProjectBoundary(
   const hasEvidence = await hasProjectEvidence(rootDir);
   if (isGitRepo || hasEvidence) return null;
 
-  const v3Initialized = await pathExists(
-    path.join(rootDir, '.mancode', 'schema.json'),
-  );
+  const inspection = await inspectMancodeLayout(rootDir);
+  const v3Initialized =
+    inspection.v3AuthorityPathsPresent.includes('schema.json');
   const legacyAuthorityPresent =
-    legacyInitialized || (await scanLegacyAuthority(rootDir)).authorityPresent;
+    legacyInitialized || inspection.legacy.authorityPresent;
+  // A scratch-only `.mancode` is not a project manifest, but it is exactly
+  // the state the scratch resolution flow owns; let it through to that flow
+  // instead of mislabeling the directory as foreign.
+  const scratchOnlyMancode = inspection.v3ScratchOnly;
   if (
     !genericSafety.ok &&
     !(
-      (legacyAuthorityPresent || v3Initialized) &&
+      (legacyAuthorityPresent || v3Initialized || scratchOnlyMancode) &&
       genericSafety.reason === 'nonempty'
     )
   ) {
     printNotProjectDirectory(rootDir, locale, genericSafety.reason);
     return EXIT_NOT_A_PROJECT_DIR;
   }
-  if (legacyAuthorityPresent || v3Initialized) return null;
+  if (legacyAuthorityPresent || v3Initialized || scratchOnlyMancode) {
+    return null;
+  }
 
   const prompter =
     options.prompter ?? (options.interactive ? createTerminalPrompter() : null);
