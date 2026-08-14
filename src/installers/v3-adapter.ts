@@ -462,7 +462,10 @@ async function effectivePrimaryTarget(
   if (resolved === null) return primary;
   const agentsPath = v3AdapterTargetPath(root, 'agents');
   const realAgents = await resolveAdapterSymlink(agentsPath);
-  if (realAgents !== null && path.resolve(resolved) === path.resolve(realAgents)) {
+  if (
+    realAgents !== null &&
+    path.resolve(resolved) === path.resolve(realAgents)
+  ) {
     return 'agents';
   }
   return primary;
@@ -494,7 +497,11 @@ export async function planV3AdapterUpgradeFiles(
   }
   const desired = new Map(existing);
   for (const platform of selected) {
-    planPlatformBootstrapUpgrade(desired, platform, effectivePrimary.get(platform));
+    planPlatformBootstrapUpgrade(
+      desired,
+      platform,
+      effectivePrimary.get(platform),
+    );
     for (const mode of V3_MODE_NAMES) {
       const target = modeEntryFileTarget(platform, mode);
       const current = desired.get(target) ?? null;
@@ -2661,7 +2668,10 @@ async function relativeWithinRealRoot(
  * Callers assert installability first, and this re-resolves right before
  * the write, so a link flipped between the two steps still cannot escape.
  */
-async function writePathThrough(root: string, filePath: string): Promise<string> {
+async function writePathThrough(
+  root: string,
+  filePath: string,
+): Promise<string> {
   return (await writeThroughResolvedPath(root, filePath)) ?? filePath;
 }
 

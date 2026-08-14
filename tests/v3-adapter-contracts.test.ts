@@ -665,9 +665,9 @@ describe('V3 adapter bootstrap integration', () => {
       );
       await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
 
-      await expect(installV3Adapter(root, 'claude-code')).resolves.toMatchObject(
-        { installed: true },
-      );
+      await expect(
+        installV3Adapter(root, 'claude-code'),
+      ).resolves.toMatchObject({ installed: true });
       const entry = await lstat(path.join(root, 'CLAUDE.md'));
       expect(entry.isSymbolicLink()).toBe(true);
       // Reading the link reads the resolved file, so both views agree.
