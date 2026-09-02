@@ -25,6 +25,13 @@ import {
 } from './aggregate.js';
 import { digestCanonicalJson } from './canonical.js';
 import type { Ulid } from './ids.js';
+import { parseManDeliveryPlan } from './man-delivery-plan.js';
+import {
+  bindManPlan,
+  isManDelivery,
+  manScopeContains,
+  readBoundManPlan,
+} from './man-delivery-runtime.js';
 import { assertManteamPlanContent } from './manteam-plan.js';
 import { assertSharedTextSafe } from './privacy.js';
 import {
@@ -60,6 +67,7 @@ export interface ReviseV3PlanInput {
   sessionId: Ulid;
   expectedTaskRevision: number;
   plan: string;
+  planSource?: string;
   /** User-visible file/module boundary confirmed with this plan revision. */
   implementationScope?: unknown;
   /** Omitting the decision leaves the workflow at the step-four plan gate. */
@@ -86,7 +94,7 @@ export async function reviseV3Plan(
   input: ReviseV3PlanInput,
 ): Promise<RevisedV3Plan> {
   const taskRef = parseTaskRefValue(input.taskRef);
-  const plan = requirePlan(input.plan);
+  let plan = requirePlan(input.plan);
   const planDecision = parsePlanDecision(input.planDecision);
   const submittedScope =
     input.implementationScope === undefined
@@ -107,6 +115,21 @@ export async function reviseV3Plan(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    if (isManDelivery(context.task.metadata)) {
+      if (input.planSource) {
+        plan = await bindManPlan(
+          input.projectRoot,
+          input.planSource,
+          plan,
+          context.task.plan?.content ?? null,
+        );
+      } else {
+        await readBoundManPlan(input.projectRoot, context.task);
+        if (plan !== context.task.plan?.content)
+          throw new Error('MANCODE_MAN_PLAN_SOURCE_REQUIRED');
+      }
+    } else if (input.planSource)
+      throw new Error('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
     const planChanged = context.task.plan?.content !== plan;
     const executionScopeBinding = assertExecutionScopeBindingAttempt({
       metadata: context.task.metadata,
@@ -129,6 +152,17 @@ export async function reviseV3Plan(
         context.task.metadata.implementationScope.digest;
     if (planDecision === 'governed_execution') {
       assertExecutableImplementationScope(implementationScope);
+      if (isManDelivery(context.task.metadata)) {
+        const source = parseManDeliveryPlan(plan)?.source;
+        if (
+          !source ||
+          !manScopeContains(
+            { ...context.task.metadata, implementationScope },
+            source.path,
+          )
+        )
+          throw new Error('MANCODE_MAN_PLAN_OUTSIDE_SCOPE');
+      }
     }
     if (executionScopeBinding) {
       assertExecutableImplementationScope(implementationScope);

@@ -5,6 +5,10 @@ import {
 } from './artifact-ref.js';
 import { digestCanonicalJson } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
+import {
+  type ManEvidenceSubject,
+  parseManEvidenceSubject,
+} from './man-delivery-evidence.js';
 import { assertSharedTextSafe } from './privacy.js';
 import type {
   ItemIdentity,
@@ -35,6 +39,7 @@ export interface VerificationLedgerContext {
 }
 
 export interface VerificationComponentEvidence {
+  subject?: ManEvidenceSubject;
   evidenceId: Ulid;
   status: VerificationComponentStatus;
   summary: string | null;
@@ -280,6 +285,7 @@ export function assertVerificationLedgerRequirements(
 export function assertVerificationLedgerTransition(
   previous: VerificationLedgerV1,
   next: VerificationLedgerV1,
+  contentInvalidated = false,
 ): void {
   if (next.revision !== previous.revision + 1) {
     throw new Error(
@@ -304,7 +310,11 @@ export function assertVerificationLedgerTransition(
   if (previous.legacySource === null && next.legacySource !== null) {
     throw new Error('verification ledger cannot introduce a legacy source');
   }
-  if (!allowedVerificationTransitions(previous.status).has(next.status)) {
+  if (
+    !allowedVerificationTransitions(
+      contentInvalidated ? 'stale' : previous.status,
+    ).has(next.status)
+  ) {
     throw new Error(
       `invalid verification ledger status transition: ${previous.status} -> ${next.status}`,
     );
@@ -458,6 +468,7 @@ function parseEvidence(
       'artifactRef',
       'confirmedByActorId',
       'confirmationSource',
+      'subject',
       'updatedAt',
     ],
     `verification ledger ${kind} evidence`,
@@ -523,6 +534,11 @@ function parseEvidence(
     `verification ledger ${kind} evidence command`,
   );
   if (taskRef.namespace === 'shared') {
+    if (value.subject !== undefined)
+      assertSharedTextSafe(
+        parseManEvidenceSubject(value.subject).environment,
+        'man verification environment',
+      );
     if (summary !== null) {
       assertSharedTextSafe(
         summary,
@@ -538,6 +554,9 @@ function parseEvidence(
   }
   return {
     evidenceId: value.evidenceId,
+    ...(value.subject === undefined
+      ? {}
+      : { subject: parseManEvidenceSubject(value.subject) }),
     status,
     summary,
     command,

@@ -2,6 +2,7 @@ import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { mergeV3ChildResult } from '../context/child-result-merge.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
+import { isManDelivery } from '../context/man-delivery-runtime.js';
 import { parseSchemaManifest } from '../context/manifest.js';
 import { reviseV3Plan } from '../context/plan-revision.js';
 import {
@@ -94,6 +95,7 @@ import {
   completeGitRefTask,
   updateGitRefWorkflow,
 } from '../team/git-ref-workflow-operation.js';
+import { manDeliveryCommand } from './man-delivery.js';
 import { normalizeRequirementsInput } from './requirements-input.js';
 import {
   commandClient,
@@ -116,6 +118,7 @@ export const EXIT_NOT_INITIALIZED = 1;
 export const EXIT_INVALID_ARG = 2;
 
 export interface WorkflowOptions {
+  delivery?: boolean;
   dryRun?: boolean;
   olderThan?: string;
   json?: boolean;
@@ -183,6 +186,13 @@ export async function workflow(
   if (v3Activation === 'v3_active') {
     return workflowV3(rootDir, subcommand, args, options);
   }
+  if (options.delivery || subcommand === 'delivery') {
+    return printV3Error(
+      options.json,
+      'MANCODE_MAN_DELIVERY_REQUIRES_CONTINUITY',
+      'Man delivery requires Continuity; legacy workflows are unchanged.',
+    );
+  }
   if (!(await pathExists(path.join(rootDir, '.mancode', 'state.json')))) {
     if (v3Activation !== null) {
       return printV3Error(
@@ -247,6 +257,7 @@ type WorkflowV3Handler = (
 ) => number | Promise<number>;
 
 const WORKFLOW_V3_HANDLERS = {
+  delivery: manDeliveryCommand,
   create: workflowCreateV3,
   list: workflowListV3,
   show: workflowShowV3,
@@ -1311,6 +1322,11 @@ async function workflowPlanV3(
       sessionId: session.sessionId,
       expectedTaskRevision,
       plan,
+      planSource:
+        action === 'revise' &&
+        isManDelivery((await project.store.readTaskSnapshot(taskRef)).metadata)
+          ? options.file
+          : undefined,
       implementationScope,
       planDecision: parseV3PlanDecision(options.planDecision),
     });
@@ -1539,6 +1555,7 @@ async function workflowCreateV3(
       evaluatedAt: new Date().toISOString(),
     });
     const result = await createV3Workflow({
+      delivery: options.delivery,
       projectRoot: project.projectRoot,
       task,
       workflowMode: parsedWorkflowMode,

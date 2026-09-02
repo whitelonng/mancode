@@ -276,6 +276,10 @@ export function createCliProgram(): Command {
       'Policy v2: clarification only; use workflow review skip for review',
     )
     .option('--review-depth <depth>', 'Review depth: targeted or full')
+    .option(
+      '--delivery',
+      'Opt in a new man task to document-bound module delivery',
+    )
     .option('--review-domain <domain>', 'Review domain: quality or security')
     .option(
       '--report <path>',

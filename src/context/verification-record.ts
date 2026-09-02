@@ -21,6 +21,11 @@ import {
 } from './aggregate.js';
 import type { Ulid } from './ids.js';
 import {
+  assertManVerificationSubjects,
+  captureManSubject,
+  isManDelivery,
+} from './man-delivery-runtime.js';
+import {
   assertTaskCodeHeadUnchanged,
   nextTaskHeadFence,
   taskMutationExpectedRevisions,
@@ -80,6 +85,14 @@ export async function recordV3Verification(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    const subject = isManDelivery(context.task.metadata)
+      ? await captureManSubject(input.projectRoot, context.task)
+      : null;
+    assertManVerificationSubjects(
+      context.task,
+      submitted,
+      subject ?? { contentDigest: '', environment: '' },
+    );
     assertVerificationEligible(
       context.task.metadata,
       context.task.plan !== null,
@@ -93,6 +106,15 @@ export async function recordV3Verification(
       context.task.requirements,
       context.operationId,
       timestamp,
+      subject !== null &&
+        context.task.verification.checks.some((check) =>
+          [check.automated, check.manual].some(
+            (item) =>
+              item?.status === 'passed' &&
+              (item.subject?.contentDigest !== subject.contentDigest ||
+                item.subject.environment !== subject.environment),
+          ),
+        ),
     );
     const metadata = updateMetadata(
       context.task.metadata,
@@ -233,6 +255,7 @@ function createCurrentVerification(
   requirements: Parameters<typeof assertVerificationLedgerRequirements>[1],
   operationId: Ulid,
   updatedAt: string,
+  contentInvalidated: boolean,
 ): VerificationLedgerV1 {
   if (
     submitted.requirementsDigest !== metadata.governance.requirementsDigest ||
@@ -256,7 +279,7 @@ function createCurrentVerification(
     },
     requirements,
   );
-  assertVerificationLedgerTransition(previous, next);
+  assertVerificationLedgerTransition(previous, next, contentInvalidated);
   assertVerificationLedgerRequirements(next, requirements);
   assertVerificationLedgerAgainstContext(next, {
     requirementsDigest: metadata.governance.requirementsDigest,

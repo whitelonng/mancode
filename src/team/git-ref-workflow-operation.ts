@@ -6,6 +6,7 @@ import {
 } from '../context/aggregate.js';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
+import { assertManDeliveryReady } from '../context/man-delivery-runtime.js';
 import { assertManteamPlanContent } from '../context/manteam-plan.js';
 import {
   normalizeImplementationScope,
@@ -299,6 +300,7 @@ export async function completeGitRefTask(
   try {
     assertNoPendingHandoff(opened.manifest, taskRef);
     assertCompletionOutcome(opened.context.task.metadata, input.outcome);
+    await assertManDeliveryReady(input.projectRoot, opened.context.task);
     const activeClaims = activeRemoteClaims(opened.manifest, taskRef);
     const activeChildren =
       await opened.context.store.listActiveChildTaskRefs(taskRef);

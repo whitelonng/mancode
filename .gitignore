@@ -25,6 +25,7 @@ docs/*
 !docs/platform-adapters.md
 !docs/engineering.md
 !docs/12-lifecycle.md
+!docs/man-module-delivery-plan.md
 
 # Node.js
 node_modules/

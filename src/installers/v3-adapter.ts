@@ -129,6 +129,31 @@ const RETRIABLE_ADAPTER_READ_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 const ADAPTER_READ_MAX_ATTEMPTS = 4;
 const ADAPTER_READ_RETRY_DELAY_MS = 25;
 
+const PROJECT_DOCUMENTATION_HANDOFF_POLICY = [
+  '<!-- project:documentation-handoff-policy:start -->',
+  '# man 项目文档与交接基线',
+  '以下两组补充规则仅用于显式启用模块交付策略的新 `/man` 任务，不改变普通 Solo、其他模式、旧策略任务或 Solo handoff。',
+  '- 需要新增或调整计划时，把目标、范围、阶段、验收标准和未决问题写入项目指定的计划基线目录，默认 `doc/`；已有 `docs/` 等明确约定时沿用它，不另建副本。绑定实际计划路径；计划不得只留在聊天记录、`AGENTS.md` 或 `CLAUDE.md`。只要求讨论或规划不授权修改业务代码。',
+  '- 开始实现前，以绑定的已确认计划为准，并阅读 `架构/` 中与改动有关的设计文档。分别识别目录不存在、被 `.gitignore` 排除和存在但不可读；被忽略不代表本地不可读。远程仅有计划时继续可确定部分；只有架构细节确实影响实现且不能从计划或现有契约得出时，暂停受影响部分并索取文档或确认，不自行补造。',
+  '- 如根目录存在 `项目进度.html`，只通过唯一的 `mancode-progress-data` JSON 契约和稳定 taskId 更新任务开始、待审核、验收通过或必要外部决策阻塞状态；缺少契约、映射或写入权限时提示人工同步，不猜 HTML、不阻止开发。未开发保持“未完成”，普通修复、测试或推送失败不属于业务“阻塞”。页面不替代计划和运行时权威。',
+  '- 完成计划或代码变更后，先做相称验证，将本任务应版本化的变更（含计划）提交到当前任务分支，不混入他人改动。已有上游且已获推送授权时才推送；无 remote、无上游或 push 失败报告“交付未发布”，不冒充业务阻塞或擅自配置远程。无 Git 可继续规划，不能声称版本化交付完成。不得强制加入被忽略的 `架构/`、`项目接口/`，也不得复制其中的凭据、账号和密钥。',
+  '<!-- project:documentation-handoff-policy:end -->',
+] as const;
+
+const ENGINEERING_EXECUTION_QUALITY_POLICY = [
+  '<!-- project:engineering-execution-quality:start -->',
+  '# man 工程执行与效率准则',
+  '- 验证应与变更风险和验收目标相称；不滥用校验，不为低风险、可直接观察的事实叠加重复检查。',
+  '- 不得以 `catch` 吞掉、伪装或笼统改写错误来遮掩根因；仅在能够恢复、补充上下文或完成必要清理时处理异常，并保留可诊断的原始错误信息与因果链。',
+  '- 优先定位并修复根因，避免治标不治本；不要以无依据的增量分支、补丁或层层兜底代替正确的设计与实现。',
+  '- 在执行中主动自检：出现明显无关扩张、重复操作或无依据的层层防御时，先收敛问题、减少操作，再继续；代码行数和工具次数只是风险信号，不是硬阈值，也不能据此删除必要安全边界。',
+  '- 任务耗时异常时反思是否由自己的重复检查、无效调用、过度设计或偏离目标造成，并及时调整做法。',
+  '- 对 GPT 模型：不能把哈希作为“产物已变化”或功能正确的唯一证明；已有构建输出足以说明时不额外计算。完整性校验、缓存键、证据适用性和发布溯源仍可使用哈希。',
+  '- 对 GPT 模型：不要仅为再次确认而重读刚刚写入且未被外部修改的文件；直接使用已知写入结果，必要时仅核验关键片段或运行相关验证。',
+  '- 并非每次迭代都必须落为增量代码。代码是实现目标的手段而非最终目的；当结论是无需变更、应删除冗余或先澄清问题时，应如实处理。',
+  '<!-- project:engineering-execution-quality:end -->',
+] as const;
+
 export interface V3AdapterCapabilities {
   nativeModeEntry: boolean;
   sessionHook: false;
@@ -1075,6 +1100,17 @@ export function renderV3Bootstrap(platform: PlatformName): string {
     '- If the goal and decision-changing requirements are clear, consistent with project evidence, and low risk, proceed with the narrowest useful change without ceremonial questions. Resolve repository-answerable unknowns yourself.',
     '- When the goal is clear but requirements are incomplete, classify each remaining unknown as blocking, recommendable, or defaultable. Ask and wait only for blocking decisions that can materially change behavior, scope, acceptance, architecture, data, security, compatibility, or semantic ownership. For recommendable decisions, give bounded options and a clear recommendation. Use a default only when it is low-impact, reversible, consistent with repository conventions, and stated explicitly.',
     "- If an explicit request conflicts with repository evidence or introduces a hard-risk change involving authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure, or another irreversible effect, stop before editing. Show the concrete conflict or impact, recommend the safer path, ask a focused confirmation or choice, and wait. Clarity never overrides safety or the operator's actual goal.",
+    '',
+    ...(['AGENTS.md', 'CLAUDE.md'].includes(
+      path.basename(v3AdapterTargetPath('', primaryFileTarget(platform))),
+    )
+      ? [
+          ...PROJECT_DOCUMENTATION_HANDOFF_POLICY,
+          '',
+          ...ENGINEERING_EXECUTION_QUALITY_POLICY,
+          '',
+        ]
+      : []),
     '- A natural-language request explicitly asking for research, a plan, architecture, migration design, or formal acceptance authorizes the `man` planning path without a separate mode-confirmation question. For an ordinary implementation request whose blocking decision crosses modules or requires architecture, migration, semantic owner/source-of-truth, team coordination, or formal acceptance, recommend `/man`, explain why, and wait; never switch authority silently.',
     '- For governed task work only, if status has no `identity.actorId`, ask for a display name and run `mancode team identity create --name "<display name>"` before creating a session.',
     '- If status reports `session`, reuse it. `task: null` and `MANCODE_TASK_REQUIRED` do not make a session stale.',
@@ -1235,7 +1271,7 @@ const V3_MODE_DEFINITIONS: Record<
     contextPurpose: 'plan',
     actions: [
       '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
-      '- For a new task, run `mancode workflow create man "<task>" --session <id>`.',
+      '- For a new task, run `mancode workflow create man "<task>" --delivery --session <id>`. This explicitly enables document-bound module delivery (planning policy 3); never silently upgrade an existing task. Other modes and Solo handoff retain their contracts.',
       '- Read `.mancode/shared/context/glossary.json` when it exists and prefer its confirmed terms in clarification, requirements, plans, reports, and naming.',
       "- Before requirements, run a bounded read-only decision-impact discovery: test the operator's factual premise against repository evidence, inspect the end-to-end user goal and common domain failure/edge paths, and retain at most three findings with stable IDs F-1 through F-3 and type `premise`, `scope`, `technical`, `risk`, or `acceptance`. Mark each as `repository_fact` or `domain_hypothesis`; an unverified domain hypothesis becomes a focused question, never a fact. Discovery produces evidence and recommendations, never execution authority.",
       '- Before writing requirements, inspect the relevant project facts and implementation, then run a decision-readiness gate covering both clarity and soundness. Treat the request as ready only when the goal, in-scope/out-of-scope behavior, acceptance boundary, semantic owner/source of truth, and decision-changing constraints are supplied and consistent with evidence, verifiable from the repository, or explicitly recorded as safe defaults. A supplied instruction is not automatically correct. Do not ask ceremonial questions or manufacture alternatives when the request is already clear and sound.',
@@ -1249,7 +1285,9 @@ const V3_MODE_DEFINITIONS: Record<
       '- `acceptanceCriteria` must contain at least one required item shaped as `{ "id": "AC-1", "description": "...", "required": true, "method": "automated" }`; `method` is exactly `automated`, `manual`, or `hybrid`.',
       '- Finalize requirements with `mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>`.',
       '- Let mancode assign internal IDs and digests; do not invent canonical IDs or digests in the semantic input.',
-      '- Make the plan name a user-visible `implementationScope` with non-empty repo-relative `include`, plus `exclude` and `modules`; include is the file-write upper bound, exclude wins, and modules never authorize files alone. Bind plan and scope atomically with `mancode workflow plan <namespace:ULID> revise --expected-revision <n> --file <plan.md> --scope-file <scope.json> --session <id>`.',
+      '- For delivery tasks, when one real verification command covers several acceptance criteria, use `--acceptance AC-1,AC-2` to record that single run for those criteria; do not rerun the same suite only to fill separate slots. After an authorized upstream push, `mancode workflow delivery <namespace:ULID> publication --json` can query the actual remote ref without fetching or changing it; unavailable evidence remains unverified.',
+      '- Write one module plan in the explicitly selected project plan directory, otherwise the established convention, otherwise `doc/`. Keep approved goals, scope, stages, architecture references, acceptance IDs and unresolved decisions between standalone `<!-- mancode:plan-baseline:start -->` / `<!-- mancode:plan-baseline:end -->` markers; put actual delivery only between `<!-- mancode:delivery-record:start -->` / `<!-- mancode:delivery-record:end -->`. Examples inside code fences are not markers. Do not copy private architecture credentials. Only decision-changing missing architecture requires confirmation; planning permission is not implementation permission.',
+      '- Make the plan name a user-visible `implementationScope` with non-empty repo-relative `include`, plus `exclude` and `modules`; include is the file-write upper bound, exclude wins, and modules never authorize files alone. Include the plan and any authorized progress page. Bind plan and scope atomically with `mancode workflow plan <namespace:ULID> revise --expected-revision <n> --file <repo-relative-plan.md> --scope-file <scope.json> --session <id>`. A progress-only edit must not become a plan revision; changed approved goals require realignment, not rewriting history to fit the code.',
       '- Confirm the current plan with `mancode workflow plan <namespace:ULID> confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id>`.',
       '- Before editing in governed execution, read the confirmed plan and `activeTask.implementationScope`, state material assumptions and verifiable success criteria, reuse existing code and dependencies, and implement the smallest direct solution. Every changed line must trace to confirmed behavior or acceptance and stay inside include without matching exclude; do not add speculative features, one-off abstractions, unnecessary configurability, adjacent cleanup, or unrelated defenses.',
       '- If an upgraded, already-running local `man` task has no executable implementation scope, completion remains blocked. Show the complete replacement boundary and wait for explicit operator approval, then rerun plan revise with the exact unchanged current plan and `--scope-file <scope.json>`. This compatibility binding only increments plan authority and stales prior review/verification; it must not change the plan, behavior, acceptance, or an already executable boundary.',
@@ -1257,7 +1295,13 @@ const V3_MODE_DEFINITIONS: Record<
       "- Confirming with `--plan-decision plan_only` keeps the plan as planned authority and clears this session's active workflow pointer. Resume the TaskRef explicitly before any later governed mutation.",
       '- When new evidence materially invalidates confirmed requirements and the operator explicitly chooses to realign the same local task, resume its TaskRef if needed, generate a fresh canonical checkpoint ULID, and run `mancode workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <fresh-ULID> --summary "<reason>" --next-action "<step-2 action>" --session <id>`. Reframe archives the confirmed requirements and plan, clears the plan decision, and stops at Step 2 with draft requirements. Do not substitute plan revise, scope-change, or workflow update for reframe.',
       '- Read reframe evidence without opening private authority files: `mancode workflow archive <namespace:ULID> show <archive-ULID> --json` and `mancode workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json`.',
-      '- Apply verification and review ledgers with their mancode `apply --file` commands, then use `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`.',
+      '- For existing tasks without delivery policy 3, keep their current verification/review apply and completion protocol. The following module actions apply only to new delivery tasks. Keep transient JSON inputs in `.mancode/local/drafts/`, not among the source files being verified. Use `mancode workflow delivery <namespace:ULID> inspect --json` for the current subject, acceptance slots and evidence. Content identity is not proof of correct behavior; external-service or environment changes require renewed evidence.',
+      '- Implement the authorized module and run proportionate checks. To capture an automated result, write `{ "argv": ["npm", "test"] }` with the actual relevant command and run `mancode workflow delivery <namespace:ULID> verify --acceptance <AC-ID> --file <command.json> --expected-revision <n> --session <id>`. The command runs without a shell; inspect its captured output and exit code. Do not substitute a trivial successful command for the acceptance behavior. Manual/hybrid slots require a real observation or explicit user confirmation: record its source and non-sensitive environment in `{ "confirmed": true, "summary": "..." }` via the same command with `confirm` instead of `verify`; never fabricate confirmation.',
+      '- Run `mancode workflow delivery <namespace:ULID> sync --expected-revision <n> --session <id>` at implementation start or before module review. Verification/review commands also project results into the delivery block. Optional progress uses the full TaskRef as taskId by default, or an explicit baseline marker `<!-- mancode:progress-task module-id -->`; a missing/invalid contract only requests manual sync.',
+      '- After the whole module is implemented, perform one total review (not one per snippet, nor an extra review after existing quality/security review). Prefer one independent reviewer when available and authorized; otherwise label self-review honestly. Read the approved baseline, relevant architecture, the complete module diff since its bound baseHead, actual entry/call chains, and verification evidence. Check goal → implementation for omissions and diff → goal for scope drift, plus concrete correctness/security defects and unjustified abstraction, fallback or defensive code. Respect intentional phasing and necessary boundaries; zero findings is valid, optional suggestions never block.',
+      '- Submit one module review JSON: `{ "subject": <subject from inspect>, "reviewer": "self|independent", "direction": "goal coverage and diff justification", "correctness": "observed behavior and concrete risks", "proportionality": "why complexity/defenses are warranted", "nextAction": "authorized next module or stop", "coverage": [{ "acceptanceId": "AC-1", "status": "met|missing|unverified", "evidence": "implementation/call path and observed evidence" }], "findings": [], "resolved": [] }`. Every required acceptance must be covered; findings contain only required repairs as `{ "id": "R-1", "domain": "quality|security", "severity": "p0|p1|p2", "summary": "causal evidence and consequence" }`. Apply with `mancode workflow delivery <namespace:ULID> review --file <review.json> --review-depth <targeted|full> --expected-revision <n> --session <id>`; full is required for material security risk.',
+      '- Fix concrete findings, verify the changed module and recheck the repair plus direct regression; use resolved finding IDs instead of dropping issues. Unchanged reviewed content retains applicable tests, while changed content conservatively invalidates module evidence. Do not loop without new diagnostic evidence, invent findings, or expand scope to hypothetical improvements. Require explicit audited approval for any existing review skip/waiver.',
+      '- Before completion, sync the record and optional page, verify, then commit only task-owned versionable changes on the current task branch. Use `mancode workflow delivery <namespace:ULID> check --json`, then `mancode workflow complete <namespace:ULID> --expected-revision <n> --session <id>`. Push only to an existing authorized upstream; report no upstream or failed push as unpublished, never business-blocked. Do not auto-init Git, configure remotes, force-add private files, merge or deploy. Continue another module only when already authorized; otherwise report the result and next action.',
       '- When a new high-frequency domain term emerges, propose it to the operator; only after explicit confirmation register it with `mancode context glossary add --term "<term>" --definition "<definition>" --expected-revision <n> --session <id>`. Never write to the glossary without operator confirmation.',
     ],
   },
