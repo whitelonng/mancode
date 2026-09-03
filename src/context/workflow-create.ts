@@ -119,6 +119,8 @@ export interface WorkflowCreateScope {
 }
 
 export interface CreateV3WorkflowInput {
+  /** Opt in a new man task; never silently upgrade existing tasks or other modes. */
+  delivery?: boolean;
   projectRoot: string;
   task: string;
   workflowMode: 'man' | 'manba' | 'manteam';
@@ -181,6 +183,9 @@ export async function createV3Workflow(
   const timestamp = now.toISOString();
   assertUlid(input.sessionId, 'workflow sessionId');
   const workflowMode = parseWorkflowMode(input.workflowMode);
+  if (input.delivery && (workflowMode !== 'man' || input.parentTaskRef)) {
+    throw new Error('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
+  }
   const session = await readSession(projectRoot, input.sessionId);
   if (session === null || session.status !== 'active') {
     throw new Error('MANCODE_SESSION_NOT_FOUND');
@@ -274,12 +279,15 @@ export async function createV3Workflow(
         ? 0
         : 1,
     timestamp,
-    planningPolicyVersion:
-      parent === null
+    planningPolicyVersion: input.delivery
+      ? 3
+      : parent === null
         ? project.manifest.manifestVersion === 2 && workflowMode === 'man'
           ? project.manifest.workflowPolicyDefaults.planning
           : 1
-        : parent.metadata.governance.policyVersions.planning,
+        : parent.metadata.governance.policyVersions.planning === 3
+          ? 2
+          : parent.metadata.governance.policyVersions.planning,
   });
   const homeStore = resolveTaskEntityHomeStore(
     runtime.entityHomeStoreContext,

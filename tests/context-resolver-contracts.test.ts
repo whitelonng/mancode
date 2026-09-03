@@ -229,7 +229,7 @@ describe('V3 Context Resolver', () => {
         policyVersions: { planning: number | null };
       };
     };
-    metadata.governance.policyVersions.planning = 3;
+    metadata.governance.policyVersions.planning = 4;
     await writeJson(metadataPath, metadata);
 
     const request = {

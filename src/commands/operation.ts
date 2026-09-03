@@ -1,4 +1,4 @@
-import { assertUlid } from '../context/ids.js';
+import { assertUlid, isUlid } from '../context/ids.js';
 import {
   executeOperationRecovery,
   inspectOperationRecovery,
@@ -19,6 +19,7 @@ export interface OperationShowOptions {
 export interface OperationMutationOptions extends OperationShowOptions {
   session?: string;
   client?: string;
+  replacementCheckpointId?: string;
 }
 
 export async function operationShow(
@@ -81,8 +82,22 @@ async function runOperationMutation(
       EXIT_V3_INVALID_ARGUMENT,
     );
   }
+  if (
+    options.replacementCheckpointId !== undefined &&
+    !isUlid(options.replacementCheckpointId)
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_REPLACEMENT_CHECKPOINT_ID_INVALID',
+      'replacement checkpoint ID must be a canonical ULID.',
+      EXIT_V3_INVALID_ARGUMENT,
+    );
+  }
   try {
     assertUlid(operationId, 'operationId');
+    if (options.replacementCheckpointId !== undefined) {
+      assertUlid(options.replacementCheckpointId, 'replacementCheckpointId');
+    }
     const project = await readV3CommandProject(rootDir);
     const session = await resolveV3CommandSession(project, options);
     const result = await executeOperationRecovery({
@@ -91,6 +106,7 @@ async function runOperationMutation(
       actorId: session.actorId,
       sessionId: session.sessionId,
       mode,
+      replacementCheckpointId: options.replacementCheckpointId,
     });
     return printV3Result(options.json, { schemaVersion: 1, ...result });
   } catch (error) {

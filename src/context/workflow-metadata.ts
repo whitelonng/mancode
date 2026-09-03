@@ -52,7 +52,7 @@ export type PlanDecision =
 export type WorkflowPolicyComponent = 'planning' | 'review' | 'verification';
 
 export const SUPPORTED_WORKFLOW_POLICY_VERSIONS = {
-  planning: [1, 2],
+  planning: [1, 2, 3],
   review: [1, 2],
   verification: [1],
 } as const;
@@ -374,6 +374,14 @@ export function assertWorkflowMetadataTransition(
     throw new Error(
       'workflow metadata revision must increase exactly once per mutation',
     );
+  }
+  if (
+    (previous.governance.policyVersions.planning === 3 ||
+      next.governance.policyVersions.planning === 3) &&
+    previous.governance.policyVersions.planning !==
+      next.governance.policyVersions.planning
+  ) {
+    throw new Error('MANCODE_MAN_DELIVERY_POLICY_IMMUTABLE');
   }
   if (
     previous.workflowMode !== next.workflowMode ||
@@ -739,6 +747,12 @@ function parseLegacyCompatibility(
 }
 
 function assertWorkflowMetadataShape(metadata: WorkflowMetadataV3): void {
+  if (
+    metadata.governance.policyVersions.planning === 3 &&
+    metadata.workflowMode !== 'man'
+  ) {
+    throw new Error('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
+  }
   if (metadata.workflowMode === 'man') {
     if (metadata.coordination !== 'single' || metadata.parent !== null) {
       throw new Error(

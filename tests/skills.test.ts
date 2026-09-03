@@ -89,6 +89,13 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/明确排除.*excludedScope/);
     expect(MAN_SKILL.body).toMatch(/未接受.*自动塞入.*excludedScope/);
     expect(MAN_SKILL.body).toMatch(/implementationScope/);
+    expect(MAN_SKILL.body).toContain('document-bound delivery');
+    expect(MAN_SKILL.body).toContain('review_incomplete');
+    expect(MAN_SKILL.body).toContain('observation surface');
+    expect(MAN_SKILL.body).toContain('verificationSurfaces');
+    expect(MAN_SKILL.body).toContain('自述');
+    expect(MAN_SKILL.body).toContain('finalization blockers');
+    expect(MAN_SKILL.body).toContain('repo-relative path 或 glob');
   });
 
   it('keeps solo review bounded and lightweight', () => {

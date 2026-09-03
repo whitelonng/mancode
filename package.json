@@ -37,7 +37,7 @@
     "zcode"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.5.0"
   },
   "bin": {
     "mancode": "dist/cli.js"

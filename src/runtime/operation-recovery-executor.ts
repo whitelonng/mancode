@@ -9,6 +9,10 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  buildTaskAggregateManifest,
+  taskAggregateDigest,
+} from '../context/aggregate.js';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import {
@@ -17,14 +21,19 @@ import {
   parseSchemaManifest,
 } from '../context/manifest.js';
 import { parseMigrationStage } from '../context/migrate.js';
+import { parseRequirementsLedger } from '../context/requirements-ledger.js';
+import { parseReviewLedger } from '../context/review-ledger.js';
 import { V3ContextStore } from '../context/store.js';
 import { taskRootPath } from '../context/task-locator.js';
 import { type TaskRef, sameTaskRef } from '../context/task-ref.js';
+import { parseVerificationLedger } from '../context/verification-ledger.js';
+import { parseWorkflowMetadata } from '../context/workflow-metadata.js';
 import {
   applyV3AdapterFilePlan,
   assertV3AdapterTargetSafe,
   v3AdapterTargetPath,
 } from '../installers/v3-adapter.js';
+import { parseCheckpoint } from '../team/checkpoints.js';
 import {
   assertProjectConfigTransition,
   assertTeamPolicyTransition,
@@ -43,8 +52,15 @@ import {
   type LocalLockHandle,
   acquireOperationEntityLocks,
 } from './local-lock.js';
-import { getOperationDefinition } from './operation-definition.js';
-import type { OperationJournalV1 } from './operation-journal.js';
+import { throwIfOperationCrashInjected } from './operation-crash-injection.js';
+import {
+  assertOperationJournalMatchesDefinition,
+  getOperationDefinition,
+} from './operation-definition.js';
+import {
+  type OperationJournalV1,
+  parseOperationJournal,
+} from './operation-journal.js';
 import {
   type OperationRecoveryActionV1,
   type OperationRecoveryPayloadV1,
@@ -60,7 +76,11 @@ import {
   taskAuthorityContentDigest,
   workflowTaskDirectoryDigest,
 } from './operation-recovery-payload.js';
-import { readOperationRecoveryPayload } from './operation-recovery-store.js';
+import {
+  readOperationRecoveryPayload,
+  readOperationRecoveryPayloadForDigest,
+  writeOperationRecoveryPayloadVersion,
+} from './operation-recovery-store.js';
 import {
   readOperationReservation,
   removeOperationReservation,
@@ -74,11 +94,13 @@ import { readProjectRuntimeContext } from './project-runtime.js';
 import { inspectOperationProjectionState } from './projection-outbox.js';
 import { assertRecoveryActor, planOperationRecovery } from './reconciler.js';
 import { readSession } from './session.js';
+import { parseTaskHeadFence } from './task-head-fence.js';
 import { readTaskHeadFence, replaceTaskHeadFence } from './task-head-store.js';
 import {
   readTaskArchiveDigestAtRoot,
   readTaskAuthorityFileAtRoot,
   readTaskCheckpointAtRoot,
+  serializeTaskAuthority,
   writeTaskArchiveAtRoot,
   writeTaskAuthorityFileAtRoot,
   writeTaskCheckpointAtRoot,
@@ -96,6 +118,7 @@ export interface ExecuteOperationRecoveryInput {
   actorId: Ulid;
   sessionId: Ulid;
   mode?: 'repair' | 'abort';
+  replacementCheckpointId?: Ulid;
   now?: Date;
 }
 
@@ -103,6 +126,10 @@ export interface ExecutedOperationRecovery {
   state: OperationRecoveryExecutionState;
   journal: OperationJournalV1;
   reason: string;
+  checkpointReplacement?: {
+    previousCheckpointId: Ulid;
+    replacementCheckpointId: Ulid;
+  };
 }
 
 export interface InspectedOperationRecovery {
@@ -178,8 +205,17 @@ export async function executeOperationRecovery(
   assertUlid(input.operationId, 'operation recovery operationId');
   assertUlid(input.actorId, 'operation recovery actorId');
   assertUlid(input.sessionId, 'operation recovery sessionId');
+  if (input.replacementCheckpointId !== undefined) {
+    assertUlid(
+      input.replacementCheckpointId,
+      'operation recovery replacementCheckpointId',
+    );
+  }
   const now = input.now ?? new Date();
   const mode = input.mode ?? 'repair';
+  if (mode === 'abort' && input.replacementCheckpointId !== undefined) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+  }
   const stores = await knownOperationStores(input.projectRoot);
   const located = await locateJournal(stores, input.operationId);
   if (located === null) throw new Error('MANCODE_OPERATION_JOURNAL_NOT_FOUND');
@@ -200,24 +236,33 @@ export async function executeOperationRecovery(
     located.journal.state === 'committed' ||
     located.journal.state === 'aborted'
   ) {
+    await assertTerminalCheckpointReplacementRetry(
+      located.store,
+      located.journal,
+      input.replacementCheckpointId,
+    );
     return {
       state: 'already_terminal',
       journal: located.journal,
       reason: 'terminal',
     };
   }
+  assertCheckpointReplacementSupported(
+    located.journal,
+    input.replacementCheckpointId,
+  );
 
   const locks = await acquireRecoveryOperationLocks(
     located.store,
     located.journal,
     stores,
     now,
+    input.replacementCheckpointId === undefined
+      ? []
+      : [`checkpoint:${input.replacementCheckpointId}`],
   );
   try {
-    const journal = await readOperationJournal(
-      located.store,
-      input.operationId,
-    );
+    let journal = await readOperationJournal(located.store, input.operationId);
     if (journal === null)
       throw new Error('MANCODE_OPERATION_JOURNAL_NOT_FOUND');
     const plan = planOperationRecovery({
@@ -226,9 +271,18 @@ export async function executeOperationRecovery(
     });
     assertRecoveryActor(plan, input.actorId, input.sessionId);
     if (journal.state === 'committed' || journal.state === 'aborted') {
+      await assertTerminalCheckpointReplacementRetry(
+        located.store,
+        journal,
+        input.replacementCheckpointId,
+      );
       return { state: 'already_terminal', journal, reason: 'terminal' };
     }
-    const payload = await loadBoundPayload(located.store, journal);
+    assertCheckpointReplacementSupported(
+      journal,
+      input.replacementCheckpointId,
+    );
+    let payload = await loadBoundPayload(located.store, journal);
     if (payload === null) {
       if (plan.action === 'safe_abort') {
         const aborted = await abortOperation(
@@ -250,6 +304,34 @@ export async function executeOperationRecovery(
         journal: blocked,
         reason: 'MANCODE_OPERATION_RECOVERY_PAYLOAD_REQUIRED',
       };
+    }
+    if (
+      input.replacementCheckpointId === undefined &&
+      payload.type === 'reframe' &&
+      (await reframeCheckpointReplacementProvenance(
+        located.store,
+        journal,
+        payload,
+      )) !== null
+    ) {
+      throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_REQUIRED');
+    }
+    let checkpointReplacement:
+      | ExecutedOperationRecovery['checkpointReplacement']
+      | undefined;
+    if (input.replacementCheckpointId !== undefined) {
+      const amended = await replaceReframeRecoveryCheckpoint({
+        projectRoot: input.projectRoot,
+        primaryStore: located.store,
+        stores,
+        journal,
+        payload,
+        replacementCheckpointId: input.replacementCheckpointId,
+        now,
+      });
+      journal = amended.journal;
+      payload = amended.payload;
+      checkpointReplacement = amended.checkpointReplacement;
     }
     assertOperationRecoveryPayloadCoversJournal(journal, payload);
     try {
@@ -276,6 +358,7 @@ export async function executeOperationRecovery(
     }
     if (mode === 'abort') throw new Error('MANCODE_OPERATION_ABORT_UNSAFE');
     try {
+      await assertReframeRecoveryPlanCurrent(input.projectRoot, payload);
       const repaired = await applyPayload(
         input.projectRoot,
         located.store,
@@ -298,6 +381,9 @@ export async function executeOperationRecovery(
         state: 'repaired',
         journal: repaired,
         reason: 'forward_repair',
+        ...(checkpointReplacement === undefined
+          ? {}
+          : { checkpointReplacement }),
       };
     } catch (error) {
       const blocked = await markRepairRequired(located.store, journal, now);
@@ -309,6 +395,9 @@ export async function executeOperationRecovery(
           error.message === 'MANCODE_OPERATION_RECOVERY_CONFLICT'
             ? 'MANCODE_OPERATION_RECOVERY_CONFLICT'
             : 'MANCODE_OPERATION_RECOVERY_FAILED',
+        ...(checkpointReplacement === undefined
+          ? {}
+          : { checkpointReplacement }),
       };
     }
   } finally {
@@ -372,6 +461,7 @@ async function acquireRecoveryOperationLocks(
   journal: OperationJournalV1,
   stores: EntityHomeStore[],
   now: Date,
+  extraPrimaryEntityLocks: string[] = [],
 ): Promise<LocalLockHandle[]> {
   const byId = new Map(stores.map((store) => [store.storeId, store]));
   const secondaryTargets = journal.secondaryReservations.map((reservation) => {
@@ -384,7 +474,12 @@ async function acquireRecoveryOperationLocks(
   return acquireOperationEntityLocks(
     journal.operationId,
     [
-      { store: primaryStore, entityLockKeys: journal.entityLocks },
+      {
+        store: primaryStore,
+        entityLockKeys: [
+          ...new Set([...journal.entityLocks, ...extraPrimaryEntityLocks]),
+        ],
+      },
       ...secondaryTargets,
     ],
     { now },
@@ -396,9 +491,10 @@ async function loadBoundPayload(
   journal: OperationJournalV1,
 ): Promise<OperationRecoveryPayloadV1 | null> {
   if (journal.recoveryPayloadDigest === undefined) return null;
-  const payload = await readOperationRecoveryPayload(
+  const payload = await readOperationRecoveryPayloadForDigest(
     store,
     journal.operationId,
+    journal.recoveryPayloadDigest,
   );
   if (payload === null) {
     throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_MISSING');
@@ -413,6 +509,433 @@ async function loadBoundPayload(
     throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_MISMATCH');
   }
   return parsed;
+}
+
+function assertCheckpointReplacementSupported(
+  journal: OperationJournalV1,
+  replacementCheckpointId: Ulid | undefined,
+): void {
+  if (replacementCheckpointId === undefined) return;
+  if (
+    journal.type !== 'reframe' ||
+    journal.state !== 'repair_required' ||
+    journal.recoveryPayloadDigest === undefined ||
+    journal.secondaryReservations.length !== 0
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  }
+}
+
+async function assertTerminalCheckpointReplacementRetry(
+  store: EntityHomeStore,
+  journal: OperationJournalV1,
+  replacementCheckpointId: Ulid | undefined,
+): Promise<void> {
+  if (replacementCheckpointId === undefined) return;
+  if (
+    journal.type !== 'reframe' ||
+    journal.state !== 'committed' ||
+    journal.recoveryPayloadDigest === undefined ||
+    journal.secondaryReservations.length !== 0
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  }
+  const payload = await loadBoundPayload(store, journal);
+  if (payload === null) {
+    throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_REQUIRED');
+  }
+  assertOperationRecoveryPayloadCoversJournal(journal, payload);
+  const replacement = await reframeCheckpointReplacementProvenance(
+    store,
+    journal,
+    payload,
+  );
+  if (replacement?.replacementCheckpointId !== replacementCheckpointId) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+  }
+}
+
+type CheckpointRecoveryAction = Extract<
+  OperationRecoveryActionV1,
+  { kind: 'checkpoint' }
+>;
+type TaskAuthorityRecoveryAction = Extract<
+  OperationRecoveryActionV1,
+  { kind: 'task_authority_file' }
+>;
+type TaskArchiveRecoveryAction = Extract<
+  OperationRecoveryActionV1,
+  { kind: 'task_archive' }
+>;
+
+async function replaceReframeRecoveryCheckpoint(input: {
+  projectRoot: string;
+  primaryStore: EntityHomeStore;
+  stores: EntityHomeStore[];
+  journal: OperationJournalV1;
+  payload: OperationRecoveryPayloadV1;
+  replacementCheckpointId: Ulid;
+  now: Date;
+}): Promise<{
+  journal: OperationJournalV1;
+  payload: OperationRecoveryPayloadV1;
+  checkpointReplacement?: NonNullable<
+    ExecutedOperationRecovery['checkpointReplacement']
+  >;
+}> {
+  const checkpointAction = singleReframeCheckpointAction(input.payload);
+  const previousCheckpointId = checkpointAction.checkpoint.checkpointId;
+  const priorReplacement = await reframeCheckpointReplacementProvenance(
+    input.primaryStore,
+    input.journal,
+    input.payload,
+  );
+  if (priorReplacement !== null) {
+    if (
+      priorReplacement.replacementCheckpointId !== input.replacementCheckpointId
+    ) {
+      throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+    }
+    await assertRecoveryPayloadState(
+      input.projectRoot,
+      input.stores,
+      input.payload,
+    );
+    return {
+      journal: input.journal,
+      payload: input.payload,
+      checkpointReplacement: priorReplacement,
+    };
+  }
+  if (previousCheckpointId === input.replacementCheckpointId) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+  }
+  const taskRootPath = await taskRoot(
+    input.projectRoot,
+    checkpointAction.checkpoint.taskRef,
+  );
+  const currentCheckpoint = await readTaskCheckpointAtRoot(
+    taskRootPath,
+    previousCheckpointId,
+  );
+
+  if (
+    !reframeCheckpointStepReached(input.journal) ||
+    currentCheckpoint === null ||
+    currentCheckpoint.operationId === input.journal.operationId ||
+    !sameTaskRef(
+      currentCheckpoint.taskRef,
+      checkpointAction.checkpoint.taskRef,
+    ) ||
+    digestCanonicalJson(currentCheckpoint) ===
+      digestCanonicalJson(checkpointAction.checkpoint)
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+  }
+
+  await assertRecoveryPayloadState(
+    input.projectRoot,
+    input.stores,
+    input.payload,
+    checkpointAction,
+  );
+  await assertReframeRecoveryPlanCurrent(input.projectRoot, input.payload);
+  const payload = buildReframeCheckpointReplacementPayload(
+    input.payload,
+    checkpointAction,
+    input.replacementCheckpointId,
+  );
+  const replacementAction = singleReframeCheckpointAction(payload);
+  const existingReplacement = await readTaskCheckpointAtRoot(
+    taskRootPath,
+    input.replacementCheckpointId,
+  );
+  if (
+    existingReplacement !== null &&
+    digestCanonicalJson(existingReplacement) !==
+      digestCanonicalJson(replacementAction.checkpoint)
+  ) {
+    throw new Error('MANCODE_REPLACEMENT_CHECKPOINT_ID_CONFLICT');
+  }
+  await assertRecoveryPayloadState(input.projectRoot, input.stores, payload);
+
+  const fromKey = `checkpoint:${previousCheckpointId}`;
+  const toKey = `checkpoint:${input.replacementCheckpointId}`;
+  const payloadDigest = operationRecoveryPayloadDigest(payload);
+  const journal = parseOperationJournal({
+    ...input.journal,
+    recoveryPayloadDigest: payloadDigest,
+    entityLocks: input.journal.entityLocks.map((key) =>
+      key === fromKey ? toKey : key,
+    ),
+    expectedRevisions: Object.fromEntries(
+      Object.entries(input.journal.expectedRevisions).map(([key, revision]) => [
+        key === fromKey ? toKey : key,
+        revision,
+      ]),
+    ),
+    updatedAt: input.now.toISOString(),
+  });
+  assertOperationJournalMatchesDefinition(journal);
+  assertOperationRecoveryPayloadCoversJournal(journal, payload);
+  await writeOperationRecoveryPayloadVersion(input.primaryStore, payload);
+  const updatedJournal = await updateOperationJournal(
+    input.primaryStore,
+    journal,
+    {
+      canAbort: false,
+      reframeCheckpointReplacement: {
+        fromCheckpointId: previousCheckpointId,
+        toCheckpointId: input.replacementCheckpointId,
+      },
+    },
+  );
+  throwIfOperationCrashInjected('reframe', 'rebind-reframe-checkpoint');
+  return {
+    journal: updatedJournal,
+    payload,
+    checkpointReplacement: {
+      previousCheckpointId,
+      replacementCheckpointId: input.replacementCheckpointId,
+    },
+  };
+}
+
+function reframeCheckpointStepReached(journal: OperationJournalV1): boolean {
+  const checkpointIndex = journal.steps.findIndex(
+    (step) => step.id === 'write-reframe-checkpoint',
+  );
+  return (
+    checkpointIndex >= 0 &&
+    journal.steps
+      .slice(0, checkpointIndex)
+      .every((step) => step.state === 'completed')
+  );
+}
+
+async function reframeCheckpointReplacementProvenance(
+  store: EntityHomeStore,
+  journal: OperationJournalV1,
+  payload: OperationRecoveryPayloadV1,
+): Promise<NonNullable<
+  ExecutedOperationRecovery['checkpointReplacement']
+> | null> {
+  if (journal.type !== 'reframe') return null;
+  const canonicalValue = await readOperationRecoveryPayload(
+    store,
+    journal.operationId,
+  );
+  if (canonicalValue === null) {
+    throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_MISSING');
+  }
+  const canonical = parseOperationRecoveryPayload(canonicalValue);
+  if (
+    canonical.operationId !== journal.operationId ||
+    canonical.type !== journal.type ||
+    canonical.primaryStoreId !== journal.primaryStoreId
+  ) {
+    throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_MISMATCH');
+  }
+  if (
+    operationRecoveryPayloadDigest(canonical) ===
+    operationRecoveryPayloadDigest(payload)
+  ) {
+    return null;
+  }
+  const previousCheckpointId =
+    singleReframeCheckpointAction(canonical).checkpoint.checkpointId;
+  const replacementCheckpointId =
+    singleReframeCheckpointAction(payload).checkpoint.checkpointId;
+  if (previousCheckpointId === replacementCheckpointId) return null;
+  const expected = buildReframeCheckpointReplacementPayload(
+    canonical,
+    singleReframeCheckpointAction(canonical),
+    replacementCheckpointId,
+  );
+  if (
+    operationRecoveryPayloadDigest(expected) !==
+    operationRecoveryPayloadDigest(payload)
+  ) {
+    throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_MISMATCH');
+  }
+  return { previousCheckpointId, replacementCheckpointId };
+}
+
+async function assertReframeRecoveryPlanCurrent(
+  projectRoot: string,
+  payload: OperationRecoveryPayloadV1,
+): Promise<void> {
+  if (payload.type !== 'reframe') return;
+  const checkpointAction = singleReframeCheckpointAction(payload);
+  const archiveAction = singleTaskArchiveAction(payload);
+  const task = await new V3ContextStore(projectRoot).readTaskSnapshot(
+    checkpointAction.checkpoint.taskRef,
+  );
+  if ((task.plan?.digest ?? null) !== archiveAction.sourcePlanDigest) {
+    throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
+  }
+}
+
+function buildReframeCheckpointReplacementPayload(
+  payload: OperationRecoveryPayloadV1,
+  checkpointAction: CheckpointRecoveryAction,
+  replacementCheckpointId: Ulid,
+): OperationRecoveryPayloadV1 {
+  const finalMetadataAction = singleTaskAuthorityAction(
+    payload,
+    'commit-reframed-metadata',
+    'metadata.json',
+  );
+  const requirementsAction = singleTaskAuthorityAction(
+    payload,
+    'write-requirements-draft',
+    'requirements.json',
+  );
+  const reviewAction = singleTaskAuthorityAction(
+    payload,
+    'mark-review-verification-stale',
+    'review-ledger.json',
+  );
+  const verificationAction = singleTaskAuthorityAction(
+    payload,
+    'mark-review-verification-stale',
+    'verification-ledger.json',
+  );
+  const archiveAction = singleTaskArchiveAction(payload);
+  const metadata = parseWorkflowMetadata(
+    JSON.parse(finalMetadataAction.targetContent),
+  );
+  if (
+    metadata.lastOperationId !== payload.operationId ||
+    metadata.latestCheckpointRef?.kind !== 'checkpoint' ||
+    metadata.latestCheckpointRef.artifactId !==
+      checkpointAction.checkpoint.checkpointId
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+  }
+  const checkpoint = parseCheckpoint({
+    ...checkpointAction.checkpoint,
+    checkpointId: replacementCheckpointId,
+  });
+  const replacementMetadata = parseWorkflowMetadata({
+    ...metadata,
+    latestCheckpointRef: {
+      ...metadata.latestCheckpointRef,
+      artifactId: replacementCheckpointId,
+    },
+  });
+  const aggregate = buildTaskAggregateManifest({
+    metadata: replacementMetadata,
+    requirements: parseRequirementsLedger(
+      JSON.parse(requirementsAction.targetContent),
+    ),
+    review: parseReviewLedger(JSON.parse(reviewAction.targetContent)),
+    verification: parseVerificationLedger(
+      JSON.parse(verificationAction.targetContent),
+    ),
+    planDigest: archiveAction.sourcePlanDigest,
+    latestCheckpoint: checkpoint,
+  });
+  const fenceActions = payload.actions.filter(
+    (action) => action.kind === 'task_head_fence',
+  );
+  if (fenceActions.length > 1) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+  }
+  return parseOperationRecoveryPayload({
+    ...payload,
+    actions: payload.actions.map((action) => {
+      if (action === checkpointAction) {
+        return { ...action, checkpoint };
+      }
+      if (action === finalMetadataAction) {
+        return {
+          ...action,
+          targetContent: serializeTaskAuthority(replacementMetadata),
+        };
+      }
+      if (action.kind === 'task_head_fence') {
+        return {
+          ...action,
+          fence: parseTaskHeadFence({
+            ...action.fence,
+            aggregateDigest: taskAggregateDigest(aggregate),
+          }),
+        };
+      }
+      return action;
+    }),
+  });
+}
+
+function singleReframeCheckpointAction(
+  payload: OperationRecoveryPayloadV1,
+): CheckpointRecoveryAction {
+  const matches = payload.actions.filter(
+    (action): action is CheckpointRecoveryAction =>
+      action.kind === 'checkpoint' &&
+      action.stepId === 'write-reframe-checkpoint' &&
+      action.beforeDigest === null,
+  );
+  if (matches.length !== 1 || matches[0] === undefined) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  }
+  return matches[0];
+}
+
+function singleTaskAuthorityAction(
+  payload: OperationRecoveryPayloadV1,
+  stepId: string,
+  fileName: TaskAuthorityRecoveryAction['fileName'],
+): TaskAuthorityRecoveryAction {
+  const matches = payload.actions.filter(
+    (action): action is TaskAuthorityRecoveryAction =>
+      action.kind === 'task_authority_file' &&
+      action.stepId === stepId &&
+      action.fileName === fileName,
+  );
+  if (matches.length !== 1 || matches[0] === undefined) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  }
+  return matches[0];
+}
+
+function singleTaskArchiveAction(
+  payload: OperationRecoveryPayloadV1,
+): TaskArchiveRecoveryAction {
+  const matches = payload.actions.filter(
+    (action): action is TaskArchiveRecoveryAction =>
+      action.kind === 'task_archive' &&
+      action.stepId === 'archive-requirements-plan',
+  );
+  if (matches.length !== 1 || matches[0] === undefined) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  }
+  return matches[0];
+}
+
+async function assertRecoveryPayloadState(
+  projectRoot: string,
+  stores: EntityHomeStore[],
+  payload: OperationRecoveryPayloadV1,
+  ignoredAction?: OperationRecoveryActionV1,
+): Promise<void> {
+  for (const [index, action] of payload.actions.entries()) {
+    if (action === ignoredAction) continue;
+    const current = await currentActionDigest(projectRoot, stores, action);
+    const target = recoveryActionTargetDigest(action);
+    const laterTarget = payload.actions
+      .slice(index + 1)
+      .some(
+        (candidate) =>
+          recoveryActionResourceKey(candidate) ===
+            recoveryActionResourceKey(action) &&
+          recoveryActionTargetDigest(candidate) === current,
+      );
+    if (current !== target && current !== action.beforeDigest && !laterTarget) {
+      throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
+    }
+  }
 }
 
 async function allActionsAtInitialState(

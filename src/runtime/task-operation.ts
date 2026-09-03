@@ -829,6 +829,35 @@ export async function writeTaskCheckpointAtRoot(
   }
 }
 
+/** Rejects a reused immutable checkpoint ID before an operation journals writes. */
+export async function assertTaskCheckpointIdAvailableAtRoot(
+  taskRoot: string,
+  checkpointId: Ulid,
+): Promise<void> {
+  assertUlid(checkpointId, 'checkpointId');
+  await assertSafeTaskDirectory(taskRoot);
+  const directory = path.join(taskRoot, 'checkpoints');
+  try {
+    const entry = await lstat(directory);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+  try {
+    const entry = await lstat(path.join(directory, `${checkpointId}.json`));
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+  throw new Error('MANCODE_CHECKPOINT_ID_CONFLICT');
+}
+
 /** Reads a fixed checkpoint path without permitting a linked task subtree. */
 export async function readTaskCheckpointAtRoot(
   taskRoot: string,
@@ -847,9 +876,13 @@ export async function readTaskCheckpointAtRoot(
     throw error;
   }
   try {
-    return await readImmutableCheckpoint(
+    const checkpoint = await readImmutableCheckpoint(
       path.join(directory, `${checkpointId}.json`),
     );
+    if (checkpoint.checkpointId !== checkpointId) {
+      throw new Error('MANCODE_CHECKPOINT_CORRUPT');
+    }
+    return checkpoint;
   } catch (error) {
     if (
       error instanceof Error &&

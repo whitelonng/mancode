@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
+import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { reframeV3Workflow } from '../src/context/reframe.js';
 import { V3ContextStore } from '../src/context/store.js';
@@ -12,7 +13,10 @@ import { taskRootPath } from '../src/context/task-locator.js';
 import type { TaskRef } from '../src/context/task-ref.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { resolveTaskEntityHomeStore } from '../src/runtime/entity-home-store.js';
-import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
+import {
+  createOperationLockPauseForTesting,
+  withOperationCrashInjectionForTesting,
+} from '../src/runtime/operation-crash-injection.js';
 import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
 import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
 import {
@@ -21,16 +25,24 @@ import {
   type TaskAuthorityFileName,
   taskArchiveManifest,
 } from '../src/runtime/operation-recovery-payload.js';
-import { readOperationRecoveryPayload } from '../src/runtime/operation-recovery-store.js';
+import {
+  readOperationRecoveryPayload,
+  readOperationRecoveryPayloadForDigest,
+} from '../src/runtime/operation-recovery-store.js';
 import { readOperationJournal } from '../src/runtime/operation-store.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
 import { createSession } from '../src/runtime/session.js';
+import {
+  readTaskCheckpointAtRoot,
+  writeTaskCheckpointAtRoot,
+} from '../src/runtime/task-operation.js';
 import {
   createLocalActor,
   createSharedActorProfile,
   publishSharedActorProfile,
   readLocalActor,
 } from '../src/team/actor.js';
+import { parseCheckpoint } from '../src/team/checkpoints.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
 import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
@@ -186,6 +198,478 @@ describe('V3 reframe crash recovery', () => {
       });
     }
   }, 120_000);
+
+  it('rebinds a foreign checkpoint conflict to a fresh ID and completes the original reframe', async () => {
+    const actors = await bootstrap(root);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Recover a reframe whose checkpoint ID belongs to another operation.',
+      workflowMode: 'manteam',
+      sessionId: actors.sessionId,
+      client: 'vitest',
+      sharedPrivacyConfirmed: true,
+      implementationScope: {
+        include: ['src/context/**'],
+        modules: ['governance'],
+      },
+      taskId: id(500),
+      operationId: id(501),
+      now: NOW,
+    });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      requirements: created.requirements,
+      now: NOW,
+    });
+    const existing = await createV3Checkpoint({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: confirmed.taskRevision,
+      kind: 'diagnostic_started',
+      summary: 'Existing checkpoint from another operation.',
+      checkpointId: id(502),
+      operationId: id(503),
+      now: NOW,
+    });
+    const beforeReframe = await new V3ContextStore(root).readTaskSnapshot(
+      created.taskRef,
+    );
+    const operationId = id(504);
+    const conflictedCheckpointId = id(505);
+    const taskRoot = taskRootPath(root, created.taskRef);
+    const foreignCheckpoint = parseCheckpoint({
+      ...existing.checkpoint,
+      checkpointId: conflictedCheckpointId,
+      summary: 'Foreign checkpoint occupying the interrupted reframe ID.',
+    });
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: 'reframe',
+          crashAfter: 'mark-review-verification-stale',
+        },
+        () =>
+          reframeV3Workflow({
+            projectRoot: root,
+            taskRef: created.taskRef,
+            sessionId: actors.sessionId,
+            expectedTaskRevision: beforeReframe.metadata.revision,
+            checkpointId: conflictedCheckpointId,
+            operationId,
+            now: NOW,
+          }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+    const runtime = await readProjectRuntimeContext(root);
+    const home = resolveTaskEntityHomeStore(
+      runtime.entityHomeStoreContext,
+      created.taskRef,
+    );
+    await expect(
+      readOperationJournal(home, operationId),
+    ).resolves.toMatchObject({
+      state: 'repair_required',
+      steps: expect.arrayContaining([
+        { id: 'write-reframe-checkpoint', state: 'pending' },
+      ]),
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId: conflictedCheckpointId,
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+
+    await writeTaskCheckpointAtRoot(taskRoot, foreignCheckpoint);
+
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+      }),
+    ).resolves.toMatchObject({
+      state: 'repair_required',
+      reason: 'MANCODE_OPERATION_RECOVERY_CONFLICT',
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        mode: 'abort',
+      }),
+    ).rejects.toThrow('MANCODE_OPERATION_ABORT_UNSAFE');
+
+    const journalBeforeReplacement = await readOperationJournal(
+      home,
+      operationId,
+    );
+    if (journalBeforeReplacement === null) {
+      throw new Error('missing conflicted reframe journal');
+    }
+    const planPath = path.join(taskRoot, 'plan.md');
+    const planContent = await readFile(planPath, 'utf8');
+    await writeFile(planPath, `${planContent}\nExternal plan drift.\n`);
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId: id(506),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_OPERATION_RECOVERY_CONFLICT');
+    await writeFile(planPath, planContent);
+    await expect(readOperationJournal(home, operationId)).resolves.toEqual(
+      journalBeforeReplacement,
+    );
+
+    const occupiedReplacementId = id(506);
+    await writeTaskCheckpointAtRoot(
+      taskRoot,
+      parseCheckpoint({
+        ...existing.checkpoint,
+        checkpointId: occupiedReplacementId,
+        summary: 'Foreign checkpoint occupying the proposed replacement ID.',
+      }),
+    );
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId: occupiedReplacementId,
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REPLACEMENT_CHECKPOINT_ID_CONFLICT');
+    await expect(readOperationJournal(home, operationId)).resolves.toEqual(
+      journalBeforeReplacement,
+    );
+
+    const replacementCheckpointId = id(507);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: 'reframe',
+          crashAfter: 'rebind-reframe-checkpoint',
+        },
+        () =>
+          executeOperationRecovery({
+            projectRoot: root,
+            operationId,
+            actorId: actors.actorId,
+            sessionId: actors.sessionId,
+            replacementCheckpointId,
+            now: NOW,
+          }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+    const reboundJournal = await readOperationJournal(home, operationId);
+    expect(reboundJournal).toMatchObject({
+      state: 'repair_required',
+      entityLocks: expect.arrayContaining([
+        `checkpoint:${replacementCheckpointId}`,
+      ]),
+    });
+    expect(reboundJournal?.recoveryPayloadDigest).not.toBe(
+      journalBeforeReplacement.recoveryPayloadDigest,
+    );
+
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_REQUIRED');
+
+    await writeFile(planPath, `${planContent}\nDrift after payload rebind.\n`);
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId,
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      state: 'repair_required',
+      reason: 'MANCODE_OPERATION_RECOVERY_CONFLICT',
+    });
+    await writeFile(planPath, planContent);
+
+    const recovered = await executeOperationRecovery({
+      projectRoot: root,
+      operationId,
+      actorId: actors.actorId,
+      sessionId: actors.sessionId,
+      replacementCheckpointId,
+      now: NOW,
+    });
+    expect(recovered).toMatchObject({
+      state: 'repaired',
+      reason: 'forward_repair',
+      checkpointReplacement: {
+        previousCheckpointId: conflictedCheckpointId,
+        replacementCheckpointId,
+      },
+      journal: {
+        state: 'committed',
+        entityLocks: expect.arrayContaining([
+          `checkpoint:${replacementCheckpointId}`,
+        ]),
+        expectedRevisions: {
+          [`checkpoint:${replacementCheckpointId}`]: 0,
+        },
+      },
+    });
+    expect(recovered.journal.entityLocks).not.toContain(
+      `checkpoint:${conflictedCheckpointId}`,
+    );
+    expect(recovered.journal.expectedRevisions).not.toHaveProperty(
+      `checkpoint:${conflictedCheckpointId}`,
+    );
+
+    const store = new V3ContextStore(root);
+    const task = await store.readTaskSnapshot(created.taskRef);
+    expect(task.metadata).toMatchObject({
+      transitionState: 'stable',
+      lastOperationId: operationId,
+      latestCheckpointRef: { artifactId: replacementCheckpointId },
+    });
+    expect(task.requirements.status).toBe('draft');
+    expect(task.review.status).toBe('stale');
+    expect(task.verification.status).toBe('stale');
+    expect(task.latestCheckpoint).toMatchObject({
+      checkpointId: replacementCheckpointId,
+      operationId,
+      kind: 'requirements_reframed',
+    });
+    expect(task.aggregateError).toBeNull();
+    await expect(
+      readTaskCheckpointAtRoot(taskRoot, conflictedCheckpointId),
+    ).resolves.toEqual(foreignCheckpoint);
+
+    if (recovered.journal.recoveryPayloadDigest === undefined) {
+      throw new Error('missing replacement recovery payload digest');
+    }
+    const replacementPayload = await readOperationRecoveryPayloadForDigest(
+      home,
+      operationId,
+      recovered.journal.recoveryPayloadDigest,
+    );
+    if (replacementPayload === null) {
+      throw new Error('missing replacement recovery payload');
+    }
+    expect(singleAction(replacementPayload, 'checkpoint').checkpoint).toEqual(
+      task.latestCheckpoint,
+    );
+    expect(authorityTarget(replacementPayload, 'metadata.json')).toEqual(
+      task.metadata,
+    );
+    expect(singleAction(replacementPayload, 'task_head_fence').fence).toEqual(
+      (await store.readCoordinationSnapshot(created.taskRef, home))
+        .taskHeadFence,
+    );
+
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+      }),
+    ).resolves.toMatchObject({
+      state: 'already_terminal',
+      journal: { state: 'committed' },
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId,
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      state: 'already_terminal',
+      journal: { state: 'committed' },
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId: id(508),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_NOT_APPLICABLE');
+  });
+
+  it('repairs the legacy conflict after the checkpoint step was completed', async () => {
+    const actors = await bootstrap(root);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Recover the legacy completed-step checkpoint conflict.',
+      workflowMode: 'man',
+      sessionId: actors.sessionId,
+      client: 'vitest',
+      implementationScope: {
+        include: ['src/context/**'],
+        modules: ['governance'],
+      },
+      taskId: id(510),
+      operationId: id(511),
+      now: NOW,
+    });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      requirements: created.requirements,
+      now: NOW,
+    });
+    const existing = await createV3Checkpoint({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: confirmed.taskRevision,
+      kind: 'diagnostic_started',
+      summary: 'Source for a foreign legacy checkpoint.',
+      checkpointId: id(512),
+      operationId: id(513),
+      now: NOW,
+    });
+    const beforeReframe = await new V3ContextStore(root).readTaskSnapshot(
+      created.taskRef,
+    );
+    const operationId = id(514);
+    const conflictedCheckpointId = id(515);
+    const replacementCheckpointId = id(516);
+    const taskRoot = taskRootPath(root, created.taskRef);
+    const pause = createOperationLockPauseForTesting({
+      operationId,
+      pauseAfter: 'entity_locks_held',
+    });
+    const attempt = pause.run(() =>
+      reframeV3Workflow({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId: actors.sessionId,
+        expectedTaskRevision: beforeReframe.metadata.revision,
+        checkpointId: conflictedCheckpointId,
+        operationId,
+        now: NOW,
+      }),
+    );
+    await pause.reached;
+    await writeTaskCheckpointAtRoot(
+      taskRoot,
+      parseCheckpoint({
+        ...existing.checkpoint,
+        checkpointId: conflictedCheckpointId,
+        summary: 'Foreign checkpoint occupying the legacy reframe ID.',
+      }),
+    );
+    pause.release();
+    await expect(attempt).rejects.toThrow('MANCODE_CHECKPOINT_ID_CONFLICT');
+
+    const runtime = await readProjectRuntimeContext(root);
+    const home = resolveTaskEntityHomeStore(
+      runtime.entityHomeStoreContext,
+      created.taskRef,
+    );
+    await expect(
+      readOperationJournal(home, operationId),
+    ).resolves.toMatchObject({
+      state: 'repair_required',
+      steps: expect.arrayContaining([
+        { id: 'write-reframe-checkpoint', state: 'completed' },
+      ]),
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      state: 'repair_required',
+      reason: 'MANCODE_OPERATION_RECOVERY_CONFLICT',
+    });
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId: actors.actorId,
+        sessionId: actors.sessionId,
+        replacementCheckpointId,
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      state: 'repaired',
+      checkpointReplacement: {
+        previousCheckpointId: conflictedCheckpointId,
+        replacementCheckpointId,
+      },
+    });
+  });
+
+  it('rejects checkpoint files whose path ID and body ID disagree', async () => {
+    const actors = await bootstrap(root);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Reject mismatched checkpoint path authority.',
+      workflowMode: 'man',
+      sessionId: actors.sessionId,
+      client: 'vitest',
+      taskId: id(520),
+      operationId: id(521),
+      now: NOW,
+    });
+    const checkpoint = await createV3Checkpoint({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Canonical checkpoint body.',
+      checkpointId: id(522),
+      operationId: id(523),
+      now: NOW,
+    });
+    const mismatchedPathId = id(524);
+    const taskRoot = taskRootPath(root, created.taskRef);
+    await writeFile(
+      path.join(taskRoot, 'checkpoints', `${mismatchedPathId}.json`),
+      `${JSON.stringify(checkpoint.checkpoint, null, 2)}\n`,
+    );
+
+    await expect(
+      readTaskCheckpointAtRoot(taskRoot, mismatchedPathId),
+    ).rejects.toThrow('MANCODE_CHECKPOINT_CORRUPT');
+  });
 });
 
 async function expectAbortedAuthority(input: {

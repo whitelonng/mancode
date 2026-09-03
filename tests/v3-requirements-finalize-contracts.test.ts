@@ -168,6 +168,36 @@ describe('V3 requirements finalization operation', () => {
     ).rejects.toThrow('MANCODE_EXPECTED_REVISION_CONFLICT');
   });
 
+  it('requires explicit verification slot surfaces for policy-3 man delivery', async () => {
+    const { sessionId } = await bootstrap(root, false, false);
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Require declared delivery observation boundaries.',
+      workflowMode: 'man',
+      delivery: true,
+      sessionId,
+      client: 'vitest',
+      taskId: id(14),
+      operationId: id(15),
+      now: NOW,
+    });
+
+    await expect(
+      finalizeV3Requirements({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: created.metadata.revision,
+        requirements: finalizedRequirements(
+          created.requirements,
+          created.taskRef,
+        ),
+        operationId: id(16),
+        now: NOW,
+      }),
+    ).rejects.toThrow('MANCODE_MAN_ACCEPTANCE_SURFACE_REQUIRED: AC-1');
+  });
+
   it('rejects a newly confirmed exact scope contradiction without making old ledgers unreadable', async () => {
     const { sessionId } = await bootstrap(root, false, false);
     const created = await createV3Workflow({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type RequirementsLedgerV1,
+  assertManDeliveryVerificationSurfaces,
   parseRequirementsLedger,
   requirementsAreReady,
   requirementsLedgerDigest,
@@ -90,6 +91,59 @@ describe('requirements ledger V3 contract', () => {
       outOfScope: ['Limit repeated login attempts.'],
     });
   });
+
+  it('keeps historical criteria readable but requires explicit slot surfaces for new man delivery', () => {
+    const current = ledger();
+    const [criterion] = current.acceptanceCriteria;
+    if (!criterion) throw new Error('missing fixture criterion');
+    const { verificationSurfaces: _surfaces, ...historicalCriterion } =
+      criterion;
+    const historical = withDigest({
+      ...current,
+      acceptanceCriteria: [historicalCriterion],
+    });
+
+    expect(
+      parseRequirementsLedger(historical).acceptanceCriteria[0]
+        ?.verificationSurfaces,
+    ).toBeUndefined();
+    expect(() =>
+      assertManDeliveryVerificationSurfaces(
+        parseRequirementsLedger(historical),
+      ),
+    ).toThrow('MANCODE_MAN_ACCEPTANCE_SURFACE_REQUIRED: AC-1');
+    expect(() =>
+      assertManDeliveryVerificationSurfaces(parseRequirementsLedger(current)),
+    ).not.toThrow();
+  });
+
+  it('rejects invalid or verification-requirement-incompatible surfaces', () => {
+    const current = ledger();
+    const incompatible = {
+      ...current,
+      acceptanceCriteria: current.acceptanceCriteria.map((criterion) => ({
+        ...criterion,
+        verificationSurfaces: { automated: 'real_http' },
+      })),
+    } as RequirementsLedgerV1;
+    const invalid = {
+      ...current,
+      acceptanceCriteria: current.acceptanceCriteria.map((criterion) => ({
+        ...criterion,
+        verificationSurfaces: {
+          automated: 'mock_http',
+          manual: 'manual_observation',
+        },
+      })),
+    } as unknown as RequirementsLedgerV1;
+
+    expect(() => parseRequirementsLedger(withDigest(incompatible))).toThrow(
+      /verificationSurfaces must match verificationRequirement slots/,
+    );
+    expect(() => parseRequirementsLedger(withDigest(invalid))).toThrow(
+      'MANCODE_MAN_VERIFICATION_SURFACE_INVALID',
+    );
+  });
 });
 
 function ledger(): RequirementsLedgerV1 {
@@ -150,6 +204,10 @@ function ledger(): RequirementsLedgerV1 {
         statement: 'A repeated failed login receives a rate-limit response.',
         required: true,
         verificationRequirement: 'hybrid',
+        verificationSurfaces: {
+          automated: 'real_http',
+          manual: 'manual_observation',
+        },
       },
     ],
     blockingUnknowns: [],

@@ -276,6 +276,10 @@ export function createCliProgram(): Command {
       'Policy v2: clarification only; use workflow review skip for review',
     )
     .option('--review-depth <depth>', 'Review depth: targeted or full')
+    .option(
+      '--delivery',
+      'Opt in a new man task to document-bound module delivery',
+    )
     .option('--review-domain <domain>', 'Review domain: quality or security')
     .option(
       '--report <path>',
@@ -577,6 +581,10 @@ export function createCliProgram(): Command {
   operationProgram
     .command('repair <operationId>')
     .description('Repair an operation using its original actor and session')
+    .option(
+      '--replacement-checkpoint-id <id>',
+      'Replace only a conflicted reframe checkpoint target',
+    )
     .option('--session <id>', 'Session ID (otherwise MANCODE_SESSION_ID)')
     .option('--client <name>', 'Client identity (default: mancode-cli)')
     .option('--json', 'Output as JSON (for scripts)')

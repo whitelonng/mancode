@@ -24,6 +24,7 @@ describe('requirements ledger', () => {
             description: 'Pointer lock movement works',
             required: true,
             method: 'manual',
+            verificationSurfaces: { manual: 'browser' },
           },
         ],
       }),
@@ -32,6 +33,10 @@ describe('requirements ledger', () => {
     expect(requirementsAreReady(ledger)).toBe(true);
     expect(renderRequirementsMarkdown(ledger)).toContain('READY');
     expect(renderRequirementsMarkdown(ledger)).toContain('AC-1');
+    expect(renderRequirementsMarkdown(ledger)).toContain('manual=browser');
+    expect(ledger.acceptanceCriteria[0]?.verificationSurfaces).toEqual({
+      manual: 'browser',
+    });
   });
 
   it('rejects duplicate ids and manifests with no required acceptance', () => {
@@ -106,6 +111,41 @@ describe('requirements ledger', () => {
         }),
       ),
     ).toThrow(/coverage is missing/);
+  });
+
+  it('rejects invalid or method-incompatible verification surfaces', () => {
+    const base = {
+      version: 1,
+      goal: 'Build it',
+      confirmedScope: ['Confirmed first release'],
+      excludedScope: [],
+      technicalDecisions: ['Use the existing stack'],
+      defaults: [],
+      blockingUnknowns: [],
+      coverage: completeCoverage(),
+    };
+    const parseWithSurfaces = (verificationSurfaces: unknown) =>
+      parseRequirementsLedger(
+        JSON.stringify({
+          ...base,
+          acceptanceCriteria: [
+            {
+              id: 'AC-1',
+              description: 'The confirmed behavior works',
+              required: true,
+              method: 'manual',
+              verificationSurfaces,
+            },
+          ],
+        }),
+      );
+
+    expect(() => parseWithSurfaces({ automated: 'component' })).toThrow(
+      /invalid acceptance verificationSurfaces/,
+    );
+    expect(() => parseWithSurfaces({ manual: 'mock_http' })).toThrow(
+      /invalid acceptance verification surface/,
+    );
   });
 
   it('reads old contradictory scope but rejects it as a new confirmation', () => {

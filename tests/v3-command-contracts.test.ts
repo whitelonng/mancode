@@ -500,6 +500,30 @@ describe('V3 CLI command contracts', () => {
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         state: 'already_terminal',
       });
+      expect(
+        await operationRepair(root, operationId, {
+          session: sessionId,
+          client: 'fixture',
+          replacementCheckpointId: id(620),
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: {
+          code: 'MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED',
+        },
+      });
+      expect(
+        await operationRepair(root, operationId, {
+          session: sessionId,
+          client: 'fixture',
+          replacementCheckpointId: 'not-a-ulid',
+          json: true,
+        }),
+      ).toBe(2);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+        error: { code: 'MANCODE_REPLACEMENT_CHECKPOINT_ID_INVALID' },
+      });
       expect(await contextDoctor(root, { json: true })).toBe(0);
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         operations: [],

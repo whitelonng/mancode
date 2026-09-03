@@ -98,6 +98,10 @@ describe('operation crash recovery matrix', () => {
   it('executes safe abort or forward repair at every declared crash point', async () => {
     let exercised = 0;
     for (const definition of Object.values(OPERATION_DEFINITIONS)) {
+      // Reframe repair validates its semantic archive, plan, checkpoint, and
+      // aggregate bundle. Its real payload matrix is covered separately by
+      // v3-reframe-recovery-contracts rather than this synthetic plan writer.
+      if (definition.type === 'reframe') continue;
       for (const fixture of OPERATION_CRASH_FIXTURES[definition.type]) {
         exercised += 1;
         const operationId = nextId();

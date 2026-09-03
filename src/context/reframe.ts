@@ -24,6 +24,7 @@ import { replaceTaskHeadFence } from '../runtime/task-head-store.js';
 import {
   type OpenedV3TaskOperation,
   advanceTaskOperation,
+  assertTaskCheckpointIdAvailableAtRoot,
   commitTaskOperation,
   createTaskOperationJournal,
   handleTaskOperationFailure,
@@ -132,6 +133,10 @@ export async function reframeV3Workflow(
   try {
     assertReframeEligible(context, activeClaims, openHandoffs, activeChildren);
     assertReframeClaimsFresh(context, activeClaims);
+    await assertTaskCheckpointIdAvailableAtRoot(
+      context.task.location.taskRoot,
+      input.checkpointId,
+    );
 
     const timestamp = context.now.toISOString();
     const archivedRequirementsContent = await readTaskAuthorityFileAtRoot(

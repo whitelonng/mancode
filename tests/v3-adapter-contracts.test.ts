@@ -208,6 +208,22 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain(
         'hard-risk change involving authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure',
       );
+      if (['AGENTS.md', 'CLAUDE.md'].includes(path.basename(target))) {
+        expect(bootstrap).toContain(
+          '仅用于显式启用模块交付策略的新 `/man` 任务',
+        );
+        expect(bootstrap).toContain('项目指定的计划基线目录，默认 `doc/`');
+        expect(bootstrap).toContain('已有 `docs/` 等明确约定时沿用它');
+        expect(bootstrap).toContain('mancode-progress-data');
+        expect(bootstrap).toContain('被忽略不代表本地不可读');
+        expect(bootstrap).toContain('交付未发布');
+        expect(bootstrap).toContain('优先定位并修复根因，避免治标不治本');
+        expect(bootstrap).toContain(
+          '完整性校验、缓存键、证据适用性和发布溯源仍可使用哈希',
+        );
+        expect(bootstrap).not.toContain('扩大到十几行');
+      } else
+        expect(bootstrap).not.toContain('project:documentation-handoff-policy');
       expect(bootstrap).toContain(
         'explicitly asking for research, a plan, architecture, migration design, or formal acceptance authorizes the `man` planning path',
       );
@@ -255,6 +271,16 @@ describe('V3 adapter bootstrap integration', () => {
       if (platform === 'claude-code') {
         expect(installed.target).toBe('CLAUDE.md');
         expect(bootstrap).toContain('mancode:continuity:claude:start');
+        expect(bootstrap).toContain(
+          '<!-- project:documentation-handoff-policy:end -->',
+        );
+      }
+      if (platform === 'codex') {
+        expect(installed.target).toBe('AGENTS.md');
+        expect(bootstrap).toContain('mancode:continuity:codex:start');
+        expect(bootstrap).toContain(
+          '<!-- project:engineering-execution-quality:end -->',
+        );
       }
       if (platform === 'dsh') {
         expect(installed.target).toBe('AGENTS.md');
@@ -329,6 +355,7 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('"rationale": "..."');
           expect(entry).toContain('acceptanceCriteria');
           expect(entry).toContain('"method": "automated"');
+          expect(entry).toContain('"verificationSurfaces"');
           expect(entry).toContain(
             "clears this session's active workflow pointer",
           );
@@ -427,6 +454,12 @@ describe('V3 adapter bootstrap integration', () => {
             'upgraded, already-running local `man` task has no executable implementation scope',
           );
           expect(entry).toContain('exact unchanged current plan');
+          expect(entry).toContain('repo-relative path or glob');
+          expect(entry).toContain('"surface": "real_http"');
+          expect(entry).toContain('self-declared');
+          expect(entry).toContain('uncommitted outside-scope');
+          expect(entry).toContain('exit code 0');
+          expect(entry).toContain('review_incomplete');
         }
         if (mode === 'manteam') {
           expect(entry).toContain(
@@ -592,7 +625,7 @@ describe('V3 adapter bootstrap integration', () => {
     const man = await readFile(v3ModeEntryPath(root, 'codex', 'man'), 'utf8');
 
     expect(man).toContain(
-      'revise --expected-revision <n> --file <plan.md> --scope-file <scope.json> --session <id> --client <active-client>',
+      'revise --expected-revision <n> --file <repo-relative-plan.md> --scope-file <scope.json> --session <id> --client <active-client>',
     );
     expect(man).toContain(
       'confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id> --client <active-client>',
@@ -610,6 +643,22 @@ describe('V3 adapter bootstrap integration', () => {
     expect(man).toContain(
       'workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json',
     );
+    expect(man).toContain(
+      'operation repair <operation-ULID> --replacement-checkpoint-id <fresh-ULID> --session <id> --client <active-client>',
+    );
+    expect(man).toContain('limited to that proven reframe checkpoint conflict');
+    expect(man).toContain('--delivery --session <id> --client <active-client>');
+    expect(man).toContain('one total review (not one per snippet');
+    expect(man).toContain('goal → implementation');
+    expect(man).toContain('diff → goal');
+    for (const mode of V3_MODE_NAMES.filter((mode) => mode !== 'man')) {
+      const other = await readFile(
+        v3ModeEntryPath(root, 'codex', mode),
+        'utf8',
+      );
+      expect(other).not.toContain('--delivery');
+      expect(other).not.toContain('mancode:plan-baseline');
+    }
   });
 
   it('refuses to overwrite a user-authored original mode entry', async () => {

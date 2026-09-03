@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
+import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { reframeV3Workflow } from '../src/context/reframe.js';
@@ -245,6 +246,51 @@ describe('V3 local workflow reframe', () => {
       activeTaskRef: created.taskRef,
       activeMode: 'manteam',
       lastSeenRevision: reframed.metadata.revision,
+    });
+  });
+
+  it('rejects a reused checkpoint ID before creating a journal or changing authority', async () => {
+    const actors = await bootstrap(root, { git: true, joined: true });
+    const created = await createV3Workflow({
+      projectRoot: root,
+      task: 'Reject a checkpoint ID already owned by another operation.',
+      workflowMode: 'manteam',
+      sessionId: actors.sessionId,
+      client: 'vitest',
+      sharedPrivacyConfirmed: true,
+      implementationScope: { include: ['src/**'], modules: ['governance'] },
+      taskId: id(500),
+      operationId: id(501),
+      now: NOW,
+    });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      requirements: created.requirements,
+      now: NOW,
+    });
+    const checkpointId = id(502);
+    const existing = await createV3Checkpoint({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: confirmed.taskRevision,
+      kind: 'diagnostic_started',
+      summary: 'This checkpoint ID already belongs to another operation.',
+      checkpointId,
+      operationId: id(503),
+      now: NOW,
+    });
+
+    await expectRejectedWithoutAuthorityChange({
+      projectRoot: root,
+      taskRef: created.taskRef,
+      sessionId: actors.sessionId,
+      expectedTaskRevision: existing.metadata.revision,
+      checkpointId,
+      operationId: id(504),
+      error: 'MANCODE_CHECKPOINT_ID_CONFLICT',
     });
   });
 

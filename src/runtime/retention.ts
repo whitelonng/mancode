@@ -19,7 +19,11 @@ import {
   type OperationJournalV1,
   parseOperationJournal,
 } from './operation-journal.js';
-import { operationRecoveryPayloadPath } from './operation-recovery-store.js';
+import {
+  operationRecoveryDirectory,
+  operationRecoveryPayloadPath,
+  operationRecoveryPayloadVersionPath,
+} from './operation-recovery-store.js';
 import { readProjectRuntimeContext } from './project-runtime.js';
 import { parseSessionState } from './session.js';
 
@@ -166,14 +170,14 @@ export async function applyContextCompaction(
 ): Promise<AppliedContextCompaction> {
   const deleted: string[] = [];
   for (const candidate of plan.candidates) {
-    await removeRegularFile(candidate.target);
-    deleted.push(candidate.target);
     for (const target of candidate.relatedTargets) {
       if (await regularFileExists(target)) {
         await removeRegularFile(target);
         deleted.push(target);
       }
     }
+    await removeRegularFile(candidate.target);
+    deleted.push(candidate.target);
   }
   return { ...plan, deleted };
 }
@@ -287,6 +291,7 @@ async function planOperationRetention(
   for (const store of stores) {
     const directory = operationDirectory(store);
     const entries = await readDirectoryOrEmpty(directory);
+    let recoveryEntries: string[] | null = null;
     for (const entry of entries) {
       if (!entry.endsWith('.json')) continue;
       const target = path.join(directory, entry);
@@ -304,7 +309,12 @@ async function planOperationRetention(
           }
         }
       } else if (Date.parse(journal.updatedAt) < threshold) {
-        candidates.push(operationRetentionCandidate(store, journal, target));
+        recoveryEntries ??= await readDirectoryOrEmpty(
+          operationRecoveryDirectory(store),
+        );
+        candidates.push(
+          operationRetentionCandidate(store, journal, target, recoveryEntries),
+        );
       }
     }
   }
@@ -348,17 +358,48 @@ function operationRetentionCandidate(
   store: EntityHomeStore,
   journal: OperationJournalV1,
   target: string,
+  recoveryEntries: string[],
 ): RetentionCandidate {
+  const relatedTargets =
+    journal.recoveryPayloadDigest === undefined
+      ? []
+      : operationRecoveryTargetsForRetention(store, journal, recoveryEntries);
   return {
     kind: 'terminal_operation',
     target,
     reason: `${journal.state} operation exceeds ${TERMINAL_JOURNAL_RETENTION_DAYS} day retention`,
     taskRef: null,
-    relatedTargets:
-      journal.recoveryPayloadDigest === undefined
-        ? []
-        : [operationRecoveryPayloadPath(store, journal.operationId)],
+    relatedTargets,
   };
+}
+
+function operationRecoveryTargetsForRetention(
+  store: EntityHomeStore,
+  journal: OperationJournalV1,
+  recoveryEntries: string[],
+): string[] {
+  if (journal.recoveryPayloadDigest === undefined) return [];
+  const directory = operationRecoveryDirectory(store);
+  const versionPrefix = `${journal.operationId}.`;
+  const discoveredVersions = recoveryEntries
+    .filter((entry) => {
+      if (!entry.startsWith(versionPrefix)) return false;
+      return /^[a-f0-9]{64}\.json$/.test(entry.slice(versionPrefix.length));
+    })
+    .map((entry) => path.join(directory, entry));
+  return [
+    ...new Set([
+      operationRecoveryPayloadPath(store, journal.operationId),
+      operationRecoveryPayloadVersionPath(
+        store,
+        journal.operationId,
+        journal.recoveryPayloadDigest,
+      ),
+      ...discoveredVersions,
+    ]),
+  ].sort((left, right) =>
+    Buffer.from(left, 'utf8').compare(Buffer.from(right, 'utf8')),
+  );
 }
 
 function operationEntityKeys(journal: OperationJournalV1): string[] {

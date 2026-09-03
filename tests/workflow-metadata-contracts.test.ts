@@ -14,6 +14,35 @@ const SESSION_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7M';
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 
 describe('workflow metadata V3 contract', () => {
+  it('keeps delivery policy opt-in immutable and exclusive to man', () => {
+    const draft = localMetadata();
+    const enabled = parseWorkflowMetadata({
+      ...draft,
+      workflowMode: 'man',
+      governance: {
+        ...draft.governance,
+        policyVersions: { planning: 3, review: 1, verification: 1 },
+      },
+    });
+    expect(enabled.governance.policyVersions.planning).toBe(3);
+    expect(() =>
+      parseWorkflowMetadata({ ...enabled, workflowMode: 'manba' }),
+    ).toThrow('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
+    expect(() =>
+      assertWorkflowMetadataTransition(
+        enabled,
+        {
+          ...enabled,
+          revision: enabled.revision + 1,
+          governance: {
+            ...enabled.governance,
+            policyVersions: { planning: 2, review: 1, verification: 1 },
+          },
+        },
+        'ordinary',
+      ),
+    ).toThrow('POLICY_IMMUTABLE');
+  });
   it('enforces the V3 workflow dimensions without accepting legacy mamba or non-workflow modes', () => {
     const metadata = parseWorkflowMetadata(rawMetadata());
     expect(metadata.workflowMode).toBe('manteam');
@@ -140,11 +169,11 @@ describe('workflow metadata V3 contract', () => {
         ...rawMetadata(),
         governance: {
           ...rawMetadata().governance,
-          policyVersions: { planning: 3, review: 1, verification: 1 },
+          policyVersions: { planning: 4, review: 1, verification: 1 },
         },
       }),
     ).toThrow(
-      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=3 supported=1,2 requiredWriter=>0.4.0/,
+      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=4 supported=1,2,3 requiredWriter=>0.4.0/,
     );
     expect(() =>
       parseWorkflowMetadata({

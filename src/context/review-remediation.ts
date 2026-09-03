@@ -21,6 +21,11 @@ import {
 } from './aggregate.js';
 import type { Ulid } from './ids.js';
 import {
+  assertManReviewCoverage,
+  captureManSubject,
+  isManDelivery,
+} from './man-delivery-runtime.js';
+import {
   type ReviewLedgerV1,
   assertReviewLedgerAgainstContext,
   assertReviewLedgerTransition,
@@ -34,6 +39,12 @@ import {
   taskMutationExpectedRevisions,
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
+import {
+  assertVerificationLedgerTransition,
+  deriveVerificationLedgerStatus,
+  parseVerificationLedger,
+  verificationLedgerDigest,
+} from './verification-ledger.js';
 import type { VerificationLedgerV1 } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
@@ -62,8 +73,8 @@ export interface AppliedV3ReviewLedger {
 }
 
 /**
- * Applies a current review result and invalidates all prior verification
- * evidence. Review input is a complete ledger so the persisted digest covers
+ * Applies a current review result. Only opted-in man delivery can retain
+ * verification bound to unchanged content. The persisted digest covers
  * the exact domains, blockers, reports, skips, and remediation round audited.
  */
 export async function applyV3ReviewLedger(
@@ -86,6 +97,14 @@ export async function applyV3ReviewLedger(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    const subject = isManDelivery(context.task.metadata)
+      ? await captureManSubject(input.projectRoot, context.task)
+      : null;
+    assertManReviewCoverage(
+      context.task,
+      submitted,
+      subject ?? { contentDigest: '', environment: '' },
+    );
     assertReviewEligible(context.task.metadata, context.task.plan !== null);
     const timestamp = context.now.toISOString();
     const review = createCurrentReview(
@@ -95,11 +114,43 @@ export async function applyV3ReviewLedger(
       context.operationId,
       timestamp,
     );
-    const verification = markTaskVerificationStale(
+    let verification = markTaskVerificationStale(
       context.task.verification,
       context.operationId,
       timestamp,
     );
+    const previous = context.task.verification;
+    if (
+      subject &&
+      previous.requirementsDigest ===
+        context.task.metadata.governance.requirementsDigest &&
+      previous.planVersion === context.task.metadata.governance.planVersion &&
+      previous.checks.every((check) =>
+        [check.automated, check.manual].every(
+          (item) =>
+            item?.status !== 'passed' ||
+            (item.subject?.contentDigest === subject.contentDigest &&
+              item.subject.environment === subject.environment),
+        ),
+      )
+    ) {
+      const current = {
+        ...previous,
+        revision: previous.revision + 1,
+        remediationRound: review.remediationRound,
+        lastOperationId: context.operationId,
+        updatedAt: timestamp,
+      };
+      const draft = {
+        ...current,
+        status: deriveVerificationLedgerStatus(current),
+      };
+      verification = parseVerificationLedger({
+        ...draft,
+        contentDigest: verificationLedgerDigest(draft),
+      });
+      assertVerificationLedgerTransition(previous, verification);
+    }
     const metadata = updateMetadata(
       context.task.metadata,
       review,
