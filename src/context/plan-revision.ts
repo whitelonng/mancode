@@ -27,9 +27,9 @@ import { digestCanonicalJson } from './canonical.js';
 import type { Ulid } from './ids.js';
 import { parseManDeliveryPlan } from './man-delivery-plan.js';
 import {
+  assertManPlanInScope,
   bindManPlan,
   isManDelivery,
-  manScopeContains,
   readBoundManPlan,
 } from './man-delivery-runtime.js';
 import { assertManteamPlanContent } from './manteam-plan.js';
@@ -154,14 +154,14 @@ export async function reviseV3Plan(
       assertExecutableImplementationScope(implementationScope);
       if (isManDelivery(context.task.metadata)) {
         const source = parseManDeliveryPlan(plan)?.source;
-        if (
-          !source ||
-          !manScopeContains(
-            { ...context.task.metadata, implementationScope },
-            source.path,
-          )
-        )
-          throw new Error('MANCODE_MAN_PLAN_OUTSIDE_SCOPE');
+        if (!source)
+          throw new Error(
+            'MANCODE_MAN_PLAN_OUTSIDE_SCOPE: bound plan source path is missing; provide a repo-relative plan path',
+          );
+        assertManPlanInScope(
+          { ...context.task.metadata, implementationScope },
+          source.path,
+        );
       }
     }
     if (executionScopeBinding) {

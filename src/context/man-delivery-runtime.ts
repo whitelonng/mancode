@@ -33,6 +33,25 @@ import type { WorkflowMetadataV3 } from './workflow-metadata.js';
 const execFile = promisify(execFileCallback);
 export const MAN_DELIVERY_POLICY = 3;
 
+export type ManFinalizationBlockerCode =
+  | 'plan_execution_required'
+  | 'review_incomplete'
+  | 'verification_incomplete'
+  | 'delivery_record_stale'
+  | 'committed_outside_scope'
+  | 'uncommitted_changes';
+
+export interface ManDeliveryFinalization {
+  status: 'ready' | 'incomplete';
+  blockers: Array<{
+    code: ManFinalizationBlockerCode;
+    status: string;
+    nextAction: string;
+    files?: string[];
+    diagnostic?: string;
+  }>;
+}
+
 export function isManDelivery(metadata: WorkflowMetadataV3): boolean {
   return (
     metadata.workflowMode === 'man' &&
@@ -277,6 +296,97 @@ export function manScopeContains(
   ).allowed;
 }
 
+export function assertManPlanInScope(
+  metadata: WorkflowMetadataV3,
+  file: string,
+): void {
+  if (!manScopeContains(metadata, file))
+    throw new Error(
+      `MANCODE_MAN_PLAN_OUTSIDE_SCOPE: ${file} is not covered by implementationScope.include; add that exact repo-relative path or a covering glob`,
+    );
+}
+
+function manDeliveryFinalization(
+  task: StoredTaskSnapshot,
+  subject: ManEvidenceSubject,
+  recordCurrent: boolean,
+  outsideScope: string[],
+  pendingCommit: string[],
+): ManDeliveryFinalization {
+  const blockers: ManDeliveryFinalization['blockers'] = [];
+  if (task.metadata.governance.planDecision !== 'governed_execution')
+    blockers.push({
+      code: 'plan_execution_required',
+      status: task.metadata.governance.planDecision ?? 'unconfirmed',
+      nextAction: 'Confirm the bound plan for governed execution.',
+    });
+
+  const reviewSubjectCurrent =
+    task.review.status === 'skipped' ||
+    (task.review.status === 'passed' &&
+      task.review.delivery?.subject.contentDigest === subject.contentDigest &&
+      task.review.delivery?.subject.environment === subject.environment);
+  if (!reviewSubjectCurrent)
+    blockers.push({
+      code: 'review_incomplete',
+      status: task.review.status === 'passed' ? 'stale' : task.review.status,
+      nextAction:
+        task.review.status === 'blocked'
+          ? 'Fix the recorded findings, verify the changed module, and submit the targeted review result.'
+          : 'Complete one module review for the current subject and apply its review ledger.',
+    });
+
+  let verificationStatus: string = task.verification.status;
+  if (verificationStatus === 'passed') {
+    for (const check of task.verification.checks) {
+      for (const evidence of [check.automated, check.manual]) {
+        if (evidence?.status !== 'passed') continue;
+        if (!evidence.surface) verificationStatus = 'surface_required';
+        else if (
+          evidence.subject?.contentDigest !== subject.contentDigest ||
+          evidence.subject.environment !== subject.environment
+        )
+          verificationStatus = 'stale';
+      }
+    }
+  }
+  if (verificationStatus !== 'passed')
+    blockers.push({
+      code: 'verification_incomplete',
+      status: verificationStatus,
+      nextAction:
+        verificationStatus === 'surface_required'
+          ? 'Record the actual observation surface for every passed acceptance slot.'
+          : 'Run or confirm the missing acceptance evidence against the current subject.',
+    });
+
+  if (!recordCurrent)
+    blockers.push({
+      code: 'delivery_record_stale',
+      status: 'stale',
+      nextAction: 'Sync the delivery record after the latest evidence change.',
+    });
+  if (outsideScope.length)
+    blockers.push({
+      code: 'committed_outside_scope',
+      status: 'blocked',
+      nextAction:
+        'Remove the unrelated committed changes or obtain an approved scope realignment.',
+      files: outsideScope,
+    });
+  if (pendingCommit.length)
+    blockers.push({
+      code: 'uncommitted_changes',
+      status: 'pending',
+      nextAction: 'Commit only the task-owned versionable changes.',
+      files: pendingCommit,
+    });
+  return {
+    status: blockers.length ? 'incomplete' : 'ready',
+    blockers,
+  };
+}
+
 export async function inspectManDelivery(
   root: string,
   task: StoredTaskSnapshot,
@@ -338,6 +448,9 @@ export async function inspectManDelivery(
         `refs/heads/${(await manGit(root, ['branch', '--show-current'])).trim()}`,
       ])
     ).trim() || null;
+  const recordCurrent =
+    parseManPlanDocument(bound.document).record ===
+    renderManDeliveryRecord(task, subject).trim();
   return {
     subject,
     source: bound.source,
@@ -345,6 +458,13 @@ export async function inspectManDelivery(
     outsideScope,
     upstream,
     publication: upstream === null ? 'unpublished' : 'unknown',
+    finalization: manDeliveryFinalization(
+      task,
+      subject,
+      recordCurrent,
+      outsideScope,
+      pendingCommit,
+    ),
   };
 }
 
@@ -440,10 +560,15 @@ export function renderManDeliveryRecord(
     ...(task.review.delivery?.coverage.map(
       (row) => `- ${row.acceptanceId}: ${row.status} — ${row.evidence}`,
     ) ?? []),
-    ...task.verification.checks.map(
-      (check) =>
-        `- ${check.displayId}: automated=${check.automated?.status ?? 'n/a'}; manual=${check.manual?.status ?? 'n/a'}; ${check.automated?.summary ?? check.manual?.summary ?? 'No evidence yet.'}`,
-    ),
+    ...task.verification.checks.map((check) => {
+      const component = (
+        item: VerificationLedgerV1['checks'][number]['automated'],
+      ) =>
+        item === null
+          ? 'n/a'
+          : `${item.status}(surface=${item.surface ?? 'unspecified'})`;
+      return `- ${check.displayId}: automated=${component(check.automated)}; manual=${component(check.manual)}; ${check.automated?.summary ?? check.manual?.summary ?? 'No evidence yet.'}`;
+    }),
   ].join('\n');
 }
 
@@ -456,7 +581,7 @@ export async function syncManDeliveryRecord(
     task.metadata.governance.planDecision === 'governed_execution' &&
     !manScopeContains(task.metadata, bound.source.path)
   )
-    throw new Error('MANCODE_MAN_PLAN_OUTSIDE_SCOPE');
+    assertManPlanInScope(task.metadata, bound.source.path);
   const subject = (await hasGitWorktree(root))
     ? await captureManSubject(root, task)
     : undefined;
@@ -546,27 +671,36 @@ export async function assertManDeliveryReady(
   task: StoredTaskSnapshot,
 ): Promise<void> {
   if (!isManDelivery(task.metadata)) return;
-  if (
-    task.metadata.governance.planDecision !== 'governed_execution' ||
-    !['passed', 'skipped'].includes(task.review.status) ||
-    task.verification.status !== 'passed'
-  )
-    throw new Error('MANCODE_MAN_DELIVERY_NOT_VERIFIED');
   const result = await inspectManDelivery(root, task);
+  const blocker = (code: ManFinalizationBlockerCode) =>
+    result.finalization.blockers.find((item) => item.code === code);
+  const plan = blocker('plan_execution_required');
+  if (plan)
+    throw new Error(
+      `MANCODE_MAN_DELIVERY_EXECUTION_REQUIRED: ${plan.nextAction}`,
+    );
+  const verification = blocker('verification_incomplete');
+  if (verification)
+    throw new Error(
+      `MANCODE_MAN_VERIFICATION_INCOMPLETE: ${verification.status}; ${verification.nextAction}`,
+    );
+  const review = blocker('review_incomplete');
+  if (review)
+    throw new Error(
+      `MANCODE_MAN_REVIEW_INCOMPLETE: ${review.status}; ${review.nextAction}`,
+    );
   assertManReviewCoverage(task, task.review, result.subject);
   assertManVerificationSubjects(task, task.verification, result.subject);
-  const bound = await readBoundManPlan(root, task);
-  if (
-    parseManPlanDocument(bound.document).record !==
-    renderManDeliveryRecord(task, result.subject).trim()
-  )
+  if (blocker('delivery_record_stale'))
     throw new Error('MANCODE_MAN_DELIVERY_RECORD_STALE');
-  if (result.outsideScope.length)
+  const outside = blocker('committed_outside_scope');
+  if (outside)
     throw new Error(
-      `MANCODE_MAN_COMMIT_OUTSIDE_SCOPE: ${result.outsideScope.join(', ')}`,
+      `MANCODE_MAN_COMMIT_OUTSIDE_SCOPE: ${outside.files?.join(', ')}`,
     );
-  if (result.pendingCommit.length)
+  const pending = blocker('uncommitted_changes');
+  if (pending)
     throw new Error(
-      `MANCODE_MAN_DELIVERY_UNCOMMITTED: ${result.pendingCommit.join(', ')}`,
+      `MANCODE_MAN_DELIVERY_UNCOMMITTED: ${pending.files?.join(', ')}`,
     );
 }

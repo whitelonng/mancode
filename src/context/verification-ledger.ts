@@ -7,7 +7,9 @@ import { digestCanonicalJson } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
 import {
   type ManEvidenceSubject,
+  type ManVerificationSurface,
   parseManEvidenceSubject,
+  parseManVerificationSurface,
 } from './man-delivery-evidence.js';
 import { assertSharedTextSafe } from './privacy.js';
 import type {
@@ -40,6 +42,8 @@ export interface VerificationLedgerContext {
 
 export interface VerificationComponentEvidence {
   subject?: ManEvidenceSubject;
+  /** Optional for historical ledgers; required for passed policy-3 man evidence. */
+  surface?: ManVerificationSurface;
   evidenceId: Ulid;
   status: VerificationComponentStatus;
   summary: string | null;
@@ -469,6 +473,7 @@ function parseEvidence(
       'confirmedByActorId',
       'confirmationSource',
       'subject',
+      'surface',
       'updatedAt',
     ],
     `verification ledger ${kind} evidence`,
@@ -557,6 +562,9 @@ function parseEvidence(
     ...(value.subject === undefined
       ? {}
       : { subject: parseManEvidenceSubject(value.subject) }),
+    ...(value.surface === undefined
+      ? {}
+      : { surface: parseManVerificationSurface(value.surface) }),
     status,
     summary,
     command,

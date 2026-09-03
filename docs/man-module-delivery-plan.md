@@ -449,6 +449,45 @@ P1–P3 已实现。P4 的确定性候选验证已通过，真实宿主行为实
 
 P5 未开始。当前测试证明确定性机制，不证明 agent 在真实宿主中的漏审率、误报率、停止/继续判断或时间成本。真实 agent 对照与重复运行、用户项目验收仍待测试位置及环境授权；这不是业务阻塞，不提前宣称“已达生产保障”。
 
+### 真实宿主试验反馈修订（2026-09-03）
+
+用户提供的隔离测试项目 `mancode测试`，结果记录于该项目的 `docs/results.md`。候选和旧流程的业务实现均通过真实 HTTP oracle 10/10，但候选仍暴露出以下生产交付缺口。本节修订不扩大到 Solo、`manba`、`manteam`、`manps` 或 `mansolo`。
+
+1. **审核进程结束不等于模块审核完成。** 植入跨租户泄漏和吞错的样例中，reviewer 发现一个问题后提前退出且宿主进程返回成功，但 review ledger 仍为 `stale`。公共运行时必须把它明确显示为 `review_incomplete`，给出下一步；不能让进程退出码或自然语言总结冒充 review passed。
+2. **验证证据必须声明实际观察层级。** 新 `/man` 的自动/人工交付证据需要记录 `unit`、`component`、`handler`、`real_http`、`browser`、`device`、`external_service` 或 `manual_observation`。发生环境降级时必须记录实际层级；低于计划要求时保持未验证或请求确认，不能把 handler 测试标成真实 HTTP。层级声明改善审计和审核输入，但机器不根据命令字符串猜测语义，也不把声明本身当作真实性证明。
+3. **scope 错误要能直接修复。** `implementationScope.include` / `exclude` 只接受 repo-relative path 或 glob；语义范围继续写入 requirements。计划文件未被 include 覆盖时，错误必须指出实际路径，并提示添加该精确路径或覆盖 glob。不能用难以证明正确的词表把所有中文根文件或无扩展名文件一律判非法。
+4. **轻量化只合并重复动作，不削弱门禁。** 每次 delivery mutation 应返回最新 revision、当前收尾阻塞项和准确 next action，减少重复 status/context/inspect。一个真实验证命令仍可覆盖多个明确验收 ID；模块完成后仍只做一次总审。治理动作 7–10 次是优化目标而非硬阈值，本轮不新增大型 finalize 编排器。
+
+本轮修复的实施范围：
+
+- `src/commands/man-delivery.ts`：验证层级输入、mutation 后收尾状态和可执行结果。
+- `src/context/man-delivery-evidence.ts`、`src/context/verification-ledger.ts`、`src/context/man-delivery-runtime.ts`：层级契约、结构化收尾阻塞项、具体完成错误、交付记录投影。
+- `src/installers/v3-adapter.ts`：只更新新 `/man` 指引，明确 reviewer 早退和 path/glob 边界。
+- 对应 `tests/man-delivery*.test.ts`、`tests/v3-adapter-contracts.test.ts`：先固定失败样例，再实现。
+
+本轮新增验收：
+
+- `delivery inspect` 对 review/verification/record/commit 的未完成状态返回稳定的结构化 blocker 和 next action；`delivery check` 使用对应具体错误码。
+- reviewer 进程即使 exit 0，只要 ledger 仍为 `pending`、`stale`、`in_review` 或 `blocked` 就不能显示 ready，也不能完成任务。
+- 新 `/man` 通过的验证证据必须包含合法 observation surface；旧任务和非 man ledger 可继续解析没有该字段的历史证据。
+- `delivery verify` / `confirm` 拒绝缺失或非法 surface，失效证据清空旧 surface，交付记录和 inspect 可看到实际 surface。
+- 计划路径未纳入 implementation scope 时，错误包含未覆盖的 repo-relative 路径和可执行修正建议。
+- 不增加逐片段审核、重复验证、强制 reviewer 数量或通用模式门禁；其他模式契约保持通过。
+
+### 本轮修复交付记录
+
+已按上述边界完成候选修复：`delivery inspect` 及 delivery mutation 回执现在返回结构化 `finalization`；完成检查分别报告 review、verification、交付记录、scope commit 和未提交变更。reviewer 进程返回成功但 ledger 未通过时仍显示 `review_incomplete`。验证证据新增实际 observation surface，历史 ledger 可继续读取缺失字段，但新 `/man` 不能用缺少 surface 的 passed evidence 完成交付。计划文件不在 scope 时会回报具体路径及修正方式。
+
+实现没有新增逐段审核、额外 reviewer、固定命令次数或大型 finalize 编排器。结构化收尾状态集中在现有 delivery runtime；其他模式未启用新门禁。权威 mutation 后的投影或 finalization 读取失败仍返回 mutation 成功及待重试状态，不把后置投影失败伪装成写入失败。
+
+验证结果：
+
+- 针对性 `/man`、delivery runtime、evidence 和 adapter 契约：60 个用例通过。
+- 全量：132 个测试文件、1004 个用例通过。
+- `npm run typecheck`、`npm run lint`、`npm run build`、`npm run test:dist` 和 `git diff --check` 通过；分发产物验证覆盖 10 个 adapter。
+
+本轮自审检查了目标覆盖、完成门禁次序、历史 ledger 兼容、投影失败语义和模式隔离。没有发现需要新增防御层或通用抽象的问题。当前结论仍是测试候选，不把结构化证据声明等同于真实性证明，也不宣称已经覆盖所有生产项目和宿主权限差异。
+
 ### 调研依据
 
 前序调研使用官方仓库当时的 `main` 流程文件，不代表这些机制已完成同项目效果对照，也不把其全部仪式引入 man：

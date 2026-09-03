@@ -11,6 +11,7 @@ import { type Ulid, createUlid } from '../src/context/ids.js';
 import {
   captureManSubject,
   renderManDeliveryRecord,
+  syncManDeliveryRecord,
 } from '../src/context/man-delivery-runtime.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
@@ -67,6 +68,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     command(
       'verify',
       {
+        surface: 'component',
         argv: [
           process.execPath,
           '-e',
@@ -107,6 +109,7 @@ describe('opted-in man module delivery through the public workflow command', () 
           'confirm',
           {
             confirmed: true,
+            surface: 'manual_observation',
             summary:
               'Fixture operator explicitly confirms the required behavior in the local Node environment.',
           },
@@ -211,10 +214,29 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '进行中',
     );
-    expect((await command('check')).code).not.toBe(0);
+    const initialCheck = await command('check');
+    expect(initialCheck.code).not.toBe(0);
+    expect(initialCheck.output).toContain('VERIFICATION_INCOMPLETE');
     await finishEvidence();
+    const awaitingReview = await command('inspect');
+    expect(JSON.parse(awaitingReview.output).finalization).toMatchObject({
+      status: 'incomplete',
+      blockers: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'review_incomplete',
+          status: 'stale',
+        }),
+      ]),
+    });
+    expect((await command('check')).output).toContain('REVIEW_INCOMPLETE');
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '待审核',
+    );
+    expect(await readFile(path.join(root, 'docs/export.md'), 'utf8')).toContain(
+      'surface=component',
+    );
+    expect(await readFile(path.join(root, 'docs/export.md'), 'utf8')).toContain(
+      'surface=manual_observation',
     );
     const evidence = (await snapshot()).verification.checks;
     expect((await review()).code).toBe(0);
@@ -237,11 +259,18 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '已完成',
     );
+    const uncommitted = await command('inspect');
+    expect(JSON.parse(uncommitted.output).finalization).toMatchObject({
+      status: 'incomplete',
+      blockers: [expect.objectContaining({ code: 'uncommitted_changes' })],
+    });
     expect((await command('check')).output).toContain('UNCOMMITTED');
     await git(['add', 'docs/export.md', '项目进度.html']);
     await git(['commit', '-qm', 'module delivery']);
     expect((await command('check')).code).toBe(0);
-    expect((await command('inspect')).output).toContain('unpublished');
+    const ready = JSON.parse((await command('inspect')).output);
+    expect(ready.publication).toBe('unpublished');
+    expect(ready.finalization).toEqual({ status: 'ready', blockers: [] });
     const output = logs();
     expect(
       await workflow(
@@ -264,7 +293,9 @@ describe('opted-in man module delivery through the public workflow command', () 
     await finishEvidence();
     expect((await review()).code).toBe(0);
     await writeFile(path.join(root, 'app.cjs'), 'exports.run=()=>3;');
-    expect((await command('check')).output).toContain('STALE');
+    expect((await command('check')).output).toContain(
+      'VERIFICATION_INCOMPLETE',
+    );
     const failed = await verify();
     expect(failed.code).toBe(0); // The recording operation succeeded, the check did not.
     expect(failed.output).toContain('exitCode');
@@ -370,6 +401,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     const result = await command(
       'verify',
       {
+        surface: 'component',
         argv: [
           process.execPath,
           '-e',
@@ -386,6 +418,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     const result = await command(
       'verify',
       {
+        surface: 'component',
         argv: [
           process.execPath,
           '-e',
@@ -405,6 +438,53 @@ describe('opted-in man module delivery through the public workflow command', () 
         .map((check) => check.automated?.status),
     ).toEqual(['passed', 'passed']);
     expect(task.verification.checks[2]?.manual?.status).toBe('pending');
+  });
+
+  it('requires an explicit verification surface and returns the next finalization state with the mutation receipt', async () => {
+    const before = (await snapshot()).metadata.revision;
+    const missing = await command(
+      'verify',
+      {
+        argv: [process.execPath, '-e', 'process.exit(0)'],
+      },
+      'AC-1',
+    );
+    expect(missing.output).toContain('VERIFICATION_SURFACE_INVALID');
+    expect((await snapshot()).metadata.revision).toBe(before);
+
+    const verified = await verify();
+    expect(verified.code, verified.output).toBe(0);
+    expect(JSON.parse(verified.output)).toMatchObject({
+      revision: before + 1,
+      finalization: {
+        status: 'incomplete',
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: 'verification_incomplete' }),
+          expect.objectContaining({ code: 'review_incomplete' }),
+        ]),
+      },
+    });
+    expect((await snapshot()).verification.checks[0]?.automated?.surface).toBe(
+      'component',
+    );
+  });
+
+  it('reports the exact plan path needed by implementation scope', async () => {
+    const current = await snapshot();
+    await expect(
+      syncManDeliveryRecord(root, {
+        ...current,
+        metadata: {
+          ...current.metadata,
+          implementationScope: {
+            ...current.metadata.implementationScope,
+            include: ['app.cjs'],
+          },
+        },
+      }),
+    ).rejects.toThrow(
+      'MANCODE_MAN_PLAN_OUTSIDE_SCOPE: docs/export.md is not covered by implementationScope.include; add that exact repo-relative path or a covering glob',
+    );
   });
 
   it('rejects the delivery opt-in for other workflow modes before any mutation', async () => {

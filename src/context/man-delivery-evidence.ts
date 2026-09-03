@@ -5,6 +5,27 @@ export interface ManEvidenceSubject {
   environment: string;
 }
 
+export type ManVerificationSurface =
+  | 'unit'
+  | 'component'
+  | 'handler'
+  | 'real_http'
+  | 'browser'
+  | 'device'
+  | 'external_service'
+  | 'manual_observation';
+
+const MAN_VERIFICATION_SURFACES = new Set<ManVerificationSurface>([
+  'unit',
+  'component',
+  'handler',
+  'real_http',
+  'browser',
+  'device',
+  'external_service',
+  'manual_observation',
+]);
+
 export interface ManReviewEvidence {
   subject: ManEvidenceSubject;
   reviewer: 'independent' | 'self';
@@ -36,6 +57,17 @@ export function parseManEvidenceSubject(value: unknown): ManEvidenceSubject {
     contentDigest: value.contentDigest,
     environment: text(value.environment),
   };
+}
+
+export function parseManVerificationSurface(
+  value: unknown,
+): ManVerificationSurface {
+  if (
+    typeof value !== 'string' ||
+    !MAN_VERIFICATION_SURFACES.has(value as ManVerificationSurface)
+  )
+    throw new Error('MANCODE_MAN_VERIFICATION_SURFACE_INVALID');
+  return value as ManVerificationSurface;
 }
 
 export function parseManReviewEvidence(value: unknown): ManReviewEvidence {

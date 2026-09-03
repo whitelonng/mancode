@@ -453,6 +453,10 @@ describe('V3 adapter bootstrap integration', () => {
             'upgraded, already-running local `man` task has no executable implementation scope',
           );
           expect(entry).toContain('exact unchanged current plan');
+          expect(entry).toContain('repo-relative path or glob');
+          expect(entry).toContain('"surface": "real_http"');
+          expect(entry).toContain('exit code 0');
+          expect(entry).toContain('review_incomplete');
         }
         if (mode === 'manteam') {
           expect(entry).toContain(

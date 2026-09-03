@@ -4,8 +4,12 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { assertTaskCompletionGate } from '../context/aggregate.js';
 import { createUlid } from '../context/ids.js';
-import { parseManReviewEvidence } from '../context/man-delivery-evidence.js';
 import {
+  parseManReviewEvidence,
+  parseManVerificationSurface,
+} from '../context/man-delivery-evidence.js';
+import {
+  type ManDeliveryFinalization,
   assertManDeliveryReady,
   captureManSubject,
   inspectManDelivery,
@@ -116,10 +120,16 @@ export async function manDeliveryCommand(
       task = context.task;
       if (action === 'sync') {
         const progress = await syncManDeliveryRecord(project.projectRoot, task);
+        const synced = await project.store.readTaskSnapshot(taskRef);
+        const finalization = await inspectFinalization(
+          project.projectRoot,
+          synced,
+        );
         return printV3Result(options.json, {
           deliveryRecord: 'synced',
           progress,
-          revision: task.metadata.revision,
+          revision: synced.metadata.revision,
+          finalization,
         });
       }
       if (
@@ -142,7 +152,9 @@ export async function manDeliveryCommand(
       assertRecord(input, 'verification command');
       assertKnownKeys(
         input,
-        action === 'verify' ? ['argv'] : ['confirmed', 'summary'],
+        action === 'verify'
+          ? ['argv', 'surface']
+          : ['confirmed', 'summary', 'surface'],
         'verification command',
       );
       if (
@@ -162,6 +174,7 @@ export async function manDeliveryCommand(
           !input.summary.trim())
       )
         throw new Error('MANCODE_MAN_EXPLICIT_CONFIRMATION_REQUIRED');
+      const surface = parseManVerificationSurface(input.surface);
       const checks = verificationChecks(task);
       const acceptanceIds =
         options.acceptance?.split(',').map((id) => id.trim()) ?? [];
@@ -221,7 +234,11 @@ export async function manDeliveryCommand(
             evidence.subject.environment === subject.environment)
         )
           return evidence;
-        const { subject: _oldSubject, ...rest } = evidence;
+        const {
+          subject: _oldSubject,
+          surface: _oldSurface,
+          ...rest
+        } = evidence;
         return {
           ...rest,
           status: 'pending',
@@ -250,6 +267,7 @@ export async function manDeliveryCommand(
             next[component] = {
               ...slot,
               subject,
+              surface,
               status: result.exitCode === 0 ? 'passed' : 'failed',
               command: action === 'verify' ? JSON.stringify(input.argv) : null,
               exitCode: action === 'verify' ? result.exitCode : null,
@@ -307,13 +325,44 @@ export async function manDeliveryCommand(
         error: error instanceof Error ? error.message : String(error),
       };
     }
-    return printV3Result(options.json, { result: output, deliveryRecord });
+    const finalization = await inspectFinalization(
+      project.projectRoot,
+      updated,
+    );
+    return printV3Result(options.json, {
+      result: output,
+      deliveryRecord,
+      revision: updated.metadata.revision,
+      finalization,
+    });
   } catch (error) {
     return printV3Error(
       options.json,
       v3ErrorCode(error, 'MANCODE_MAN_DELIVERY_FAILED'),
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+async function inspectFinalization(
+  root: string,
+  task: StoredTaskSnapshot,
+): Promise<ManDeliveryFinalization> {
+  try {
+    return (await inspectManDelivery(root, task)).finalization;
+  } catch (error) {
+    return {
+      status: 'incomplete',
+      blockers: [
+        {
+          code: 'delivery_record_stale',
+          status: 'inspection_failed',
+          nextAction:
+            'Run delivery inspect again; the authority mutation succeeded but finalization could not be read.',
+          diagnostic: error instanceof Error ? error.message : String(error),
+        },
+      ],
+    };
   }
 }
 

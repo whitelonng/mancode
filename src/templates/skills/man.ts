@@ -11,6 +11,10 @@ export const MAN_SKILL: SkillSpec = {
 
 用 \`mancode workflow create man "<task>" --json\` 创建 workflow 并读取返回的 taskId；不得直接创建或改写 metadata.json。随后只用 workflow CLI 更新需求、验证、step/status/planVersion/skippedSteps。通用 \`--skipped\` 只用于 Step 1–2 的 \`clarification\`；用户明确跳过整个 review 时必须在 Step 6 使用专用 \`workflow review ... skip --reason\`，不能写数字、\`film-1\` 或 \`film-2\`。state 的 \`currentMode\`、\`currentTask\` 和 \`currentWorkflowMode\` 指向本 task。
 
+当任务显式使用 document-bound delivery（\`mancode workflow create man "<task>" --delivery\`，planning policy 3）时，以下交付规则只对该新 \`/man\` 任务生效；普通 \`/man\`、旧任务、\`/manba\`、\`/manteam\`、\`/manps\`、\`/mansolo\` 和 Solo handoff 保持原协议。计划必须绑定项目指定的计划文件（默认 \`doc/\`，已有 \`docs/\` 约定优先），模块完成后把实际交付回写到同一文件的 delivery record，再做一次模块总审。总审读取已批准计划、相关架构、完整模块 diff、入口/调用链和验证证据，检查目标覆盖、真实正确性/漏洞，以及无依据的防御和抽象；它不能只听实现者总结。reviewer 进程退出码为 0 或自然语言说“通过”都不代表 review 已写入：必须重新运行 \`mancode workflow delivery <TaskRef> inspect --json\`，看到 ledger 仍为 \`pending\`、\`in_review\`、\`stale\` 或 \`blocked\` 时，报告 \`review_incomplete\` 并继续审核或修复。
+
+delivery 验证输入必须声明实际 observation surface：\`unit\`、\`component\`、\`handler\`、\`real_http\`、\`browser\`、\`device\`、\`external_service\` 或 \`manual_observation\`。例如真实 HTTP 才能写 \`"surface": "real_http"\`；不能从命令名猜测，也不能把 handler/mock/截图当成真实 HTTP。缺少或降级的证据保持未验证。完成前以 \`delivery check --json\` 的结构化 finalization blockers 为准，先解决 review、verification、delivery record、scope 和未提交变更，再运行 \`workflow complete\`；没有 upstream 或 push 失败表示未发布，不是业务阻塞。include/exclude 只接收 repo-relative path 或 glob，语义范围写在 requirements；计划路径越界时按 CLI 给出的具体路径修正，不要靠猜测词表扩大防御。
+
 ## 计划职责与技术选择关卡
 
 把 \`/man\` 作为正式计划入口：先对齐需求并产出可确认的计划，不因计划完成而自动进入完整实施。计划关卡必须让用户选择只保留计划、交给默认 \`solo\` 轻量实施、继续完整 \`/man\` 或修改计划。
