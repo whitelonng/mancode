@@ -78,6 +78,8 @@ export const MANTEAM_SKILL: SkillSpec = {
 - Follow-up TODOs, only if unavoidable
 - Suggested commit message
 
+handoff、commit 和 PR 文案必须来自 accepted target、任务起始 baseline、实际读回状态与 task-owned diff。不得让会话中被否决的方案定义交付身份，但必须保留冲突、未完成工作、失败验证、blocker、迁移/回滚、审计事实，以及正式 handoff 的 rejected/cancelled 状态和 reason。
+
 只有在用户确认实施并完成 workflow 后，才把最终 ADR 追加到 \`.mancode/memory/decisions.md\`。abandoned / plan-only workflow 只能保留在 \`.mancode/workflows/<taskId>/team-context.md\`、\`plan.md\` 和 \`handoff.md\`，不能污染长期团队 memory。
 
 ## Commit Discipline

@@ -92,7 +92,7 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 
 1. 存在 open blocker 时，Head Coach 一次性修复全部 blocker，并用 \`mancode workflow review <taskId> remediate --resolved Q1,D1\` 记录唯一一轮修复；没有 blocker 时不运行 remediate。不要为 🟡/🟢 扩大改动。
 2. remediation 会使旧验证整批失效。在 Step 9 重跑全部 required 验收，并通过 verify record/require-manual/confirm-manual 重新登记证据；未重新全部通过不能 completed。不重新运行已完成的 reviewer。修复若引入新的高风险面则标记 blocked，不能开启无界 review 循环。
-3. 写 \`summary.md\`：改动、新建、复用、验证、审查深度、findings 处置、跳过步骤和残余风险。
+3. 基于 accepted target、任务起始 baseline、实际读回状态和 task-owned diff 写 \`summary.md\` 及任何 commit/PR 文案：记录改动、新建、复用、验证、审查深度、findings 处置、跳过步骤和残余风险；保留 \`excludedScope\`、失败验证、blocker、迁移/回滚和审计事实。
 4. CLI 确认所需审查领域完成且 blocker 清零后才写 \`completed\`；否则用 \`--status blocked --blocking-reason "<原因>"\`。
 5. 关键决策 appendTeamDecision 到 \`decisions.md\`，更新 Active Plans。发现新的高频领域词时向用户提议，经用户确认后用 \`mancode context glossary add\` 登记，不得未经确认写入术语表。
 6. worktree 合并前取得用户确认；终态写入成功后 state 回 solo 并清空 workflow 指针。

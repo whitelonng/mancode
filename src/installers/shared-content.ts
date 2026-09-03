@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../context/accepted-state-narrative-guidance.js';
 import {
   INTERFACE_EMOJI_ICON_GUIDANCE,
   VISUAL_DIRECTION_SELECTION_GUIDANCE,
@@ -121,6 +122,8 @@ function renderPracticeRules(): string {
     '6. Only then write the smallest new implementation.',
     '',
     'For every task, consider: why this change, what already exists, and what is the smallest useful diff?',
+    '',
+    `- ${ACCEPTED_STATE_NARRATIVE_GUIDANCE}`,
     '',
     'In solo mode, use the narrowest meaningful validation and one bounded self-check limited to the current diff. Do not start another reviewer or repeat the review.',
     'Recommend man and explain the trigger when platform entry/flow differs, the semantic owner or source of truth is unclear, status/contract/policy semantics change, scope/architecture/cost/acceptance crosses files or modules, or historical compatibility, migration, cross-platform, or team evidence is required. Auth, payment, sensitive data, deletion, public APIs, untrusted input, concurrency, and infrastructure remain hard-risk signals. Advice alone never changes mode, step, policy, or authority.',

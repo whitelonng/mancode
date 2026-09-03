@@ -18,18 +18,29 @@ try {
   await mkdir(projectRoot, { recursive: true });
   runCli(['init', '--empty', '--platform', 'all', '--lang', 'en']);
 
-  const generatedFiles = [
+  const bootstrapFiles = new Set([
     'CLAUDE.md',
-    '.claude/skills/man/SKILL.md',
     '.cursor/rules/mancode-continuity.mdc',
-    '.cursor/commands/man.md',
     'AGENTS.md',
+    '.github/copilot-instructions.md',
+  ]);
+  const manFiles = new Set([
+    '.claude/skills/man/SKILL.md',
+    '.cursor/commands/man.md',
     '.agents/skills/man/SKILL.md',
     '.dsh/skills/man/SKILL.md',
-    '.github/copilot-instructions.md',
     '.github/prompts/man.prompt.md',
     '.qoder/commands/man.md',
-  ];
+  ]);
+  const manteamFiles = new Set([
+    '.claude/skills/manteam/SKILL.md',
+    '.cursor/commands/manteam.md',
+    '.agents/skills/manteam/SKILL.md',
+    '.dsh/skills/manteam/SKILL.md',
+    '.github/prompts/manteam.prompt.md',
+    '.qoder/commands/manteam.md',
+  ]);
+  const generatedFiles = [...bootstrapFiles, ...manFiles, ...manteamFiles];
 
   for (const relativePath of generatedFiles) {
     const content = await readFile(
@@ -37,6 +48,31 @@ try {
       'utf8',
     );
     assertGeneratedContract(relativePath, content);
+    if (bootstrapFiles.has(relativePath)) {
+      assertContainsAll(relativePath, content, [
+        'accepted target',
+        'task-owned diff',
+        'Rejected session-only proposals',
+        'mark them unverified',
+      ]);
+    }
+    if (manFiles.has(relativePath)) {
+      assertContainsAll(relativePath, content, [
+        'completion, a commit, or a PR',
+        'accepted requirements and plan',
+        'task-owned diff from the bound `baseHead`',
+        'Preserve failures, blockers',
+        'report it as unverified',
+      ]);
+    }
+    if (manteamFiles.has(relativePath)) {
+      assertContainsAll(relativePath, content, [
+        'Before any handoff, commit, or PR',
+        'current authoritative task and handoff state plus the task-owned diff',
+        'every formal handoff status and resolution reason',
+        'mark it unverified',
+      ]);
+    }
   }
 
   const status = runCli(['status', '--brief', '--json']);
@@ -90,6 +126,15 @@ function assertGeneratedContract(relativePath, content) {
     assert(
       !content.includes(forbidden),
       `${relativePath} exposes stale guidance: ${forbidden}`,
+    );
+  }
+}
+
+function assertContainsAll(relativePath, content, requiredValues) {
+  for (const required of requiredValues) {
+    assert(
+      content.includes(required),
+      `${relativePath} is missing compiled delivery guidance: ${required}`,
     );
   }
 }

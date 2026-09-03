@@ -17,6 +17,7 @@ import {
   EXIT_UNSUPPORTED_PLATFORM,
   install,
 } from '../src/commands/install.js';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state-narrative-guidance.js';
 import { DEFAULT_CONFIG } from '../src/templates/defaults.js';
 
 describe('mancode install', () => {
@@ -40,6 +41,20 @@ describe('mancode install', () => {
     await silentInit(dir);
     const code = await install(dir, 'claude-code');
     expect(code).toBe(EXIT_OK);
+
+    for (const relativePath of [
+      ['.claude', 'skills', 'solo', 'SKILL.md'],
+      ['.claude', 'skills', 'man', 'SKILL.md'],
+      ['.claude', 'skills', 'manba', 'SKILL.md'],
+      ['.claude', 'skills', 'manteam', 'SKILL.md'],
+      ['.claude', 'agents', 'head-coach.md'],
+    ]) {
+      const content = await readFile(path.join(dir, ...relativePath), 'utf-8');
+      expect(content).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+      expect(countOccurrences(content, ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toBe(
+        1,
+      );
+    }
   });
 
   it('reinstalls hooks and skills with --force', async () => {
@@ -279,6 +294,12 @@ describe('mancode install', () => {
     expect(
       await pathExists(path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md')),
     ).toBe(true);
+    const solo = await readFile(
+      path.join(dir, '.claude', 'skills', 'solo', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(solo).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(countOccurrences(solo, ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toBe(1);
     expect(await pathExists(path.join(dir, '.claude', 'skills', 'manba'))).toBe(
       false,
     );
@@ -773,4 +794,8 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function countOccurrences(value: string, needle: string): number {
+  return value.split(needle).length - 1;
 }

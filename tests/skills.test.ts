@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state-narrative-guidance.js';
 import { installClaudeCode } from '../src/installers/claude-code.js';
 import { renderModeSkill } from '../src/installers/mode-skills.js';
 import { SOLO_SKILL } from '../src/templates/inline.js';
@@ -72,6 +73,7 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toMatch(/Historical \/ Compatibility Impact/);
     expect(MAN_SKILL.body).toMatch(/complexity bearer/);
     expect(MAN_SKILL.body).toMatch(/一个 recommendation/);
+    expect(MAN_SKILL.body).toMatch(/拒绝其他方向的主要理由/);
     expect(MAN_SKILL.body).toMatch(/简单任务.*只列一个方向/);
     expect(MAN_SKILL.body).toMatch(/stop conditions/);
     expect(MAN_SKILL.body).toMatch(/Domain Matrix/);
@@ -96,6 +98,12 @@ describe('mvp-2 skills', () => {
     expect(MAN_SKILL.body).toContain('自述');
     expect(MAN_SKILL.body).toContain('finalization blockers');
     expect(MAN_SKILL.body).toContain('repo-relative path 或 glob');
+    expect(MAN_SKILL.body).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(
+      countOccurrences(MAN_SKILL.body, ACCEPTED_STATE_NARRATIVE_GUIDANCE),
+    ).toBe(1);
+    expect(MAN_SKILL.body).toMatch(/task-owned diff/);
+    expect(MAN_SKILL.body).toMatch(/excludedScope.*失败验证.*blocker/);
   });
 
   it('keeps solo review bounded and lightweight', () => {
@@ -131,6 +139,10 @@ describe('mvp-2 skills', () => {
     expect(SOLO_SKILL).toContain('present 2-3 distinct product-appropriate');
     expect(SOLO_SKILL).toContain('do not count as a selected visual direction');
     expect(SOLO_SKILL).not.toContain('发现只产生建议权，不产生执行权');
+    expect(SOLO_SKILL).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(
+      countOccurrences(SOLO_SKILL, ACCEPTED_STATE_NARRATIVE_GUIDANCE),
+    ).toBe(1);
   });
 
   it('defines manba diagnosis and real browser validation boundaries', () => {
@@ -149,6 +161,13 @@ describe('mvp-2 skills', () => {
     expect(MAMBA_SKILL.body).toMatch(/--status in_progress/);
     expect(MAMBA_SKILL.body).toMatch(/不得自动恢复父任务/);
     expect(MAMBA_SKILL.body).toMatch(/unrelated active workflow/);
+    expect(MAMBA_SKILL.body).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(
+      countOccurrences(MAMBA_SKILL.body, ACCEPTED_STATE_NARRATIVE_GUIDANCE),
+    ).toBe(1);
+    expect(MAMBA_SKILL.body).toMatch(
+      /no_repro.*blocked\/manual_test_required.*失败验证.*负向或权限结果/,
+    );
   });
 
   it('keeps manteam and mansolo workflow constraints', () => {
@@ -167,6 +186,12 @@ describe('mvp-2 skills', () => {
     expect(MANSOLO_SKILL.body).toMatch(/shared\/context\/glossary\.json/);
     expect(MANTEAM_SKILL.body).toMatch(/发现只产生建议权，不产生执行权/);
     expect(MANSOLO_SKILL.body).not.toContain('发现只产生建议权，不产生执行权');
+    expect(MANTEAM_SKILL.body).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(
+      countOccurrences(MANTEAM_SKILL.body, ACCEPTED_STATE_NARRATIVE_GUIDANCE),
+    ).toBe(1);
+    expect(MANTEAM_SKILL.body).toMatch(/task-owned diff/);
+    expect(MANTEAM_SKILL.body).toMatch(/rejected\/cancelled.*reason/);
   });
 
   it('keeps non-Claude mode files on the same validated workflow contract', () => {
@@ -186,6 +211,7 @@ describe('mvp-2 skills', () => {
     expect(man).toMatch(/Current Behavior Evidence/);
     expect(man).toMatch(/complexity bearer/);
     expect(man).toMatch(/exactly one recommendation/);
+    expect(man).toMatch(/rejection reasons/);
     expect(man).toMatch(/one real direction/);
     expect(man).toMatch(/Domain Matrix/);
     expect(man).toContain('NEEDS_REALIGNMENT');
@@ -195,6 +221,9 @@ describe('mvp-2 skills', () => {
       'Discovery produces evidence and recommendations, never execution authority.',
     );
     expect(man).toMatch(/implementation scope/);
+    expect(man).not.toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(man).toMatch(/task-owned diff/);
+    expect(man).toMatch(/excluded scope, failed verification, blockers/);
 
     const manba = renderModeSkill('manba', '/');
     expect(manba).toMatch(/workflow create manba/);
@@ -207,12 +236,21 @@ describe('mvp-2 skills', () => {
     expect(manba).toMatch(/--status in_progress/);
     expect(manba).toMatch(/Never auto-resume manual_test_required/);
     expect(manba).toMatch(/unrelated active workflow/);
+    expect(manba).not.toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(manba).toMatch(
+      /observed final state.*no_repro.*blocked\/manual_test_required.*failed validation/,
+    );
 
     const manteam = renderModeSkill('manteam', '/');
     expect(manteam).toMatch(/Step 1 through Step 9/);
     expect(manteam).toMatch(/linked manba child/);
     expect(manteam).toContain(
       'Discovery produces evidence and recommendations, never execution authority.',
+    );
+    expect(manteam).not.toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(manteam).toMatch(/task-owned diff/);
+    expect(manteam).toMatch(
+      /formal rejected or cancelled handoff states and reasons/,
     );
 
     const mansolo = renderModeSkill('mansolo', '/');
@@ -242,6 +280,8 @@ describe('mvp-2 skills', () => {
     expect(solo).toContain('Never use emoji as interface icons');
     expect(solo).toContain('Emoji remain allowed inside user-authored content');
     expect(solo).toContain('present 2-3 distinct product-appropriate');
+    expect(solo).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(countOccurrences(solo, ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toBe(1);
     for (const skill of MVP2_SKILLS) {
       const content = await readFile(
         path.join(dir, '.claude', 'skills', skill.name, 'SKILL.md'),
@@ -251,3 +291,7 @@ describe('mvp-2 skills', () => {
     }
   });
 });
+
+function countOccurrences(value: string, needle: string): number {
+  return value.split(needle).length - 1;
+}

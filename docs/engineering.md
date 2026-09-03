@@ -60,6 +60,19 @@ metadata、requirements、plan、ledger、claim 和 handoff；只有受支持的
 计划时必须继承其 requirements、plan 和 `implementationScope`，不能重新规划或扩权。
 这些状态写入既有 ledger、plan revision 和 workflow metadata，不建立第二套提示词 authority。
 
+## 基于已接受状态的交付叙事
+
+最终用户可见的标题、文件名、注释、commit、PR、summary 和 handoff 叙事应从已接受
+目标、权威基线、实际读回状态和本任务 diff 生成，并假设读者没有参与工作会话。仅在
+会话中被否决的方案或措辞修正不进入最终产物的交付身份；只有当它们构成必要的审计事实、
+引用或用户明确要求的比较时才保留。
+
+这条规则只约束交付叙事，不修改执行授权或审计事实。requirements、计划中的真实方案
+比较、`excludedScope`、review/verification 证据、失败与 blocker、迁移和兼容影响、
+安全事实、引用内容以及 handoff 的结构化状态和 resolution reason 必须保留。工具、hook
+或外部平台创建或改写用户可见表面后，应在能力允许时读回实际结果；无法读回时报告该
+表面未验证，不能把提示词规则描述成确定性保证。
+
 ## 代码地图
 
 | 目录 | 职责 |

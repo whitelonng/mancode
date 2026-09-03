@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state-narrative-guidance.js';
 import { generateSharedContent } from '../src/installers/shared-content.js';
 
 describe('generateSharedContent', () => {
@@ -66,6 +67,10 @@ describe('generateSharedContent', () => {
     expect(content).toContain('NEEDS_REALIGNMENT');
     expect(content).toContain('MANCODE_REFRAME_REQUIRED');
     expect(content).toContain('do not call generic workflow update');
+    expect(content).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(countOccurrences(content, ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toBe(
+      1,
+    );
   });
 
   it('renders the public manba name for legacy workflow state', async () => {
@@ -267,6 +272,10 @@ describe('generateSharedContent', () => {
     });
 
     expect(content).toContain('mancode Practice Rules');
+    expect(content).toContain(ACCEPTED_STATE_NARRATIVE_GUIDANCE);
+    expect(countOccurrences(content, ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toBe(
+      1,
+    );
     expect(content).not.toContain('mancode Modes');
     expect(content).not.toContain('mancode Platform Downgrade');
   });
@@ -295,3 +304,7 @@ describe('generateSharedContent', () => {
     );
   }
 });
+
+function countOccurrences(value: string, needle: string): number {
+  return value.split(needle).length - 1;
+}
