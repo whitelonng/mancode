@@ -643,6 +643,10 @@ describe('V3 adapter bootstrap integration', () => {
     expect(man).toContain(
       'workflow checkpoint <namespace:ULID> show <checkpoint-ULID> --json',
     );
+    expect(man).toContain(
+      'operation repair <operation-ULID> --replacement-checkpoint-id <fresh-ULID> --session <id> --client <active-client>',
+    );
+    expect(man).toContain('limited to that proven reframe checkpoint conflict');
     expect(man).toContain('--delivery --session <id> --client <active-client>');
     expect(man).toContain('one total review (not one per snippet');
     expect(man).toContain('goal → implementation');

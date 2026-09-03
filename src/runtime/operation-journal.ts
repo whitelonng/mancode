@@ -81,6 +81,11 @@ export interface OperationJournalV1 {
 export interface OperationTransitionOptions {
   /** True only before any external write, or after verified compensation. */
   canAbort: boolean;
+  /** Narrow repair-only rebinding for a conflicted reframe checkpoint target. */
+  reframeCheckpointReplacement?: {
+    fromCheckpointId: Ulid;
+    toCheckpointId: Ulid;
+  };
 }
 
 const OPERATION_TYPES = new Set<OperationType>([
@@ -220,7 +225,11 @@ export function assertOperationJournalTransition(
   next: OperationJournalV1,
   options: OperationTransitionOptions,
 ): void {
-  assertJournalIdentityIsStable(previous, next);
+  assertJournalIdentityIsStable(
+    previous,
+    next,
+    options.reframeCheckpointReplacement,
+  );
   assertStepProgresses(previous.steps, next.steps);
   if (previous.state === next.state) return;
   if (!allowedOperationTransitions(previous.state).has(next.state)) {
@@ -433,6 +442,7 @@ function parseTimestamp(value: unknown, label: string): string {
 function assertJournalIdentityIsStable(
   previous: OperationJournalV1,
   next: OperationJournalV1,
+  replacement: OperationTransitionOptions['reframeCheckpointReplacement'],
 ): void {
   if (
     previous.operationId !== next.operationId ||
@@ -443,15 +453,74 @@ function assertJournalIdentityIsStable(
     previous.sessionId !== next.sessionId ||
     JSON.stringify(previous.authorizationBasis) !==
       JSON.stringify(next.authorizationBasis) ||
-    previous.recoveryPayloadDigest !== next.recoveryPayloadDigest ||
     previous.startedAt !== next.startedAt ||
     JSON.stringify(previous.secondaryReservations) !==
-      JSON.stringify(next.secondaryReservations) ||
-    JSON.stringify(previous.entityLocks) !== JSON.stringify(next.entityLocks) ||
-    JSON.stringify(previous.expectedRevisions) !==
-      JSON.stringify(next.expectedRevisions)
+      JSON.stringify(next.secondaryReservations)
   ) {
     throw new Error('operation journal identity fields are immutable');
+  }
+  if (replacement === undefined) {
+    if (
+      previous.recoveryPayloadDigest !== next.recoveryPayloadDigest ||
+      JSON.stringify(previous.entityLocks) !==
+        JSON.stringify(next.entityLocks) ||
+      JSON.stringify(previous.expectedRevisions) !==
+        JSON.stringify(next.expectedRevisions)
+    ) {
+      throw new Error('operation journal identity fields are immutable');
+    }
+    return;
+  }
+  assertReframeCheckpointReplacement(previous, next, replacement);
+}
+
+function assertReframeCheckpointReplacement(
+  previous: OperationJournalV1,
+  next: OperationJournalV1,
+  replacement: NonNullable<
+    OperationTransitionOptions['reframeCheckpointReplacement']
+  >,
+): void {
+  assertUlid(replacement.fromCheckpointId, 'reframe replacement checkpointId');
+  assertUlid(replacement.toCheckpointId, 'reframe replacement checkpointId');
+  if (
+    replacement.fromCheckpointId === replacement.toCheckpointId ||
+    previous.type !== 'reframe' ||
+    next.type !== 'reframe' ||
+    previous.state !== 'repair_required' ||
+    next.state !== 'repair_required' ||
+    previous.secondaryReservations.length !== 0 ||
+    previous.recoveryPayloadDigest === undefined ||
+    next.recoveryPayloadDigest === undefined ||
+    previous.recoveryPayloadDigest === next.recoveryPayloadDigest ||
+    JSON.stringify(previous.steps) !== JSON.stringify(next.steps)
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+  }
+  const fromKey = `checkpoint:${replacement.fromCheckpointId}`;
+  const toKey = `checkpoint:${replacement.toCheckpointId}`;
+  if (
+    previous.entityLocks.filter((key) => key === fromKey).length !== 1 ||
+    previous.entityLocks.includes(toKey) ||
+    JSON.stringify(next.entityLocks) !==
+      JSON.stringify(
+        previous.entityLocks.map((key) => (key === fromKey ? toKey : key)),
+      ) ||
+    previous.expectedRevisions[fromKey] !== 0 ||
+    previous.expectedRevisions[toKey] !== undefined
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+  }
+  const expectedRevisions = Object.fromEntries(
+    Object.entries(previous.expectedRevisions).map(([key, revision]) => [
+      key === fromKey ? toKey : key,
+      revision,
+    ]),
+  );
+  if (
+    JSON.stringify(next.expectedRevisions) !== JSON.stringify(expectedRevisions)
+  ) {
+    throw new Error('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
   }
 }
 

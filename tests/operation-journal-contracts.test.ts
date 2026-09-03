@@ -6,7 +6,10 @@ import {
 } from '../src/runtime/operation-journal.js';
 
 const ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7H';
+const CHECKPOINT_A = '01JZ4B6W5Z0A1B2C3D4E5F6G7J';
+const CHECKPOINT_B = '01JZ4B6W5Z0A1B2C3D4E5F6G7K';
 const DIGEST = `sha256:${'a'.repeat(64)}`;
+const NEXT_DIGEST = `sha256:${'b'.repeat(64)}`;
 
 describe('operation journal contract', () => {
   it('rejects malformed entity locks, reservations, and steps before they can become durable', () => {
@@ -131,6 +134,81 @@ describe('operation journal contract', () => {
         canAbort: false,
       }),
     ).toThrow(/cannot abort/);
+  });
+
+  it('allows only the exact checkpoint lock and payload rebind for a repair-required reframe', () => {
+    const previous = parseOperationJournal({
+      ...journal(),
+      type: 'reframe',
+      state: 'repair_required',
+      recoveryPayloadDigest: DIGEST,
+      entityLocks: ['task:local:01JZ', `checkpoint:${CHECKPOINT_A}`],
+      expectedRevisions: {
+        'task:local:01JZ': 7,
+        [`checkpoint:${CHECKPOINT_A}`]: 0,
+      },
+      steps: [
+        { id: 'validate', state: 'completed' },
+        { id: 'write', state: 'pending' },
+      ],
+    });
+    const next = parseOperationJournal({
+      ...previous,
+      recoveryPayloadDigest: NEXT_DIGEST,
+      entityLocks: ['task:local:01JZ', `checkpoint:${CHECKPOINT_B}`],
+      expectedRevisions: {
+        'task:local:01JZ': 7,
+        [`checkpoint:${CHECKPOINT_B}`]: 0,
+      },
+      updatedAt: '2026-07-17T10:01:00.000Z',
+    });
+    const replacement = {
+      canAbort: false,
+      reframeCheckpointReplacement: {
+        fromCheckpointId: CHECKPOINT_A,
+        toCheckpointId: CHECKPOINT_B,
+      },
+    } as const;
+
+    expect(() =>
+      assertOperationJournalTransition(previous, next, replacement),
+    ).not.toThrow();
+    expect(() =>
+      assertOperationJournalTransition(previous, next, { canAbort: false }),
+    ).toThrow(/identity fields are immutable/);
+    expect(() =>
+      assertOperationJournalTransition(
+        previous,
+        parseOperationJournal({
+          ...next,
+          steps: next.steps.map((step) => ({
+            ...step,
+            state: 'completed' as const,
+          })),
+        }),
+        replacement,
+      ),
+    ).toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+    expect(() =>
+      assertOperationJournalTransition(
+        previous,
+        parseOperationJournal({
+          ...next,
+          expectedRevisions: {
+            ...next.expectedRevisions,
+            'task:local:01JZ': 8,
+          },
+        }),
+        replacement,
+      ),
+    ).toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
+    expect(() =>
+      assertOperationJournalTransition(
+        parseOperationJournal({ ...previous, type: 'handoff_accept' }),
+        parseOperationJournal({ ...next, type: 'handoff_accept' }),
+        replacement,
+      ),
+    ).toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_INVALID');
   });
 });
 

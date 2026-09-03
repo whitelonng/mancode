@@ -155,6 +155,21 @@ describe('operation recovery executor', () => {
     });
   });
 
+  it('rejects replacement checkpoint recovery for non-reframe operations', async () => {
+    const operationId = id(12);
+    await prepareInterruptedPlan(operationId, '# Interrupted plan\n', true);
+
+    await expect(
+      executeOperationRecovery({
+        projectRoot: root,
+        operationId,
+        actorId,
+        sessionId,
+        replacementCheckpointId: id(13),
+      }),
+    ).rejects.toThrow('MANCODE_REFRAME_CHECKPOINT_REPLACEMENT_UNSUPPORTED');
+  });
+
   it('removes only the abandoned private workflow staging directory before a safe abort', async () => {
     const operationId = id(10);
     const recoveryTaskId = id(11);

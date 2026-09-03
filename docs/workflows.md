@@ -210,6 +210,17 @@ mancode workflow checkpoint local:<ULID> show <CHECKPOINT_ULID> --json
 
 archive 输出会校验归档摘要，并返回 reframe 前的 requirements 与 plan；checkpoint 输出返回该次 reframe 的完整 checkpoint。这两个命令不修改 workflow，也不需要 `--session`。
 
+新版本会在 reframe 创建 journal 或修改业务 authority 前拒绝已存在的 checkpoint ID。仅当旧版本已经留下一个 `repair_required` reframe，且普通 `operation repair` 明确因为该 ID 被另一 operation 的 checkpoint 占用而无法前向恢复时，才使用定向替换：
+
+```bash
+mancode operation show <REFRAME_OPERATION_ULID> --json
+mancode operation repair <REFRAME_OPERATION_ULID> \
+  --replacement-checkpoint-id <FRESH_CHECKPOINT_ULID> \
+  --session <ORIGINAL_SESSION_ID> --client <CLIENT> --json
+```
+
+该命令只重绑定原 reframe 的 checkpoint、最终 metadata、aggregate 与 task-head fence 目标，然后继续原 operation；它不会删除或覆盖占用旧 ID 的 checkpoint。非 reframe、非 `repair_required`、存在 secondary reservation、资源已漂移或 replacement ID 已占用时都会拒绝。若换绑后再次中断，非终态恢复必须携带同一个 replacement ID 精确重试；终态 operation 不带替换参数时仍返回通用终态结果，携带替换参数时只接受原 replacement ID。其他中断仍使用不带该参数的 `operation repair`；不得通过删除 operation journal、recovery payload、checkpoint 或任务状态解除 adapter upgrade 门禁。
+
 ## Session 与 Context Pack
 
 session 是 checkout-local 的调用身份，不决定任务是否完成。没有真实宿主传播证据时，mutating command 必须显式传 `--session`。

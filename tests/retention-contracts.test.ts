@@ -14,6 +14,10 @@ import {
   operationDirectory,
   resolveLocalEntityHomeStore,
 } from '../src/runtime/entity-home-store.js';
+import {
+  operationRecoveryPayloadPath,
+  operationRecoveryPayloadVersionPath,
+} from '../src/runtime/operation-recovery-store.js';
 import { readOperationJournal } from '../src/runtime/operation-store.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
 import {
@@ -190,6 +194,123 @@ describe('V3 retention and compaction', () => {
         expect.objectContaining({ kind: 'checkpoint' }),
       ]),
     });
+  });
+
+  it('deletes every recovery payload version with an aged terminal operation', async () => {
+    const runtime = await readProjectRuntimeContext(root);
+    const localStore = resolveLocalEntityHomeStore(
+      runtime.entityHomeStoreContext,
+    );
+    const operationId = id(7);
+    const journal = await readOperationJournal(localStore, operationId);
+    if (journal?.recoveryPayloadDigest === undefined) {
+      throw new Error('missing terminal operation recovery payload');
+    }
+    const journalTarget = path.join(
+      operationDirectory(localStore),
+      `${operationId}.json`,
+    );
+    await writeFile(
+      journalTarget,
+      `${JSON.stringify(
+        {
+          ...journal,
+          startedAt: '2026-05-01T00:00:00.000Z',
+          updatedAt: '2026-05-01T01:00:00.000Z',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const canonicalPayload = operationRecoveryPayloadPath(
+      localStore,
+      operationId,
+    );
+    const boundVersion = operationRecoveryPayloadVersionPath(
+      localStore,
+      operationId,
+      journal.recoveryPayloadDigest,
+    );
+    const orphanVersion = operationRecoveryPayloadVersionPath(
+      localStore,
+      operationId,
+      `sha256:${'f'.repeat(64)}`,
+    );
+    await Promise.all([
+      writeFile(boundVersion, '{}\n'),
+      writeFile(orphanVersion, '{}\n'),
+    ]);
+
+    const plan = await planContextCompaction({ projectRoot: root, now: NOW });
+    const candidate = plan.candidates.find(
+      (entry) => entry.target === journalTarget,
+    );
+    expect(candidate?.relatedTargets).toEqual(
+      expect.arrayContaining([canonicalPayload, boundVersion, orphanVersion]),
+    );
+
+    const applied = await applyContextCompaction(plan);
+    expect(applied.deleted).toEqual(
+      expect.arrayContaining([
+        journalTarget,
+        canonicalPayload,
+        boundVersion,
+        orphanVersion,
+      ]),
+    );
+    await Promise.all(
+      [journalTarget, canonicalPayload, boundVersion, orphanVersion].map(
+        (target) => expect(readFile(target, 'utf8')).rejects.toThrow(),
+      ),
+    );
+  });
+
+  it('keeps the operation journal when recovery payload deletion is interrupted', async () => {
+    const runtime = await readProjectRuntimeContext(root);
+    const localStore = resolveLocalEntityHomeStore(
+      runtime.entityHomeStoreContext,
+    );
+    const operationId = id(7);
+    const journal = await readOperationJournal(localStore, operationId);
+    if (journal?.recoveryPayloadDigest === undefined) {
+      throw new Error('missing terminal operation recovery payload');
+    }
+    const journalTarget = path.join(
+      operationDirectory(localStore),
+      `${operationId}.json`,
+    );
+    await writeFile(
+      journalTarget,
+      `${JSON.stringify(
+        {
+          ...journal,
+          startedAt: '2026-05-01T00:00:00.000Z',
+          updatedAt: '2026-05-01T01:00:00.000Z',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const plan = await planContextCompaction({ projectRoot: root, now: NOW });
+    const candidate = plan.candidates.find(
+      (entry) => entry.target === journalTarget,
+    );
+    const failingTarget = candidate?.relatedTargets[0];
+    if (candidate === undefined || failingTarget === undefined) {
+      throw new Error('missing operation recovery retention target');
+    }
+    await rm(failingTarget, { force: true });
+    await mkdir(failingTarget);
+
+    await expect(
+      applyContextCompaction({
+        ...plan,
+        candidates: [candidate],
+      }),
+    ).rejects.toThrow('MANCODE_RETENTION_PATH_UNSAFE');
+    await expect(readFile(journalTarget, 'utf8')).resolves.toContain(
+      operationId,
+    );
   });
 
   it('keeps a repair-required journal and the session and task artifacts it protects', async () => {

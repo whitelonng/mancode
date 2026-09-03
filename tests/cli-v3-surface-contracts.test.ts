@@ -42,6 +42,9 @@ describe('V3 CLI command surface', () => {
         commandAt(cliProgram, 'context', 'glossary').helpInformation(),
       ).toContain('--expected-revision');
       expect(commandAt(cliProgram, 'operation', 'repair')).toBeDefined();
+      expect(
+        commandAt(cliProgram, 'operation', 'repair').helpInformation(),
+      ).toContain('--replacement-checkpoint-id');
       expect(commandAt(cliProgram, 'operation', 'abort')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'status')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'upgrade')).toBeDefined();
