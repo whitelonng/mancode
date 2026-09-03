@@ -37,6 +37,7 @@ import {
   buildTaskAggregateManifest,
 } from './aggregate.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
+import { assertManDeliveryReady } from './man-delivery-runtime.js';
 import { V3ContextStore } from './store.js';
 import {
   assertTaskCodeHeadUnchanged,
@@ -101,6 +102,7 @@ export async function completeV3Task(
       throw new Error('MANCODE_GIT_REF_TRANSPORT_NOT_IMPLEMENTED');
     }
     const activeChildren = await context.store.listActiveChildTaskRefs(taskRef);
+    await assertManDeliveryReady(input.projectRoot, context.task);
     assertTaskCompletionGate(
       {
         metadata: context.task.metadata,

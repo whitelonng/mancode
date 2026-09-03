@@ -57,6 +57,10 @@ adapter upgrade 先在 staging 中生成预览，用户确认后再通过 journa
 
 ## Legacy hooks
 
+初始化生成的 `AGENTS.md` / `CLAUDE.md` 现在包含限定于新 `/man` 模块交付策略的文档交接和执行效率规则。项目计划目录优先沿用明确约定，默认 `doc/`；不强制其他模式建计划、审核或提交。规则不保存任务状态，也不授权修改未批准的业务代码。
+
+新 man 入口显式使用 `workflow create man --delivery`，引导一次模块总审、真实验证、文档回写和提交/发布分离。`manba`、`manteam`、`manps`、`mansolo` 的入口流程不变。详细数据格式与限制见 [新 man 模块交付](./workflows.md#新-man一次模块审核与文档交付)。仅更新源码不会改写已安装文件；现有项目仍走上文的 adapter upgrade 预览和确认流程。
+
 只有 `mancode init --legacy` 安装读取 `.mancode/state.json` 的旧 Claude Code hooks。Continuity adapter 不应创建、读取或刷新 legacy authority。
 
 Continuity 的 Claude Code bootstrap 位于根目录 `CLAUDE.md` 的 `mancode:continuity:claude` 托管区，确保普通 Solo 请求也会加载；原有 mode skills 仍位于 `.claude/skills/`。Cursor bootstrap 位于 `.cursor/rules/mancode-continuity.mdc`，其他嵌入式托管区同样使用 `mancode:continuity:*` 标记。升级时只自动移除带 mancode 旧管理标记的 `mancode-v3`/旧 Continuity bootstrap 或托管区；用户在 `CLAUDE.md` 和同名旧文件中的自写内容会保留。

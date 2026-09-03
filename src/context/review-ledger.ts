@@ -5,6 +5,10 @@ import {
 } from './artifact-ref.js';
 import { digestCanonicalJson, sortUtf8StringSet } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
+import {
+  type ManReviewEvidence,
+  parseManReviewEvidence,
+} from './man-delivery-evidence.js';
 import { assertSharedTextSafe } from './privacy.js';
 import type { ItemIdentity } from './requirements-ledger.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
@@ -33,6 +37,8 @@ export interface ReviewLedgerContext {
 }
 
 export interface ReviewLedgerV1 {
+  /** Present only on explicitly enabled man delivery tasks. */
+  delivery?: ManReviewEvidence;
   schemaVersion: 1;
   canonicalizationVersion: 'mancode-jcs-v1';
   taskRef: TaskRef;
@@ -130,6 +136,7 @@ export function parseReviewLedger(value: unknown): ReviewLedgerV1 {
       'contentDigest',
       'lastOperationId',
       'updatedAt',
+      'delivery',
     ],
     'review ledger',
   );
@@ -144,6 +151,9 @@ export function parseReviewLedger(value: unknown): ReviewLedgerV1 {
   }
   const taskRef = parseTaskRefValue(value.taskRef);
   const ledger: ReviewLedgerV1 = {
+    ...(value.delivery === undefined
+      ? {}
+      : { delivery: parseManReviewEvidence(value.delivery) }),
     schemaVersion: 1,
     canonicalizationVersion: 'mancode-jcs-v1',
     taskRef,
@@ -181,6 +191,8 @@ export function parseReviewLedger(value: unknown): ReviewLedgerV1 {
     updatedAt: parseTimestamp(value.updatedAt, 'review ledger updatedAt'),
   };
   assertReviewLedgerShape(ledger);
+  if (taskRef.namespace === 'shared' && ledger.delivery)
+    assertSharedTextSafe(JSON.stringify(ledger.delivery), 'man module review');
   if (ledger.contentDigest !== reviewLedgerDigest(ledger)) {
     throw new Error(
       'review ledger contentDigest does not match canonical content',
@@ -192,6 +204,7 @@ export function parseReviewLedger(value: unknown): ReviewLedgerV1 {
 
 export function reviewLedgerDigest(ledger: ReviewLedgerV1): string {
   return digestCanonicalJson({
+    ...(ledger.delivery === undefined ? {} : { delivery: ledger.delivery }),
     schemaVersion: ledger.schemaVersion,
     canonicalizationVersion: ledger.canonicalizationVersion,
     taskRef: ledger.taskRef,

@@ -257,6 +257,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
               <code data-cli-command="workflow review">mancode workflow review</code> ·
               <code data-cli-command="workflow verify">mancode workflow verify</code> ·
               <code data-cli-command="workflow complete">mancode workflow complete</code> ·
+              <code data-cli-command="workflow delivery">mancode workflow delivery</code> ·
               <code data-cli-command="workflow scope">mancode workflow scope</code> ·
               <code data-cli-command="workflow reframe">mancode workflow reframe</code> ·
               <code data-cli-command="workflow archive">mancode workflow archive</code> ·
@@ -394,6 +395,8 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <article class="command-card"><header><h3>Plan only</h3><span>Stop</span></header><p>Use when the requested deliverable is the confirmed plan, not code.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
           </div>
           <p>All three choices require an active <code>man</code> workflow, confirmed requirements, and <code>plan.md</code>. Revise the plan with <code>workflow plan ... revise</code>; every successful mutation returns the revision required by the next command.</p>
+          <p>Newly generated <code>man</code> entries create tasks with <code>--delivery</code> (planning policy 3). This opt-in binds an approved baseline and a separate delivery record in one versionable plan, using the project's directory convention or <code>doc/</code> by default. Other modes, older tasks, and Solo handoffs keep their existing contracts.</p>
+          <p><code>workflow delivery &lt;TaskRef&gt; inspect|verify|confirm|review|sync|check|publication</code> supports one module-level review, real command evidence, manual confirmation, document writeback, and separate commit/publication checks. Mutating actions require the active session and latest expected revision. A relevant command can cover multiple criteria through <code>--acceptance AC-1,AC-2</code> without repeated runs. Review checks goal coverage, concrete defects, and unnecessary complexity; zero findings is valid. Missing upstreams or failed pushes mean unpublished delivery, not a business blocker. This mechanism does not certify an agent's semantic judgment or production readiness.</p>
 
           <h3>A valid Continuity sequence</h3>
           <p>Continuity uses explicit TaskRefs and expected revisions. The CLI owns every durable mutation; do not edit metadata files or use the legacy <code>--step</code> protocol.</p>

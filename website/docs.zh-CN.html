@@ -257,6 +257,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
               <code data-cli-command="workflow review">mancode workflow review</code> ·
               <code data-cli-command="workflow verify">mancode workflow verify</code> ·
               <code data-cli-command="workflow complete">mancode workflow complete</code> ·
+              <code data-cli-command="workflow delivery">mancode workflow delivery</code> ·
               <code data-cli-command="workflow scope">mancode workflow scope</code> ·
               <code data-cli-command="workflow reframe">mancode workflow reframe</code> ·
               <code data-cli-command="workflow archive">mancode workflow archive</code> ·
@@ -394,6 +395,8 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>只保留计划</h3><span>停止</span></header><p>用户需要的交付物是计划，而不是代码。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
           <p>三种选择都要求活动中的 <code>man</code> 工作流、已确认需求和 <code>plan.md</code>。使用 <code>workflow plan ... revise</code> 修订计划；每次成功写入都会返回下一个命令需要的 revision。</p>
+          <p>新生成的 <code>man</code> 入口通过 <code>--delivery</code> 显式启用 planning policy 3。它在同一份可版本化计划中区分批准基线与交付记录，沿用项目计划目录约定，新项目默认 <code>doc/</code>。其他模式、旧任务和 Solo handoff 保持原契约。</p>
+          <p><code>workflow delivery &lt;TaskRef&gt; inspect|verify|confirm|review|sync|check|publication</code> 支持一次模块总审、实际命令证据、人工确认、文档回写，以及提交与发布分离检查。写操作需要活动 session 和最新 expected revision。一个命令确实覆盖多个验收项时，可用 <code>--acceptance AC-1,AC-2</code> 一次登记，不重复运行。总审检查目标兑现、具体缺陷与不必要的复杂度，允许零 finding。无上游或推送失败是交付未发布，不是业务阻塞；这些机制不等于已经证明 agent 的语义判断或生产适用性。</p>
 
           <h3>一条合法的 Continuity 顺序</h3>
           <p>Continuity 使用显式 TaskRef 和 expected revision。所有持久化变更都由 CLI 完成；不要手工编辑 metadata，也不要使用 legacy <code>--step</code> 协议。</p>

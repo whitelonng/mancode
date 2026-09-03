@@ -22,6 +22,7 @@ import {
 import type { Ulid } from './ids.js';
 import {
   type RequirementsLedgerV1,
+  assertManDeliveryVerificationSurfaces,
   assertRequirementsLedgerTransition,
   assertRequirementsScopeConsistent,
   parseRequirementsLedger,
@@ -127,6 +128,14 @@ async function writeV3Requirements(
   let journal: OperationJournalV1 | null = null;
   try {
     assertRequirementsFinalizeEligible(context.task.metadata);
+    if (
+      action === 'finalize' &&
+      context.task.metadata.workflowMode === 'man' &&
+      context.task.metadata.governance.policyVersions.planning === 3 &&
+      context.task.metadata.governance.planDecision !== 'solo_handoff'
+    ) {
+      assertManDeliveryVerificationSurfaces(submitted);
+    }
     const timestamp = context.now.toISOString();
     const requirements = createReplacementRequirements(
       context.task.requirements,
