@@ -355,6 +355,7 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('"rationale": "..."');
           expect(entry).toContain('acceptanceCriteria');
           expect(entry).toContain('"method": "automated"');
+          expect(entry).toContain('"verificationSurfaces"');
           expect(entry).toContain(
             "clears this session's active workflow pointer",
           );
@@ -455,6 +456,8 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('exact unchanged current plan');
           expect(entry).toContain('repo-relative path or glob');
           expect(entry).toContain('"surface": "real_http"');
+          expect(entry).toContain('self-declared');
+          expect(entry).toContain('uncommitted outside-scope');
           expect(entry).toContain('exit code 0');
           expect(entry).toContain('review_incomplete');
         }

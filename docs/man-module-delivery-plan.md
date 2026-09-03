@@ -153,9 +153,9 @@
 
 一次总审使用：批准目标及验收项、相关架构/规范、模块开始到待审版本的完整改动、直接相关入口与调用链、已有验证结果、实际交付记录。
 
-不能只看最后一次 commit，也不能只看实现者总结。基线 diff 应区分任务开始前已有改动、本任务变更及他人变更，不要求整个仓库干净才能工作。
+不能只看最后一次 commit，也不能只看实现者总结。基线 diff 应区分任务开始前已有改动、本任务变更及他人变更；规划和实施期间不要求整个仓库干净，但最终验证与完成前必须把范围外未提交文件移出当前 checkout、stash 或单独提交，避免它参与证据后却不进入版本化交付。
 
-优先由未参与实现的 reviewer 一次完成三个方向，不按维度拆成三个 agent。平台不支持独立 reviewer 时明确标注自审及能力限制；不得伪造独立审查。需要独立审查的高风险任务未满足条件时，报告具体未验证项。
+优先由未参与实现的 reviewer 一次完成三个方向，不按维度拆成三个 agent。平台不支持独立 reviewer 时明确标注自审及能力限制；不得伪造独立审查。`reviewer` 字段只是调用者自述，不绑定另一 actor/session，不能单独作为身份认证。需要独立审查的高风险任务未满足条件时，报告具体未验证项。
 
 ### 6.2 三个方向与双向追踪
 
@@ -454,7 +454,7 @@ P5 未开始。当前测试证明确定性机制，不证明 agent 在真实宿�
 用户提供的隔离测试项目 `mancode测试`，结果记录于该项目的 `docs/results.md`。候选和旧流程的业务实现均通过真实 HTTP oracle 10/10，但候选仍暴露出以下生产交付缺口。本节修订不扩大到 Solo、`manba`、`manteam`、`manps` 或 `mansolo`。
 
 1. **审核进程结束不等于模块审核完成。** 植入跨租户泄漏和吞错的样例中，reviewer 发现一个问题后提前退出且宿主进程返回成功，但 review ledger 仍为 `stale`。公共运行时必须把它明确显示为 `review_incomplete`，给出下一步；不能让进程退出码或自然语言总结冒充 review passed。
-2. **验证证据必须声明实际观察层级。** 新 `/man` 的自动/人工交付证据需要记录 `unit`、`component`、`handler`、`real_http`、`browser`、`device`、`external_service` 或 `manual_observation`。发生环境降级时必须记录实际层级；低于计划要求时保持未验证或请求确认，不能把 handler 测试标成真实 HTTP。层级声明改善审计和审核输入，但机器不根据命令字符串猜测语义，也不把声明本身当作真实性证明。
+2. **验收要求和验证证据必须分别声明期望与实际观察层级。** 新 `/man` 的必需 acceptance criterion 通过 `verificationSurfaces` 为 automated/manual 槽位记录精确期望；实际交付证据记录 `unit`、`component`、`handler`、`real_http`、`browser`、`device`、`external_service` 或 `manual_observation`。发生环境降级时必须记录实际层级；实际值与期望值不一致时保持未验证，不能把 handler 测试标成真实 HTTP。机器不根据命令字符串猜测语义，也不把声明本身当作真实性证明。
 3. **scope 错误要能直接修复。** `implementationScope.include` / `exclude` 只接受 repo-relative path 或 glob；语义范围继续写入 requirements。计划文件未被 include 覆盖时，错误必须指出实际路径，并提示添加该精确路径或覆盖 glob。不能用难以证明正确的词表把所有中文根文件或无扩展名文件一律判非法。
 4. **轻量化只合并重复动作，不削弱门禁。** 每次 delivery mutation 应返回最新 revision、当前收尾阻塞项和准确 next action，减少重复 status/context/inspect。一个真实验证命令仍可覆盖多个明确验收 ID；模块完成后仍只做一次总审。治理动作 7–10 次是优化目标而非硬阈值，本轮不新增大型 finalize 编排器。
 
@@ -469,16 +469,16 @@ P5 未开始。当前测试证明确定性机制，不证明 agent 在真实宿�
 
 - `delivery inspect` 对 review/verification/record/commit 的未完成状态返回稳定的结构化 blocker 和 next action；`delivery check` 使用对应具体错误码。
 - reviewer 进程即使 exit 0，只要 ledger 仍为 `pending`、`stale`、`in_review` 或 `blocked` 就不能显示 ready，也不能完成任务。
-- 新 `/man` 通过的验证证据必须包含合法 observation surface；旧任务和非 man ledger 可继续解析没有该字段的历史证据。
+- 新 `/man` 的必需验收槽位必须在 requirements 声明 `verificationSurfaces`，通过的验证证据必须包含相同的合法 observation surface；旧 requirements、旧验证和非 man ledger 可继续解析没有该字段的历史记录。
 - `delivery verify` / `confirm` 拒绝缺失或非法 surface，失效证据清空旧 surface，交付记录和 inspect 可看到实际 surface。
 - 计划路径未纳入 implementation scope 时，错误包含未覆盖的 repo-relative 路径和可执行修正建议。
 - 不增加逐片段审核、重复验证、强制 reviewer 数量或通用模式门禁；其他模式契约保持通过。
 
 ### 本轮修复交付记录
 
-已按上述边界完成候选修复：`delivery inspect` 及 delivery mutation 回执现在返回结构化 `finalization`；完成检查分别报告 review、verification、交付记录、scope commit 和未提交变更。reviewer 进程返回成功但 ledger 未通过时仍显示 `review_incomplete`。验证证据新增实际 observation surface，历史 ledger 可继续读取缺失字段，但新 `/man` 不能用缺少 surface 的 passed evidence 完成交付。计划文件不在 scope 时会回报具体路径及修正方式。
+已按上述边界完成候选修复：`delivery inspect` 及 delivery mutation 回执现在返回结构化 `finalization`；完成检查分别报告 review、verification、交付记录、scope commit 和未提交变更。reviewer 进程返回成功但 ledger 未通过时仍显示 `review_incomplete`。requirements 保存每个必需槽位的期望 observation surface，交付证据保存实际 surface；历史 ledger 可继续读取缺失字段，但新 `/man` 不能用缺失或不匹配的 passed evidence 完成交付。具体文件使用真实 glob 匹配，范围外未提交文件会单独阻塞，计划文件不在 scope 时会回报具体路径及修正方式。
 
-实现没有新增逐段审核、额外 reviewer、固定命令次数或大型 finalize 编排器。结构化收尾状态集中在现有 delivery runtime；其他模式未启用新门禁。权威 mutation 后的投影或 finalization 读取失败仍返回 mutation 成功及待重试状态，不把后置投影失败伪装成写入失败。
+实现没有新增逐段审核、额外 reviewer、固定命令次数或大型 finalize 编排器。结构化收尾状态集中在现有 delivery runtime；其他模式未启用新门禁。权威 mutation 后的投影或 finalization 读取失败仍返回 mutation 成功及 `inspection_failed` diagnostic，不把确定性检查失败误报为 delivery record stale，也不把后置投影失败伪装成写入失败。
 
 验证结果：
 

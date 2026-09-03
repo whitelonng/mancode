@@ -16,6 +16,7 @@ import {
   bindManPlan,
   captureManSubject,
   inspectManPublication,
+  manInspectionFailureFinalization,
   readManPlanFile,
 } from '../src/context/man-delivery-runtime.js';
 import type { StoredTaskSnapshot } from '../src/context/store.js';
@@ -142,6 +143,24 @@ describe('man delivery content and file contracts', () => {
     } finally {
       await rm(unversioned, { recursive: true, force: true });
     }
+  });
+
+  it('reports deterministic inspection failures without calling the delivery record stale', () => {
+    expect(
+      manInspectionFailureFinalization(
+        new Error('MANCODE_MAN_PLAN_BASELINE_CHANGED'),
+      ),
+    ).toEqual({
+      status: 'incomplete',
+      blockers: [
+        expect.objectContaining({
+          code: 'inspection_failed',
+          status: 'failed',
+          nextAction: expect.stringContaining('approved plan baseline'),
+          diagnostic: 'MANCODE_MAN_PLAN_BASELINE_CHANGED',
+        }),
+      ],
+    });
   });
 
   it('checks actual upstream publication independently from delivery without configuring or pushing anything itself', async () => {

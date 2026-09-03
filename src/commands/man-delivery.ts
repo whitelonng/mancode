@@ -15,6 +15,7 @@ import {
   inspectManDelivery,
   inspectManPublication,
   isManDelivery,
+  manInspectionFailureFinalization,
   syncManDeliveryRecord,
 } from '../context/man-delivery-runtime.js';
 import {
@@ -351,18 +352,7 @@ async function inspectFinalization(
   try {
     return (await inspectManDelivery(root, task)).finalization;
   } catch (error) {
-    return {
-      status: 'incomplete',
-      blockers: [
-        {
-          code: 'delivery_record_stale',
-          status: 'inspection_failed',
-          nextAction:
-            'Run delivery inspect again; the authority mutation succeeded but finalization could not be read.',
-          diagnostic: error instanceof Error ? error.message : String(error),
-        },
-      ],
-    };
+    return manInspectionFailureFinalization(error);
   }
 }
 

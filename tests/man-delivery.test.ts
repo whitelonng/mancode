@@ -10,6 +10,8 @@ import { workflow } from '../src/commands/workflow.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
 import {
   captureManSubject,
+  inspectManDelivery,
+  manScopeContains,
   renderManDeliveryRecord,
   syncManDeliveryRecord,
 } from '../src/context/man-delivery-runtime.js';
@@ -175,6 +177,10 @@ describe('opted-in man module delivery through the public workflow command', () 
               : 'Callable export returns 2',
           required: true,
           method: id === 'AC-3' ? 'manual' : 'automated',
+          verificationSurfaces:
+            id === 'AC-3'
+              ? { manual: 'manual_observation' }
+              : { automated: 'component' },
         })),
       },
       taskRef,
@@ -259,6 +265,25 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '已完成',
     );
+    const withoutSurface = {
+      ...reviewed,
+      verification: {
+        ...reviewed.verification,
+        checks: reviewed.verification.checks.map((check, index) => {
+          if (index !== 0 || !check.automated) return check;
+          const { surface: _surface, ...automated } = check.automated;
+          return { ...check, automated };
+        }),
+      },
+    };
+    await syncManDeliveryRecord(root, withoutSurface);
+    expect(
+      await readFile(path.join(root, '项目进度.html'), 'utf8'),
+    ).not.toContain('已完成');
+    expect(await readFile(path.join(root, 'docs/export.md'), 'utf8')).toContain(
+      'Verification: surface_required',
+    );
+    await syncManDeliveryRecord(root, reviewed);
     const uncommitted = await command('inspect');
     expect(JSON.parse(uncommitted.output).finalization).toMatchObject({
       status: 'incomplete',
@@ -350,7 +375,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect((await review()).code).toBe(0);
   });
 
-  it('records required repairs, preserves tested repairs across resolution and reports committed scope expansion', async () => {
+  it('records required repairs and blocks both uncommitted and committed scope expansion', async () => {
     await finishEvidence();
     expect(
       (
@@ -391,6 +416,9 @@ describe('opted-in man module delivery through the public workflow command', () 
     // Unrelated code added before a new check is not silently attributed to the module.
     await finishEvidence();
     expect((await review()).code).toBe(0);
+    expect((await command('check')).output).toContain(
+      'UNCOMMITTED_OUTSIDE_SCOPE',
+    );
     await git(['add', '.']);
     await git(['commit', '-qm', 'mixed scope']);
     expect((await command('check')).output).toContain('OUTSIDE_SCOPE');
@@ -467,6 +495,94 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect((await snapshot()).verification.checks[0]?.automated?.surface).toBe(
       'component',
     );
+  });
+
+  it('keeps evidence below the required observation surface incomplete', async () => {
+    expect(
+      (
+        await command(
+          'verify',
+          {
+            surface: 'unit',
+            argv: [
+              process.execPath,
+              '-e',
+              "require('node:assert').equal(require('./app.cjs').run(),2)",
+            ],
+          },
+          'AC-1,AC-2',
+        )
+      ).code,
+    ).toBe(0);
+    expect(
+      (
+        await command(
+          'confirm',
+          {
+            confirmed: true,
+            surface: 'manual_observation',
+            summary: 'Fixture operator confirms the observed result.',
+          },
+          'AC-3',
+        )
+      ).code,
+    ).toBe(0);
+    expect((await snapshot()).verification.status).toBe('passed');
+    expect((await review()).code).toBe(0);
+
+    const inspection = JSON.parse((await command('inspect')).output);
+    expect(inspection.finalization).toMatchObject({
+      status: 'incomplete',
+      blockers: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'verification_incomplete',
+          status: 'surface_mismatch',
+        }),
+      ]),
+    });
+    expect(
+      await readFile(path.join(root, '项目进度.html'), 'utf8'),
+    ).not.toContain('已完成');
+    expect(await readFile(path.join(root, 'docs/export.md'), 'utf8')).toContain(
+      'Verification: surface_mismatch',
+    );
+  });
+
+  it('matches concrete task files with standard globs and sibling excludes', async () => {
+    const current = await snapshot();
+    const metadata = {
+      ...current.metadata,
+      implementationScope: {
+        ...current.metadata.implementationScope,
+        include: ['docs/*.md', 'src/**'],
+        exclude: ['src/generated/**'],
+      },
+    };
+    expect(manScopeContains(metadata, 'docs/export.md')).toBe(true);
+    expect(manScopeContains(metadata, 'src/index.ts')).toBe(true);
+    expect(manScopeContains(metadata, 'src/generated/client.ts')).toBe(false);
+
+    await mkdir(path.join(root, 'src'));
+    await writeFile(path.join(root, 'src/index.ts'), 'export const value=1;');
+    expect(
+      (await inspectManDelivery(root, { ...current, metadata })).pendingCommit,
+    ).toContain('src/index.ts');
+  });
+
+  it('accepts an extension glob that covers the bound plan path', async () => {
+    const current = await snapshot();
+    await expect(
+      syncManDeliveryRecord(root, {
+        ...current,
+        metadata: {
+          ...current.metadata,
+          implementationScope: {
+            ...current.metadata.implementationScope,
+            include: ['app.cjs', 'docs/*.md'],
+          },
+        },
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('reports the exact plan path needed by implementation scope', async () => {

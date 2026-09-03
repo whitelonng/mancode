@@ -77,6 +77,9 @@ function buildCanonicalRequirements(
       statement: item.description,
       required: item.required,
       verificationRequirement: item.method,
+      ...(item.verificationSurfaces === undefined
+        ? {}
+        : { verificationSurfaces: item.verificationSurfaces }),
     })),
     blockingUnknowns: semantic.blockingUnknowns.map((statement, index) => ({
       displayId: `U-${index + 1}`,

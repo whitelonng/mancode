@@ -54,6 +54,8 @@ draft 的 `blockingUnknowns` 必须列出开放决定；scope、coverage、techn
 
 新入口创建任务时传 `--delivery`，显式选用 planning policy 3。省略该选项仍沿用项目默认策略。只有 `man` 可启用；旧任务不能静默升级或降级，其他模式及 Solo handoff 不受影响。更新运行时后，还需按 adapter upgrade 协议更新宿主入口，不能只手改 skill。
 
+policy 3 的每个必需验收项还要按证据槽位声明精确的期望观察面。例如自动化真实 HTTP 验收使用 `{"id":"AC-1","description":"真实 HTTP 返回约定结果","required":true,"method":"automated","verificationSurfaces":{"automated":"real_http"}}`；manual 使用 `manual`，hybrid 同时声明 `automated` 和 `manual`。历史 requirements 和非 delivery 任务仍可读取缺少该字段的记录。
+
 默认路径：一份模块计划 → 实现与相关验证 → 回写待审 → 一次总审 → 必要修复与定向复核 → 提交与完成。只讨论/规划不授权实现。模块以可独立验收的结果划分，不以文件或函数划分。审核既检查“目标到实现”的缺漏，也检查“改动到目标”的偏离，并检查具体缺陷和不必要的复杂度。允许零 finding；可选改进不阻止交付。
 
 #### 绑定一份计划
@@ -84,7 +86,7 @@ mancode workflow plan <TASK_REF> confirm --plan-decision governed_execution --ex
 
 #### 验证与总审
 
-JSON 临时输入放在 `.mancode/local/drafts/`，避免把审核输入本身计入被测源码。自动化输入示例为 `{"argv":["npm","test"]}`；实际选择与验收相称的命令，不为同一事实反复全量测试。
+JSON 临时输入放在 `.mancode/local/drafts/`，避免把审核输入本身计入被测源码。自动化输入示例为 `{"argv":["npm","test"],"surface":"component"}`；`surface` 必须是实际观察面并与该验收槽位的 `verificationSurfaces` 精确一致。实际选择与验收相称的命令，不为同一事实反复全量测试。
 
 ```bash
 mancode workflow delivery <TASK_REF> sync --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
@@ -92,7 +94,7 @@ mancode workflow delivery <TASK_REF> verify --acceptance AC-1 --file .mancode/lo
 mancode workflow delivery <TASK_REF> inspect --json
 ```
 
-`verify` 无 shell 地执行 argv，返回实际 stdout、stderr 和 exitCode，并通过原 journal 写证据。一个命令确实覆盖多个验收项时，可用 `--acceptance AC-1,AC-2` 一次运行并关联多个槽位，不能为逐项登记重复执行同一套测试。CLI 返回 0 表示录入成功，不表示测试通过；查看 `commandResult.exitCode` 和 verification 状态。命令运行期间源码改变时不记录“通过”。手动/hybrid 验收使用 `confirm` 替代 `verify`，输入 `{"confirmed":true,"summary":"真实观察或用户确认的来源、结果与非敏感环境"}`；返回 manualConfirmation、记录当前 actor，不能把自述冒充独立认证。
+`verify` 无 shell 地执行 argv，返回实际 stdout、stderr 和 exitCode，并通过原 journal 写证据。一个命令确实覆盖多个验收项时，可用 `--acceptance AC-1,AC-2` 一次运行并关联多个槽位，不能为逐项登记重复执行同一套测试。CLI 返回 0 表示录入成功，不表示测试通过；查看 `commandResult.exitCode` 和 finalization 状态。命令运行期间源码改变时不记录“通过”。手动/hybrid 验收使用 `confirm` 替代 `verify`，输入 `{"confirmed":true,"surface":"manual_observation","summary":"真实观察或用户确认的来源、结果与非敏感环境"}`；返回 manualConfirmation、记录当前 actor，不能把自述冒充独立认证。实际 surface 缺失或与 requirements 不一致时，即使底层 verification ledger 已记录 passed，最终门禁仍保持 `verification_incomplete`。
 
 实现完整模块后，一名 reviewer 尽可能在获授权的独立上下文审核；无法独立时明确自审。使用批准计划、相关架构、`inspect.source.baseHead` 以来完整 diff、入口调用链与验证证据，不只阅读实现者总结。审核输入：
 
@@ -110,7 +112,7 @@ mancode workflow delivery <TASK_REF> inspect --json
 }
 ```
 
-subject 占位文字不是有效摘要，须替换为 `inspect` 结果。`reviewer` 可为 `self` 或 `independent`；coverage 状态为 `met`、`missing` 或 `unverified`。必修 finding 形如 `{"id":"R-1","domain":"quality","severity":"p1","summary":"因果证据及影响"}`；domain 为 quality/security，severity 为 p0/p1/p2。修复后在 resolved 列出原 finding ID，不通过删掉问题记录来放行。
+subject 占位文字不是有效摘要，须替换为 `inspect` 结果。`reviewer` 可为 `self` 或 `independent`，但它只是调用者自述的审核元数据，不绑定另一 actor/session，不能单独证明独立身份；coverage 状态为 `met`、`missing` 或 `unverified`。必修 finding 形如 `{"id":"R-1","domain":"quality","severity":"p1","summary":"因果证据及影响"}`；domain 为 quality/security，severity 为 p0/p1/p2。修复后在 resolved 列出原 finding ID，不通过删掉问题记录来放行。
 
 ```bash
 mancode workflow delivery <TASK_REF> review --file .mancode/local/drafts/review.json --review-depth targeted --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
@@ -131,7 +133,7 @@ mancode workflow complete <TASK_REF> --expected-revision <N> --session <SESSION_
 mancode workflow delivery <TASK_REF> publication --json
 ```
 
-check 检查证据、计划回写、任务文件提交及范围，complete 仍重新执行原有 authority/子任务/repair/claim 门禁。工作区无关脏文件不要求提交；同一文件内的他人改动仍需人工区分。基线之后的范围外提交会被拒绝，需处理或重新确认范围，不能静默归为本任务。
+check 检查证据、计划回写、任务文件提交及范围，complete 仍重新执行原有 authority/子任务/repair/claim 门禁。范围外未提交文件不要求加入本任务提交，但必须先移出当前 checkout、stash 或单独提交，因为它可能参与本次验证；同一文件内的他人改动仍需人工区分。基线之后的范围外提交会被拒绝，需处理或重新确认范围，不能静默归为本任务。后置读取失败返回 `inspection_failed` 及原始 diagnostic，不再误报为 delivery record stale。
 
 `publication` 只查询现有 upstream，不 fetch、push 或设置 remote；结果为 published、unpublished 或 unverified。没有 remote/上游或 push 失败不属于业务阻塞，报告“交付未发布”；查询失败不能冒称已发布。shared 的业务分支发布不等同于 Continuity transport 同步，保留既有显式同步和 fence 协议。
 

@@ -1,5 +1,9 @@
 import { digestCanonicalJson, sortUtf8StringSet } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
+import {
+  type ManVerificationSurface,
+  parseManVerificationSurface,
+} from './man-delivery-evidence.js';
 import { assertSharedTextSafe } from './privacy.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 import { assertKnownKeys, assertRecord } from './validation.js';
@@ -58,6 +62,10 @@ export interface RequirementsLedgerV1 {
       statement: string;
       required: boolean;
       verificationRequirement: VerificationRequirement;
+      verificationSurfaces?: {
+        automated?: ManVerificationSurface;
+        manual?: ManVerificationSurface;
+      };
     }
   >;
   blockingUnknowns: Array<
@@ -489,6 +497,7 @@ function parseAcceptanceCriteria(
         'statement',
         'required',
         'verificationRequirement',
+        'verificationSurfaces',
       ],
       'requirements ledger acceptance criterion',
     );
@@ -506,6 +515,12 @@ function parseAcceptanceCriteria(
         'requirements ledger criterion verificationRequirement is invalid',
       );
     }
+    const verificationRequirement =
+      item.verificationRequirement as VerificationRequirement;
+    const verificationSurfaces = parseVerificationSurfaces(
+      item.verificationSurfaces,
+      verificationRequirement,
+    );
     return {
       ...identity,
       criterionId: item.criterionId,
@@ -518,10 +533,59 @@ function parseAcceptanceCriteria(
         'requirements ledger criterion statement',
       ),
       required: item.required,
-      verificationRequirement:
-        item.verificationRequirement as VerificationRequirement,
+      verificationRequirement,
+      ...(verificationSurfaces === undefined ? {} : { verificationSurfaces }),
     };
   });
+}
+
+export function assertManDeliveryVerificationSurfaces(
+  ledger: RequirementsLedgerV1,
+): void {
+  for (const criterion of ledger.acceptanceCriteria) {
+    if (criterion.required && criterion.verificationSurfaces === undefined) {
+      throw new Error(
+        `MANCODE_MAN_ACCEPTANCE_SURFACE_REQUIRED: ${criterion.displayId}`,
+      );
+    }
+  }
+}
+
+function parseVerificationSurfaces(
+  value: unknown,
+  requirement: VerificationRequirement,
+): RequirementsLedgerV1['acceptanceCriteria'][number]['verificationSurfaces'] {
+  if (value === undefined) return undefined;
+  assertRecord(value, 'requirements ledger acceptance verificationSurfaces');
+  assertKnownKeys(
+    value,
+    ['automated', 'manual'],
+    'requirements ledger acceptance verificationSurfaces',
+  );
+  const automated =
+    value.automated === undefined
+      ? undefined
+      : parseManVerificationSurface(value.automated);
+  const manual =
+    value.manual === undefined
+      ? undefined
+      : parseManVerificationSurface(value.manual);
+  if (
+    (requirement === 'automated' &&
+      (automated === undefined || manual !== undefined)) ||
+    (requirement === 'manual' &&
+      (automated !== undefined || manual === undefined)) ||
+    (requirement === 'hybrid' &&
+      (automated === undefined || manual === undefined))
+  ) {
+    throw new Error(
+      'requirements ledger acceptance verificationSurfaces must match verificationRequirement slots',
+    );
+  }
+  return {
+    ...(automated === undefined ? {} : { automated }),
+    ...(manual === undefined ? {} : { manual }),
+  };
 }
 
 function parseBlockingUnknowns(

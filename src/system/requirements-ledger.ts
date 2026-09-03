@@ -3,6 +3,15 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export type VerificationMethod = 'automated' | 'manual' | 'hybrid';
+export type VerificationSurface =
+  | 'unit'
+  | 'component'
+  | 'handler'
+  | 'real_http'
+  | 'browser'
+  | 'device'
+  | 'external_service'
+  | 'manual_observation';
 export type RequirementCoverageStatus =
   | 'confirmed'
   | 'defaulted'
@@ -27,6 +36,10 @@ export interface AcceptanceCriterion {
   description: string;
   required: boolean;
   method: VerificationMethod;
+  verificationSurfaces?: {
+    automated?: VerificationSurface;
+    manual?: VerificationSurface;
+  };
 }
 
 export interface RequirementsLedger {
@@ -44,6 +57,16 @@ export interface RequirementsLedger {
 const REQUIREMENTS_FILE = 'requirements.json';
 const REQUIREMENTS_MARKDOWN_FILE = 'requirements.md';
 const ACCEPTANCE_ID_PATTERN = /^AC-[A-Z0-9][A-Z0-9-]{0,27}$/;
+const VERIFICATION_SURFACES = new Set<VerificationSurface>([
+  'unit',
+  'component',
+  'handler',
+  'real_http',
+  'browser',
+  'device',
+  'external_service',
+  'manual_observation',
+]);
 export const REQUIREMENT_DIMENSIONS: RequirementDimension[] = [
   'platform',
   'core_scope',
@@ -157,11 +180,16 @@ export function parseRequirementsLedger(
       throw new Error(`duplicate acceptance criterion: ${item.id}`);
     }
     ids.add(item.id);
+    const verificationSurfaces = parseVerificationSurfaces(
+      item.verificationSurfaces,
+      item.method,
+    );
     return {
       id: item.id,
       description: item.description.trim(),
       required: item.required,
       method: item.method,
+      ...(verificationSurfaces === undefined ? {} : { verificationSurfaces }),
     };
   });
   if (
@@ -239,10 +267,14 @@ export function renderRequirementsMarkdown(ledger: RequirementsLedger): string {
   const section = (title: string, items: string[]) =>
     `## ${title}\n\n${items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '- 无'}\n`;
   const criteria = ledger.acceptanceCriteria
-    .map(
-      (item) =>
-        `- **${item.id}** [${item.required ? '必需' : '可选'} / ${item.method}] ${item.description}`,
-    )
+    .map((item) => {
+      const surfaces = item.verificationSurfaces
+        ? ` / ${Object.entries(item.verificationSurfaces)
+            .map(([slot, surface]) => `${slot}=${surface}`)
+            .join(', ')}`
+        : '';
+      return `- **${item.id}** [${item.required ? '必需' : '可选'} / ${item.method}${surfaces}] ${item.description}`;
+    })
     .join('\n');
   const coverage = ledger.coverage
     .map((item) => `- **${item.dimension}** [${item.status}] ${item.rationale}`)
@@ -271,6 +303,48 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 
 function isVerificationMethod(value: unknown): value is VerificationMethod {
   return value === 'automated' || value === 'manual' || value === 'hybrid';
+}
+
+function parseVerificationSurfaces(
+  value: unknown,
+  method: VerificationMethod,
+): AcceptanceCriterion['verificationSurfaces'] {
+  if (value === undefined) return undefined;
+  if (!isRecord(value))
+    throw new Error('invalid acceptance verificationSurfaces');
+  const unknown = Object.keys(value).filter(
+    (key) => key !== 'automated' && key !== 'manual',
+  );
+  if (unknown.length)
+    throw new Error('invalid acceptance verificationSurfaces');
+  const automated = parseVerificationSurface(value.automated);
+  const manual = parseVerificationSurface(value.manual);
+  if (
+    (method === 'automated' &&
+      (automated === undefined || manual !== undefined)) ||
+    (method === 'manual' &&
+      (automated !== undefined || manual === undefined)) ||
+    (method === 'hybrid' && (automated === undefined || manual === undefined))
+  ) {
+    throw new Error('invalid acceptance verificationSurfaces');
+  }
+  return {
+    ...(automated === undefined ? {} : { automated }),
+    ...(manual === undefined ? {} : { manual }),
+  };
+}
+
+function parseVerificationSurface(
+  value: unknown,
+): VerificationSurface | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    !VERIFICATION_SURFACES.has(value as VerificationSurface)
+  ) {
+    throw new Error('invalid acceptance verification surface');
+  }
+  return value as VerificationSurface;
 }
 
 function isRequirementDimension(value: unknown): value is RequirementDimension {

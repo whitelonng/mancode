@@ -12,7 +12,6 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { replaceFileAtomically } from '../runtime/atomic-file.js';
 import { readCheckoutCodeHead } from '../runtime/project-runtime.js';
-import { evaluateClaimScopeSubset } from '../team/conflicts.js';
 import { digestCanonicalJson } from './canonical.js';
 import type { ManEvidenceSubject } from './man-delivery-evidence.js';
 import {
@@ -38,7 +37,9 @@ export type ManFinalizationBlockerCode =
   | 'review_incomplete'
   | 'verification_incomplete'
   | 'delivery_record_stale'
+  | 'inspection_failed'
   | 'committed_outside_scope'
+  | 'uncommitted_outside_scope'
   | 'uncommitted_changes';
 
 export interface ManDeliveryFinalization {
@@ -290,10 +291,14 @@ export function manScopeContains(
   metadata: WorkflowMetadataV3,
   file: string,
 ): boolean {
-  return evaluateClaimScopeSubset(
-    { paths: [file], modules: [], apis: [], schemas: [] },
-    metadata.implementationScope,
-  ).allowed;
+  return (
+    metadata.implementationScope.include.some((include) =>
+      path.matchesGlob(file, include),
+    ) &&
+    !metadata.implementationScope.exclude.some((exclude) =>
+      path.matchesGlob(file, exclude),
+    )
+  );
 }
 
 export function assertManPlanInScope(
@@ -311,6 +316,7 @@ function manDeliveryFinalization(
   subject: ManEvidenceSubject,
   recordCurrent: boolean,
   outsideScope: string[],
+  outsideScopeDirty: string[],
   pendingCommit: string[],
 ): ManDeliveryFinalization {
   const blockers: ManDeliveryFinalization['blockers'] = [];
@@ -336,28 +342,12 @@ function manDeliveryFinalization(
           : 'Complete one module review for the current subject and apply its review ledger.',
     });
 
-  let verificationStatus: string = task.verification.status;
-  if (verificationStatus === 'passed') {
-    for (const check of task.verification.checks) {
-      for (const evidence of [check.automated, check.manual]) {
-        if (evidence?.status !== 'passed') continue;
-        if (!evidence.surface) verificationStatus = 'surface_required';
-        else if (
-          evidence.subject?.contentDigest !== subject.contentDigest ||
-          evidence.subject.environment !== subject.environment
-        )
-          verificationStatus = 'stale';
-      }
-    }
-  }
-  if (verificationStatus !== 'passed')
+  const verification = assessManVerification(task, subject);
+  if (verification.status !== 'passed')
     blockers.push({
       code: 'verification_incomplete',
-      status: verificationStatus,
-      nextAction:
-        verificationStatus === 'surface_required'
-          ? 'Record the actual observation surface for every passed acceptance slot.'
-          : 'Run or confirm the missing acceptance evidence against the current subject.',
+      status: verification.status,
+      nextAction: verification.nextAction,
     });
 
   if (!recordCurrent)
@@ -374,6 +364,14 @@ function manDeliveryFinalization(
         'Remove the unrelated committed changes or obtain an approved scope realignment.',
       files: outsideScope,
     });
+  if (outsideScopeDirty.length)
+    blockers.push({
+      code: 'uncommitted_outside_scope',
+      status: 'blocked',
+      nextAction:
+        'Move, stash, or separately commit unrelated working-tree changes before recording final delivery evidence; do not add them to this task commit.',
+      files: outsideScopeDirty,
+    });
   if (pendingCommit.length)
     blockers.push({
       code: 'uncommitted_changes',
@@ -385,6 +383,129 @@ function manDeliveryFinalization(
     status: blockers.length ? 'incomplete' : 'ready',
     blockers,
   };
+}
+
+export function manInspectionFailureFinalization(
+  error: unknown,
+): ManDeliveryFinalization {
+  const diagnostic = error instanceof Error ? error.message : String(error);
+  let nextAction =
+    'Resolve the reported inspection diagnostic, then run delivery inspect again.';
+  if (diagnostic.includes('MANCODE_MAN_PLAN_BASELINE_CHANGED')) {
+    nextAction =
+      'Restore the approved plan baseline or explicitly reframe the task before inspecting delivery again.';
+  } else if (diagnostic.includes('MANCODE_MAN_PLAN_IGNORED')) {
+    nextAction =
+      'Remove the ignore rule for the approved plan file, then inspect delivery again.';
+  } else if (diagnostic.includes('MANCODE_MAN_DELIVERY_GIT_REQUIRED')) {
+    nextAction =
+      'Use a Git worktree for versioned delivery, then inspect the task again.';
+  } else if (diagnostic.includes('MANCODE_MAN_CONTENT_NODE_UNSUPPORTED')) {
+    nextAction =
+      'Remove the unsupported repository content node from the delivery subject or use a supported versioned file, then inspect again.';
+  }
+  return {
+    status: 'incomplete',
+    blockers: [
+      {
+        code: 'inspection_failed',
+        status: 'failed',
+        nextAction,
+        diagnostic,
+      },
+    ],
+  };
+}
+
+function assessManVerification(
+  task: StoredTaskSnapshot,
+  subject?: ManEvidenceSubject,
+): { status: string; nextAction: string } {
+  const missingConfiguredCriteria = task.requirements.acceptanceCriteria
+    .filter(
+      (criterion) =>
+        criterion.required && criterion.verificationSurfaces === undefined,
+    )
+    .map((criterion) => criterion.displayId);
+  if (missingConfiguredCriteria.length) {
+    return {
+      status: 'surface_requirement_missing',
+      nextAction: `Reframe or re-finalize requirements with verificationSurfaces for ${missingConfiguredCriteria.join(', ')}.`,
+    };
+  }
+  if (task.verification.status !== 'passed') {
+    return {
+      status: task.verification.status,
+      nextAction:
+        'Run or confirm the missing acceptance evidence against the current subject.',
+    };
+  }
+  const criteria = new Map(
+    task.requirements.acceptanceCriteria.map((criterion) => [
+      criterion.criterionId,
+      criterion,
+    ]),
+  );
+  const missingRequirements: string[] = [];
+  const missingActual: string[] = [];
+  const stale: string[] = [];
+  const mismatches: string[] = [];
+  for (const check of task.verification.checks) {
+    if (!check.required) continue;
+    const criterion = criteria.get(check.criterionId);
+    for (const slot of ['automated', 'manual'] as const) {
+      const evidence = check[slot];
+      if (evidence?.status !== 'passed') continue;
+      const expected = criterion?.verificationSurfaces?.[slot];
+      const label = `${check.displayId}:${slot}`;
+      if (!expected) {
+        missingRequirements.push(label);
+        continue;
+      }
+      if (!evidence.surface) {
+        missingActual.push(label);
+        continue;
+      }
+      if (
+        subject !== undefined &&
+        (evidence.subject?.contentDigest !== subject.contentDigest ||
+          evidence.subject.environment !== subject.environment)
+      ) {
+        stale.push(label);
+        continue;
+      }
+      if (evidence.surface !== expected) {
+        mismatches.push(
+          `${label} requires ${expected}, recorded ${evidence.surface}`,
+        );
+      }
+    }
+  }
+  if (missingRequirements.length) {
+    return {
+      status: 'surface_requirement_missing',
+      nextAction: `Reframe or re-finalize requirements with verificationSurfaces for ${missingRequirements.join(', ')}.`,
+    };
+  }
+  if (missingActual.length) {
+    return {
+      status: 'surface_required',
+      nextAction: `Record the actual observation surface for ${missingActual.join(', ')}.`,
+    };
+  }
+  if (stale.length) {
+    return {
+      status: 'stale',
+      nextAction: `Re-run or confirm evidence against the current subject for ${stale.join(', ')}.`,
+    };
+  }
+  if (mismatches.length) {
+    return {
+      status: 'surface_mismatch',
+      nextAction: `Record evidence at the required observation surface: ${mismatches.join('; ')}.`,
+    };
+  }
+  return { status: 'passed', nextAction: 'No verification action required.' };
 }
 
 export async function inspectManDelivery(
@@ -413,9 +534,11 @@ export async function inspectManDelivery(
     .filter(Boolean);
   const inTask = (file: string) =>
     file === bound.source.path || manScopeContains(task.metadata, file);
-  const pendingCommit = [...new Set([...trackedDirty, ...untracked])].filter(
-    inTask,
+  const dirtyFiles = [...new Set([...trackedDirty, ...untracked])].filter(
+    (file) => !file.startsWith('.mancode/'),
   );
+  const pendingCommit = dirtyFiles.filter(inTask);
+  const outsideScopeDirty = dirtyFiles.filter((file) => !inTask(file));
   const committedChanges =
     head === null
       ? []
@@ -455,6 +578,7 @@ export async function inspectManDelivery(
     subject,
     source: bound.source,
     pendingCommit,
+    outsideScopeDirty,
     outsideScope,
     upstream,
     publication: upstream === null ? 'unpublished' : 'unknown',
@@ -463,6 +587,7 @@ export async function inspectManDelivery(
       subject,
       recordCurrent,
       outsideScope,
+      outsideScopeDirty,
       pendingCommit,
     ),
   };
@@ -527,25 +652,16 @@ export function renderManDeliveryRecord(
     task.review.delivery &&
     (task.review.delivery.subject.contentDigest !== subject.contentDigest ||
       task.review.delivery.subject.environment !== subject.environment);
-  const verificationStale =
-    subject &&
-    task.verification.checks.some((check) =>
-      [check.automated, check.manual].some(
-        (item) =>
-          item?.status === 'passed' &&
-          (item.subject?.contentDigest !== subject.contentDigest ||
-            item.subject.environment !== subject.environment),
-      ),
-    );
+  const verificationStatus = assessManVerification(task, subject).status;
   return [
     `Task: ${task.metadata.taskRef.namespace}:${task.metadata.taskRef.taskId}`,
     `Plan version: ${task.metadata.governance.planVersion}`,
     `Review: ${reviewStale ? 'stale' : task.review.status}`,
-    `Verification: ${verificationStale ? 'stale' : task.verification.status}`,
+    `Verification: ${verificationStatus}`,
     '',
     ...(task.review.delivery
       ? [
-          `Reviewer: ${task.review.delivery.reviewer}`,
+          `Reviewer declaration: ${task.review.delivery.reviewer}`,
           `Direction: ${task.review.delivery.direction}`,
           `Correctness: ${task.review.delivery.correctness}`,
           `Proportionality: ${task.review.delivery.proportionality}`,
@@ -632,17 +748,9 @@ export async function syncManDeliveryRecord(
     task.metadata.status === 'blocked' && unresolved.length
       ? unresolved.map((item) => item.statement).join('; ')
       : null;
-  const currentEvidence =
+  const verified =
     subject !== undefined &&
-    task.verification.checks.every((check) =>
-      [check.automated, check.manual].every(
-        (item) =>
-          item?.status !== 'passed' ||
-          (item.subject?.contentDigest === subject.contentDigest &&
-            item.subject.environment === subject.environment),
-      ),
-    );
-  const verified = currentEvidence && task.verification.status === 'passed';
+    assessManVerification(task, subject).status === 'passed';
   const reviewed =
     task.review.status === 'skipped' ||
     (task.review.status === 'passed' &&
@@ -697,6 +805,11 @@ export async function assertManDeliveryReady(
   if (outside)
     throw new Error(
       `MANCODE_MAN_COMMIT_OUTSIDE_SCOPE: ${outside.files?.join(', ')}`,
+    );
+  const outsideDirty = blocker('uncommitted_outside_scope');
+  if (outsideDirty)
+    throw new Error(
+      `MANCODE_MAN_UNCOMMITTED_OUTSIDE_SCOPE: ${outsideDirty.files?.join(', ')}`,
     );
   const pending = blocker('uncommitted_changes');
   if (pending)
