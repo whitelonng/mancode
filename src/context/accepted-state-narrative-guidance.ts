@@ -1,0 +1,2 @@
+export const ACCEPTED_STATE_NARRATIVE_GUIDANCE =
+  'Base final titles, filenames, comments, commits, PRs, summaries, and handoffs on the accepted target, authoritative baseline, observed final state, and task-owned diff. Rejected session-only proposals and wording fixes do not define delivery identity. Preserve relevant failures, blockers, compatibility, migration, diagnosis, audit, quotations, requested comparisons, and authoritative workflow or handoff facts. Read back external surfaces when possible; otherwise mark them unverified.';

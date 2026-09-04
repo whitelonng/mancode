@@ -54,6 +54,12 @@ adapter upgrade 先在 staging 中生成预览，用户确认后再通过 journa
 - 不保存易过期的 task/session 状态副本。
 - 未证明宿主 session 传播时要求显式 session。
 - 保留用户自写配置，并支持重复安装和安全卸载。
+- 为默认 Solo 和 mode producer 提供基于已接受状态的交付叙事规则；它只影响最终用户可见
+  包装，不修改 requirements、ledger、handoff resolution 或 completion gate。
+
+该叙事规则属于 managed adapter 内容。renderer 更新后，现有安装会按相同 digest 契约
+显示 `stale`，必须继续通过 `adapter upgrade --dry-run` 和显式确认发布；它不构成新的
+adapter schema，因此不单独提升 renderer schema version。
 
 ## Legacy hooks
 

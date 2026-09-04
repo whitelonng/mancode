@@ -38,7 +38,7 @@ export const MAMBA_SKILL: SkillSpec = {
 
 ## 5. 真实回归与结论
 
-重跑原路径，覆盖受影响的关键正向、负向和权限边界路径，并运行必要 build/lint/typecheck/test。写 \`mamba-report.md\`：环境、步骤、结果、产物路径、回归范围、风险与建议。
+重跑原路径，覆盖受影响的关键正向、负向和权限边界路径，并运行必要 build/lint/typecheck/test。基于实际观察到的最终状态写 \`mamba-report.md\`：环境、步骤、结果、产物路径、回归范围、风险与建议；报告必须如实保留 no_repro、blocked/manual_test_required、失败验证、负向或权限结果和残余风险。
 
 - 已修复：\`status: "completed", outcome: "fixed"\`
 - 已验证但未改代码：\`status: "completed", outcome: "verified"\`

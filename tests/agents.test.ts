@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state-narrative-guidance.js';
 import { installClaudeCode } from '../src/installers/claude-code.js';
 import {
   ALL_AGENTS,
@@ -145,6 +146,16 @@ describe('coaching staff agents', () => {
       expect(HEAD_COACH_AGENT.body).toContain('NEEDS_REALIGNMENT');
       expect(HEAD_COACH_AGENT.body).toContain('MANCODE_REFRAME_REQUIRED');
       expect(HEAD_COACH_AGENT.body).toMatch(/这是只读诊断/);
+      expect(HEAD_COACH_AGENT.body).toContain(
+        ACCEPTED_STATE_NARRATIVE_GUIDANCE,
+      );
+      expect(
+        countOccurrences(
+          HEAD_COACH_AGENT.body,
+          ACCEPTED_STATE_NARRATIVE_GUIDANCE,
+        ),
+      ).toBe(1);
+      expect(HEAD_COACH_AGENT.body).toMatch(/验证结果.*问题处置.*残余风险/);
     });
 
     it('head coach body includes 5 core principles', () => {
@@ -275,3 +286,7 @@ describe('coaching staff agents', () => {
     });
   });
 });
+
+function countOccurrences(value: string, needle: string): number {
+  return value.split(needle).length - 1;
+}

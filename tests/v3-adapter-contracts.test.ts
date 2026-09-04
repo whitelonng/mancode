@@ -20,11 +20,13 @@ import {
   EXIT_V3_AUTHORITY_PROTECTED,
   uninstall,
 } from '../src/commands/uninstall.js';
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state-narrative-guidance.js';
 import { parseSchemaManifest } from '../src/context/manifest.js';
 import { upgradeV3Adapters } from '../src/installers/adapter-upgrade.js';
 import type { PlatformName } from '../src/installers/registry.js';
 import {
   V3_ADAPTER_PLATFORMS,
+  V3_ADAPTER_VERSION,
   V3_MODE_NAMES,
   inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
@@ -48,6 +50,18 @@ describe('V3 adapter bootstrap integration', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('keeps the V3 adapter schema and original mode surface unchanged', () => {
+    expect(V3_ADAPTER_VERSION).toBe('3');
+    expect(V3_ADAPTER_PLATFORMS).toHaveLength(8);
+    expect(V3_MODE_NAMES).toEqual([
+      'manba',
+      'man',
+      'manteam',
+      'manps',
+      'mansolo',
+    ]);
   });
 
   it('uses V3 status and bootstrap-only adapters without creating legacy authority', async () => {
@@ -207,6 +221,10 @@ describe('V3 adapter bootstrap integration', () => {
       );
       expect(bootstrap).toContain(
         'hard-risk change involving authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure',
+      );
+      expect(bootstrap).toContain(`- ${ACCEPTED_STATE_NARRATIVE_GUIDANCE}`);
+      expect(bootstrap.split(ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toHaveLength(
+        2,
       );
       if (['AGENTS.md', 'CLAUDE.md'].includes(path.basename(target))) {
         expect(bootstrap).toContain(
@@ -460,6 +478,16 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('uncommitted outside-scope');
           expect(entry).toContain('exit code 0');
           expect(entry).toContain('review_incomplete');
+          expect(entry).toContain('completion, a commit, or a PR');
+          expect(entry).toContain('accepted requirements and plan');
+          expect(entry).toContain(
+            'observed final state after available readback',
+          );
+          expect(entry).toContain('task-owned diff from the bound `baseHead`');
+          expect(entry).toContain(
+            'Preserve failures, blockers, compatibility or migration facts',
+          );
+          expect(entry).toContain('report it as unverified');
         }
         if (mode === 'manteam') {
           expect(entry).toContain(
@@ -480,6 +508,20 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             'do not leave ownership questions or partial answers only in chat history',
           );
+          expect(entry).toContain('Before any handoff, commit, or PR');
+          expect(entry).toContain(
+            'current authoritative task and handoff state plus the task-owned diff',
+          );
+          expect(entry).toContain(
+            'accepted requirements, the observed final state after available readback',
+          );
+          expect(entry).toContain(
+            'Preserve failures, blockers, incomplete work, compatibility and migration facts, audit evidence',
+          );
+          expect(entry).toContain(
+            'every formal handoff status and resolution reason',
+          );
+          expect(entry).toContain('mark it unverified');
         }
         if (mode === 'mansolo') {
           expect(entry).not.toContain(

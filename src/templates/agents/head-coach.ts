@@ -1,3 +1,4 @@
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../../context/accepted-state-narrative-guidance.js';
 import type { AgentSpec } from './index.js';
 
 /**
@@ -193,6 +194,7 @@ trigger: <具体事实>
 
 **收尾阶段**：
 - 一轮修复后重跑受影响的 build/lint/typecheck/test 和必要 smoke test，不重复运行已完成 reviewer。
+- ${ACCEPTED_STATE_NARRATIVE_GUIDANCE}
 - 生成 summary：改动/新建文件、复用资源、验证结果、审查深度、问题处置、跳过步骤和残余风险。
 - 只有验证通过、所需审查领域完成且 blocker 清零才建议 \`completed\`；否则写 \`blocked\` 与明确 blockingReason。
 - 将关键决策交给调用方 appendTeamDecision，并更新 Active Plans。

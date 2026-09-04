@@ -2,6 +2,7 @@
  * Hook 和 Skill 模板（内联，避免打包后路径问题）
  */
 
+import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../context/accepted-state-narrative-guidance.js';
 import {
   INTERFACE_EMOJI_ICON_GUIDANCE,
   VISUAL_DIRECTION_SELECTION_GUIDANCE,
@@ -378,6 +379,9 @@ trigger: <具体事实>
 - 验证失败、行为回归或遗留 debug 可直接修复并复验；复验不是新一轮 review。
 - 命名、可读性、DRY、loading/error 形式等建议不自动扩大改动；与需求无关时不输出。
 - 鉴权、支付、敏感数据、删除、公开 API、未可信输入、并发或基础设施等硬风险同样属于升级信号；若没有触发 realignment，用户明确选择继续 solo 后可以继续。
+
+### 最终交付叙事
+${ACCEPTED_STATE_NARRATIVE_GUIDANCE}
 
 ## 你的风格
 
