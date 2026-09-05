@@ -4,6 +4,8 @@ import {
   mkdir,
   readFile,
   readdir,
+  readlink,
+  realpath,
   rename,
   rm,
   rmdir,
@@ -11,13 +13,17 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { MancodeState } from '../commands/init.js';
+import { hasManagedBlock } from '../installers/managed-block.js';
 import {
   V3_ADAPTER_VERSION,
   applyV3AdapterFilePlan,
   assertV3AdapterTargetSafe,
-  planV3AdapterFiles,
+  type planV3AdapterFiles,
+  planV3AdapterUpgradeFiles,
+  readV3AdapterFilePlanContent,
   v3AdapterTargetPath,
 } from '../installers/v3-adapter.js';
+import { replaceFileAtomically } from '../runtime/atomic-file.js';
 import {
   operationDirectory,
   resolveCoordinationEntityHomeStore,
@@ -26,6 +32,7 @@ import {
 import { acquireOperationEntityLocks } from '../runtime/local-lock.js';
 import {
   armOperationCrashAfterVisibleWrite,
+  pauseIfOperationLockInjectedForTesting,
   throwIfDeferredOperationCrashInjected,
   throwIfOperationCrashInjected,
 } from '../runtime/operation-crash-injection.js';
@@ -94,10 +101,13 @@ import { type Ulid, assertUlid, createUlid } from './ids.js';
 import { sameLegacyBaseline, scanLegacyAuthority } from './layout.js';
 import {
   type LegacyBaseline,
-  type SchemaManifestV1,
+  type ManagedAdapterInventory,
+  type SchemaManifest,
   assertActivationRollbackManifestTransition,
   assertSchemaManifestTransition,
-  parseSchemaManifestV1 as parseSchemaManifest,
+  managedAdapterInventoriesMatch,
+  managedAdapterNames,
+  parseSchemaManifest,
 } from './manifest.js';
 import type { ManagedAdapter } from './manifest.js';
 import {
@@ -144,6 +154,47 @@ import {
  */
 export const MIGRATION_STAGE_SCHEMA_VERSION = 1;
 
+/** The bootstrap journal uses the common crash injector without becoming a
+ * task operation visible to the runtime recovery executor. */
+export const DUAL_READ_BOOTSTRAP_OPERATION = 'migration_bootstrap' as const;
+export const DUAL_READ_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
+
+export type DualReadBootstrapTargetName = 'config' | 'policy' | 'schema';
+export type DualReadBootstrapTargetState = 'pending' | 'published';
+export type DualReadBootstrapStateName =
+  | 'staged'
+  | 'publishing'
+  | 'committed'
+  | 'repair_required';
+
+export interface DualReadBootstrapTargetV1 {
+  name: DualReadBootstrapTargetName;
+  relativePath: string;
+  beforeContent: string | null;
+  targetContent: string;
+  state: DualReadBootstrapTargetState;
+}
+
+/**
+ * A small local journal for the three-file compatibility shell.  The target
+ * contents are intentionally stored in the journal as well as staging: a
+ * process can rebuild a damaged staging directory without guessing what it
+ * was supposed to publish.
+ */
+export interface DualReadBootstrapStateV1 {
+  schemaVersion: 1;
+  operationId: Ulid;
+  state: DualReadBootstrapStateName;
+  sourceBaseline: LegacyBaseline;
+  managedAdapters: ManagedAdapterInventory;
+  managedAdaptersDigest: string;
+  adapterEvidenceDigest: string;
+  stagingDirectory: string;
+  targets: DualReadBootstrapTargetV1[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type MigrationStageState = 'staged' | 'activated' | 'rolled_back';
 export type MigrationTaskStageState = 'ready' | 'blocked';
 
@@ -176,6 +227,13 @@ export interface MigrationStageV1 {
   state: MigrationStageState;
   sourceBaseline: LegacyBaseline;
   sourceInventoryDigest: string;
+  /**
+   * Adapter inventory is optional only for stages written by pre-inventory
+   * versions. New stages always persist all three fields together.
+   */
+  managedAdapters?: ManagedAdapterInventory;
+  managedAdaptersDigest?: string;
+  adapterEvidenceDigest?: string;
   aliases: LegacyTaskAliasMap;
   resolutions: Record<string, MigrationTaskResolutionV1>;
   tasks: MigrationTaskStageV1[];
@@ -187,6 +245,9 @@ export interface MigrationDryRunReportV1 {
   schemaVersion: 1;
   sourceBaseline: LegacyBaseline;
   sourceInventoryDigest: string;
+  managedAdapters: ManagedAdapterInventory;
+  managedAdaptersDigest: string;
+  adapterEvidenceDigest: string;
   aliases: LegacyTaskAliasMap;
   tasks: MigrationTaskStageV1[];
 }
@@ -198,7 +259,8 @@ export interface StageLegacyMigrationInput {
   now?: Date;
   minReaderVersion?: string;
   minWriterVersion?: string;
-  managedAdapters?: Record<ManagedAdapter, string>;
+  /** An explicit empty object intentionally selects no adapters. */
+  managedAdapters?: ManagedAdapterInventory;
 }
 
 export interface ResolveLegacyMigrationInput {
@@ -225,7 +287,7 @@ export interface ActivateLegacyMigrationInput {
 }
 
 export interface ActivatedLegacyMigration {
-  manifest: SchemaManifestV1;
+  manifest: SchemaManifest;
   stage: MigrationStageV1;
   operation: OperationJournalV1;
 }
@@ -239,7 +301,7 @@ export interface RollbackLegacyMigrationInput {
 }
 
 export interface RolledBackLegacyMigration {
-  manifest: SchemaManifestV1;
+  manifest: SchemaManifest;
   stage: MigrationStageV1;
   operation: OperationJournalV1;
 }
@@ -255,8 +317,24 @@ interface LoadedLegacyTask {
 interface LegacyMigrationSourceSet {
   baseline: LegacyBaseline;
   inventoryDigest: string;
+  adapterEvidence: string[];
+  adapterEvidenceDigest: string;
+  inferredManagedAdapters: ManagedAdapterInventory;
   state: Partial<MancodeState> | null;
   tasks: LoadedLegacyTask[];
+}
+
+type MigrationAdapterInventorySource =
+  | 'manifest'
+  | 'explicit'
+  | 'stage'
+  | 'legacy-evidence';
+
+interface ResolvedMigrationAdapterInventory {
+  managedAdapters: ManagedAdapterInventory;
+  managedAdaptersDigest: string;
+  adapterEvidenceDigest: string;
+  source: MigrationAdapterInventorySource;
 }
 
 interface RenderedTask {
@@ -277,12 +355,153 @@ const MANAGED_ADAPTERS: ManagedAdapter[] = [
   'qoder',
   'dsh',
 ];
+const DUAL_READ_BOOTSTRAP_LOCK_LEASE_MS = 30_000;
+const DUAL_READ_BOOTSTRAP_STAGING_PREFIX =
+  '.mancode/local/migration/.dual-read-bootstrap-';
+const DUAL_READ_BOOTSTRAP_STATE_RELATIVE =
+  '.mancode/local/migration/dual-read-bootstrap.json';
+const DUAL_READ_BOOTSTRAP_LOCK_RELATIVE =
+  '.mancode/local/migration/.bootstrap.lock';
+const DUAL_READ_BOOTSTRAP_TARGET_SPECS: ReadonlyArray<{
+  name: DualReadBootstrapTargetName;
+  relativePath: string;
+  stagingRelativePath: string;
+}> = [
+  {
+    name: 'config',
+    relativePath: '.mancode/shared/config.json',
+    stagingRelativePath: 'shared/config.json',
+  },
+  {
+    name: 'policy',
+    relativePath: '.mancode/shared/team/policy.json',
+    stagingRelativePath: 'shared/team/policy.json',
+  },
+  {
+    name: 'schema',
+    relativePath: '.mancode/schema.json',
+    stagingRelativePath: 'schema.json',
+  },
+];
+const LEGACY_ADAPTER_VERSION = 'legacy-unmanaged';
+const ADAPTER_EVIDENCE_SCAN_LIMIT = 512;
+
+/** Fixed platform paths are evidence; a generic AGENTS.md is intentionally not. */
+const PLATFORM_PATH_EVIDENCE: ReadonlyArray<{
+  platform: ManagedAdapter;
+  relativePath: string;
+  kind: 'file' | 'directory' | 'any';
+}> = [
+  { platform: 'claude-code', relativePath: 'CLAUDE.md', kind: 'file' },
+  { platform: 'claude-code', relativePath: '.claude', kind: 'directory' },
+  {
+    platform: 'claude-code',
+    relativePath: '.claude/settings.json',
+    kind: 'file',
+  },
+  {
+    platform: 'claude-code',
+    relativePath: '.claude/skills',
+    kind: 'directory',
+  },
+  {
+    platform: 'claude-code',
+    relativePath: '.claude/agents',
+    kind: 'directory',
+  },
+  { platform: 'cursor', relativePath: '.cursor/rules', kind: 'directory' },
+  {
+    platform: 'cursor',
+    relativePath: '.cursor/commands',
+    kind: 'directory',
+  },
+  {
+    platform: 'copilot',
+    relativePath: '.github/copilot-instructions.md',
+    kind: 'file',
+  },
+  { platform: 'copilot', relativePath: '.github/prompts', kind: 'directory' },
+  { platform: 'qoder', relativePath: '.qoder/commands', kind: 'directory' },
+  { platform: 'dsh', relativePath: '.dsh/skills', kind: 'directory' },
+  { platform: 'codex', relativePath: '.codex/skills', kind: 'directory' },
+  { platform: 'zcode', relativePath: '.zcode/skills', kind: 'directory' },
+];
+
+const MARKER_EVIDENCE: ReadonlyArray<{
+  platform: ManagedAdapter;
+  marker: string;
+}> = [
+  { platform: 'claude-code', marker: 'mancode:continuity:claude:' },
+  { platform: 'claude-code', marker: 'mancode:claude-skill' },
+  { platform: 'claude-code', marker: 'mancode:claude-agent' },
+  { platform: 'claude-code', marker: 'mancode:v3:claude:' },
+  { platform: 'codex', marker: 'mancode:continuity:codex:' },
+  { platform: 'codex', marker: 'mancode:v3:codex:' },
+  { platform: 'codex', marker: 'mancode:codex-skill' },
+  { platform: 'zcode', marker: 'mancode:continuity:zcode:' },
+  { platform: 'zcode', marker: 'mancode:v3:zcode:' },
+  { platform: 'zcode', marker: 'mancode:zcode-skill' },
+  { platform: 'zcode', marker: 'mancode:zcode:' },
+  { platform: 'kimi-code', marker: 'mancode:continuity:kimi:' },
+  { platform: 'kimi-code', marker: 'mancode:v3:kimi:' },
+  { platform: 'kimi-code', marker: 'mancode:kimi-skill' },
+  { platform: 'kimi-code', marker: 'mancode:kimi-code:' },
+  { platform: 'qoder', marker: 'mancode:continuity:qoder:' },
+  { platform: 'qoder', marker: 'mancode:v3:qoder:' },
+  { platform: 'qoder', marker: 'mancode:qoder:' },
+  { platform: 'dsh', marker: 'mancode:continuity:dsh:' },
+  { platform: 'dsh', marker: 'mancode:v3:dsh:' },
+  { platform: 'dsh', marker: 'mancode:dsh-skill' },
+  { platform: 'dsh', marker: 'mancode:dsh:' },
+  { platform: 'copilot', marker: 'mancode:continuity:copilot:' },
+  { platform: 'copilot', marker: 'mancode:v3:copilot:' },
+  { platform: 'copilot', marker: 'mancode:copilot:' },
+  { platform: 'cursor', marker: 'mancode:cursor-rule' },
+  { platform: 'cursor', marker: 'mancode:continuity:cursor:' },
+  { platform: 'cursor', marker: 'mancode:v3:cursor:' },
+];
+
+/** The original generic block was platform-specific by file location. */
+const LEGACY_GENERIC_BLOCK_EVIDENCE: ReadonlyArray<{
+  platform: ManagedAdapter;
+  relativePath: string;
+}> = [
+  { platform: 'codex', relativePath: 'AGENTS.md' },
+  { platform: 'copilot', relativePath: '.github/copilot-instructions.md' },
+];
+const LEGACY_GENERIC_MANAGED_MARKER =
+  '<!-- Managed by mancode. Do not edit this block manually. -->';
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const STAGE_STATES = new Set<MigrationStageState>([
   'staged',
   'activated',
   'rolled_back',
 ]);
+
+export function dualReadBootstrapStatePath(projectRoot: string): string {
+  return path.join(
+    path.resolve(projectRoot),
+    DUAL_READ_BOOTSTRAP_STATE_RELATIVE,
+  );
+}
+
+export function dualReadBootstrapLockPath(projectRoot: string): string {
+  return path.join(
+    path.resolve(projectRoot),
+    DUAL_READ_BOOTSTRAP_LOCK_RELATIVE,
+  );
+}
+
+export function dualReadBootstrapStagingPath(
+  projectRoot: string,
+  operationId: Ulid,
+): string {
+  assertUlid(operationId, 'dual-read bootstrap operationId');
+  return path.join(
+    path.resolve(projectRoot),
+    `${DUAL_READ_BOOTSTRAP_STAGING_PREFIX}${operationId}`,
+  );
+}
 
 /**
  * Performs the same source scan and parity rendering as staging, but writes
@@ -291,8 +510,19 @@ const STAGE_STATES = new Set<MigrationStageState>([
  */
 export async function dryRunLegacyMigration(
   projectRoot: string,
+  managedAdapters?: ManagedAdapterInventory,
 ): Promise<MigrationDryRunReportV1> {
   const sourceSet = await loadLegacyMigrationSources(projectRoot);
+  const inventory = await resolveMigrationAdapterInventory(
+    path.resolve(projectRoot),
+    sourceSet,
+    { explicit: managedAdapters },
+  );
+  await inspectDualReadBootstrapForDryRun(
+    path.resolve(projectRoot),
+    sourceSet,
+    inventory,
+  );
   const allocator = createDeterministicMigrationIdAllocator(
     migrationSeed(sourceSet),
   );
@@ -302,6 +532,9 @@ export async function dryRunLegacyMigration(
     schemaVersion: 1,
     sourceBaseline: sourceSet.baseline,
     sourceInventoryDigest: sourceSet.inventoryDigest,
+    managedAdapters: inventory.managedAdapters,
+    managedAdaptersDigest: inventory.managedAdaptersDigest,
+    adapterEvidenceDigest: inventory.adapterEvidenceDigest,
     aliases,
     tasks: rendered.map((item) => item.stage),
   };
@@ -325,15 +558,26 @@ export async function stageLegacyMigration(
   const stageId = input.stageId ?? createUlid();
   assertUlid(stageId, 'migration stageId');
 
-  await ensureDualReadShell({
-    projectRoot: root,
-    sourceSet,
-    allocator,
-    now,
-    minReaderVersion: input.minReaderVersion ?? VERSION,
-    minWriterVersion: input.minWriterVersion ?? VERSION,
-    managedAdapters: input.managedAdapters ?? defaultManagedAdapters(),
-  });
+  // The stage lock is backed by the V3 runtime store, so the first shell must
+  // exist before that lock can be acquired. The callback below repeats the
+  // inventory resolution against the locked stage and manifest.
+  const existingStageHint = await readMigrationStageOrNull(root, stageId);
+  if (existingStageHint === null || existingStageHint.state === 'staged') {
+    const initialInventory = await resolveMigrationAdapterInventory(
+      root,
+      sourceSet,
+      { stage: existingStageHint, explicit: input.managedAdapters },
+    );
+    await ensureDualReadShell({
+      projectRoot: root,
+      sourceSet,
+      allocator,
+      now,
+      minReaderVersion: input.minReaderVersion ?? VERSION,
+      minWriterVersion: input.minWriterVersion ?? VERSION,
+      managedAdapters: initialInventory.managedAdapters,
+    });
+  }
 
   return withMigrationStageLock(root, stageId, async () => {
     const existing = await readMigrationStageOrNull(root, stageId);
@@ -350,6 +594,18 @@ export async function stageLegacyMigration(
       if (!sameAliases(existing.aliases, aliases)) {
         throw new Error('MANCODE_MIGRATION_ALIAS_MAP_CHANGED');
       }
+      const inventory = await resolveMigrationAdapterInventory(
+        root,
+        sourceSet,
+        { explicit: input.managedAdapters, stage: existing },
+      );
+      assertMigrationInventorySnapshot(existing, inventory, sourceSet);
+      const shellManifest = await assertDualReadShellReady({
+        projectRoot: root,
+        sourceSet,
+        managedAdapters: inventory.managedAdapters,
+      });
+      assertDualReadManifestInventory(shellManifest, inventory);
       const rendered = renderTasks(
         sourceSet,
         aliases,
@@ -361,12 +617,23 @@ export async function stageLegacyMigration(
       const next = parseMigrationStage({
         ...existing,
         revision: existing.revision + 1,
+        ...migrationInventoryFields(inventory),
         tasks: rendered.map((item) => item.stage),
         updatedAt: now,
       });
       await writeMigrationStage(root, next);
       return next;
     }
+
+    const inventory = await resolveMigrationAdapterInventory(root, sourceSet, {
+      explicit: input.managedAdapters,
+    });
+    const shellManifest = await assertDualReadShellReady({
+      projectRoot: root,
+      sourceSet,
+      managedAdapters: inventory.managedAdapters,
+    });
+    assertDualReadManifestInventory(shellManifest, inventory);
 
     const rendered = renderTasks(
       sourceSet,
@@ -383,6 +650,7 @@ export async function stageLegacyMigration(
       state: 'staged',
       sourceBaseline: sourceSet.baseline,
       sourceInventoryDigest: sourceSet.inventoryDigest,
+      ...migrationInventoryFields(inventory),
       aliases,
       resolutions: {},
       tasks: rendered.map((item) => item.stage),
@@ -438,6 +706,10 @@ export async function resolveLegacyMigration(
     if (stage.sourceInventoryDigest !== sourceSet.inventoryDigest) {
       throw new Error('MANCODE_LEGACY_SOURCE_CHANGED');
     }
+    const inventory = await resolveMigrationAdapterInventory(root, sourceSet, {
+      stage,
+    });
+    assertMigrationInventorySnapshot(stage, inventory, sourceSet);
     const allocator = createDeterministicMigrationIdAllocator(
       migrationSeed(sourceSet),
     );
@@ -468,6 +740,7 @@ export async function resolveLegacyMigration(
     const next = parseMigrationStage({
       ...stage,
       revision: stage.revision + 1,
+      ...migrationInventoryFields(inventory),
       resolutions,
       tasks: rendered.map((item) => item.stage),
       updatedAt: now,
@@ -537,6 +810,11 @@ export async function activateLegacyMigration(
     ) {
       throw new Error('MANCODE_LEGACY_BASELINE_CHANGED');
     }
+    const inventory = await resolveMigrationAdapterInventory(root, sourceSet, {
+      stage,
+    });
+    assertMigrationInventorySnapshot(stage, inventory, sourceSet);
+    assertDualReadManifestInventory(project.manifest, inventory);
     const allocator = createDeterministicMigrationIdAllocator(
       migrationSeed(sourceSet),
     );
@@ -601,7 +879,11 @@ export async function activateLegacyMigration(
     if (shared.length > 0 && codeHead === null) {
       throw new Error('MANCODE_TASK_HEAD_CODE_REF_UNAVAILABLE');
     }
-    const adapterPlans = await planV3AdapterFiles(root);
+    const selectedPlatforms = managedAdapterNames(inventory.managedAdapters);
+    const adapterPlans =
+      selectedPlatforms.length === 0
+        ? []
+        : await planV3AdapterUpgradeFiles(root, selectedPlatforms);
     const entities = buildActivationEntities(
       rendered,
       runtime,
@@ -642,11 +924,8 @@ export async function activateLegacyMigration(
       activationState: 'v3_active',
       activatedAt: now.toISOString(),
       managedAdapters: Object.fromEntries(
-        Object.keys(project.manifest.managedAdapters).map((adapter) => [
-          adapter,
-          V3_ADAPTER_VERSION,
-        ]),
-      ) as Record<ManagedAdapter, string>,
+        selectedPlatforms.map((adapter) => [adapter, V3_ADAPTER_VERSION]),
+      ) as ManagedAdapterInventory,
     });
     assertSchemaManifestTransition(manifestActivating, manifestActive);
     const activatedConfig = parseProjectConfig({
@@ -660,6 +939,7 @@ export async function activateLegacyMigration(
       ...stage,
       revision: stage.revision + 1,
       state: 'activated',
+      ...migrationInventoryFields(inventory),
       updatedAt: now.toISOString(),
     });
     const payload = parseOperationRecoveryPayload({
@@ -674,14 +954,24 @@ export async function activateLegacyMigration(
           beforeContent: serialize(project.manifest),
           targetContent: serialize(manifestActivating),
         }),
-        ...adapterPlans.map((plan) =>
-          createV3AdapterFileRecoveryAction({
-            stepId: 'replace-managed-adapters',
-            target: plan.target,
-            beforeContent: plan.beforeContent,
-            targetContent: plan.targetContent,
-          }),
-        ),
+        ...(await Promise.all(
+          adapterPlans.map(async (plan) =>
+            createV3AdapterFileRecoveryAction({
+              stepId: 'replace-managed-adapters',
+              target: plan.target,
+              beforeContent: plan.beforeContent,
+              targetContent: plan.targetContent,
+              resolvedTarget: plan.resolvedTarget,
+              linkIdentities: plan.linkIdentities,
+              ...(plan.beforeContent === null
+                ? {
+                    absentParentDirectories:
+                      await absentAdapterParentDirectories(root, plan.target),
+                  }
+                : {}),
+            }),
+          ),
+        )),
         ...entities.flatMap((entity) => [
           createMigrationTaskDirectoryRecoveryAction({
             stepId: 'promote-staged-tasks',
@@ -986,14 +1276,16 @@ export async function rollbackLegacyMigration(
       await rm(target, { force: false });
     } else if (action.kind === 'v3_adapter_file') {
       await assertV3AdapterTargetSafe(root, action.target);
-      const target = v3AdapterTargetPath(root, action.target);
       if (action.beforeContent === null) {
+        const target = v3AdapterTargetPath(root, action.target);
         await rm(target, { force: false });
       } else {
         await applyV3AdapterFilePlan(root, {
           target: action.target,
           beforeContent: action.targetContent,
           targetContent: action.beforeContent,
+          resolvedTarget: action.resolvedTarget,
+          linkIdentities: action.linkIdentities,
         });
       }
     } else if (
@@ -1007,6 +1299,7 @@ export async function rollbackLegacyMigration(
       );
     }
   }
+  await removeEmptyActivationParents(root, parsed);
   await writeTextAtomic(
     path.join(root, '.mancode', 'schema.json'),
     serialize(dualReadManifest),
@@ -1017,6 +1310,63 @@ export async function rollbackLegacyMigration(
     stage: rolledBackStage,
     operation: activation,
   };
+}
+
+async function absentAdapterParentDirectories(
+  root: string,
+  target: Parameters<typeof v3AdapterTargetPath>[1],
+): Promise<string[]> {
+  const absent: string[] = [];
+  let directory = path.dirname(v3AdapterTargetPath(root, target));
+  while (directory !== root && isWithinRoot(root, directory)) {
+    const entry = await lstatOrNullMigration(directory);
+    if (entry !== null) break;
+    absent.push(relativeMigrationPath(root, directory));
+    directory = path.dirname(directory);
+  }
+  return absent;
+}
+
+async function removeEmptyActivationParents(
+  root: string,
+  payload: ReturnType<typeof parseOperationRecoveryPayload>,
+): Promise<void> {
+  const parents = new Set(
+    payload.actions.flatMap((action) =>
+      action.kind === 'v3_adapter_file'
+        ? (action.absentParentDirectories ?? [])
+        : [],
+    ),
+  );
+  for (const parent of [...parents].sort(
+    (a, b) => b.split('/').length - a.split('/').length,
+  )) {
+    let directory = root;
+    let safe = true;
+    for (const segment of parent.split('/')) {
+      directory = path.join(directory, segment);
+      const entry = await lstatOrNullMigration(directory);
+      if (entry === null || entry.isSymbolicLink() || !entry.isDirectory()) {
+        safe = false;
+        break;
+      }
+    }
+    if (!safe) continue;
+    try {
+      // Never recursively delete: new user content and preexisting directories
+      // must survive even when they prevent restoration of the old evidence.
+      await rmdir(directory);
+    } catch (error) {
+      if (
+        isNotFound(error) ||
+        (error instanceof Error &&
+          'code' in error &&
+          (error.code === 'ENOTEMPTY' || error.code === 'EEXIST'))
+      )
+        continue;
+      throw error;
+    }
+  }
 }
 
 interface ActivationTaskEntity {
@@ -1390,10 +1740,7 @@ async function assertActivationRollbackProof(
         throw new Error('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
       }
     } else if (action.kind === 'v3_adapter_file') {
-      await assertV3AdapterTargetSafe(projectRoot, action.target);
-      const current = await readTextOrNull(
-        v3AdapterTargetPath(projectRoot, action.target),
-      );
+      const current = await readV3AdapterFilePlanContent(projectRoot, action);
       if (current !== action.targetContent) {
         throw new Error('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
       }
@@ -1480,19 +1827,6 @@ async function assertMigrationDirectoryMatches(
   }
 }
 
-async function readTextOrNull(target: string): Promise<string | null> {
-  try {
-    const entry = await lstat(target);
-    if (!entry.isFile() || entry.isSymbolicLink()) {
-      throw new Error('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
-    }
-    return await readFile(target, 'utf8');
-  } catch (error) {
-    if (isNotFound(error)) return null;
-    throw error;
-  }
-}
-
 export async function readMigrationStage(
   projectRoot: string,
   stageId: Ulid,
@@ -1556,6 +1890,9 @@ export function parseMigrationStage(value: unknown): MigrationStageV1 {
       'state',
       'sourceBaseline',
       'sourceInventoryDigest',
+      'managedAdapters',
+      'managedAdaptersDigest',
+      'adapterEvidenceDigest',
       'aliases',
       'resolutions',
       'tasks',
@@ -1581,6 +1918,46 @@ export function parseMigrationStage(value: unknown): MigrationStageV1 {
   ) {
     throw new Error('migration stage state is invalid');
   }
+  const inventoryFieldNames = [
+    value.managedAdapters,
+    value.managedAdaptersDigest,
+    value.adapterEvidenceDigest,
+  ];
+  const hasInventoryFields = inventoryFieldNames.some(
+    (field) => field !== undefined,
+  );
+  if (
+    hasInventoryFields &&
+    inventoryFieldNames.some((field) => field === undefined)
+  ) {
+    throw new Error('migration stage adapter inventory snapshot is incomplete');
+  }
+  const inventoryFields = hasInventoryFields
+    ? (() => {
+        const managedAdapters = parseManagedAdapterInventory(
+          value.managedAdapters,
+          'migration stage managedAdapters',
+        );
+        const managedAdaptersDigest = parseDigest(
+          value.managedAdaptersDigest,
+          'migration stage managedAdaptersDigest',
+        );
+        if (
+          managedAdaptersDigest !==
+          managedAdapterInventoryDigest(managedAdapters)
+        ) {
+          throw new Error('migration stage managedAdaptersDigest is invalid');
+        }
+        return {
+          managedAdapters,
+          managedAdaptersDigest,
+          adapterEvidenceDigest: parseDigest(
+            value.adapterEvidenceDigest,
+            'migration stage adapterEvidenceDigest',
+          ),
+        };
+      })()
+    : {};
   const aliases = parseAliases(value.aliases);
   const resolutions = parseResolutions(value.resolutions, aliases);
   const tasks = parseStageTasks(value.tasks, aliases);
@@ -1597,12 +1974,319 @@ export function parseMigrationStage(value: unknown): MigrationStageV1 {
       value.sourceInventoryDigest,
       'migration stage sourceInventoryDigest',
     ),
+    ...inventoryFields,
     aliases,
     resolutions,
     tasks,
     createdAt: parseTimestamp(value.createdAt, 'migration stage createdAt'),
     updatedAt: parseTimestamp(value.updatedAt, 'migration stage updatedAt'),
   };
+}
+
+export function parseDualReadBootstrapState(
+  value: unknown,
+): DualReadBootstrapStateV1 {
+  assertRecord(value, 'dual-read bootstrap state');
+  assertKnownKeys(
+    value,
+    [
+      'schemaVersion',
+      'operationId',
+      'state',
+      'sourceBaseline',
+      'managedAdapters',
+      'managedAdaptersDigest',
+      'adapterEvidenceDigest',
+      'stagingDirectory',
+      'targets',
+      'createdAt',
+      'updatedAt',
+    ],
+    'dual-read bootstrap state',
+  );
+  if (value.schemaVersion !== DUAL_READ_BOOTSTRAP_SCHEMA_VERSION) {
+    throw new Error('dual-read bootstrap state schemaVersion is invalid');
+  }
+  assertUlid(value.operationId, 'dual-read bootstrap state operationId');
+  if (
+    typeof value.state !== 'string' ||
+    !new Set<DualReadBootstrapStateName>([
+      'staged',
+      'publishing',
+      'committed',
+      'repair_required',
+    ]).has(value.state as DualReadBootstrapStateName)
+  ) {
+    throw new Error('dual-read bootstrap state state is invalid');
+  }
+  const managedAdapters = parseManagedAdapterInventory(
+    value.managedAdapters,
+    'dual-read bootstrap state managedAdapters',
+  );
+  const managedAdaptersDigest = parseDigest(
+    value.managedAdaptersDigest,
+    'dual-read bootstrap state managedAdaptersDigest',
+  );
+  if (
+    managedAdaptersDigest !== managedAdapterInventoryDigest(managedAdapters)
+  ) {
+    throw new Error(
+      'dual-read bootstrap state managedAdaptersDigest is invalid',
+    );
+  }
+  const operationId = value.operationId;
+  if (value.stagingDirectory !== relativeBootstrapStagingPath(operationId)) {
+    throw new Error('dual-read bootstrap state stagingDirectory is invalid');
+  }
+  if (!Array.isArray(value.targets)) {
+    throw new Error('dual-read bootstrap state targets must be an array');
+  }
+  const targets = value.targets.map((raw) => {
+    assertRecord(raw, 'dual-read bootstrap target');
+    assertKnownKeys(
+      raw,
+      ['name', 'relativePath', 'beforeContent', 'targetContent', 'state'],
+      'dual-read bootstrap target',
+    );
+    if (
+      raw.name !== 'config' &&
+      raw.name !== 'policy' &&
+      raw.name !== 'schema'
+    ) {
+      throw new Error('dual-read bootstrap target name is invalid');
+    }
+    const spec = DUAL_READ_BOOTSTRAP_TARGET_SPECS.find(
+      (candidate) => candidate.name === raw.name,
+    );
+    if (spec === undefined || raw.relativePath !== spec.relativePath) {
+      throw new Error('dual-read bootstrap target relativePath is invalid');
+    }
+    if (raw.beforeContent !== null && typeof raw.beforeContent !== 'string') {
+      throw new Error('dual-read bootstrap target beforeContent is invalid');
+    }
+    if (typeof raw.targetContent !== 'string' || !raw.targetContent) {
+      throw new Error('dual-read bootstrap target targetContent is invalid');
+    }
+    if (raw.state !== 'pending' && raw.state !== 'published') {
+      throw new Error('dual-read bootstrap target state is invalid');
+    }
+    return {
+      name: raw.name as DualReadBootstrapTargetName,
+      relativePath: raw.relativePath,
+      beforeContent: raw.beforeContent,
+      targetContent: raw.targetContent,
+      state: raw.state as DualReadBootstrapTargetState,
+    } satisfies DualReadBootstrapTargetV1;
+  });
+  if (
+    targets.length !== DUAL_READ_BOOTSTRAP_TARGET_SPECS.length ||
+    targets.some(
+      (target, index) =>
+        target.name !== DUAL_READ_BOOTSTRAP_TARGET_SPECS[index]?.name,
+    )
+  ) {
+    throw new Error('dual-read bootstrap state targets are not ordered');
+  }
+  const publishedCount = targets.filter(
+    (target) => target.state === 'published',
+  ).length;
+  if (
+    targets.some(
+      (target, index) =>
+        target.state !== (index < publishedCount ? 'published' : 'pending'),
+    )
+  ) {
+    throw new Error('dual-read bootstrap state target publication is invalid');
+  }
+  if (value.state === 'staged' && publishedCount !== 0) {
+    throw new Error('staged dual-read bootstrap state has published targets');
+  }
+  if (
+    value.state === 'committed' &&
+    publishedCount !== DUAL_READ_BOOTSTRAP_TARGET_SPECS.length
+  ) {
+    throw new Error('committed dual-read bootstrap state has pending targets');
+  }
+  return {
+    schemaVersion: 1,
+    operationId,
+    state: value.state as DualReadBootstrapStateName,
+    sourceBaseline: parseLegacyBaseline(value.sourceBaseline),
+    managedAdapters,
+    managedAdaptersDigest,
+    adapterEvidenceDigest: parseDigest(
+      value.adapterEvidenceDigest,
+      'dual-read bootstrap state adapterEvidenceDigest',
+    ),
+    stagingDirectory: value.stagingDirectory,
+    targets,
+    createdAt: parseTimestamp(
+      value.createdAt,
+      'dual-read bootstrap state createdAt',
+    ),
+    updatedAt: parseTimestamp(
+      value.updatedAt,
+      'dual-read bootstrap state updatedAt',
+    ),
+  };
+}
+
+async function resolveMigrationAdapterInventory(
+  root: string,
+  sourceSet: LegacyMigrationSourceSet,
+  options: {
+    explicit?: ManagedAdapterInventory;
+    stage?: MigrationStageV1 | null;
+  },
+): Promise<ResolvedMigrationAdapterInventory> {
+  const explicit =
+    options.explicit === undefined
+      ? undefined
+      : parseManagedAdapterInventory(
+          options.explicit,
+          'migration managedAdapters selection',
+        );
+  const stageInventory =
+    options.stage?.managedAdapters === undefined
+      ? undefined
+      : parseManagedAdapterInventory(
+          options.stage.managedAdapters,
+          'migration stage managedAdapters',
+        );
+  const manifest = await readSchemaManifestOrNull(root);
+
+  if (manifest !== null) {
+    const inventory = parseManagedAdapterInventory(
+      manifest.managedAdapters,
+      'schema manifest managedAdapters',
+    );
+    assertOptionalInventoryMatches(explicit, inventory);
+    assertOptionalInventoryMatches(stageInventory, inventory);
+    return resolvedMigrationInventory(
+      inventory,
+      sourceSet.adapterEvidenceDigest,
+      'manifest',
+    );
+  }
+  if (explicit !== undefined) {
+    assertOptionalInventoryMatches(explicit, stageInventory);
+    return resolvedMigrationInventory(
+      explicit,
+      sourceSet.adapterEvidenceDigest,
+      'explicit',
+    );
+  }
+  if (stageInventory !== undefined) {
+    return resolvedMigrationInventory(
+      stageInventory,
+      sourceSet.adapterEvidenceDigest,
+      'stage',
+    );
+  }
+  if (Object.keys(sourceSet.inferredManagedAdapters).length === 0) {
+    throw new Error('MANCODE_MIGRATION_ADAPTER_INVENTORY_REQUIRED');
+  }
+  return resolvedMigrationInventory(
+    sourceSet.inferredManagedAdapters,
+    sourceSet.adapterEvidenceDigest,
+    'legacy-evidence',
+  );
+}
+
+function resolvedMigrationInventory(
+  managedAdapters: ManagedAdapterInventory,
+  adapterEvidenceDigest: string,
+  source: MigrationAdapterInventorySource,
+): ResolvedMigrationAdapterInventory {
+  const normalized = parseManagedAdapterInventory(
+    managedAdapters,
+    'migration managedAdapters',
+  );
+  return {
+    managedAdapters: normalized,
+    managedAdaptersDigest: managedAdapterInventoryDigest(normalized),
+    adapterEvidenceDigest,
+    source,
+  };
+}
+
+function assertOptionalInventoryMatches(
+  expected: ManagedAdapterInventory | undefined,
+  actual: ManagedAdapterInventory | undefined,
+): void {
+  if (
+    expected !== undefined &&
+    actual !== undefined &&
+    !managedAdapterInventoriesMatch(expected, actual)
+  ) {
+    throw new Error('MANCODE_MIGRATION_ADAPTER_INVENTORY_CONFLICT');
+  }
+}
+
+function assertMigrationInventorySnapshot(
+  stage: MigrationStageV1,
+  inventory: ResolvedMigrationAdapterInventory,
+  sourceSet: LegacyMigrationSourceSet,
+): void {
+  // Stages written before the inventory extension remain readable. Their
+  // first resolve/activate adopts the already-authoritative manifest or the
+  // current evidence without pretending an old snapshot existed.
+  if (stage.managedAdapters === undefined) return;
+  if (
+    !managedAdapterInventoriesMatch(
+      stage.managedAdapters,
+      inventory.managedAdapters,
+    ) ||
+    stage.managedAdaptersDigest !== inventory.managedAdaptersDigest
+  ) {
+    throw new Error('MANCODE_MIGRATION_ADAPTER_INVENTORY_CHANGED');
+  }
+  if (stage.adapterEvidenceDigest !== sourceSet.adapterEvidenceDigest) {
+    throw new Error('MANCODE_MIGRATION_ADAPTER_EVIDENCE_CHANGED');
+  }
+}
+
+function assertDualReadManifestInventory(
+  manifest: SchemaManifest,
+  inventory: ResolvedMigrationAdapterInventory,
+): void {
+  if (
+    !managedAdapterInventoriesMatch(
+      manifest.managedAdapters,
+      inventory.managedAdapters,
+    )
+  ) {
+    throw new Error('MANCODE_MIGRATION_ADAPTER_INVENTORY_CONFLICT');
+  }
+}
+
+function migrationInventoryFields(
+  inventory: ResolvedMigrationAdapterInventory,
+): Pick<
+  MigrationStageV1,
+  'managedAdapters' | 'managedAdaptersDigest' | 'adapterEvidenceDigest'
+> {
+  return {
+    managedAdapters: inventory.managedAdapters,
+    managedAdaptersDigest: inventory.managedAdaptersDigest,
+    adapterEvidenceDigest: inventory.adapterEvidenceDigest,
+  };
+}
+
+async function readSchemaManifestOrNull(
+  root: string,
+): Promise<SchemaManifest | null> {
+  const raw = await readBootstrapRawFile(
+    path.join(root, '.mancode', 'schema.json'),
+  );
+  if (raw === null) return null;
+  try {
+    return parseSchemaManifest(JSON.parse(raw));
+  } catch (error) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED', {
+      cause: error,
+    });
+  }
 }
 
 async function loadLegacyMigrationSources(
@@ -1621,6 +2305,7 @@ async function loadLegacyMigrationSources(
   if (tasks.length === 0) {
     throw new Error('MANCODE_MIGRATION_NO_WORKFLOWS');
   }
+  const adapterEvidence = await scanLegacyAdapterEvidence(root, state);
   return {
     baseline: scan.baseline,
     inventoryDigest: digestCanonicalJson({
@@ -1636,9 +2321,310 @@ async function loadLegacyMigrationSources(
         blockers: task.blockers,
       })),
     }),
+    adapterEvidence: adapterEvidence.evidence,
+    adapterEvidenceDigest: adapterEvidence.digest,
+    inferredManagedAdapters: adapterEvidence.managedAdapters,
     state,
     tasks,
   };
+}
+
+interface LegacyAdapterEvidenceScan {
+  evidence: string[];
+  managedAdapters: ManagedAdapterInventory;
+  digest: string;
+}
+
+/**
+ * Legacy migration may only register an adapter when the checkout contains a
+ * concrete signal for it.  In particular, AGENTS.md is shared by several
+ * hosts and its existence alone is deliberately not a platform signal.
+ */
+async function scanLegacyAdapterEvidence(
+  root: string,
+  state: Partial<MancodeState> | null,
+): Promise<LegacyAdapterEvidenceScan> {
+  const evidence = new Set<string>();
+  const platforms = new Set<ManagedAdapter>();
+  const add = (platform: ManagedAdapter, reason: string): void => {
+    platforms.add(platform);
+    evidence.add(`${platform}:${reason}`);
+  };
+
+  const stateRecord = state as Record<string, unknown> | null;
+  addLegacyPlatformValues(stateRecord, 'state', add);
+
+  const legacyConfig = await readLegacyTextOrNull(root, 'config.json');
+  if (legacyConfig !== null) {
+    try {
+      const parsed = JSON.parse(legacyConfig);
+      if (isPlainRecord(parsed)) {
+        addLegacyPlatformValues(parsed, 'config', add);
+      }
+    } catch {
+      // The legacy source loader owns config validity. Inventory inference only
+      // uses recognized fields and must not turn an unrelated config parse
+      // failure into a platform selection.
+    }
+  }
+
+  for (const candidate of PLATFORM_PATH_EVIDENCE) {
+    const absolute = path.join(root, ...candidate.relativePath.split('/'));
+    const entry = await lstatOrNullMigration(absolute);
+    if (entry === null || !matchesEvidenceKind(entry, candidate.kind)) {
+      continue;
+    }
+    const digest = await evidenceNodeDigest(root, absolute, entry);
+    add(
+      candidate.platform,
+      `path:${candidate.relativePath}:${candidate.kind}:${digest ?? entryKind(entry)}`,
+    );
+  }
+
+  const markerFiles = await collectLegacyMarkerFiles(root);
+  for (const file of markerFiles.files) {
+    const content = await readEvidenceFile(root, file);
+    if (content === null) continue;
+    const genericBlock = LEGACY_GENERIC_BLOCK_EVIDENCE.find(
+      (candidate) => candidate.relativePath === file,
+    );
+    if (
+      genericBlock !== undefined &&
+      (hasManagedBlock(content.text) ||
+        content.text.includes(LEGACY_GENERIC_MANAGED_MARKER))
+    ) {
+      add(
+        genericBlock.platform,
+        `legacy-block:${file}:generic:${content.digest}`,
+      );
+    }
+    for (const marker of MARKER_EVIDENCE) {
+      if (content.text.includes(marker.marker)) {
+        add(
+          marker.platform,
+          `marker:${file}:${marker.marker}:${digestText(content.text)}`,
+        );
+      }
+    }
+  }
+  if (markerFiles.truncated) {
+    evidence.add('scan:marker-files-truncated');
+  }
+
+  const orderedEvidence = [...evidence].sort(compareUtf8);
+  const managedAdapters = Object.fromEntries(
+    MANAGED_ADAPTERS.filter((platform) => platforms.has(platform)).map(
+      (platform) => [platform, LEGACY_ADAPTER_VERSION],
+    ),
+  ) as ManagedAdapterInventory;
+  return {
+    evidence: orderedEvidence,
+    managedAdapters,
+    digest: digestCanonicalJson({
+      schemaVersion: 1,
+      evidence: orderedEvidence,
+    }),
+  };
+}
+
+function addLegacyPlatformValues(
+  record: Record<string, unknown> | null,
+  source: string,
+  add: (platform: ManagedAdapter, reason: string) => void,
+): void {
+  if (record === null) return;
+  addLegacyPlatformValue(record.platform, `${source}.platform`, add);
+  const platforms = record.platforms;
+  if (Array.isArray(platforms)) {
+    for (const platform of platforms) {
+      addLegacyPlatformValue(platform, `${source}.platforms`, add);
+    }
+  }
+  const managedAdapters = record.managedAdapters;
+  if (isPlainRecord(managedAdapters)) {
+    for (const platform of Object.keys(managedAdapters)) {
+      addLegacyPlatformValue(platform, `${source}.managedAdapters`, add);
+    }
+  }
+}
+
+function addLegacyPlatformValue(
+  value: unknown,
+  reason: string,
+  add: (platform: ManagedAdapter, reason: string) => void,
+): void {
+  if (
+    typeof value === 'string' &&
+    (MANAGED_ADAPTERS as readonly string[]).includes(value)
+  ) {
+    add(value as ManagedAdapter, `${reason}:${value}`);
+  }
+}
+
+async function collectLegacyMarkerFiles(
+  root: string,
+): Promise<{ files: string[]; truncated: boolean }> {
+  const files: string[] = [];
+  let visited = 0;
+  let truncated = false;
+  const roots = [
+    'AGENTS.md',
+    'CLAUDE.md',
+    '.agents',
+    '.codex',
+    '.claude',
+    '.cursor',
+    '.github',
+    '.qoder',
+    '.zcode',
+    '.dsh',
+  ];
+  const visit = async (relative: string): Promise<void> => {
+    if (visited >= ADAPTER_EVIDENCE_SCAN_LIMIT) {
+      truncated = true;
+      return;
+    }
+    visited += 1;
+    const absolute = path.join(root, ...relative.split('/'));
+    const entry = await lstatOrNullMigration(absolute);
+    if (entry === null) return;
+    if (entry.isSymbolicLink()) {
+      // A root adapter link is still path evidence, but marker reads must not
+      // follow an arbitrary external link. readEvidenceFile performs the
+      // in-root check for the small set of root files above.
+      if (entry.isSymbolicLink() && !relative.startsWith('.')) {
+        files.push(relative);
+      }
+      return;
+    }
+    if (entry.isFile()) {
+      files.push(relative);
+      return;
+    }
+    if (!entry.isDirectory()) return;
+    const children = (await readdir(absolute)).sort(compareUtf8);
+    for (const child of children) {
+      if (visited >= ADAPTER_EVIDENCE_SCAN_LIMIT) {
+        truncated = true;
+        break;
+      }
+      await visit(`${relative}/${child}`);
+    }
+  };
+  for (const rootEntry of roots) {
+    await visit(rootEntry);
+    if (visited >= ADAPTER_EVIDENCE_SCAN_LIMIT) {
+      truncated = true;
+      break;
+    }
+  }
+  return { files: files.sort(compareUtf8), truncated };
+}
+
+async function readEvidenceFile(
+  root: string,
+  relative: string,
+): Promise<{ text: string; digest: string } | null> {
+  const absolute = path.join(root, ...relative.split('/'));
+  const entry = await lstatOrNullMigration(absolute);
+  if (entry === null) return null;
+  let target = absolute;
+  if (entry.isSymbolicLink()) {
+    let resolved: string;
+    try {
+      resolved = await realpath(absolute);
+    } catch {
+      return null;
+    }
+    if (!isWithinRoot(root, resolved)) return null;
+    target = resolved;
+  } else if (!entry.isFile()) {
+    return null;
+  }
+  const targetEntry = await lstatOrNullMigration(target);
+  if (
+    targetEntry === null ||
+    !targetEntry.isFile() ||
+    targetEntry.isSymbolicLink()
+  ) {
+    return null;
+  }
+  const text = await readFile(target, 'utf8');
+  return { text, digest: digestText(text) };
+}
+
+async function evidenceNodeDigest(
+  root: string,
+  absolute: string,
+  entry: Awaited<ReturnType<typeof lstat>>,
+): Promise<string | null> {
+  if (entry.isFile()) {
+    const content = await readEvidenceFile(
+      root,
+      relativeMigrationPath(root, absolute),
+    );
+    return content?.digest ?? null;
+  }
+  if (entry.isSymbolicLink()) {
+    try {
+      return digestText(await readlink(absolute, 'utf8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function matchesEvidenceKind(
+  entry: Awaited<ReturnType<typeof lstat>>,
+  kind: 'file' | 'directory' | 'any',
+): boolean {
+  return (
+    kind === 'any' ||
+    (kind === 'file' && (entry.isFile() || entry.isSymbolicLink())) ||
+    (kind === 'directory' && entry.isDirectory())
+  );
+}
+
+function entryKind(entry: Awaited<ReturnType<typeof lstat>>): string {
+  if (entry.isSymbolicLink()) return 'symlink';
+  if (entry.isFile()) return 'file';
+  if (entry.isDirectory()) return 'directory';
+  return 'other';
+}
+
+async function lstatOrNullMigration(
+  target: string,
+): Promise<Awaited<ReturnType<typeof lstat>> | null> {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
+
+function relativeMigrationPath(root: string, target: string): string {
+  return path.relative(root, target).split(path.sep).join('/');
+}
+
+function isWithinRoot(root: string, target: string): boolean {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(target);
+  return (
+    resolvedTarget === resolvedRoot ||
+    resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null)
+  );
 }
 
 async function loadLegacyState(
@@ -2228,6 +3214,34 @@ function candidateEntityFiles(
   ];
 }
 
+interface DualReadBootstrapTargetSnapshot {
+  config: string | null;
+  policy: string | null;
+  schema: string | null;
+}
+
+interface DualReadBootstrapBundle {
+  manifest: SchemaManifest;
+  config: ProjectConfigV1;
+  policy: TeamPolicyV1;
+  contents: Record<DualReadBootstrapTargetName, string>;
+}
+
+interface DualReadBootstrapLockOwnerV1 {
+  schemaVersion: 1;
+  operationId: Ulid;
+  processId: number;
+  acquiredAt: string;
+  leaseExpiresAt: string;
+  statePath: string;
+  stagingDirectory: string;
+}
+
+interface DualReadBootstrapLockHandle {
+  owner: DualReadBootstrapLockOwnerV1;
+  release(): Promise<void>;
+}
+
 async function ensureDualReadShell(input: {
   projectRoot: string;
   sourceSet: LegacyMigrationSourceSet;
@@ -2235,64 +3249,293 @@ async function ensureDualReadShell(input: {
   now: string;
   minReaderVersion: string;
   minWriterVersion: string;
-  managedAdapters: Record<ManagedAdapter, string>;
-}): Promise<void> {
+  managedAdapters: ManagedAdapterInventory;
+}): Promise<SchemaManifest> {
   const root = path.resolve(input.projectRoot);
-  const mancodeRoot = path.join(root, '.mancode');
-  const schemaPath = path.join(mancodeRoot, 'schema.json');
-  const configPath = path.join(mancodeRoot, 'shared', 'config.json');
-  const policyPath = path.join(mancodeRoot, 'shared', 'team', 'policy.json');
-  const existingSchema = await readJsonOrNull(schemaPath);
-  if (existingSchema !== null) {
-    const manifest = parseSchemaManifest(existingSchema);
-    if (manifest.activationState !== 'dual_read') {
-      throw new Error('MANCODE_MIGRATION_MANIFEST_STATE_INVALID');
-    }
-    if (
-      !sameLegacyBaseline(manifest.legacyBaseline, input.sourceSet.baseline)
-    ) {
-      throw new Error('MANCODE_LEGACY_BASELINE_CHANGED');
-    }
-    await validateExistingDualReadShell(configPath, policyPath);
-    return;
-  }
-  const lockPath = path.join(
-    mancodeRoot,
-    'local',
-    'migration',
-    '.bootstrap.lock',
-  );
-  await mkdir(path.dirname(lockPath), { recursive: true });
+  const lockOperationId =
+    (await readDualReadBootstrapOperationIdHint(root)) ?? createUlid();
+  const lock = await acquireDualReadBootstrapLock(root, lockOperationId);
   try {
-    await mkdir(lockPath);
-  } catch (error) {
-    if (isAlreadyExists(error))
-      throw new Error('MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD');
-    throw error;
-  }
-  try {
-    const racedSchema = await readJsonOrNull(schemaPath);
-    if (racedSchema !== null) {
-      const manifest = parseSchemaManifest(racedSchema);
-      if (
-        manifest.activationState !== 'dual_read' ||
-        !sameLegacyBaseline(manifest.legacyBaseline, input.sourceSet.baseline)
-      ) {
-        throw new Error('MANCODE_MIGRATION_MANIFEST_STATE_INVALID');
+    const state = await readDualReadBootstrapStateOrNull(root);
+    if (state !== null) {
+      try {
+        if (state.state === 'repair_required') {
+          throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+        }
+        await cleanupOrphanedDualReadBootstrapStaging(root, state.operationId);
+        assertDualReadBootstrapStateInputs(state, input);
+        if (state.state !== 'committed') {
+          await ensureDualReadBootstrapStaging(root, state);
+        }
+        const manifest = await completeDualReadBootstrap(
+          root,
+          state,
+          input.now,
+        );
+        await cleanupOrphanedDualReadBootstrapStaging(root, null);
+        return manifest;
+      } catch (error) {
+        if (shouldMarkDualReadBootstrapRepairRequired(error)) {
+          await markDualReadBootstrapRepairRequired(root, state, input.now);
+        }
+        throw error;
       }
-      await validateExistingDualReadShell(configPath, policyPath);
+    }
+    const snapshot = await readDualReadBootstrapTargets(root);
+    if (snapshot.schema !== null) {
+      const existing = validateDualReadBootstrapSnapshot(snapshot, input);
+      if (snapshot.config === null || snapshot.policy === null) {
+        throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+      }
+      const adopted = createCommittedDualReadBootstrapState(
+        snapshot,
+        input,
+        lockOperationId,
+      );
+      await writeInitialDualReadBootstrapState(root, adopted);
+      return existing.manifest;
+    }
+
+    await cleanupOrphanedDualReadBootstrapStaging(root, null);
+    const prepared = createDualReadBootstrapState(
+      snapshot,
+      input,
+      lockOperationId,
+    );
+    await ensureDualReadBootstrapStaging(root, prepared.state);
+    throwIfOperationCrashInjected(
+      DUAL_READ_BOOTSTRAP_OPERATION,
+      'write-staging',
+    );
+    const durable = await writeInitialDualReadBootstrapState(
+      root,
+      prepared.state,
+    );
+    throwIfOperationCrashInjected(DUAL_READ_BOOTSTRAP_OPERATION, 'prepared');
+    return await completeDualReadBootstrap(root, durable, input.now);
+  } finally {
+    await lock.release().catch(() => undefined);
+  }
+}
+
+function shouldMarkDualReadBootstrapRepairRequired(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message === 'MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED' ||
+    error.message === 'MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT' ||
+    error.message === 'MANCODE_MIGRATION_MANIFEST_STATE_INVALID'
+  );
+}
+
+/**
+ * Stage holds the migration lock only after bootstrap has completed.  Once
+ * inside that lock it must validate the committed shell without starting a
+ * second recovery/publish pass, otherwise two callers can observe different
+ * bootstrap generations between the preflight and stage write.
+ */
+async function assertDualReadShellReady(input: {
+  projectRoot: string;
+  sourceSet: LegacyMigrationSourceSet;
+  managedAdapters: ManagedAdapterInventory;
+}): Promise<SchemaManifest> {
+  const root = path.resolve(input.projectRoot);
+  const state = await readDualReadBootstrapStateOrNull(root);
+  if (state === null || state.state === 'repair_required') {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  if (state.state !== 'committed') {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  const snapshot = await readDualReadBootstrapTargets(root);
+  const validated = validateDualReadBootstrapSnapshot(snapshot, {
+    sourceSet: input.sourceSet,
+    managedAdapters: input.managedAdapters,
+  });
+  for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+    const target = findBootstrapTarget(state, spec.name);
+    if (
+      target.state !== 'published' ||
+      snapshot[spec.name] !== target.targetContent
+    ) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+    }
+  }
+  return validated.manifest;
+}
+
+/** Dry-run remains read-only but must not hide bootstrap recovery work. */
+async function inspectDualReadBootstrapForDryRun(
+  root: string,
+  sourceSet: LegacyMigrationSourceSet,
+  inventory: ResolvedMigrationAdapterInventory,
+): Promise<void> {
+  const state = await readDualReadBootstrapStateOrNull(root);
+  const snapshot = await readDualReadBootstrapTargets(root);
+  if (state === null) {
+    if (snapshot.schema !== null) {
+      validateDualReadBootstrapSnapshot(snapshot, {
+        sourceSet,
+        managedAdapters: inventory.managedAdapters,
+      });
       return;
     }
-    const workspaceId = input.allocator.allocate('workspace');
-    const config: ProjectConfigV1 = parseProjectConfig({
+    if (snapshot.config !== null || snapshot.policy !== null) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_RECOVERY_REQUIRED');
+    }
+    return;
+  }
+  if (state.state === 'repair_required') {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  assertDualReadBootstrapStateInputs(state, {
+    sourceSet,
+    managedAdapters: inventory.managedAdapters,
+  });
+  for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+    const target = findBootstrapTarget(state, spec.name);
+    const current = snapshot[spec.name];
+    if (
+      (target.state === 'published' && current !== target.targetContent) ||
+      (target.state === 'pending' &&
+        current !== target.beforeContent &&
+        current !== target.targetContent)
+    ) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+    }
+  }
+  if (state.state !== 'committed') {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_RECOVERY_REQUIRED');
+  }
+  await assertDualReadBootstrapPublishedTargets(root, state);
+}
+
+function createDualReadBootstrapState(
+  snapshot: DualReadBootstrapTargetSnapshot,
+  input: {
+    sourceSet: LegacyMigrationSourceSet;
+    allocator: ReturnType<typeof createDeterministicMigrationIdAllocator>;
+    now: string;
+    minReaderVersion: string;
+    minWriterVersion: string;
+    managedAdapters: ManagedAdapterInventory;
+  },
+  operationId: Ulid,
+): { state: DualReadBootstrapStateV1; bundle: DualReadBootstrapBundle } {
+  const bundle = createDualReadBootstrapBundle(snapshot, input);
+  const targets = DUAL_READ_BOOTSTRAP_TARGET_SPECS.map((spec) => {
+    const current = snapshot[spec.name];
+    const targetContent = bundle.contents[spec.name];
+    return {
+      name: spec.name,
+      relativePath: spec.relativePath,
+      beforeContent: current,
+      targetContent,
+      state:
+        current !== null && current === targetContent
+          ? ('published' as const)
+          : ('pending' as const),
+    } satisfies DualReadBootstrapTargetV1;
+  });
+  const state = parseDualReadBootstrapState({
+    schemaVersion: DUAL_READ_BOOTSTRAP_SCHEMA_VERSION,
+    operationId,
+    state: targets.some((target) => target.state === 'published')
+      ? 'publishing'
+      : 'staged',
+    sourceBaseline: input.sourceSet.baseline,
+    managedAdapters: input.managedAdapters,
+    managedAdaptersDigest: managedAdapterInventoryDigest(input.managedAdapters),
+    adapterEvidenceDigest: input.sourceSet.adapterEvidenceDigest,
+    stagingDirectory: relativeBootstrapStagingPath(operationId),
+    targets,
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+  return { state, bundle };
+}
+
+function createCommittedDualReadBootstrapState(
+  snapshot: DualReadBootstrapTargetSnapshot,
+  input: {
+    sourceSet: LegacyMigrationSourceSet;
+    now: string;
+    managedAdapters: ManagedAdapterInventory;
+  },
+  operationId: Ulid,
+): DualReadBootstrapStateV1 {
+  const targets = DUAL_READ_BOOTSTRAP_TARGET_SPECS.map((spec) => {
+    const content = snapshot[spec.name];
+    if (content === null) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    }
+    return {
+      name: spec.name,
+      relativePath: spec.relativePath,
+      beforeContent: content,
+      targetContent: content,
+      state: 'published' as const,
+    } satisfies DualReadBootstrapTargetV1;
+  });
+  return parseDualReadBootstrapState({
+    schemaVersion: DUAL_READ_BOOTSTRAP_SCHEMA_VERSION,
+    operationId,
+    state: 'committed',
+    sourceBaseline: input.sourceSet.baseline,
+    managedAdapters: input.managedAdapters,
+    managedAdaptersDigest: managedAdapterInventoryDigest(input.managedAdapters),
+    adapterEvidenceDigest: input.sourceSet.adapterEvidenceDigest,
+    stagingDirectory: relativeBootstrapStagingPath(operationId),
+    targets,
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+}
+
+function createDualReadBootstrapBundle(
+  snapshot: DualReadBootstrapTargetSnapshot,
+  input: {
+    sourceSet: LegacyMigrationSourceSet;
+    allocator: ReturnType<typeof createDeterministicMigrationIdAllocator>;
+    now: string;
+    minReaderVersion: string;
+    minWriterVersion: string;
+    managedAdapters: ManagedAdapterInventory;
+  },
+): DualReadBootstrapBundle {
+  const generatedWorkspaceId = input.allocator.allocate('workspace');
+  const generatedSchemaEpoch = input.allocator.allocate('schema-epoch');
+  const existingConfig =
+    snapshot.config === null
+      ? null
+      : parseBootstrapConfigContent(snapshot.config);
+  const existingPolicy =
+    snapshot.policy === null
+      ? null
+      : parseBootstrapPolicyContent(snapshot.policy);
+  if (existingConfig !== null) assertBootstrapConfigSeed(existingConfig);
+  if (existingPolicy !== null) assertBootstrapPolicySeed(existingPolicy);
+  if (existingConfig !== null && existingPolicy !== null) {
+    assertConfigPolicyConsistency(existingConfig, existingPolicy);
+  }
+  const workspaceId =
+    existingConfig?.workspaceId ??
+    existingPolicy?.workspaceId ??
+    generatedWorkspaceId;
+  const updatedAt =
+    existingConfig?.updatedAt ?? existingPolicy?.updatedAt ?? input.now;
+  const config =
+    existingConfig ??
+    parseProjectConfig({
       schemaVersion: 1,
       revision: 1,
       workspaceId,
-      transport: { mode: 'local', remote: null },
+      transport: { mode: 'local', remote: null, epoch: 1 },
       lastOperationId: null,
-      updatedAt: input.now,
+      updatedAt,
     });
-    const policy: TeamPolicyV1 = parseTeamPolicy({
+  const policy =
+    existingPolicy ??
+    parseTeamPolicy({
       schemaVersion: 1,
       revision: 1,
       workspaceId,
@@ -2306,43 +3549,966 @@ async function ensureDualReadShell(input: {
         completedSessionDays: 30,
       },
       lastOperationId: null,
-      updatedAt: input.now,
+      updatedAt,
     });
-    const manifest = parseSchemaManifest({
-      manifestVersion: 1,
-      layoutVersion: 3,
-      epoch: input.allocator.allocate('schema-epoch'),
-      activationState: 'dual_read',
-      minReaderVersion: input.minReaderVersion,
-      minWriterVersion: input.minWriterVersion,
-      activatedAt: null,
-      legacyBaseline: input.sourceSet.baseline,
-      managedAdapters: input.managedAdapters,
-      lastOperationId: null,
-    });
-    await writeJsonExclusive(schemaPath, manifest);
-    await writeJsonExclusive(configPath, config);
-    await writeJsonExclusive(policyPath, policy);
-  } finally {
-    await rmdir(lockPath).catch(() => undefined);
+  assertConfigPolicyConsistency(config, policy);
+  const manifest = parseSchemaManifest({
+    manifestVersion: 1,
+    layoutVersion: 3,
+    epoch: generatedSchemaEpoch,
+    activationState: 'dual_read',
+    minReaderVersion: input.minReaderVersion,
+    minWriterVersion: input.minWriterVersion,
+    activatedAt: null,
+    legacyBaseline: input.sourceSet.baseline,
+    managedAdapters: input.managedAdapters,
+    lastOperationId: null,
+  });
+  return {
+    manifest,
+    config,
+    policy,
+    contents: {
+      config: snapshot.config === null ? serialize(config) : snapshot.config,
+      policy: snapshot.policy === null ? serialize(policy) : snapshot.policy,
+      schema: serialize(manifest),
+    },
+  };
+}
+
+function assertBootstrapConfigSeed(config: ProjectConfigV1): void {
+  if (
+    config.revision !== 1 ||
+    config.transport.mode !== 'local' ||
+    config.transport.remote !== null ||
+    config.transport.epoch !== 1 ||
+    config.lastOperationId !== null
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
   }
 }
 
-async function validateExistingDualReadShell(
-  configPath: string,
-  policyPath: string,
-): Promise<void> {
-  const [config, policy] = await Promise.all([
-    readJsonOrNull(configPath),
-    readJsonOrNull(policyPath),
-  ]);
-  if (config === null || policy === null) {
-    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_INCOMPLETE');
+function assertBootstrapPolicySeed(policy: TeamPolicyV1): void {
+  if (
+    policy.revision !== 1 ||
+    policy.policy !== 'auto' ||
+    policy.recentDays !== 30 ||
+    policy.defaultVisibility !== 'local' ||
+    policy.shareConfirmedDecisions !== false ||
+    policy.retention.localRawArtifactDays !== 7 ||
+    policy.retention.localCacheDays !== 7 ||
+    policy.retention.completedSessionDays !== 30 ||
+    policy.lastOperationId !== null
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
   }
-  assertConfigPolicyConsistency(
-    parseProjectConfig(config),
-    parseTeamPolicy(policy),
+}
+
+function validateDualReadBootstrapSnapshot(
+  snapshot: DualReadBootstrapTargetSnapshot,
+  input: {
+    sourceSet: LegacyMigrationSourceSet;
+    managedAdapters: ManagedAdapterInventory;
+  },
+): { manifest: SchemaManifest; config: ProjectConfigV1; policy: TeamPolicyV1 } {
+  if (
+    snapshot.schema === null ||
+    snapshot.config === null ||
+    snapshot.policy === null
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  const manifest = parseBootstrapManifestContent(snapshot.schema);
+  if (manifest.activationState !== 'dual_read') {
+    throw new Error('MANCODE_MIGRATION_MANIFEST_STATE_INVALID');
+  }
+  if (!sameLegacyBaseline(manifest.legacyBaseline, input.sourceSet.baseline)) {
+    throw new Error('MANCODE_LEGACY_BASELINE_CHANGED');
+  }
+  assertDualReadManifestInventory(
+    manifest,
+    resolvedMigrationInventory(
+      input.managedAdapters,
+      input.sourceSet.adapterEvidenceDigest,
+      'explicit',
+    ),
   );
+  const config = parseBootstrapConfigContent(snapshot.config);
+  const policy = parseBootstrapPolicyContent(snapshot.policy);
+  assertConfigPolicyConsistency(config, policy);
+  return { manifest, config, policy };
+}
+
+function parseBootstrapManifestContent(content: string): SchemaManifest {
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  try {
+    return parseSchemaManifest(value);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('MANCODE_')) {
+      throw error;
+    }
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED', {
+      cause: error,
+    });
+  }
+}
+
+function parseBootstrapConfigContent(content: string): ProjectConfigV1 {
+  try {
+    return parseProjectConfig(JSON.parse(content));
+  } catch (error) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED', {
+      cause: error,
+    });
+  }
+}
+
+function parseBootstrapPolicyContent(content: string): TeamPolicyV1 {
+  try {
+    return parseTeamPolicy(JSON.parse(content));
+  } catch (error) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED', {
+      cause: error,
+    });
+  }
+}
+
+function assertDualReadBootstrapStateInputs(
+  state: DualReadBootstrapStateV1,
+  input: {
+    sourceSet: LegacyMigrationSourceSet;
+    managedAdapters: ManagedAdapterInventory;
+  },
+): void {
+  if (
+    !sameLegacyBaseline(state.sourceBaseline, input.sourceSet.baseline) ||
+    !managedAdapterInventoriesMatch(
+      state.managedAdapters,
+      input.managedAdapters,
+    )
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  const expectedInventoryDigest = managedAdapterInventoryDigest(
+    input.managedAdapters,
+  );
+  if (state.managedAdaptersDigest !== expectedInventoryDigest) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  if (state.adapterEvidenceDigest !== input.sourceSet.adapterEvidenceDigest) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  validateDualReadBootstrapStateTargets(state);
+  const manifest = parseBootstrapManifestContent(
+    findBootstrapTarget(state, 'schema').targetContent,
+  );
+  if (manifest.activationState !== 'dual_read') {
+    throw new Error('MANCODE_MIGRATION_MANIFEST_STATE_INVALID');
+  }
+  if (!sameLegacyBaseline(manifest.legacyBaseline, state.sourceBaseline)) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  assertDualReadManifestInventory(
+    manifest,
+    resolvedMigrationInventory(
+      state.managedAdapters,
+      state.adapterEvidenceDigest,
+      'explicit',
+    ),
+  );
+}
+
+function validateDualReadBootstrapStateTargets(
+  state: DualReadBootstrapStateV1,
+): void {
+  const targets = new Map(state.targets.map((target) => [target.name, target]));
+  const schema = targets.get('schema');
+  const config = targets.get('config');
+  const policy = targets.get('policy');
+  if (schema === undefined || config === undefined || policy === undefined) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  parseBootstrapManifestContent(schema.targetContent);
+  const parsedConfig = parseBootstrapConfigContent(config.targetContent);
+  const parsedPolicy = parseBootstrapPolicyContent(policy.targetContent);
+  assertConfigPolicyConsistency(parsedConfig, parsedPolicy);
+}
+
+async function readDualReadBootstrapStateOrNull(
+  root: string,
+): Promise<DualReadBootstrapStateV1 | null> {
+  const raw = await readBootstrapRawFile(dualReadBootstrapStatePath(root));
+  if (raw === null) return null;
+  try {
+    return parseDualReadBootstrapState(JSON.parse(raw));
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === 'MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED'
+    ) {
+      throw error;
+    }
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED', {
+      cause: error,
+    });
+  }
+}
+
+/**
+ * Lock acquisition needs the durable operation ID when it is readable, but a
+ * damaged journal must not prevent the lock from serializing the later,
+ * authoritative repair-required result.
+ */
+async function readDualReadBootstrapOperationIdHint(
+  root: string,
+): Promise<Ulid | null> {
+  try {
+    const raw = await readBootstrapRawFile(dualReadBootstrapStatePath(root));
+    if (raw === null) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!isPlainRecord(value) || typeof value.operationId !== 'string') {
+      return null;
+    }
+    assertUlid(value.operationId, 'dual-read bootstrap state operationId');
+    return value.operationId;
+  } catch {
+    return null;
+  }
+}
+
+async function readDualReadBootstrapTargets(
+  root: string,
+): Promise<DualReadBootstrapTargetSnapshot> {
+  const values = await Promise.all(
+    DUAL_READ_BOOTSTRAP_TARGET_SPECS.map((spec) =>
+      readBootstrapRawFile(path.join(root, spec.relativePath)),
+    ),
+  );
+  return {
+    config: values[0] ?? null,
+    policy: values[1] ?? null,
+    schema: values[2] ?? null,
+  };
+}
+
+async function cleanupOrphanedDualReadBootstrapStaging(
+  root: string,
+  keepOperationId: Ulid | null,
+): Promise<void> {
+  const directory = path.join(root, '.mancode', 'local', 'migration');
+  await assertBootstrapParentChain(path.join(directory, 'placeholder'));
+  const directoryEntry = await lstatOrNullMigration(directory);
+  if (directoryEntry === null) return;
+  if (directoryEntry.isSymbolicLink() || !directoryEntry.isDirectory()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  const entries = await readdir(directory);
+  for (const entry of entries) {
+    if (!entry.startsWith('.dual-read-bootstrap-')) continue;
+    const operationId = entry.slice('.dual-read-bootstrap-'.length);
+    try {
+      assertUlid(operationId, 'dual-read bootstrap staging operationId');
+    } catch {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    }
+    if (operationId === keepOperationId) continue;
+    const stagingRoot = path.join(directory, entry);
+    if (!(await isSafeBootstrapStagingTree(stagingRoot))) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    }
+    await rm(stagingRoot, { recursive: true, force: false });
+  }
+}
+
+async function ensureDualReadBootstrapStaging(
+  root: string,
+  state: DualReadBootstrapStateV1,
+): Promise<void> {
+  const stagingRoot = dualReadBootstrapStagingPath(root, state.operationId);
+  if (
+    relativeBootstrapStagingPath(state.operationId) !== state.stagingDirectory
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  await ensureBootstrapDirectory(path.dirname(stagingRoot));
+  const existing = await lstatOrNullMigration(stagingRoot);
+  if (existing?.isSymbolicLink()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  if (existing !== null && !existing.isDirectory()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  let rebuild = existing === null;
+  if (!rebuild) {
+    await assertSafeBootstrapStagingTree(stagingRoot);
+    rebuild = !(await isExpectedBootstrapStagingTree(stagingRoot));
+  }
+  if (!rebuild) {
+    for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+      const staged = await readBootstrapRawFile(
+        path.join(stagingRoot, spec.stagingRelativePath),
+      );
+      const target = findBootstrapTarget(state, spec.name);
+      if (staged !== target.targetContent) {
+        rebuild = true;
+        break;
+      }
+    }
+  }
+  if (rebuild && existing !== null) {
+    await rm(stagingRoot, { recursive: true, force: false });
+  }
+  if (rebuild) await mkdir(stagingRoot, { recursive: true });
+  for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+    const target = findBootstrapTarget(state, spec.name);
+    const stagedPath = path.join(stagingRoot, spec.stagingRelativePath);
+    const staged = await readBootstrapRawFile(stagedPath);
+    if (staged !== target.targetContent) {
+      throwIfOperationCrashInjected(
+        DUAL_READ_BOOTSTRAP_OPERATION,
+        `staging-${spec.name}-before`,
+      );
+      armOperationCrashAfterVisibleWrite(
+        DUAL_READ_BOOTSTRAP_OPERATION,
+        `staging-${spec.name}`,
+      );
+      await writeBootstrapStagingFile(stagedPath, target.targetContent);
+      throwIfDeferredOperationCrashInjected(DUAL_READ_BOOTSTRAP_OPERATION);
+      throwIfOperationCrashInjected(
+        DUAL_READ_BOOTSTRAP_OPERATION,
+        `staging-${spec.name}-after`,
+      );
+    }
+  }
+  for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+    const target = findBootstrapTarget(state, spec.name);
+    const staged = await readBootstrapRawFile(
+      path.join(stagingRoot, spec.stagingRelativePath),
+    );
+    if (staged !== target.targetContent) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    }
+  }
+  if (!(await isExpectedBootstrapStagingTree(stagingRoot))) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  validateDualReadBootstrapStateTargets(state);
+}
+
+async function isExpectedBootstrapStagingTree(
+  stagingRoot: string,
+): Promise<boolean> {
+  const expectedDirectories = new Set(['shared', 'shared/team']);
+  const expectedFiles = new Set(
+    DUAL_READ_BOOTSTRAP_TARGET_SPECS.map((spec) => spec.stagingRelativePath),
+  );
+  const entries = await collectBootstrapStagingEntries(stagingRoot);
+  if (
+    entries.size !== expectedDirectories.size + expectedFiles.size ||
+    [...entries].some(
+      ([relative, kind]) =>
+        (kind === 'directory' && !expectedDirectories.has(relative)) ||
+        (kind === 'file' && !expectedFiles.has(relative)),
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function isSafeBootstrapStagingTree(
+  stagingRoot: string,
+): Promise<boolean> {
+  try {
+    await assertSafeBootstrapStagingTree(stagingRoot);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function assertSafeBootstrapStagingTree(
+  stagingRoot: string,
+): Promise<void> {
+  const rootEntry = await lstatOrNullMigration(stagingRoot);
+  if (
+    rootEntry === null ||
+    rootEntry.isSymbolicLink() ||
+    !rootEntry.isDirectory()
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  await collectBootstrapStagingEntries(stagingRoot);
+}
+
+async function collectBootstrapStagingEntries(
+  stagingRoot: string,
+): Promise<Map<string, 'directory' | 'file'>> {
+  const entries = new Map<string, 'directory' | 'file'>();
+  const visit = async (directory: string, relative: string): Promise<void> => {
+    const children = (await readdir(directory)).sort(compareUtf8);
+    for (const child of children) {
+      const childPath = path.join(directory, child);
+      const childRelative = relative ? `${relative}/${child}` : child;
+      const entry = await lstat(childPath);
+      if (entry.isSymbolicLink() || (!entry.isDirectory() && !entry.isFile())) {
+        throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+      }
+      entries.set(childRelative, entry.isDirectory() ? 'directory' : 'file');
+      if (entry.isDirectory()) await visit(childPath, childRelative);
+    }
+  };
+  await visit(stagingRoot, '');
+  return entries;
+}
+
+async function completeDualReadBootstrap(
+  root: string,
+  initial: DualReadBootstrapStateV1,
+  now: string,
+): Promise<SchemaManifest> {
+  let state = initial;
+  if (state.state === 'repair_required') {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  if (state.state === 'committed') {
+    try {
+      await assertDualReadBootstrapPublishedTargets(root, state);
+    } catch (error) {
+      await markDualReadBootstrapRepairRequired(root, state, now);
+      throw error;
+    }
+    await removeDualReadBootstrapStaging(root, state);
+    return parseBootstrapManifestContent(
+      findBootstrapTarget(state, 'schema').targetContent,
+    );
+  }
+  for (const name of ['config', 'policy', 'schema'] as const) {
+    state = await publishDualReadBootstrapTarget(root, state, name, now);
+  }
+  await assertDualReadBootstrapPublishedTargets(root, state);
+  const committed = parseDualReadBootstrapState({
+    ...state,
+    state: 'committed',
+    updatedAt: now,
+  });
+  state = await persistDualReadBootstrapState(root, state, committed);
+  await removeDualReadBootstrapStaging(root, state);
+  throwIfOperationCrashInjected(DUAL_READ_BOOTSTRAP_OPERATION, 'commit');
+  return parseBootstrapManifestContent(
+    findBootstrapTarget(state, 'schema').targetContent,
+  );
+}
+
+async function publishDualReadBootstrapTarget(
+  root: string,
+  state: DualReadBootstrapStateV1,
+  name: DualReadBootstrapTargetName,
+  now: string,
+): Promise<DualReadBootstrapStateV1> {
+  const target = findBootstrapTarget(state, name);
+  const spec = DUAL_READ_BOOTSTRAP_TARGET_SPECS.find(
+    (candidate) => candidate.name === name,
+  );
+  if (spec === undefined) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  const targetPath = path.join(root, spec.relativePath);
+  const current = await readBootstrapRawFile(targetPath);
+  if (target.state === 'published') {
+    if (current !== target.targetContent) {
+      await markDualReadBootstrapRepairRequired(root, state, now);
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+    }
+    return state;
+  }
+  if (current === target.targetContent) {
+    const next = updateBootstrapTargetState(state, name, 'published', now);
+    return persistDualReadBootstrapState(root, state, next);
+  }
+  if (current !== target.beforeContent) {
+    await markDualReadBootstrapRepairRequired(root, state, now);
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  throwIfOperationCrashInjected(
+    DUAL_READ_BOOTSTRAP_OPERATION,
+    `${name}-before`,
+  );
+  armOperationCrashAfterVisibleWrite(DUAL_READ_BOOTSTRAP_OPERATION, name);
+  await writeBootstrapTargetAtomically(
+    targetPath,
+    target.beforeContent,
+    target.targetContent,
+  );
+  throwIfDeferredOperationCrashInjected(DUAL_READ_BOOTSTRAP_OPERATION);
+  throwIfOperationCrashInjected(DUAL_READ_BOOTSTRAP_OPERATION, `${name}-after`);
+  const verified = await readBootstrapRawFile(targetPath);
+  if (verified !== target.targetContent) {
+    await markDualReadBootstrapRepairRequired(root, state, now);
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  const next = updateBootstrapTargetState(state, name, 'published', now);
+  return persistDualReadBootstrapState(root, state, next);
+}
+
+function updateBootstrapTargetState(
+  state: DualReadBootstrapStateV1,
+  name: DualReadBootstrapTargetName,
+  targetState: DualReadBootstrapTargetState,
+  now: string,
+): DualReadBootstrapStateV1 {
+  const targets = state.targets.map((target) =>
+    target.name === name ? { ...target, state: targetState } : target,
+  );
+  return parseDualReadBootstrapState({
+    ...state,
+    state: 'publishing',
+    targets,
+    updatedAt: now,
+  });
+}
+
+async function assertDualReadBootstrapPublishedTargets(
+  root: string,
+  state: DualReadBootstrapStateV1,
+): Promise<void> {
+  const snapshot = await readDualReadBootstrapTargets(root);
+  for (const spec of DUAL_READ_BOOTSTRAP_TARGET_SPECS) {
+    const target = findBootstrapTarget(state, spec.name);
+    if (snapshot[spec.name] !== target.targetContent) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+    }
+  }
+  validateDualReadBootstrapSnapshot(snapshot, {
+    sourceSet: {
+      baseline: state.sourceBaseline,
+      adapterEvidenceDigest: state.adapterEvidenceDigest,
+    } as LegacyMigrationSourceSet,
+    managedAdapters: state.managedAdapters,
+  });
+}
+
+async function markDualReadBootstrapRepairRequired(
+  root: string,
+  state: DualReadBootstrapStateV1,
+  now: string,
+): Promise<void> {
+  const next = parseDualReadBootstrapState({
+    ...state,
+    state: 'repair_required',
+    updatedAt: now,
+  });
+  await persistDualReadBootstrapState(root, state, next).catch(() => undefined);
+}
+
+function findBootstrapTarget(
+  state: DualReadBootstrapStateV1,
+  name: DualReadBootstrapTargetName,
+): DualReadBootstrapTargetV1 {
+  const target = state.targets.find((candidate) => candidate.name === name);
+  if (target === undefined) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  return target;
+}
+
+async function writeInitialDualReadBootstrapState(
+  root: string,
+  state: DualReadBootstrapStateV1,
+): Promise<DualReadBootstrapStateV1> {
+  const target = dualReadBootstrapStatePath(root);
+  const existing = await readDualReadBootstrapStateOrNull(root);
+  if (existing !== null) {
+    if (digestCanonicalJson(existing) === digestCanonicalJson(state)) {
+      return existing;
+    }
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  await writeJsonAtomic(target, state);
+  return state;
+}
+
+async function persistDualReadBootstrapState(
+  root: string,
+  previous: DualReadBootstrapStateV1,
+  next: DualReadBootstrapStateV1,
+): Promise<DualReadBootstrapStateV1> {
+  const current = await readDualReadBootstrapStateOrNull(root);
+  if (
+    current === null ||
+    digestCanonicalJson(current) !== digestCanonicalJson(previous)
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_JOURNAL_CONFLICT');
+  }
+  await writeJsonAtomic(dualReadBootstrapStatePath(root), next);
+  return next;
+}
+
+async function removeDualReadBootstrapStaging(
+  root: string,
+  state: DualReadBootstrapStateV1,
+): Promise<void> {
+  const stagingRoot = dualReadBootstrapStagingPath(root, state.operationId);
+  const existing = await lstatOrNullMigration(stagingRoot);
+  if (existing === null) return;
+  if (existing.isSymbolicLink() || !existing.isDirectory()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  await rm(stagingRoot, { recursive: true, force: false });
+}
+
+async function writeBootstrapStagingFile(
+  target: string,
+  content: string,
+): Promise<void> {
+  await ensureBootstrapDirectory(path.dirname(target));
+  const temporary = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${createUlid()}.bootstrap.tmp`,
+  );
+  try {
+    await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx' });
+    await replaceFileAtomically(temporary, target);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+async function writeBootstrapTargetAtomically(
+  target: string,
+  beforeContent: string | null,
+  targetContent: string,
+): Promise<void> {
+  await ensureBootstrapDirectory(path.dirname(target));
+  const current = await readBootstrapRawFile(target);
+  if (current === targetContent) return;
+  if (current !== beforeContent) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  const temporary = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${createUlid()}.bootstrap.tmp`,
+  );
+  try {
+    await writeFile(temporary, targetContent, {
+      encoding: 'utf8',
+      flag: 'wx',
+    });
+    await replaceFileAtomically(temporary, target);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+async function readBootstrapRawFile(target: string): Promise<string | null> {
+  await assertBootstrapParentChain(target);
+  const before = await lstatOrNullMigration(target);
+  if (before === null) return null;
+  if (before.isSymbolicLink() || !before.isFile()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  const content = await readFile(target, 'utf8');
+  const after = await lstatOrNullMigration(target);
+  if (
+    after === null ||
+    after.isSymbolicLink() ||
+    !after.isFile() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino
+  ) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+  }
+  return content;
+}
+
+async function assertBootstrapParentChain(target: string): Promise<void> {
+  const root = path.resolve(target);
+  const projectRoot = findProjectRootForBootstrapPath(root);
+  let current = projectRoot;
+  const relative = path.relative(projectRoot, path.dirname(root));
+  for (const segment of relative ? relative.split(path.sep) : []) {
+    current = path.join(current, segment);
+    const entry = await lstatOrNullMigration(current);
+    if (entry === null) return;
+    if (entry.isSymbolicLink() || !entry.isDirectory()) {
+      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    }
+  }
+}
+
+function findProjectRootForBootstrapPath(target: string): string {
+  const marker = `${path.sep}.mancode${path.sep}`;
+  const index = target.indexOf(marker);
+  if (index >= 0) {
+    return target.slice(0, index) || path.parse(target).root;
+  }
+  const rootMarker = `${path.sep}.mancode`;
+  if (target.endsWith(rootMarker)) {
+    return target.slice(0, -rootMarker.length) || path.parse(target).root;
+  }
+  throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+}
+
+async function ensureBootstrapDirectory(target: string): Promise<void> {
+  const root = path.resolve(target);
+  const projectRoot = findProjectRootForBootstrapPath(root);
+  await assertBootstrapParentChain(path.join(root, 'placeholder'));
+  await mkdir(root, { recursive: true });
+  const entry = await lstatOrNullMigration(root);
+  if (entry === null || entry.isSymbolicLink() || !entry.isDirectory()) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+  if (!isWithinRoot(projectRoot, root)) {
+    throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+  }
+}
+
+async function acquireDualReadBootstrapLock(
+  root: string,
+  operationId: Ulid,
+): Promise<DualReadBootstrapLockHandle> {
+  const lockPath = dualReadBootstrapLockPath(root);
+  await ensureBootstrapDirectory(path.dirname(lockPath));
+  const now = new Date();
+  const owner: DualReadBootstrapLockOwnerV1 = {
+    schemaVersion: 1,
+    operationId,
+    processId: process.pid,
+    acquiredAt: now.toISOString(),
+    leaseExpiresAt: new Date(
+      now.getTime() + DUAL_READ_BOOTSTRAP_LOCK_LEASE_MS,
+    ).toISOString(),
+    statePath: relativeBootstrapStatePath(),
+    stagingDirectory: relativeBootstrapStagingPath(operationId),
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await mkdir(lockPath);
+      const createdPause = pauseIfOperationLockInjectedForTesting(
+        operationId,
+        'bootstrap_lock_created',
+      );
+      if (createdPause !== null) await createdPause;
+      // On failure, leave the directory for inspection. Without a complete
+      // owner record we cannot prove that cleanup would delete our own lock.
+      await writeFile(
+        path.join(lockPath, 'owner.json'),
+        `${JSON.stringify(owner, null, 2)}\n`,
+        { encoding: 'utf8', flag: 'wx' },
+      );
+      const pause = pauseIfOperationLockInjectedForTesting(
+        operationId,
+        'bootstrap_lock_held',
+      );
+      if (pause !== null) await pause;
+      return {
+        owner,
+        async release(): Promise<void> {
+          const current = await readDualReadBootstrapLockOwner(lockPath);
+          if (current === null || !sameBootstrapLockOwner(current, owner)) {
+            return;
+          }
+          await rm(lockPath, { recursive: true, force: false });
+        },
+      };
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+      const status = await inspectDualReadBootstrapLock(root, lockPath);
+      if (status === 'reclaimable') {
+        if (await reclaimDualReadBootstrapLock(root, lockPath, operationId)) {
+          continue;
+        }
+      }
+      throw new Error(
+        status === 'stale_unverified'
+          ? 'MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED'
+          : 'MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD',
+      );
+    }
+  }
+  throw new Error('MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD');
+}
+
+async function inspectDualReadBootstrapLock(
+  root: string,
+  lockPath: string,
+): Promise<'held' | 'reclaimable' | 'stale_unverified'> {
+  const stat = await lstatOrNullMigration(lockPath);
+  if (stat === null) return 'reclaimable';
+  if (stat.isSymbolicLink() || !stat.isDirectory()) return 'held';
+  const owner = await readDualReadBootstrapLockOwner(lockPath);
+  if (owner !== null) {
+    if (processIsAliveForBootstrap(owner.processId)) return 'held';
+    if (Date.parse(owner.leaseExpiresAt) >= Date.now()) return 'held';
+  } else {
+    // A slow but live creator can still be between mkdir and owner publish.
+    // Directory age cannot establish that this process has died.
+    return 'stale_unverified';
+  }
+  const state = await readDualReadBootstrapStateOrNull(root);
+  if (state === null) return 'stale_unverified';
+  if (owner !== null && owner.operationId !== state.operationId) {
+    return 'stale_unverified';
+  }
+  try {
+    validateDualReadBootstrapStateTargets(state);
+  } catch {
+    return 'stale_unverified';
+  }
+  return 'reclaimable';
+}
+
+async function reclaimDualReadBootstrapLock(
+  root: string,
+  lockPath: string,
+  operationId: Ulid,
+): Promise<boolean> {
+  // Serialize reclaimers, then re-read the owner: an earlier observation can
+  // refer to a stale directory that another reclaimer has already replaced.
+  // A guard abandoned by a crashed reclaimer requires operator inspection.
+  const guardPath = `${lockPath}.reclaim`;
+  try {
+    await mkdir(guardPath);
+  } catch (error) {
+    if (isAlreadyExists(error)) {
+      throw new Error('MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED');
+    }
+    throw error;
+  }
+  try {
+    const pause = pauseIfOperationLockInjectedForTesting(
+      operationId,
+      'bootstrap_reclaim_held',
+    );
+    if (pause !== null) await pause;
+    if ((await lstatOrNullMigration(lockPath)) === null) return true;
+    const status = await inspectDualReadBootstrapLock(root, lockPath);
+    if (status === 'stale_unverified') {
+      throw new Error('MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED');
+    }
+    if (status !== 'reclaimable') return false;
+    const stalePath = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+    await rename(lockPath, stalePath);
+    await rm(stalePath, { recursive: true, force: true });
+    return true;
+  } finally {
+    await rmdir(guardPath);
+  }
+}
+
+async function readDualReadBootstrapLockOwner(
+  lockPath: string,
+): Promise<DualReadBootstrapLockOwnerV1 | null> {
+  const ownerPath = path.join(lockPath, 'owner.json');
+  const entry = await lstatOrNullMigration(ownerPath);
+  if (entry === null || entry.isSymbolicLink() || !entry.isFile()) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(ownerPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  try {
+    return parseDualReadBootstrapLockOwner(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseDualReadBootstrapLockOwner(
+  value: unknown,
+): DualReadBootstrapLockOwnerV1 {
+  assertRecord(value, 'dual-read bootstrap lock owner');
+  assertKnownKeys(
+    value,
+    [
+      'schemaVersion',
+      'operationId',
+      'processId',
+      'acquiredAt',
+      'leaseExpiresAt',
+      'statePath',
+      'stagingDirectory',
+    ],
+    'dual-read bootstrap lock owner',
+  );
+  if (value.schemaVersion !== 1) {
+    throw new Error('dual-read bootstrap lock owner schemaVersion is invalid');
+  }
+  assertUlid(value.operationId, 'dual-read bootstrap lock owner operationId');
+  if (
+    typeof value.processId !== 'number' ||
+    !Number.isSafeInteger(value.processId) ||
+    value.processId < 1
+  ) {
+    throw new Error('dual-read bootstrap lock owner processId is invalid');
+  }
+  const acquiredAt = parseTimestamp(
+    value.acquiredAt,
+    'dual-read bootstrap lock owner acquiredAt',
+  );
+  const leaseExpiresAt = parseTimestamp(
+    value.leaseExpiresAt,
+    'dual-read bootstrap lock owner leaseExpiresAt',
+  );
+  if (
+    value.statePath !== relativeBootstrapStatePath() ||
+    value.stagingDirectory !== relativeBootstrapStagingPath(value.operationId)
+  ) {
+    throw new Error('dual-read bootstrap lock owner paths are invalid');
+  }
+  return {
+    schemaVersion: 1,
+    operationId: value.operationId,
+    processId: value.processId,
+    acquiredAt,
+    leaseExpiresAt,
+    statePath: value.statePath,
+    stagingDirectory: value.stagingDirectory,
+  };
+}
+
+function sameBootstrapLockOwner(
+  left: DualReadBootstrapLockOwnerV1,
+  right: DualReadBootstrapLockOwnerV1,
+): boolean {
+  return (
+    left.operationId === right.operationId &&
+    left.processId === right.processId &&
+    left.acquiredAt === right.acquiredAt &&
+    left.leaseExpiresAt === right.leaseExpiresAt &&
+    left.statePath === right.statePath &&
+    left.stagingDirectory === right.stagingDirectory
+  );
+}
+
+function processIsAliveForBootstrap(processId: number): boolean {
+  if (processId === process.pid) return true;
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'ESRCH'
+    );
+  }
+}
+
+function relativeBootstrapStatePath(): string {
+  return DUAL_READ_BOOTSTRAP_STATE_RELATIVE;
+}
+
+function relativeBootstrapStagingPath(operationId: Ulid): string {
+  assertUlid(operationId, 'dual-read bootstrap staging operationId');
+  return `${DUAL_READ_BOOTSTRAP_STAGING_PREFIX}${operationId}`;
 }
 
 async function readMigrationStageOrNull(
@@ -2607,6 +4773,36 @@ function parseDigest(value: unknown, label: string): string {
   return value;
 }
 
+function parseManagedAdapterInventory(
+  value: unknown,
+  label: string,
+): ManagedAdapterInventory {
+  assertRecord(value, label);
+  assertKnownKeys(value, MANAGED_ADAPTERS, label);
+  const inventory: ManagedAdapterInventory = {};
+  for (const adapter of MANAGED_ADAPTERS) {
+    const version = value[adapter];
+    if (version === undefined) continue;
+    if (typeof version !== 'string' || !version.trim()) {
+      throw new Error(`${label}.${adapter} must be a non-empty version`);
+    }
+    inventory[adapter] = version;
+  }
+  return inventory;
+}
+
+function managedAdapterInventoryDigest(
+  inventory: ManagedAdapterInventory,
+): string {
+  return digestCanonicalJson({
+    schemaVersion: 1,
+    managedAdapters: parseManagedAdapterInventory(
+      inventory,
+      'migration managedAdapters',
+    ),
+  });
+}
+
 function parseDigestOrNull(value: unknown, label: string): string | null {
   return value === null ? null : parseDigest(value, label);
 }
@@ -2648,12 +4844,6 @@ function candidateDigest(candidate: MigratedLegacyTaskCandidate): string {
     verification: candidate.verification.contentDigest,
     auxiliary: candidate.auxiliary,
   });
-}
-
-function defaultManagedAdapters(): Record<ManagedAdapter, string> {
-  return Object.fromEntries(
-    MANAGED_ADAPTERS.map((adapter) => [adapter, 'legacy-unmanaged']),
-  ) as Record<ManagedAdapter, string>;
 }
 
 function sameAliases(
@@ -2787,36 +4977,6 @@ async function writeTextAtomic(target: string, content: string): Promise<void> {
   );
   await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx' });
   await rename(temporary, target);
-}
-
-async function writeJsonExclusive(
-  target: string,
-  value: unknown,
-): Promise<void> {
-  await mkdir(path.dirname(target), { recursive: true });
-  try {
-    await writeFile(target, serialize(value), { encoding: 'utf8', flag: 'wx' });
-  } catch (error) {
-    if (!isAlreadyExists(error)) throw error;
-    const existing = await readJsonOrNull(target);
-    if (
-      existing === null ||
-      digestCanonicalJson(existing) !== digestCanonicalJson(value)
-    ) {
-      throw new Error('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
-    }
-  }
-}
-
-async function readJsonOrNull(target: string): Promise<unknown | null> {
-  try {
-    return JSON.parse(await readFile(target, 'utf8'));
-  } catch (error) {
-    if (isNotFound(error)) return null;
-    if (error instanceof SyntaxError)
-      throw new Error('MANCODE_MIGRATION_SHELL_CORRUPT');
-    throw error;
-  }
 }
 
 function serialize(value: unknown): string {

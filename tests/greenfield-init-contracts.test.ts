@@ -4,6 +4,7 @@ import {
   readFile,
   rename,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,7 @@ import {
   greenfieldStagingPath,
   greenfieldTargetPath,
   initializeGreenfield,
+  parseGreenfieldInitializationJournal,
   recoverGreenfieldInitialization,
   stageGreenfieldInitialization,
 } from '../src/context/greenfield-init.js';
@@ -137,6 +139,149 @@ describe('journaled greenfield initialization contract', () => {
       ),
     );
     expect(manifest.activationState).toBe('v3_active');
+  });
+
+  it.each([
+    'unchanged',
+    'logical-retargeted',
+    'physical-symlink',
+    'content-drift',
+  ] as const)(
+    'recovers a legacy resolvedTarget-only journal only with its pinned target: %s',
+    async (scenario) => {
+      const physicalPath = path.join(root, 'SHARED.md');
+      const logicalPath = path.join(root, 'CLAUDE.md');
+      const alternatePath = path.join(root, 'ALTERNATE.md');
+      const before = '# Shared instructions\n';
+      await writeFile(physicalPath, before);
+      await writeFile(alternatePath, before);
+      await symlink('SHARED.md', logicalPath);
+      const journal = await stageGreenfieldInitialization({
+        ...input(root),
+        managedAdapters: { 'claude-code': '3' },
+      });
+      const plan = journal.adapterPlans.find(
+        (candidate) => candidate.resolvedTarget,
+      );
+      if (plan === undefined) throw new Error('expected symlink adapter plan');
+      expect(plan.target).toBe('claude-skill');
+      plan.linkIdentities = undefined;
+      const journalPath = path.join(
+        greenfieldStagingPath(root, OPERATION_ID),
+        'local',
+        'runtime',
+        'initialization',
+        `${OPERATION_ID}.json`,
+      );
+      await writeFile(journalPath, JSON.stringify(journal));
+      await rename(
+        greenfieldStagingPath(root, OPERATION_ID),
+        greenfieldTargetPath(root),
+      );
+      if (scenario === 'logical-retargeted') {
+        await rm(logicalPath);
+        await symlink('ALTERNATE.md', logicalPath);
+      } else if (scenario === 'physical-symlink') {
+        await rm(physicalPath);
+        await symlink('ALTERNATE.md', physicalPath);
+      } else if (scenario === 'content-drift') {
+        await writeFile(physicalPath, '# Edited instructions\n');
+      }
+      const recovery = recoverGreenfieldInitialization({
+        projectRoot: root,
+        operationId: OPERATION_ID,
+        registerWorkspaceBinding: async () => {},
+      });
+      if (scenario === 'unchanged') {
+        await expect(recovery).resolves.toBe('forward_repaired');
+        await expect(readFile(physicalPath, 'utf8')).resolves.toBe(
+          plan.targetContent,
+        );
+      } else {
+        await expect(recovery).rejects.toThrow(
+          'MANCODE_V3_ADAPTER_TARGET_CONFLICT',
+        );
+        await expect(readFile(physicalPath, 'utf8')).resolves.toBe(
+          scenario === 'content-drift' ? '# Edited instructions\n' : before,
+        );
+      }
+      expect((await lstat(logicalPath)).isSymbolicLink()).toBe(true);
+      await expect(readFile(alternatePath, 'utf8')).resolves.toBe(before);
+    },
+  );
+
+  it('strictly validates new journal link identities without rejecting legacy metadata', async () => {
+    await writeFile(path.join(root, 'SHARED.md'), '# Shared instructions\n');
+    await symlink('SHARED.md', path.join(root, 'CLAUDE.md'));
+    const journal = await stageGreenfieldInitialization({
+      ...input(root),
+      managedAdapters: { 'claude-code': '3' },
+    });
+    const plan = journal.adapterPlans.find(
+      (candidate) => candidate.resolvedTarget,
+    );
+    if (plan === undefined) throw new Error('expected symlink adapter plan');
+    expect(
+      parseGreenfieldInitializationJournal(journal).adapterPlans,
+    ).toContainEqual(plan);
+    for (const metadata of [
+      { linkIdentities: [] },
+      { linkIdentities: null },
+      { resolvedTarget: undefined },
+      { resolvedTarget: '../outside.md' },
+      {
+        linkIdentities: [{ linkPath: '../CLAUDE.md', linkTarget: 'SHARED.md' }],
+      },
+      { linkIdentities: [{ linkPath: 'CLAUDE.md', linkTarget: '' }] },
+      {
+        linkIdentities: [
+          ...(plan.linkIdentities ?? []),
+          ...(plan.linkIdentities ?? []),
+        ],
+      },
+    ]) {
+      expect(() =>
+        parseGreenfieldInitializationJournal({
+          ...journal,
+          adapterPlans: [{ ...plan, ...metadata }],
+        }),
+      ).toThrow('greenfield initialization journal adapterPlans is invalid');
+    }
+    const { linkIdentities: _identities, ...legacyPlan } = plan;
+    expect(
+      parseGreenfieldInitializationJournal({
+        ...journal,
+        adapterPlans: [legacyPlan],
+      }).adapterPlans,
+    ).toEqual([legacyPlan]);
+  });
+
+  it('rejects changed new-format link identity even when its destination is unchanged', async () => {
+    const physicalPath = path.join(root, 'SHARED.md');
+    const logicalPath = path.join(root, 'CLAUDE.md');
+    const before = '# Shared instructions\n';
+    await writeFile(physicalPath, before);
+    await symlink('SHARED.md', logicalPath);
+    await stageGreenfieldInitialization({
+      ...input(root),
+      managedAdapters: { 'claude-code': '3' },
+    });
+    await rename(
+      greenfieldStagingPath(root, OPERATION_ID),
+      greenfieldTargetPath(root),
+    );
+    await rm(logicalPath);
+    await symlink('./SHARED.md', logicalPath);
+
+    await expect(
+      recoverGreenfieldInitialization({
+        projectRoot: root,
+        operationId: OPERATION_ID,
+        registerWorkspaceBinding: async () => {},
+      }),
+    ).rejects.toThrow('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    await expect(readFile(physicalPath, 'utf8')).resolves.toBe(before);
+    expect((await lstat(logicalPath)).isSymbolicLink()).toBe(true);
   });
 
   it('runs the real initializer and custom recovery at every declared crash point', async () => {

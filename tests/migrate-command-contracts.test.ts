@@ -21,6 +21,7 @@ vi.mock('../src/context/migrate.js', () => ({
   stageLegacyMigration: engine.stage,
 }));
 
+import { createCliProgram } from '../src/cli.js';
 import {
   EXIT_INVALID_ARG,
   EXIT_MIGRATION_BLOCKED,
@@ -243,6 +244,217 @@ describe('migration command contract', () => {
       EXIT_MIGRATION_BLOCKED,
       'MANCODE_MIGRATION_FAILED',
     );
+  });
+
+  describe.each(['dryRun', 'stage'] as const)(
+    '%s platform selection',
+    (operation) => {
+      it.each([
+        [
+          'codex,cursor',
+          { codex: 'legacy-unmanaged', cursor: 'legacy-unmanaged' },
+        ],
+        [' Codex, codex ', { codex: 'legacy-unmanaged' }],
+        ['none', {}],
+        [' NONE ', {}],
+        [
+          'all',
+          {
+            'claude-code': 'legacy-unmanaged',
+            cursor: 'legacy-unmanaged',
+            codex: 'legacy-unmanaged',
+            copilot: 'legacy-unmanaged',
+            zcode: 'legacy-unmanaged',
+            'kimi-code': 'legacy-unmanaged',
+            qoder: 'legacy-unmanaged',
+            dsh: 'legacy-unmanaged',
+          },
+        ],
+      ])(
+        'passes %s as an explicit inventory',
+        async (platform, managedAdapters) => {
+          await expect(
+            captureJson(() =>
+              migrateContext(root, { [operation]: true, platform, json: true }),
+            ),
+          ).resolves.toMatchObject({ exitCode: EXIT_OK });
+          if (operation === 'dryRun') {
+            expect(engine.dryRun).toHaveBeenCalledExactlyOnceWith(
+              root,
+              managedAdapters,
+            );
+          } else {
+            expect(engine.stage).toHaveBeenCalledExactlyOnceWith({
+              projectRoot: root,
+              managedAdapters,
+            });
+          }
+        },
+      );
+
+      it.each([
+        'unknown',
+        'codex,unknown',
+        'none,codex',
+        'all,codex',
+        '',
+        ' , ',
+      ])(
+        'rejects invalid selection %j before invoking the engine',
+        async (platform) => {
+          await expectJson(
+            () =>
+              migrateContext(root, { [operation]: true, platform, json: true }),
+            EXIT_INVALID_ARG,
+            'MANCODE_MIGRATION_ARGUMENT_INVALID',
+          );
+          for (const method of Object.values(engine)) {
+            expect(method).not.toHaveBeenCalled();
+          }
+        },
+      );
+    },
+  );
+
+  it.each([{ status: true }, { activate: true }, { rollback: OPERATION_ID }])(
+    'rejects platform selection for %j before invoking the engine',
+    async (operation) => {
+      await expectJson(
+        () =>
+          migrateContext(root, { ...operation, platform: 'none', json: true }),
+        EXIT_INVALID_ARG,
+        'MANCODE_MIGRATION_ARGUMENT_INVALID',
+      );
+      for (const method of Object.values(engine)) {
+        expect(method).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('passes an explicit stage ID without adding an omitted inventory', async () => {
+    await expect(
+      captureJson(() =>
+        migrateContext(root, { stage: true, stageId: STAGE_ID, json: true }),
+      ),
+    ).resolves.toMatchObject({ exitCode: EXIT_OK });
+    expect(engine.stage).toHaveBeenCalledExactlyOnceWith({
+      projectRoot: root,
+      stageId: STAGE_ID,
+    });
+  });
+
+  it.each(['--dry-run', '--stage'])(
+    'exposes --platform through the %s CLI entry',
+    async (operation) => {
+      const previousExitCode = process.exitCode;
+      try {
+        await expect(
+          captureJson(async () => {
+            await createCliProgram()
+              .exitOverride()
+              .parseAsync(
+                [
+                  'migrate',
+                  'context',
+                  operation,
+                  '--platform',
+                  'codex,cursor',
+                  ...(operation === '--stage' ? ['--stage-id', STAGE_ID] : []),
+                  '--json',
+                ],
+                { from: 'user' },
+              );
+            return Number(process.exitCode);
+          }),
+        ).resolves.toMatchObject({ exitCode: EXIT_OK });
+        const managedAdapters = {
+          codex: 'legacy-unmanaged',
+          cursor: 'legacy-unmanaged',
+        };
+        if (operation === '--dry-run') {
+          expect(engine.dryRun).toHaveBeenCalledExactlyOnceWith(
+            process.cwd(),
+            managedAdapters,
+          );
+        } else {
+          expect(engine.stage).toHaveBeenCalledExactlyOnceWith({
+            projectRoot: process.cwd(),
+            stageId: STAGE_ID,
+            managedAdapters,
+          });
+        }
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it('forwards resolution options consumed by the parent to the child service', async () => {
+    const previousExitCode = process.exitCode;
+    try {
+      const output = await captureJson(async () => {
+        await createCliProgram()
+          .exitOverride()
+          .parseAsync(
+            [
+              'migrate',
+              'context',
+              'resolve',
+              'legacy-task',
+              '--stage-id',
+              STAGE_ID,
+              '--expected-stage-revision',
+              '1',
+              '--owner',
+              OWNER_ID,
+              '--json',
+            ],
+            { from: 'user' },
+          );
+        return Number(process.exitCode);
+      });
+      expect(output.exitCode).toBe(EXIT_OK);
+      expect(engine.resolve).toHaveBeenCalledExactlyOnceWith({
+        projectRoot: process.cwd(),
+        stageId: STAGE_ID,
+        legacyTaskId: 'legacy-task',
+        expectedStageRevision: 1,
+        ownerActorId: OWNER_ID,
+        implementationScope: undefined,
+      });
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('still rejects resolution without a revision through the CLI', async () => {
+    const previousExitCode = process.exitCode;
+    try {
+      const output = await captureJson(async () => {
+        await createCliProgram().parseAsync(
+          [
+            'migrate',
+            'context',
+            'resolve',
+            'legacy-task',
+            '--stage-id',
+            STAGE_ID,
+            '--owner',
+            OWNER_ID,
+            '--json',
+          ],
+          { from: 'user' },
+        );
+        return Number(process.exitCode);
+      });
+      expect(output).toMatchObject({
+        exitCode: EXIT_MIGRATION_BLOCKED,
+        value: { error: { code: 'MANCODE_MIGRATION_STAGE_REVISION_INVALID' } },
+      });
+      expect(engine.resolve).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 });
 

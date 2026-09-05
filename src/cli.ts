@@ -1039,6 +1039,10 @@ export function createCliProgram(): Command {
     )
     .option('--dry-run', 'Inspect legacy authority without writing files')
     .option('--stage', 'Create or refresh an isolated local migration stage')
+    .option(
+      '--platform <platforms>',
+      'Adapters for dry-run or stage: comma-separated names, all, or none',
+    )
     .option('--status', 'Show local migration stages')
     .option('--activate', 'Attempt the journaled mancode activation')
     .option(
@@ -1062,7 +1066,7 @@ export function createCliProgram(): Command {
   migrateContextProgram
     .command('resolve <legacyTaskId>')
     .description('Resolve missing owner or implementation scope in one stage')
-    .requiredOption(
+    .option(
       '--expected-stage-revision <n>',
       'Expected local migration stage revision',
     )
@@ -1074,11 +1078,15 @@ export function createCliProgram(): Command {
     )
     .option('--json', 'Output as JSON (for scripts)')
     .action(async (legacyTaskId, options) => {
-      const code = await migrateContextResolve(
-        process.cwd(),
-        legacyTaskId,
-        options,
-      );
+      // Commander may consume duplicate option names on the parent first.
+      // The application service validates the merged required revision.
+      const parent = migrateContextProgram.opts();
+      const code = await migrateContextResolve(process.cwd(), legacyTaskId, {
+        stageId: parent.stageId,
+        expectedStageRevision: parent.expectedStageRevision,
+        json: parent.json,
+        ...options,
+      });
       process.exitCode = code;
     });
 

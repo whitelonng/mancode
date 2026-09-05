@@ -1,17 +1,35 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseSchemaManifest } from '../src/context/manifest.js';
 import {
+  DUAL_READ_BOOTSTRAP_OPERATION,
   activateLegacyMigration,
   dryRunLegacyMigration,
+  dualReadBootstrapLockPath,
+  dualReadBootstrapStagingPath,
+  dualReadBootstrapStatePath,
+  listMigrationStages,
   migrationStagePath,
+  parseDualReadBootstrapState,
   resolveLegacyMigration,
   rollbackLegacyMigration,
   stageLegacyMigration,
 } from '../src/context/migrate.js';
-import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
+import {
+  createOperationLockPauseForTesting,
+  withOperationCrashInjectionForTesting,
+} from '../src/runtime/operation-crash-injection.js';
 import { OPERATION_CRASH_FIXTURES } from '../src/runtime/operation-definition.js';
 import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
 import { createSession } from '../src/runtime/session.js';
@@ -24,6 +42,8 @@ import {
 const OWNER_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7J';
 const LEGACY_TASK_ID = '20260717-120000-login-rate-limit';
 const ACTIVATION_OPERATION_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7N';
+const SHARED_ADAPTER_CONTENT =
+  '# User instructions\r\nKeep this text unchanged.\r\n<!-- mancode:start -->\n<!-- Managed by mancode. Do not edit this block manually. -->\nLegacy Codex instructions.\n<!-- mancode:end -->\n';
 
 describe('legacy migration stage contract', () => {
   let root: string;
@@ -56,6 +76,729 @@ describe('legacy migration stage contract', () => {
       readFile(path.join(root, '.mancode', 'schema.json')),
     ).rejects.toThrow();
     expect(await readLegacyAuthorityBytes(root)).toEqual(before);
+  });
+
+  it('requires an explicit adapter inventory when legacy evidence is absent', async () => {
+    await rm(path.join(root, '.mancode', 'state.json'), { force: false });
+
+    await expect(dryRunLegacyMigration(root)).rejects.toThrow(
+      'MANCODE_MIGRATION_ADAPTER_INVENTORY_REQUIRED',
+    );
+    await expect(stageLegacyMigration({ projectRoot: root })).rejects.toThrow(
+      'MANCODE_MIGRATION_ADAPTER_INVENTORY_REQUIRED',
+    );
+    await expect(
+      readFile(path.join(root, '.mancode', 'schema.json')),
+    ).rejects.toThrow();
+  });
+
+  it('infers a single legacy platform without registering the other adapters', async () => {
+    const report = await dryRunLegacyMigration(root);
+
+    expect(report.managedAdapters).toEqual({
+      'claude-code': 'legacy-unmanaged',
+    });
+    expect(report.managedAdaptersDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(report.adapterEvidenceDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it('infers multiple platforms from explicit markers in one shared AGENTS.md', async () => {
+    await rm(path.join(root, '.mancode', 'state.json'), { force: false });
+    await writeFile(
+      path.join(root, 'AGENTS.md'),
+      [
+        '# User instructions',
+        '<!-- mancode:continuity:codex:start -->',
+        'Codex marker.',
+        '<!-- mancode:continuity:codex:end -->',
+        '<!-- mancode:zcode:start -->',
+        'ZCode marker.',
+        '<!-- mancode:zcode:end -->',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const report = await dryRunLegacyMigration(root);
+
+    expect(report.managedAdapters).toEqual({
+      codex: 'legacy-unmanaged',
+      zcode: 'legacy-unmanaged',
+    });
+  });
+
+  it('recognizes the old generic managed block by its platform-specific file', async () => {
+    await rm(path.join(root, '.mancode', 'state.json'), { force: false });
+    await mkdir(path.join(root, '.github'), { recursive: true });
+    const genericBlock = [
+      '<!-- mancode:start -->',
+      '<!-- Managed by mancode. Do not edit this block manually. -->',
+      'Legacy managed instructions.',
+      '<!-- mancode:end -->',
+    ].join('\n');
+    await writeFile(path.join(root, 'AGENTS.md'), genericBlock, 'utf8');
+    await writeFile(
+      path.join(root, '.github', 'copilot-instructions.md'),
+      genericBlock,
+      'utf8',
+    );
+
+    const report = await dryRunLegacyMigration(root);
+
+    expect(report.managedAdapters).toEqual({
+      codex: 'legacy-unmanaged',
+      copilot: 'legacy-unmanaged',
+    });
+  });
+
+  it('honors an explicit empty inventory and persists it in the shell and stage', async () => {
+    await rm(path.join(root, '.mancode', 'state.json'), { force: false });
+
+    const staged = await stageLegacyMigration({
+      projectRoot: root,
+      managedAdapters: {},
+    });
+
+    expect(staged.managedAdapters).toEqual({});
+    expect(staged.managedAdaptersDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(staged.adapterEvidenceDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    const manifest = parseSchemaManifest(
+      JSON.parse(
+        await readFile(path.join(root, '.mancode', 'schema.json'), 'utf8'),
+      ),
+    );
+    expect(manifest.managedAdapters).toEqual({});
+  });
+
+  it('keeps an existing all-platform manifest authoritative and compatible', async () => {
+    const initial = await stageLegacyMigration({ projectRoot: root });
+    const schemaPath = path.join(root, '.mancode', 'schema.json');
+    const manifest = parseSchemaManifest(
+      JSON.parse(await readFile(schemaPath, 'utf8')),
+    );
+    await rm(path.join(root, '.mancode', 'local'), {
+      recursive: true,
+      force: true,
+    });
+    const allPlatforms = {
+      'claude-code': '3',
+      codex: '3',
+      cursor: '3',
+      copilot: '3',
+      zcode: '3',
+      'kimi-code': '3',
+      qoder: '3',
+      dsh: '3',
+    } as const;
+    await writeFile(
+      schemaPath,
+      `${JSON.stringify({ ...manifest, managedAdapters: allPlatforms }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const staged = await stageLegacyMigration({ projectRoot: root });
+
+    expect(staged.managedAdapters).toEqual(allPlatforms);
+    await expect(
+      stageLegacyMigration({
+        projectRoot: root,
+        stageId: staged.stageId,
+        managedAdapters: { codex: '3' },
+      }),
+    ).rejects.toThrow('MANCODE_MIGRATION_ADAPTER_INVENTORY_CONFLICT');
+    expect(initial.stageId).not.toBe(staged.stageId);
+  });
+
+  it('rejects adapter evidence drift after staging', async () => {
+    const staged = await stageLegacyMigration({ projectRoot: root });
+    await mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+    await writeFile(
+      path.join(root, '.cursor', 'rules', 'user.mdc'),
+      'user-owned rule\n',
+      'utf8',
+    );
+
+    await expect(
+      resolveLegacyMigration({
+        projectRoot: root,
+        stageId: staged.stageId,
+        legacyTaskId: LEGACY_TASK_ID,
+        expectedStageRevision: staged.revision,
+        ownerActorId: OWNER_ID,
+      }),
+    ).rejects.toThrow('MANCODE_MIGRATION_ADAPTER_EVIDENCE_CHANGED');
+  });
+
+  it('activates exactly the selected inventory', async () => {
+    const staged = await stageLegacyMigration({
+      projectRoot: root,
+      managedAdapters: { codex: 'legacy-unmanaged' },
+    });
+    const resolved = await resolveLegacyMigration({
+      projectRoot: root,
+      stageId: staged.stageId,
+      legacyTaskId: LEGACY_TASK_ID,
+      expectedStageRevision: staged.revision,
+      ownerActorId: OWNER_ID,
+    });
+    const actor = await createLocalActor(root, {
+      actorId: OWNER_ID,
+      displayName: 'Inventory owner',
+    });
+    await publishSharedActorProfile(root, createSharedActorProfile(actor));
+    const session = await createSession(root, {
+      actorId: actor.actorId,
+      client: 'inventory-test',
+      identitySource: 'explicit',
+    });
+
+    const activated = await activateLegacyMigration({
+      projectRoot: root,
+      stageId: resolved.stageId,
+      expectedStageRevision: resolved.revision,
+      sessionId: session.sessionId,
+      explicitConfirmation: true,
+      sharedPrivacyConfirmed: false,
+    });
+
+    expect(activated.manifest.managedAdapters).toEqual({ codex: '3' });
+    await expect(readFile(path.join(root, 'CLAUDE.md'))).rejects.toThrow();
+    await expect(
+      readFile(path.join(root, 'AGENTS.md'), 'utf8'),
+    ).resolves.toContain('mancode:continuity:codex:start');
+  });
+
+  it('keeps repeated staging idempotent for the inventory snapshot', async () => {
+    const stageId = '01JZ4B6W5Z0A1B2C3D4E5F6G7M';
+    const first = await stageLegacyMigration({
+      projectRoot: root,
+      stageId,
+    });
+    const second = await stageLegacyMigration({
+      projectRoot: root,
+      stageId,
+    });
+
+    expect(second.managedAdapters).toEqual(first.managedAdapters);
+    expect(second.managedAdaptersDigest).toBe(first.managedAdaptersDigest);
+    expect(second.adapterEvidenceDigest).toBe(first.adapterEvidenceDigest);
+    expect(await listMigrationStages(root)).toHaveLength(1);
+  });
+
+  it.each([
+    'staging-config',
+    'prepared',
+    'config-before',
+    'config',
+    'config-after',
+    'policy-before',
+    'policy',
+    'policy-after',
+    'schema-before',
+    'schema',
+    'schema-after',
+    'commit',
+  ] as const)(
+    'recovers the dual-read shell after %s',
+    async (crashAfter) => {
+      const caseRoot = path.join(root, `bootstrap-crash-${crashAfter}`);
+      await mkdir(caseRoot, { recursive: true });
+      await writeLegacyFixture(caseRoot);
+
+      await expect(
+        withOperationCrashInjectionForTesting(
+          { operationType: DUAL_READ_BOOTSTRAP_OPERATION, crashAfter },
+          () =>
+            stageLegacyMigration({
+              projectRoot: caseRoot,
+              now: new Date('2026-07-17T12:00:00.000Z'),
+            }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+      if (!crashAfter.startsWith('schema') && crashAfter !== 'commit') {
+        await expect(
+          readFile(path.join(caseRoot, '.mancode', 'schema.json')),
+        ).rejects.toThrow();
+      }
+
+      const recovered = await stageLegacyMigration({
+        projectRoot: caseRoot,
+        now: new Date('2026-07-17T12:01:00.000Z'),
+      });
+      await assertDualReadBootstrapCommitted(caseRoot);
+
+      const repeated = await stageLegacyMigration({
+        projectRoot: caseRoot,
+        stageId: recovered.stageId,
+        now: new Date('2026-07-17T12:02:00.000Z'),
+      });
+      expect(repeated.managedAdapters).toEqual(recovered.managedAdapters);
+      await assertDualReadBootstrapCommitted(caseRoot);
+    },
+    60_000,
+  );
+
+  it('rebuilds damaged staging from the durable bootstrap state', async () => {
+    const caseRoot = path.join(root, 'bootstrap-damaged-staging');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const state = await readDualReadBootstrapState(caseRoot);
+    const stagingConfig = path.join(
+      dualReadBootstrapStagingPath(caseRoot, state.operationId),
+      'shared',
+      'config.json',
+    );
+    await writeFile(stagingConfig, '{ damaged staging }\n', 'utf8');
+
+    await stageLegacyMigration({ projectRoot: caseRoot });
+
+    await assertDualReadBootstrapCommitted(caseRoot);
+  });
+
+  it('rejects a schema symlink instead of accepting a manifest through it', async () => {
+    const manifestTarget = path.join(root, 'schema-target.json');
+    await writeFile(manifestTarget, '{}\n', 'utf8');
+    await symlink(manifestTarget, path.join(root, '.mancode', 'schema.json'));
+
+    await expect(dryRunLegacyMigration(root)).rejects.toThrow(
+      'MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED',
+    );
+  });
+
+  it('persists repair-required when a durable journal finds a damaged target', async () => {
+    const caseRoot = path.join(root, 'bootstrap-target-symlink');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    await mkdir(path.join(caseRoot, '.mancode', 'shared'), {
+      recursive: true,
+    });
+    const target = path.join(caseRoot, 'user-config.json');
+    await writeFile(target, '{}\n', 'utf8');
+    await symlink(
+      target,
+      path.join(caseRoot, '.mancode', 'shared', 'config.json'),
+    );
+
+    await expect(
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    await expect(readDualReadBootstrapState(caseRoot)).resolves.toMatchObject({
+      state: 'repair_required',
+    });
+  });
+
+  it('rebuilds ordinary staging debris but rejects staging symlinks', async () => {
+    const rebuildRoot = path.join(root, 'bootstrap-staging-debris');
+    await mkdir(rebuildRoot, { recursive: true });
+    await writeLegacyFixture(rebuildRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: rebuildRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const rebuildState = await readDualReadBootstrapState(rebuildRoot);
+    await writeFile(
+      path.join(
+        dualReadBootstrapStagingPath(rebuildRoot, rebuildState.operationId),
+        'leftover.txt',
+      ),
+      'ordinary debris\n',
+      'utf8',
+    );
+
+    await stageLegacyMigration({ projectRoot: rebuildRoot });
+    await assertDualReadBootstrapCommitted(rebuildRoot);
+
+    const unsafeRoot = path.join(root, 'bootstrap-staging-symlink');
+    await mkdir(unsafeRoot, { recursive: true });
+    await writeLegacyFixture(unsafeRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: unsafeRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const unsafeState = await readDualReadBootstrapState(unsafeRoot);
+    const unsafeTarget = path.join(unsafeRoot, 'user-owned.txt');
+    await writeFile(unsafeTarget, 'keep\n', 'utf8');
+    await symlink(
+      unsafeTarget,
+      path.join(
+        dualReadBootstrapStagingPath(unsafeRoot, unsafeState.operationId),
+        'unsafe-link',
+      ),
+    );
+
+    await expect(
+      stageLegacyMigration({ projectRoot: unsafeRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    await expect(readDualReadBootstrapState(unsafeRoot)).resolves.toMatchObject(
+      { state: 'repair_required' },
+    );
+  });
+
+  it('makes dry-run report a durable partial bootstrap while stage repairs it', async () => {
+    const caseRoot = path.join(root, 'bootstrap-dry-run-partial');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+    await expect(dryRunLegacyMigration(caseRoot)).rejects.toThrow(
+      'MANCODE_MIGRATION_DUAL_READ_SHELL_RECOVERY_REQUIRED',
+    );
+    await stageLegacyMigration({ projectRoot: caseRoot });
+    await assertDualReadBootstrapCommitted(caseRoot);
+  });
+
+  it('requires the durable target order to match config, policy, and schema', async () => {
+    await stageLegacyMigration({ projectRoot: root });
+    const state = await readDualReadBootstrapState(root);
+
+    expect(() =>
+      parseDualReadBootstrapState({
+        ...state,
+        targets: [...state.targets].reverse(),
+      }),
+    ).toThrow('dual-read bootstrap state targets are not ordered');
+  });
+
+  it('marks the bootstrap repair-required when a published target is externally changed', async () => {
+    const caseRoot = path.join(root, 'bootstrap-external-change');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await stageLegacyMigration({ projectRoot: caseRoot });
+
+    const configPath = path.join(caseRoot, '.mancode', 'shared', 'config.json');
+    await writeFile(configPath, '{ "external": true }\n', 'utf8');
+
+    await expect(
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_DUAL_READ_SHELL_CONFLICT');
+    await expect(readDualReadBootstrapState(caseRoot)).resolves.toMatchObject({
+      state: 'repair_required',
+    });
+    await expect(readFile(configPath, 'utf8')).resolves.toBe(
+      '{ "external": true }\n',
+    );
+  });
+
+  it('returns repair-required for a corrupted bootstrap journal without exposing schema', async () => {
+    const caseRoot = path.join(root, 'bootstrap-corrupt-journal');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    await writeFile(
+      dualReadBootstrapStatePath(caseRoot),
+      '{ broken journal\n',
+      'utf8',
+    );
+
+    await expect(
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    await expect(
+      readFile(path.join(caseRoot, '.mancode', 'schema.json')),
+    ).rejects.toThrow();
+  });
+
+  it('returns repair-required when schema is visible but config or policy is missing', async () => {
+    const caseRoot = path.join(root, 'bootstrap-missing-prerequisite');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await stageLegacyMigration({ projectRoot: caseRoot });
+
+    const schemaPath = path.join(caseRoot, '.mancode', 'schema.json');
+    const schemaBefore = await readFile(schemaPath, 'utf8');
+    await rm(dualReadBootstrapStatePath(caseRoot), { force: false });
+    await rm(path.join(caseRoot, '.mancode', 'shared', 'config.json'), {
+      force: false,
+    });
+    await rm(path.join(caseRoot, '.mancode', 'shared', 'team', 'policy.json'), {
+      force: false,
+    });
+
+    await expect(
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_DUAL_READ_SHELL_REPAIR_REQUIRED');
+    await expect(readFile(schemaPath, 'utf8')).resolves.toBe(schemaBefore);
+  });
+
+  it.each(['normal', 'concurrent', 'changed-owner', 'abandoned-guard'])(
+    'safely handles expired bootstrap locks: %s',
+    async (scenario) => {
+      const caseRoot = path.join(root, 'bootstrap-stale-lock');
+      await mkdir(caseRoot, { recursive: true });
+      await writeLegacyFixture(caseRoot);
+      await expect(
+        withOperationCrashInjectionForTesting(
+          {
+            operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+            crashAfter: 'prepared',
+          },
+          () => stageLegacyMigration({ projectRoot: caseRoot }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+      const state = await readDualReadBootstrapState(caseRoot);
+      const lockPath = dualReadBootstrapLockPath(caseRoot);
+      const expired = '2020-01-01T00:00:00.000Z';
+      await mkdir(lockPath);
+      await writeFile(
+        path.join(lockPath, 'owner.json'),
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            operationId: state.operationId,
+            processId: 2_147_483_647,
+            acquiredAt: expired,
+            leaseExpiresAt: expired,
+            statePath: path.relative(
+              caseRoot,
+              dualReadBootstrapStatePath(caseRoot),
+            ),
+            stagingDirectory: path.relative(
+              caseRoot,
+              dualReadBootstrapStagingPath(caseRoot, state.operationId),
+            ),
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+      await utimes(lockPath, new Date(expired), new Date(expired));
+
+      if (scenario === 'abandoned-guard') {
+        await mkdir(`${lockPath}.reclaim`);
+        await expect(
+          stageLegacyMigration({ projectRoot: caseRoot }),
+        ).rejects.toThrow('MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED');
+        await expect(lstat(lockPath)).resolves.toBeDefined();
+        expect(await readDualReadBootstrapState(caseRoot)).toEqual(state);
+        return;
+      }
+      if (scenario === 'normal') {
+        await stageLegacyMigration({ projectRoot: caseRoot });
+      } else {
+        const pause = createOperationLockPauseForTesting({
+          operationId: state.operationId,
+          pauseAfter: 'bootstrap_reclaim_held',
+        });
+        const winner = pause.run(() =>
+          stageLegacyMigration({ projectRoot: caseRoot }),
+        );
+        void winner.catch(() => undefined);
+        try {
+          await pause.reached;
+          if (scenario === 'concurrent') {
+            await expect(
+              stageLegacyMigration({ projectRoot: caseRoot }),
+            ).rejects.toThrow(
+              'MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED',
+            );
+          } else {
+            const ownerPath = path.join(lockPath, 'owner.json');
+            const owner = JSON.parse(await readFile(ownerPath, 'utf8'));
+            await writeFile(
+              ownerPath,
+              JSON.stringify({ ...owner, processId: process.pid }),
+            );
+          }
+        } finally {
+          pause.release();
+        }
+        if (scenario === 'changed-owner') {
+          await expect(winner).rejects.toThrow(
+            'MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD',
+          );
+          expect(
+            JSON.parse(
+              await readFile(path.join(lockPath, 'owner.json'), 'utf8'),
+            ).processId,
+          ).toBe(process.pid);
+          return;
+        }
+        await winner;
+      }
+
+      await assertDualReadBootstrapCommitted(caseRoot);
+      await expect(lstat(lockPath)).rejects.toThrow();
+    },
+  );
+
+  it('does not reclaim an expired lock while its owner process is alive', async () => {
+    const caseRoot = path.join(root, 'bootstrap-live-lock');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const state = await readDualReadBootstrapState(caseRoot);
+    const lockPath = dualReadBootstrapLockPath(caseRoot);
+    const expired = '2020-01-01T00:00:00.000Z';
+    await mkdir(lockPath);
+    await writeFile(
+      path.join(lockPath, 'owner.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          operationId: state.operationId,
+          processId: process.pid,
+          acquiredAt: expired,
+          leaseExpiresAt: expired,
+          statePath: path.relative(
+            caseRoot,
+            dualReadBootstrapStatePath(caseRoot),
+          ),
+          stagingDirectory: path.relative(
+            caseRoot,
+            dualReadBootstrapStagingPath(caseRoot, state.operationId),
+          ),
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+    await utimes(lockPath, new Date(expired), new Date(expired));
+
+    try {
+      await expect(
+        stageLegacyMigration({ projectRoot: caseRoot }),
+      ).rejects.toThrow('MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD');
+      await expect(lstat(lockPath)).resolves.toBeDefined();
+    } finally {
+      await rm(lockPath, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['missing', 'replaced'])(
+    'does not steal or delete a lock with a %s owner during initialization',
+    async (scenario) => {
+      await expect(
+        withOperationCrashInjectionForTesting(
+          {
+            operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+            crashAfter: 'prepared',
+          },
+          () => stageLegacyMigration({ projectRoot: root }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+      const state = await readDualReadBootstrapState(root);
+      const lockPath = dualReadBootstrapLockPath(root);
+      const pause = createOperationLockPauseForTesting({
+        operationId: state.operationId,
+        pauseAfter: 'bootstrap_lock_created',
+      });
+      const pending = pause.run(() =>
+        stageLegacyMigration({ projectRoot: root }),
+      );
+      void pending.catch(() => undefined);
+      try {
+        await pause.reached;
+        await utimes(lockPath, new Date(0), new Date(0));
+        if (scenario === 'replaced') {
+          await writeFile(
+            path.join(lockPath, 'owner.json'),
+            'unverified owner',
+          );
+        }
+        await expect(
+          stageLegacyMigration({ projectRoot: root }),
+        ).rejects.toThrow('MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED');
+      } finally {
+        pause.release();
+        await pending.catch(() => undefined);
+      }
+      if (scenario === 'missing') {
+        await pending;
+        await assertDualReadBootstrapCommitted(root);
+      } else {
+        await expect(pending).rejects.toThrow();
+        await expect(
+          readFile(path.join(lockPath, 'owner.json'), 'utf8'),
+        ).resolves.toBe('unverified owner');
+      }
+    },
+  );
+
+  it('serializes concurrent bootstrap initialization through one lock owner', async () => {
+    const caseRoot = path.join(root, 'bootstrap-concurrent');
+    await mkdir(caseRoot, { recursive: true });
+    await writeLegacyFixture(caseRoot);
+    await expect(
+      withOperationCrashInjectionForTesting(
+        {
+          operationType: DUAL_READ_BOOTSTRAP_OPERATION,
+          crashAfter: 'prepared',
+        },
+        () => stageLegacyMigration({ projectRoot: caseRoot }),
+      ),
+    ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+    const state = await readDualReadBootstrapState(caseRoot);
+    const pause = createOperationLockPauseForTesting({
+      operationId: state.operationId,
+      pauseAfter: 'bootstrap_lock_held',
+    });
+    const winner = pause.run(() =>
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    );
+    void winner.catch(() => undefined);
+    await pause.reached;
+
+    await expect(
+      stageLegacyMigration({ projectRoot: caseRoot }),
+    ).rejects.toThrow('MANCODE_MIGRATION_BOOTSTRAP_LOCK_HELD');
+    pause.release();
+    await winner;
+    await assertDualReadBootstrapCommitted(caseRoot);
   });
 
   it('writes only a dual-read shell and local quarantine, then rebuilds a candidate after explicit resolution', async () => {
@@ -394,6 +1137,121 @@ describe('legacy migration stage contract', () => {
     ).rejects.toThrow('MANCODE_MIGRATION_ROLLBACK_FORBIDDEN');
   });
 
+  it.each(['absent', 'preexisting', 'user-file'])(
+    'preserves directory ownership on rollback and allows retry: %s',
+    async (scenario) => {
+      const platformRoot = path.join(root, '.claude');
+      if (scenario === 'preexisting') {
+        await mkdir(path.join(platformRoot, 'skills', 'man'), {
+          recursive: true,
+        });
+      }
+      const prepared = await prepareActivationCase(root);
+      const activated = await activateLegacyMigration({
+        projectRoot: root,
+        stageId: prepared.stageId,
+        expectedStageRevision: prepared.stageRevision,
+        sessionId: prepared.sessionId,
+        explicitConfirmation: true,
+      });
+      if (scenario === 'user-file') {
+        await writeFile(
+          path.join(platformRoot, 'skills', 'man', 'user.txt'),
+          'keep me',
+        );
+      }
+      await rollbackLegacyMigration({
+        projectRoot: root,
+        operationId: activated.operation.operationId,
+        sessionId: prepared.sessionId,
+        explicitConfirmation: true,
+      });
+      if (scenario === 'user-file') {
+        await expect(
+          readFile(
+            path.join(platformRoot, 'skills', 'man', 'user.txt'),
+            'utf8',
+          ),
+        ).resolves.toBe('keep me');
+        return;
+      }
+      if (scenario === 'absent') {
+        await expect(lstat(platformRoot)).rejects.toThrow();
+      } else {
+        await expect(
+          lstat(path.join(platformRoot, 'skills', 'man')),
+        ).resolves.toBeDefined();
+      }
+      const retry = await stageLegacyMigration({ projectRoot: root });
+      expect(retry.state).toBe('staged');
+      expect((await readDualReadBootstrapState(root)).state).toBe('committed');
+    },
+  );
+
+  it
+    .skipIf(process.platform === 'win32')
+    .each(['mark-manifest-activating', 'replace-managed-adapters'])(
+    'recovers and rolls back shared adapter links after %s',
+    async (crashAfter) => {
+      const prepared = await prepareActivationCase(root, true);
+      await expect(
+        withOperationCrashInjectionForTesting(
+          {
+            operationType: 'v3_activate',
+            crashAfter,
+            expectedRecovery: 'forward_repair',
+          },
+          () =>
+            activateLegacyMigration({
+              projectRoot: root,
+              stageId: prepared.stageId,
+              expectedStageRevision: prepared.stageRevision,
+              sessionId: prepared.sessionId,
+              explicitConfirmation: true,
+              sharedPrivacyConfirmed: false,
+              operationId: ACTIVATION_OPERATION_ID,
+            }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+      const recovered = await executeOperationRecovery({
+        projectRoot: root,
+        operationId: ACTIVATION_OPERATION_ID,
+        actorId: OWNER_ID,
+        sessionId: prepared.sessionId,
+        mode: 'repair',
+      });
+      expect(recovered.state).toBe('repaired');
+      const content = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+      expect(content).toContain(
+        '# User instructions\r\nKeep this text unchanged.\r\n',
+      );
+      for (const platform of ['codex', 'claude']) {
+        expect(
+          content.split(`<!-- mancode:continuity:${platform}:start -->`),
+        ).toHaveLength(2);
+      }
+      await expect(readlink(path.join(root, 'CLAUDE.md'))).resolves.toBe(
+        'AGENTS.md',
+      );
+      const rolledBack = await rollbackLegacyMigration({
+        projectRoot: root,
+        operationId: ACTIVATION_OPERATION_ID,
+        sessionId: prepared.sessionId,
+        explicitConfirmation: true,
+      });
+      expect(rolledBack.stage.state).toBe('rolled_back');
+      await expect(
+        readFile(path.join(root, 'AGENTS.md'), 'utf8'),
+      ).resolves.toBe(SHARED_ADAPTER_CONTENT);
+      await expect(readlink(path.join(root, 'CLAUDE.md'))).resolves.toBe(
+        'AGENTS.md',
+      );
+      expect((await stageLegacyMigration({ projectRoot: root })).state).toBe(
+        'staged',
+      );
+    },
+  );
+
   it('runs the real V3 activation and recovery at every declared crash point', async () => {
     for (const [
       index,
@@ -479,13 +1337,23 @@ describe('legacy migration stage contract', () => {
   }, 20_000);
 });
 
-async function prepareActivationCase(projectRoot: string): Promise<{
+async function prepareActivationCase(
+  projectRoot: string,
+  sharedAdapter = false,
+): Promise<{
   stageId: string;
   stageRevision: number;
   sessionId: string;
 }> {
   await mkdir(projectRoot, { recursive: true });
   await writeLegacyFixture(projectRoot);
+  if (sharedAdapter) {
+    await writeFile(
+      path.join(projectRoot, 'AGENTS.md'),
+      SHARED_ADAPTER_CONTENT,
+    );
+    await symlink('AGENTS.md', path.join(projectRoot, 'CLAUDE.md'));
+  }
   const staged = await stageLegacyMigration({ projectRoot });
   const resolved = await resolveLegacyMigration({
     projectRoot,
@@ -665,6 +1533,29 @@ async function writeLegacyFixture(root: string): Promise<void> {
       2,
     )}\n`,
   );
+}
+
+async function readDualReadBootstrapState(root: string) {
+  return parseDualReadBootstrapState(
+    JSON.parse(await readFile(dualReadBootstrapStatePath(root), 'utf8')),
+  );
+}
+
+async function assertDualReadBootstrapCommitted(root: string): Promise<void> {
+  const state = await readDualReadBootstrapState(root);
+  expect(state.state).toBe('committed');
+  expect(state.targets.every((target) => target.state === 'published')).toBe(
+    true,
+  );
+  for (const target of state.targets) {
+    await expect(
+      readFile(path.join(root, ...target.relativePath.split('/')), 'utf8'),
+    ).resolves.toBe(target.targetContent);
+  }
+  await expect(lstat(dualReadBootstrapLockPath(root))).rejects.toThrow();
+  await expect(
+    lstat(dualReadBootstrapStagingPath(root, state.operationId)),
+  ).rejects.toThrow();
 }
 
 async function readLegacyAuthorityBytes(

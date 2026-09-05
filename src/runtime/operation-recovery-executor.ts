@@ -30,8 +30,7 @@ import { parseVerificationLedger } from '../context/verification-ledger.js';
 import { parseWorkflowMetadata } from '../context/workflow-metadata.js';
 import {
   applyV3AdapterFilePlan,
-  assertV3AdapterTargetSafe,
-  v3AdapterTargetPath,
+  readV3AdapterFilePlanContent,
 } from '../installers/v3-adapter.js';
 import { parseCheckpoint } from '../team/checkpoints.js';
 import {
@@ -1096,6 +1095,8 @@ async function applyAction(
         target: action.target,
         beforeContent: action.beforeContent,
         targetContent: action.targetContent,
+        resolvedTarget: action.resolvedTarget,
+        linkIdentities: action.linkIdentities,
       });
       return;
     case 'checkpoint': {
@@ -1229,7 +1230,7 @@ async function currentActionDigest(
       return content === null ? null : migrationStageContentDigest(content);
     }
     case 'v3_adapter_file': {
-      const content = await readAdapterFile(projectRoot, action.target);
+      const content = await readAdapterFile(projectRoot, action);
       return adapterFileContentDigest(action.target, content);
     }
     case 'checkpoint': {
@@ -1550,23 +1551,9 @@ async function readMigrationStageFile(
 
 async function readAdapterFile(
   projectRoot: string,
-  target: Extract<
-    OperationRecoveryActionV1,
-    { kind: 'v3_adapter_file' }
-  >['target'],
+  action: Extract<OperationRecoveryActionV1, { kind: 'v3_adapter_file' }>,
 ): Promise<string | null> {
-  await assertV3AdapterTargetSafe(projectRoot, target);
-  const filePath = v3AdapterTargetPath(projectRoot, target);
-  try {
-    const entry = await lstat(filePath);
-    if (!entry.isFile() || entry.isSymbolicLink()) {
-      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
-    }
-    return await readFile(filePath, 'utf8');
-  } catch (error) {
-    if (isNotFound(error)) return null;
-    throw error;
-  }
+  return readV3AdapterFilePlanContent(projectRoot, action);
 }
 
 async function ensureSafeTaskParent(

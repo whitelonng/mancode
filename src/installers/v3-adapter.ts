@@ -3,6 +3,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  readlink,
   realpath,
   rename,
   rm,
@@ -264,6 +265,14 @@ export interface V3AdapterFilePlan {
    * extra options.
    */
   resolvedTarget?: string;
+  /** Symlinks that must still resolve to resolvedTarget during replay. */
+  linkIdentities?: V3AdapterLinkIdentity[];
+}
+
+/** Minimal durable identity of one fixed adapter symlink. */
+export interface V3AdapterLinkIdentity {
+  linkPath: string;
+  linkTarget: string;
 }
 
 export interface V3StagedAdapterFilePlan {
@@ -353,17 +362,447 @@ export function adapterManagedContentDigest(
 export async function planV3AdapterFiles(
   projectRoot: string,
 ): Promise<V3AdapterFilePlan[]> {
+  return planPhysicalAdapterTargets(
+    path.resolve(projectRoot),
+    V3_ADAPTER_FILE_TARGETS,
+    V3_ADAPTER_PLATFORMS,
+  );
+}
+
+/**
+ * Plans selected adapter targets by physical file.  Logical aliases are
+ * rendered against one shared before image and produce one replacement, so a
+ * migration cannot publish two competing snapshots of the same inode.
+ */
+export async function planV3AdapterUpgradeFiles(
+  projectRoot: string,
+  platforms: readonly PlatformName[],
+): Promise<V3AdapterFilePlan[]> {
   const root = path.resolve(projectRoot);
-  const existing = new Map<V3AdapterFileTarget, string | null>();
-  for (const target of V3_ADAPTER_FILE_TARGETS) {
-    existing.set(target, await readAdapterTarget(root, target));
+  const selected = normalizeUpgradePlatforms(platforms);
+  const targets = new Set<V3AdapterFileTarget>();
+  for (const platform of selected) {
+    targets.add(primaryFileTarget(platform));
+    for (const mode of V3_MODE_NAMES) {
+      targets.add(modeEntryFileTarget(platform, mode));
+    }
+    for (const target of legacyAdapterTargetsForPlatform(platform, true)) {
+      targets.add(target);
+    }
   }
+  return planPhysicalAdapterTargets(root, [...targets], selected);
+}
+
+interface AdapterPhysicalObservation {
+  target: V3AdapterFileTarget;
+  logicalPath: string;
+  physicalRelative: string;
+  physicalKey: string;
+  beforeContent: string | null;
+  linkIdentities: V3AdapterLinkIdentity[];
+}
+
+async function planPhysicalAdapterTargets(
+  root: string,
+  targets: readonly V3AdapterFileTarget[],
+  platforms: readonly PlatformName[],
+): Promise<V3AdapterFilePlan[]> {
+  const ordered = orderAdapterTargets(targets);
+  const observations = await Promise.all(
+    ordered.map((target) => observeAdapterPhysicalTarget(root, target)),
+  );
+  const groups = new Map<string, AdapterPhysicalObservation[]>();
+  for (const observation of observations) {
+    const group = groups.get(observation.physicalKey) ?? [];
+    group.push(observation);
+    groups.set(observation.physicalKey, group);
+  }
+
+  const plans: V3AdapterFilePlan[] = [];
+  for (const group of groups.values()) {
+    const members = group.sort(
+      (left, right) =>
+        adapterTargetOrder(left.target) - adapterTargetOrder(right.target),
+    );
+    assertPhysicalGroupComposable(members);
+    const beforeContent = members[0]?.beforeContent ?? null;
+    if (members.some((member) => member.beforeContent !== beforeContent)) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    const targetContent = composePhysicalAdapterContent(
+      beforeContent,
+      members,
+      platforms,
+    );
+    if (targetContent === null || targetContent === beforeContent) continue;
+
+    const representative =
+      members.find((member) => member.target === 'agents') ?? members[0];
+    if (representative === undefined) continue;
+    const links = uniqueLinkIdentities(
+      members.flatMap((member) => member.linkIdentities),
+    );
+    plans.push({
+      target: representative.target,
+      beforeContent,
+      targetContent,
+      ...(links.length > 0
+        ? {
+            resolvedTarget: representative.physicalRelative,
+            linkIdentities: links,
+          }
+        : {}),
+    });
+  }
+  return plans.sort(
+    (left, right) =>
+      adapterTargetOrder(left.target) - adapterTargetOrder(right.target),
+  );
+}
+
+function orderAdapterTargets(
+  targets: readonly V3AdapterFileTarget[],
+): V3AdapterFileTarget[] {
+  return [...new Set(targets)].sort(
+    (left, right) => adapterTargetOrder(left) - adapterTargetOrder(right),
+  );
+}
+
+function adapterTargetOrder(target: V3AdapterFileTarget): number {
+  const index = V3_ADAPTER_FILE_TARGETS.indexOf(target);
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+async function observeAdapterPhysicalTarget(
+  root: string,
+  target: V3AdapterFileTarget,
+): Promise<AdapterPhysicalObservation> {
+  const logicalPath = v3AdapterTargetPath(root, target);
+  const entry = await lstatOrNullAdapter(logicalPath);
+  if (entry === null) {
+    await assertAdapterPathSafe(root, logicalPath);
+    return {
+      target,
+      logicalPath,
+      physicalRelative: relativeAdapterPath(root, logicalPath),
+      physicalKey: `path:${relativeAdapterPath(root, logicalPath)}`,
+      beforeContent: null,
+      linkIdentities: [],
+    };
+  }
+  if (entry.isSymbolicLink()) {
+    const resolved = await resolveObservedAdapterSymlinkChain(
+      root,
+      logicalPath,
+    );
+    const physicalRelative = normalizeAdapterRelativePath(resolved.relative);
+    return {
+      target,
+      logicalPath,
+      physicalRelative,
+      physicalKey: physicalFileKey(resolved.entry),
+      beforeContent: await readFile(resolved.path, 'utf8'),
+      linkIdentities: resolved.linkIdentities,
+    };
+  }
+  if (!entry.isFile()) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const resolved = await realpath(logicalPath);
+  const resolvedRelative = await relativeWithinRealRoot(root, resolved);
+  if (resolvedRelative === null) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const resolvedEntry = await lstat(resolved);
+  if (!resolvedEntry.isFile() || resolvedEntry.isSymbolicLink()) {
+    throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+  }
+  const physicalRelative = normalizeAdapterRelativePath(resolvedRelative);
+  return {
+    target,
+    logicalPath,
+    physicalRelative,
+    physicalKey: physicalFileKey(resolvedEntry),
+    beforeContent: await readFile(resolved, 'utf8'),
+    linkIdentities: [],
+  };
+}
+
+async function resolveObservedAdapterSymlinkChain(
+  root: string,
+  logicalPath: string,
+): Promise<{
+  path: string;
+  relative: string;
+  entry: Awaited<ReturnType<typeof lstat>>;
+  linkIdentities: V3AdapterLinkIdentity[];
+}> {
+  let current = path.resolve(logicalPath);
+  const seen = new Set<string>();
+  const linkIdentities: V3AdapterLinkIdentity[] = [];
+  for (let depth = 0; depth < 40; depth += 1) {
+    if (!isPathInsideRoot(root, current) || seen.has(current)) {
+      throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    }
+    seen.add(current);
+    const entry = await lstatOrNullAdapter(current);
+    if (entry === null) throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+    if (!entry.isSymbolicLink()) {
+      if (!entry.isFile()) throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+      const resolved = await realpath(current);
+      const relative = await relativeWithinRealRoot(root, resolved);
+      if (relative === null || entry.nlink > 1) {
+        throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+      }
+      return { path: resolved, relative, entry, linkIdentities };
+    }
+    const linkTarget = await readlink(current, 'utf8');
+    linkIdentities.push({
+      linkPath: relativeAdapterPath(root, current),
+      linkTarget,
+    });
+    current = path.resolve(path.dirname(current), linkTarget);
+  }
+  throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
+}
+
+function physicalFileKey(entry: Awaited<ReturnType<typeof lstat>>): string {
+  if (entry.nlink > 1) {
+    // Atomic replacement would silently split a hardlink topology. There is
+    // no recoverable write that preserves every unknown hardlink peer.
+    throw new Error('MANCODE_V3_ADAPTER_HARDLINK_UNSAFE');
+  }
+  return `inode:${entry.dev}:${entry.ino}`;
+}
+
+function uniqueLinkIdentities(
+  identities: readonly V3AdapterLinkIdentity[],
+): V3AdapterLinkIdentity[] {
+  const byPath = new Map<string, V3AdapterLinkIdentity>();
+  for (const identity of identities) {
+    const previous = byPath.get(identity.linkPath);
+    if (previous !== undefined && previous.linkTarget !== identity.linkTarget) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    byPath.set(identity.linkPath, identity);
+  }
+  return [...byPath.values()].sort((left, right) =>
+    compareUtf8(left.linkPath, right.linkPath),
+  );
+}
+
+function isPathInsideRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    Boolean(relative) &&
+    !relative.startsWith('..') &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function normalizeAdapterRelativePath(value: string): string {
+  return value.split(path.sep).join('/');
+}
+
+function compareUtf8(left: string, right: string): number {
+  return Buffer.from(left, 'utf8').compare(Buffer.from(right, 'utf8'));
+}
+
+async function lstatOrNullAdapter(
+  target: string,
+): Promise<Awaited<ReturnType<typeof lstat>> | null> {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function assertPhysicalGroupComposable(
+  group: readonly AdapterPhysicalObservation[],
+): void {
+  if (group.length <= 1) return;
+  if (
+    group.every((member) => isComposableEmbeddedAdapterTarget(member.target))
+  ) {
+    return;
+  }
+  throw new Error('MANCODE_V3_ADAPTER_SHARED_TARGET_CONFLICT');
+}
+
+function composePhysicalAdapterContent(
+  beforeContent: string | null,
+  members: readonly AdapterPhysicalObservation[],
+  platforms: readonly PlatformName[],
+): string | null {
+  const memberTargets = new Set(members.map((member) => member.target));
+  let content = beforeContent;
+
+  // Primary embedded blocks are applied once per selected platform. This is
+  // what lets Codex/ZCode/Kimi and a CLAUDE.md alias coexist in one AGENTS.md.
+  for (const platform of platforms) {
+    const primary = primaryFileTarget(platform);
+    if (!memberTargets.has(primary)) continue;
+    content = applyPrimaryBootstrapContent(content, platform);
+  }
+
+  for (const member of members) {
+    if (isPrimaryAdapterTarget(member.target)) continue;
+    content = desiredAdapterTargetContent(member.target, content);
+  }
+  return content;
+}
+
+function isPrimaryAdapterTarget(target: V3AdapterFileTarget): boolean {
+  return (
+    target === 'claude-skill' ||
+    target === 'cursor-rule' ||
+    target === 'agents' ||
+    target === 'copilot-instructions'
+  );
+}
+
+function applyPrimaryBootstrapContent(
+  current: string | null,
+  platform: PlatformName,
+): string {
+  switch (platform) {
+    case 'claude-code':
+      return replaceManagedV3BlockText(
+        current ?? '',
+        CONTINUITY_CLAUDE_START_MARKER,
+        CONTINUITY_CLAUDE_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'cursor':
+      return managedFilePlan(
+        'cursor-rule',
+        current,
+        renderCursorRule(renderV3Bootstrap(platform)),
+      ).targetContent;
+    case 'codex':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeLegacyAgentsBlocks(current ?? ''),
+          LEGACY_V3_CODEX_MARKERS,
+        ),
+        V3_CODEX_START_MARKER,
+        V3_CODEX_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'zcode':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeLegacyAgentsBlocks(current ?? ''),
+          LEGACY_V3_ZCODE_MARKERS,
+        ),
+        V3_ZCODE_START_MARKER,
+        V3_ZCODE_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'kimi-code':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeLegacyAgentsBlocks(current ?? ''),
+          LEGACY_KIMI_MARKERS,
+        ),
+        V3_KIMI_START_MARKER,
+        V3_KIMI_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'qoder':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(current ?? '', LEGACY_QODER_MARKERS),
+        V3_QODER_START_MARKER,
+        V3_QODER_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'dsh':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(current ?? '', LEGACY_DSH_MARKERS),
+        V3_DSH_START_MARKER,
+        V3_DSH_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+    case 'copilot':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeManagedBlock(current ?? ''),
+          LEGACY_V3_COPILOT_MARKERS,
+        ),
+        V3_COPILOT_START_MARKER,
+        V3_COPILOT_END_MARKER,
+        renderV3Bootstrap(platform),
+      );
+  }
+}
+
+function isComposableEmbeddedAdapterTarget(
+  target: V3AdapterFileTarget,
+): boolean {
+  return (
+    target === 'claude-skill' ||
+    target === 'agents' ||
+    target === 'copilot-instructions'
+  );
+}
+
+function desiredAdapterTargetContent(
+  target: V3AdapterFileTarget,
+  current: string | null,
+): string | null {
+  switch (target) {
+    case 'claude-skill':
+      return replaceManagedV3BlockText(
+        current ?? '',
+        CONTINUITY_CLAUDE_START_MARKER,
+        CONTINUITY_CLAUDE_END_MARKER,
+        renderV3Bootstrap('claude-code'),
+      );
+    case 'cursor-rule':
+      return managedFilePlan(
+        target,
+        current,
+        renderCursorRule(renderV3Bootstrap('cursor')),
+      ).targetContent;
+    case 'agents':
+      return renderAgentsBootstrapTarget(current ?? '');
+    case 'copilot-instructions':
+      return replaceManagedV3BlockText(
+        removeLegacyV3Block(
+          removeManagedBlock(current ?? ''),
+          LEGACY_V3_COPILOT_MARKERS,
+        ),
+        V3_COPILOT_START_MARKER,
+        V3_COPILOT_END_MARKER,
+        renderV3Bootstrap('copilot'),
+      );
+    default: {
+      const modeTarget = parseModeEntryFileTarget(target);
+      if (modeTarget !== null) {
+        const modeFileTarget = target as V3ModeEntryFileTarget;
+        return managedModeEntryPlan(
+          modeFileTarget,
+          current,
+          renderModeEntryForFileTarget(modeFileTarget),
+        ).targetContent;
+      }
+      const retirement = planLegacyAdapterRetirement(
+        new Map<V3AdapterFileTarget, string | null>([[target, current]]),
+      ).find((plan) => plan.target === target);
+      return retirement?.targetContent ?? current;
+    }
+  }
+}
+
+function renderAgentsBootstrapTarget(existing: string): string {
   const agents = removeLegacyV3Block(
     removeLegacyV3Block(
       removeLegacyV3Block(
         removeLegacyV3Block(
           removeLegacyV3Block(
-            removeLegacyAgentsBlocks(existing.get('agents') ?? ''),
+            removeLegacyAgentsBlocks(existing),
             LEGACY_V3_CODEX_MARKERS,
           ),
           LEGACY_V3_ZCODE_MARKERS,
@@ -374,7 +813,7 @@ export async function planV3AdapterFiles(
     ),
     LEGACY_DSH_MARKERS,
   );
-  const nextAgents = replaceManagedV3BlockText(
+  return replaceManagedV3BlockText(
     replaceManagedV3BlockText(
       replaceManagedV3BlockText(
         replaceManagedV3BlockText(
@@ -400,156 +839,6 @@ export async function planV3AdapterFiles(
     V3_DSH_END_MARKER,
     renderV3Bootstrap('dsh'),
   );
-  const legacyAdapterPlans = planLegacyAdapterRetirement(existing);
-  const plans: V3AdapterFilePlan[] = [
-    {
-      target: 'claude-skill',
-      beforeContent: existing.get('claude-skill') ?? null,
-      targetContent: replaceManagedV3BlockText(
-        existing.get('claude-skill') ?? '',
-        CONTINUITY_CLAUDE_START_MARKER,
-        CONTINUITY_CLAUDE_END_MARKER,
-        renderV3Bootstrap('claude-code'),
-      ),
-    },
-    managedFilePlan(
-      'cursor-rule',
-      existing.get('cursor-rule') ?? null,
-      renderCursorRule(renderV3Bootstrap('cursor')),
-    ),
-    {
-      target: 'agents',
-      beforeContent: existing.get('agents') ?? null,
-      targetContent: nextAgents,
-    },
-    {
-      target: 'copilot-instructions',
-      beforeContent: existing.get('copilot-instructions') ?? null,
-      targetContent: replaceManagedV3BlockText(
-        removeLegacyV3Block(
-          removeManagedBlock(existing.get('copilot-instructions') ?? ''),
-          LEGACY_V3_COPILOT_MARKERS,
-        ),
-        V3_COPILOT_START_MARKER,
-        V3_COPILOT_END_MARKER,
-        renderV3Bootstrap('copilot'),
-      ),
-    },
-    ...V3_MODE_ENTRY_FILE_TARGETS.map((target) =>
-      managedModeEntryPlan(
-        target,
-        existing.get(target) ?? null,
-        renderModeEntryForFileTarget(target),
-      ),
-    ),
-    ...legacyAdapterPlans,
-  ];
-  return annotateWriteThroughPlans(root, plans);
-}
-
-/**
- * Marks plans whose live target is a write-through symlink with the resolved
- * relative path, so publication and journal replay can write the resolved
- * file while verifying the link still points there.
- */
-async function annotateWriteThroughPlans(
-  root: string,
-  plans: V3AdapterFilePlan[],
-): Promise<V3AdapterFilePlan[]> {
-  return Promise.all(
-    plans.map(async (plan) => {
-      const resolved = await writeThroughResolvedPath(
-        root,
-        v3AdapterTargetPath(root, plan.target),
-      );
-      if (resolved === null) return plan;
-      const relative = await relativeWithinRealRoot(root, resolved);
-      if (relative === null) return plan;
-      return { ...plan, resolvedTarget: relative };
-    }),
-  );
-}
-
-/**
- * Physical primary target for a platform: when the primary target is a
- * write-through symlink landing on AGENTS.md, the platform composes into the
- * shared `agents` target so several platforms produce ONE plan for ONE
- * physical file instead of conflicting before-content snapshots.
- */
-async function effectivePrimaryTarget(
-  root: string,
-  platform: PlatformName,
-): Promise<V3AdapterFileTarget> {
-  const primary = primaryFileTarget(platform);
-  const resolved = await writeThroughResolvedPath(
-    root,
-    v3AdapterTargetPath(root, primary),
-  );
-  if (resolved === null) return primary;
-  const agentsPath = v3AdapterTargetPath(root, 'agents');
-  const realAgents = await resolveAdapterSymlink(agentsPath);
-  if (
-    realAgents !== null &&
-    path.resolve(resolved) === path.resolve(realAgents)
-  ) {
-    return 'agents';
-  }
-  return primary;
-}
-
-/** Plans a selected-platform repair while composing shared AGENTS targets once. */
-export async function planV3AdapterUpgradeFiles(
-  projectRoot: string,
-  platforms: readonly PlatformName[],
-): Promise<V3AdapterFilePlan[]> {
-  const root = path.resolve(projectRoot);
-  const selected = normalizeUpgradePlatforms(platforms);
-  const targetSet = new Set<V3AdapterFileTarget>();
-  const effectivePrimary = new Map<PlatformName, V3AdapterFileTarget>();
-  for (const platform of selected) {
-    const primary = await effectivePrimaryTarget(root, platform);
-    effectivePrimary.set(platform, primary);
-    targetSet.add(primary);
-    for (const mode of V3_MODE_NAMES) {
-      targetSet.add(modeEntryFileTarget(platform, mode));
-    }
-    for (const target of legacyAdapterTargetsForPlatform(platform, true)) {
-      targetSet.add(target);
-    }
-  }
-  const existing = new Map<V3AdapterFileTarget, string | null>();
-  for (const target of targetSet) {
-    existing.set(target, await readAdapterTarget(root, target));
-  }
-  const desired = new Map(existing);
-  for (const platform of selected) {
-    planPlatformBootstrapUpgrade(
-      desired,
-      platform,
-      effectivePrimary.get(platform),
-    );
-    for (const mode of V3_MODE_NAMES) {
-      const target = modeEntryFileTarget(platform, mode);
-      const current = desired.get(target) ?? null;
-      desired.set(
-        target,
-        managedModeEntryPlan(target, current, renderV3ModeEntry(mode, platform))
-          .targetContent,
-      );
-    }
-  }
-  const plans = [...desired.entries()]
-    .filter(([target, targetContent]) => existing.get(target) !== targetContent)
-    .map(([target, targetContent]) => ({
-      target,
-      beforeContent: existing.get(target) ?? null,
-      targetContent: targetContent ?? '',
-    }));
-  const legacyPlans = planLegacyAdapterRetirement(existing).filter(
-    (legacyPlan) =>
-      !plans.some((candidate) => candidate.target === legacyPlan.target),
-  );
-  return annotateWriteThroughPlans(root, [...plans, ...legacyPlans]);
 }
 
 /** Writes immutable upgrade candidates below .mancode staging, never live targets. */
@@ -599,28 +888,7 @@ export async function applyV3AdapterFilePlan(
     throw new Error('MANCODE_V3_ADAPTER_TARGET_INVALID');
   }
   const target = v3AdapterTargetPath(root, plan.target);
-  const writePath =
-    plan.resolvedTarget === undefined
-      ? target
-      : path.join(root, plan.resolvedTarget);
-  if (plan.resolvedTarget !== undefined) {
-    // Write-through: the plan stays pinned to the link it was planned
-    // against; a moved or retargeted link is a conflict, never a rewrite.
-    // Both sides are canonicalized because realpath adds a /private prefix
-    // on macOS while the plan path does not.
-    const entry = await lstat(target).catch(() => null);
-    const resolved =
-      entry?.isSymbolicLink() === true
-        ? await resolveAdapterSymlink(target)
-        : null;
-    const realWrite = await resolveAdapterSymlink(writePath);
-    if (resolved === null || realWrite === null || resolved !== realWrite) {
-      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
-    }
-    await assertAdapterPathSafe(root, writePath);
-  } else {
-    await assertAdapterPathSafe(root, target);
-  }
+  const writePath = await resolvePlannedAdapterWritePath(root, target, plan);
   const retiredBootstrapPlatform = retiredBootstrapPlatformFor(plan.target);
   if (retiredBootstrapPlatform !== null) {
     for (const retired of retiredBootstrapSpecs(
@@ -630,7 +898,10 @@ export async function applyV3AdapterFilePlan(
       await assertAdapterPathSafe(root, retired.filePath);
     }
   }
-  const current = await readAdapterTarget(root, plan.target);
+  const current = await readFile(writePath, 'utf8').catch((error) => {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  });
   if (current === plan.targetContent) {
     if (retiredBootstrapPlatform !== null) {
       await removeRetiredBootstrapFiles(root, retiredBootstrapPlatform);
@@ -640,6 +911,16 @@ export async function applyV3AdapterFilePlan(
   if (current !== plan.beforeContent) {
     throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
   }
+  // Re-check the journaled link identity after reading the before image. This
+  // closes the plan/read gap without rediscovering a different physical path.
+  const verifiedWritePath = await resolvePlannedAdapterWritePath(
+    root,
+    target,
+    plan,
+  );
+  if (!(await sameResolvedPath(verifiedWritePath, writePath))) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
   await mkdir(path.dirname(writePath), { recursive: true });
   await atomicWrite(writePath, plan.targetContent);
   if (retiredBootstrapPlatform !== null) {
@@ -647,6 +928,162 @@ export async function applyV3AdapterFilePlan(
     // Continuity replacement is durable. A later repair safely retries this.
     await removeRetiredBootstrapFiles(root, retiredBootstrapPlatform);
   }
+}
+
+/**
+ * Resolves the exact physical write target captured by the planner.  This is
+ * deliberately stricter than the normal adapter read helper: recovery must
+ * prove that every journaled link still resolves to the original path.
+ */
+async function resolvePlannedAdapterWritePath(
+  root: string,
+  logicalTarget: string,
+  plan: V3AdapterFilePlan,
+): Promise<string> {
+  await assertAdapterPathSafe(root, logicalTarget);
+
+  if (plan.resolvedTarget === undefined) {
+    if (plan.linkIdentities !== undefined && plan.linkIdentities.length > 0) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    const entry = await lstatOrNullAdapter(logicalTarget);
+    if (entry?.isSymbolicLink()) {
+      // A legacy action without a durable target must not rediscover where a
+      // link points during recovery.  New plans always carry link identity.
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    if (entry !== null && (!entry.isFile() || entry.nlink > 1)) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    return logicalTarget;
+  }
+
+  if (plan.linkIdentities !== undefined && plan.linkIdentities.length === 0) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
+
+  const resolvedTarget = safePlannedRelativePath(root, plan.resolvedTarget);
+  await assertAdapterPathSafe(root, resolvedTarget);
+  const resolvedEntry = await lstatOrNullAdapter(resolvedTarget);
+  if (
+    resolvedEntry === null ||
+    !resolvedEntry.isFile() ||
+    resolvedEntry.isSymbolicLink() ||
+    resolvedEntry.nlink > 1
+  ) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
+
+  if (plan.linkIdentities === undefined) {
+    // Older journals pinned only the physical destination. Never infer a new
+    // destination or follow a replacement symlink at that recorded path.
+    const logicalEntry = await lstatOrNullAdapter(logicalTarget);
+    if (
+      !logicalEntry?.isSymbolicLink() ||
+      !(await sameResolvedPath(logicalTarget, resolvedTarget))
+    ) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    return resolvedTarget;
+  }
+
+  await assertLinkIdentities(root, plan.linkIdentities, resolvedTarget);
+  const logicalEntry = await lstatOrNullAdapter(logicalTarget);
+  if (logicalEntry === null)
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  if (logicalEntry.isSymbolicLink()) {
+    const logicalRelative = relativeAdapterPath(root, logicalTarget);
+    if (
+      !plan.linkIdentities?.some(
+        (identity) => identity.linkPath === logicalRelative,
+      )
+    ) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+  } else if (!logicalEntry.isFile()) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  } else if (!(await sameResolvedPath(logicalTarget, resolvedTarget))) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
+  return resolvedTarget;
+}
+
+function safePlannedRelativePath(root: string, relative: string): string {
+  if (
+    typeof relative !== 'string' ||
+    !relative.trim() ||
+    path.isAbsolute(relative) ||
+    relative.split(/[\\/]/u).some((segment) => segment === '..' || !segment)
+  ) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
+  const resolved = path.resolve(root, relative);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+  }
+  return resolved;
+}
+
+/** Reads the exact physical target captured by a V3 adapter plan. */
+export async function readV3AdapterFilePlanContent(
+  projectRoot: string,
+  plan: Pick<
+    V3AdapterFilePlan,
+    | 'target'
+    | 'beforeContent'
+    | 'targetContent'
+    | 'resolvedTarget'
+    | 'linkIdentities'
+  >,
+): Promise<string | null> {
+  const root = path.resolve(projectRoot);
+  const logicalTarget = v3AdapterTargetPath(root, plan.target);
+  const readPath = await resolvePlannedAdapterWritePath(
+    root,
+    logicalTarget,
+    plan,
+  );
+  try {
+    const entry = await lstat(readPath);
+    if (!entry.isFile() || entry.isSymbolicLink() || entry.nlink > 1) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    return await readFile(readPath, 'utf8');
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function assertLinkIdentities(
+  root: string,
+  identities: readonly V3AdapterLinkIdentity[],
+  resolvedTarget: string,
+): Promise<void> {
+  for (const identity of identities) {
+    const linkPath = safePlannedRelativePath(root, identity.linkPath);
+    await assertAdapterPathSafe(root, linkPath);
+    const entry = await lstatOrNullAdapter(linkPath);
+    if (entry === null || !entry.isSymbolicLink()) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    const linkTarget = await readlink(linkPath, 'utf8');
+    if (linkTarget !== identity.linkTarget) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+    const actual = await resolveAdapterSymlink(linkPath);
+    if (actual === null || !(await sameResolvedPath(actual, resolvedTarget))) {
+      throw new Error('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+    }
+  }
+}
+
+async function sameResolvedPath(left: string, right: string): Promise<boolean> {
+  const [leftReal, rightReal] = await Promise.all([
+    realpath(left).catch(() => path.resolve(left)),
+    realpath(right).catch(() => path.resolve(right)),
+  ]);
+  return path.resolve(leftReal) === path.resolve(rightReal);
 }
 
 /**
@@ -1518,115 +1955,6 @@ function primaryFileTarget(platform: PlatformName): V3AdapterFileTarget {
       return 'agents';
     case 'copilot':
       return 'copilot-instructions';
-  }
-}
-
-function planPlatformBootstrapUpgrade(
-  desired: Map<V3AdapterFileTarget, string | null>,
-  platform: PlatformName,
-  targetOverride?: V3AdapterFileTarget,
-): void {
-  const target = targetOverride ?? primaryFileTarget(platform);
-  const current = desired.get(target) ?? null;
-  switch (platform) {
-    case 'claude-code':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          current ?? '',
-          CONTINUITY_CLAUDE_START_MARKER,
-          CONTINUITY_CLAUDE_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'cursor':
-      desired.set(
-        target,
-        managedFilePlan(
-          target,
-          current,
-          renderCursorRule(renderV3Bootstrap(platform)),
-        ).targetContent,
-      );
-      return;
-    case 'codex':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(
-            removeLegacyAgentsBlocks(current ?? ''),
-            LEGACY_V3_CODEX_MARKERS,
-          ),
-          V3_CODEX_START_MARKER,
-          V3_CODEX_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'zcode':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(
-            removeLegacyAgentsBlocks(current ?? ''),
-            LEGACY_V3_ZCODE_MARKERS,
-          ),
-          V3_ZCODE_START_MARKER,
-          V3_ZCODE_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'kimi-code':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(
-            removeLegacyAgentsBlocks(current ?? ''),
-            LEGACY_KIMI_MARKERS,
-          ),
-          V3_KIMI_START_MARKER,
-          V3_KIMI_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'qoder':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(current ?? '', LEGACY_QODER_MARKERS),
-          V3_QODER_START_MARKER,
-          V3_QODER_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'dsh':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(current ?? '', LEGACY_DSH_MARKERS),
-          V3_DSH_START_MARKER,
-          V3_DSH_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
-      return;
-    case 'copilot':
-      desired.set(
-        target,
-        replaceManagedV3BlockText(
-          removeLegacyV3Block(
-            removeManagedBlock(current ?? ''),
-            LEGACY_V3_COPILOT_MARKERS,
-          ),
-          V3_COPILOT_START_MARKER,
-          V3_COPILOT_END_MARKER,
-          renderV3Bootstrap(platform),
-        ),
-      );
   }
 }
 
@@ -2517,6 +2845,8 @@ export interface V3UnsafeAdapterPath {
   finalTarget: boolean;
   /** For symlinks: the resolved absolute path, or null when unresolvable. */
   resolvedTo: string | null;
+  /** Project root used to constrain materialization of a resolved link. */
+  projectRoot?: string;
 }
 
 /**
@@ -2555,8 +2885,20 @@ export async function replaceUnsafeV3AdapterSymlinks(
     ) {
       continue;
     }
+    const projectRoot = entry.projectRoot;
+    if (
+      projectRoot === undefined ||
+      (await relativeWithinRealRoot(projectRoot, entry.resolvedTo)) === null
+    ) {
+      continue;
+    }
     const resolvedEntry = await lstat(entry.resolvedTo).catch(() => null);
-    if (resolvedEntry === null || !resolvedEntry.isFile()) continue;
+    if (
+      resolvedEntry === null ||
+      !resolvedEntry.isFile() ||
+      resolvedEntry.isSymbolicLink()
+    )
+      continue;
     const content = await readFile(entry.resolvedTo);
     await rm(entry.target, { force: true });
     await writeFile(entry.target, content);
@@ -2618,6 +2960,7 @@ async function findUnsafeAdapterPathEntry(
       kind: 'outside-root',
       finalTarget: false,
       resolvedTo: null,
+      projectRoot: root,
     };
   }
   const rootEntry = await lstat(root);
@@ -2628,6 +2971,7 @@ async function findUnsafeAdapterPathEntry(
       kind: 'root-symlink',
       finalTarget: false,
       resolvedTo: null,
+      projectRoot: root,
     };
   }
   const segments = relative.split(path.sep);
@@ -2642,7 +2986,8 @@ async function findUnsafeAdapterPathEntry(
           relative,
           kind: 'symlink',
           finalTarget: index === segments.length - 1,
-          resolvedTo: await resolveAdapterSymlink(current),
+          resolvedTo: await resolveAdapterSymlinkForInspection(current),
+          projectRoot: root,
         };
       }
       if (index < segments.length - 1 && !entry.isDirectory()) {
@@ -2652,6 +2997,7 @@ async function findUnsafeAdapterPathEntry(
           kind: 'not-directory',
           finalTarget: false,
           resolvedTo: null,
+          projectRoot: root,
         };
       }
     } catch (error) {
@@ -2668,6 +3014,35 @@ async function resolveAdapterSymlink(linkPath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Resolves a link chain lexically so inspection can explain broken links. */
+async function resolveAdapterSymlinkForInspection(
+  linkPath: string,
+): Promise<string | null> {
+  let current = path.resolve(linkPath);
+  const seen = new Set<string>();
+  for (let depth = 0; depth < 40; depth += 1) {
+    if (seen.has(current)) return null;
+    seen.add(current);
+    const entry = await lstatOrNullAdapter(current);
+    if (entry === null) return current;
+    if (!entry.isSymbolicLink()) {
+      return (await realpath(current).catch(() => null)) ?? current;
+    }
+    let target: string;
+    try {
+      target = await readlink(current, 'utf8');
+    } catch {
+      return null;
+    }
+    current = path.resolve(
+      path.isAbsolute(target)
+        ? target
+        : path.join(path.dirname(current), target),
+    );
+  }
+  return null;
 }
 
 /**

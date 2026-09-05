@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import { parseSchemaManifest } from '../context/manifest.js';
@@ -22,7 +23,9 @@ import {
 } from '../context/workflow-metadata.js';
 import {
   type V3AdapterFileTarget,
+  type V3AdapterLinkIdentity,
   V3_ADAPTER_FILE_TARGETS,
+  v3AdapterTargetPath,
 } from '../installers/v3-adapter.js';
 import {
   type CheckpointV1,
@@ -160,6 +163,12 @@ export interface V3AdapterFileRecoveryAction {
   /** Retained only in the local recovery sidecar for constrained rollback. */
   beforeContent: string | null;
   targetContent: string;
+  /** Present for plans pinned to a resolved physical target. */
+  resolvedTarget?: string;
+  /** Exact symlink identities that must remain unchanged during recovery. */
+  linkIdentities?: V3AdapterLinkIdentity[];
+  /** Parents absent before activation; rollback may remove only empty ones. */
+  absentParentDirectories?: string[];
 }
 
 export interface CheckpointRecoveryAction {
@@ -513,6 +522,9 @@ export function createV3AdapterFileRecoveryAction(input: {
   target: V3AdapterFileTarget;
   beforeContent: string | null;
   targetContent: string;
+  resolvedTarget?: string;
+  linkIdentities?: V3AdapterLinkIdentity[];
+  absentParentDirectories?: string[];
 }): V3AdapterFileRecoveryAction {
   return parseV3AdapterFileAction({
     kind: 'v3_adapter_file',
@@ -521,6 +533,15 @@ export function createV3AdapterFileRecoveryAction(input: {
     beforeDigest: adapterFileContentDigest(input.target, input.beforeContent),
     beforeContent: input.beforeContent,
     targetContent: input.targetContent,
+    ...(input.resolvedTarget === undefined
+      ? {}
+      : { resolvedTarget: input.resolvedTarget }),
+    ...(input.linkIdentities === undefined
+      ? {}
+      : { linkIdentities: input.linkIdentities }),
+    ...(input.absentParentDirectories === undefined
+      ? {}
+      : { absentParentDirectories: input.absentParentDirectories }),
   });
 }
 
@@ -785,8 +806,12 @@ export function recoveryActionResourceKey(
       return `project-file:${action.fileName}`;
     case 'migration_stage_file':
       return `migration-stage:${action.stageId}`;
-    case 'v3_adapter_file':
-      return `v3-adapter:${action.target}`;
+    case 'v3_adapter_file': {
+      if (action.resolvedTarget !== undefined) {
+        return `v3-adapter:path:${action.resolvedTarget}`;
+      }
+      return `v3-adapter:logical:${action.target}`;
+    }
     case 'checkpoint':
       return `checkpoint:${action.checkpoint.taskRef.namespace}:${action.checkpoint.taskRef.taskId}:${action.checkpoint.checkpointId}`;
     case 'task_head_fence':
@@ -1184,6 +1209,9 @@ function parseV3AdapterFileAction(
       'beforeDigest',
       'beforeContent',
       'targetContent',
+      'resolvedTarget',
+      'linkIdentities',
+      'absentParentDirectories',
     ],
     'operation recovery mancode adapter action',
   );
@@ -1214,6 +1242,21 @@ function parseV3AdapterFileAction(
     );
   }
   adapterFileContentDigest(target, targetContent);
+  const physical = parseAdapterResolvedTarget(value);
+  const absentParentDirectories = parseAbsentAdapterParents(
+    value,
+    target,
+    beforeContent,
+  );
+  if (
+    physical.linkIdentities !== undefined &&
+    physical.linkIdentities.length > 0 &&
+    physical.resolvedTarget === undefined
+  ) {
+    throw new Error(
+      'operation recovery mancode adapter link identity requires resolvedTarget',
+    );
+  }
   return {
     kind: 'v3_adapter_file',
     stepId: parseStepId(value.stepId),
@@ -1221,7 +1264,126 @@ function parseV3AdapterFileAction(
     beforeDigest,
     beforeContent,
     targetContent,
+    ...physical,
+    ...(absentParentDirectories === undefined
+      ? {}
+      : { absentParentDirectories }),
   };
+}
+
+function parseAbsentAdapterParents(
+  value: Record<string, unknown>,
+  target: V3AdapterFileTarget,
+  beforeContent: string | null,
+): string[] | undefined {
+  if (value.absentParentDirectories === undefined) return undefined;
+  if (beforeContent !== null || !Array.isArray(value.absentParentDirectories)) {
+    throw new Error('operation recovery adapter absent parents is invalid');
+  }
+  const relativeTarget = path
+    .relative('.', v3AdapterTargetPath('.', target))
+    .split(path.sep)
+    .join('/');
+  const parents = value.absentParentDirectories.map((value) => {
+    const directory = parseAdapterRelativePath(value, 'adapter absent parent');
+    if (
+      directory.split('/').includes('.') ||
+      !relativeTarget.startsWith(`${directory}/`)
+    ) {
+      throw new Error(
+        'operation recovery adapter absent parent is not a target ancestor',
+      );
+    }
+    return directory;
+  });
+  if (new Set(parents).size !== parents.length) {
+    throw new Error(
+      'operation recovery adapter absent parents contains duplicates',
+    );
+  }
+  return parents;
+}
+
+function parseAdapterResolvedTarget(value: Record<string, unknown>): {
+  resolvedTarget?: string;
+  linkIdentities?: V3AdapterLinkIdentity[];
+} {
+  const resolvedTarget =
+    value.resolvedTarget === undefined
+      ? undefined
+      : parseAdapterRelativePath(
+          value.resolvedTarget,
+          'mancode adapter resolvedTarget',
+        );
+  const linkIdentities =
+    value.linkIdentities === undefined
+      ? undefined
+      : parseAdapterLinkIdentities(value.linkIdentities);
+  if ((resolvedTarget === undefined) !== (linkIdentities === undefined)) {
+    throw new Error(
+      'operation recovery mancode adapter resolved target identity is incomplete',
+    );
+  }
+  return {
+    ...(resolvedTarget === undefined ? {} : { resolvedTarget }),
+    ...(linkIdentities === undefined ? {} : { linkIdentities }),
+  };
+}
+
+function parseAdapterRelativePath(value: unknown, label: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    value.includes('\0') ||
+    value.startsWith('/') ||
+    /^[A-Za-z]:[\\/]/u.test(value) ||
+    value.split(/[\\/]/u).some((segment) => segment === '..' || segment === '')
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value.split('\\').join('/');
+}
+
+function parseAdapterLinkIdentities(value: unknown): V3AdapterLinkIdentity[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(
+      'operation recovery mancode adapter linkIdentities is invalid',
+    );
+  }
+  const identities = value.map((raw) => {
+    assertRecord(raw, 'operation recovery mancode adapter link identity');
+    assertKnownKeys(
+      raw,
+      ['linkPath', 'linkTarget'],
+      'operation recovery mancode adapter link identity',
+    );
+    const linkTarget = raw.linkTarget;
+    if (
+      typeof linkTarget !== 'string' ||
+      !linkTarget.trim() ||
+      linkTarget.includes('\0')
+    ) {
+      throw new Error(
+        'operation recovery mancode adapter linkTarget is invalid',
+      );
+    }
+    return {
+      linkPath: parseAdapterRelativePath(
+        raw.linkPath,
+        'operation recovery mancode adapter linkPath',
+      ),
+      linkTarget,
+    } satisfies V3AdapterLinkIdentity;
+  });
+  if (
+    new Set(identities.map((identity) => identity.linkPath)).size !==
+    identities.length
+  ) {
+    throw new Error(
+      'operation recovery mancode adapter linkIdentities contains duplicates',
+    );
+  }
+  return identities;
 }
 
 function parseTaskAuthorityFileAction(

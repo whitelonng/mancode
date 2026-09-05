@@ -10,6 +10,7 @@ import path from 'node:path';
 import {
   type V3AdapterFilePlan,
   type V3AdapterFileTarget,
+  type V3AdapterLinkIdentity,
   V3_ADAPTER_FILE_TARGETS,
   applyV3AdapterFilePlan,
   inspectV3AdapterVersions,
@@ -773,7 +774,13 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
     assertRecord(candidate, 'greenfield initialization adapter plan');
     assertKnownKeys(
       candidate,
-      ['target', 'beforeContent', 'targetContent', 'resolvedTarget'],
+      [
+        'target',
+        'beforeContent',
+        'targetContent',
+        'resolvedTarget',
+        'linkIdentities',
+      ],
       'greenfield initialization adapter plan',
     );
     if (
@@ -787,10 +794,11 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
       typeof candidate.targetContent !== 'string' ||
       !candidate.targetContent.trim() ||
       (candidate.resolvedTarget !== undefined &&
-        (typeof candidate.resolvedTarget !== 'string' ||
-          !candidate.resolvedTarget.trim() ||
-          path.isAbsolute(candidate.resolvedTarget) ||
-          candidate.resolvedTarget.split(/[\\/]/).includes('..')))
+        !isAdapterRelativePathArray([candidate.resolvedTarget])) ||
+      (candidate.linkIdentities !== undefined &&
+        !isAdapterLinkIdentityArray(candidate.linkIdentities)) ||
+      (candidate.linkIdentities !== undefined &&
+        candidate.resolvedTarget === undefined)
     ) {
       throw new Error(
         'greenfield initialization journal adapterPlans is invalid',
@@ -803,8 +811,56 @@ function parseAdapterPlans(value: unknown): V3AdapterFilePlan[] {
       beforeContent: candidate.beforeContent as string | null,
       targetContent: candidate.targetContent,
       resolvedTarget: candidate.resolvedTarget as string | undefined,
+      ...(candidate.linkIdentities === undefined
+        ? {}
+        : {
+            linkIdentities: candidate.linkIdentities as V3AdapterLinkIdentity[],
+          }),
     };
   });
+}
+
+function isAdapterRelativePathArray(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const paths = value.filter(
+    (item): item is string => typeof item === 'string',
+  );
+  return (
+    paths.length === value.length &&
+    new Set(paths).size === paths.length &&
+    paths.every(
+      (item) =>
+        item.trim() === item &&
+        item.length > 0 &&
+        !item.includes('\0') &&
+        !path.isAbsolute(item) &&
+        !/^[A-Za-z]:[\\/]/u.test(item) &&
+        !item.split(/[\\/]/u).some((segment) => segment === '..' || !segment),
+    )
+  );
+}
+
+function isAdapterLinkIdentityArray(
+  value: unknown,
+): value is V3AdapterLinkIdentity[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const identities = value.filter(
+    (item): item is Record<string, unknown> =>
+      typeof item === 'object' && item !== null && !Array.isArray(item),
+  );
+  if (identities.length !== value.length) return false;
+  const paths = identities.map((item) => item.linkPath);
+  return (
+    new Set(paths).size === paths.length &&
+    identities.every(
+      (item) =>
+        typeof item.linkPath === 'string' &&
+        typeof item.linkTarget === 'string' &&
+        item.linkTarget.trim().length > 0 &&
+        !item.linkTarget.includes('\0') &&
+        isAdapterRelativePathArray([item.linkPath]),
+    )
+  );
 }
 
 async function assertAdapterPlansAtBeforeState(
