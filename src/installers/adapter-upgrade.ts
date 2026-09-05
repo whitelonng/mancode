@@ -372,6 +372,8 @@ async function commitAdapterUpgrade(input: {
           target: plan.target,
           beforeContent: plan.beforeContent,
           targetContent: plan.targetContent,
+          resolvedTarget: plan.resolvedTarget,
+          linkIdentities: plan.linkIdentities,
         }),
       ),
       ...(manifestAction === null ? [] : [manifestAction]),

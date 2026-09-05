@@ -1,4 +1,5 @@
 import {
+  link,
   lstat,
   mkdir,
   readFile,
@@ -28,9 +29,12 @@ import {
   V3_ADAPTER_PLATFORMS,
   V3_ADAPTER_VERSION,
   V3_MODE_NAMES,
+  applyV3AdapterFilePlan,
   inspectUnsafeV3AdapterPaths,
   inspectV3Adapter,
   installV3Adapter,
+  planV3AdapterUpgradeFiles,
+  readV3AdapterFilePlanContent,
   removeV3Adapter,
   replaceUnsafeV3AdapterSymlinks,
   stageV3Adapter,
@@ -740,6 +744,174 @@ describe('V3 adapter bootstrap integration', () => {
         ).rejects.toThrow();
       } finally {
         await rm(outside, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'merges CLAUDE.md -> AGENTS.md into one physical plan and preserves the link',
+    async () => {
+      const agentsPath = path.join(root, 'AGENTS.md');
+      const claudePath = path.join(root, 'CLAUDE.md');
+      await writeFile(agentsPath, '# Shared user instructions\n');
+      await symlink('AGENTS.md', claudePath);
+
+      const plans = await planV3AdapterUpgradeFiles(root, [
+        'claude-code',
+        'codex',
+      ]);
+      const physicalPlans = plans.filter(
+        (plan) => plan.resolvedTarget === 'AGENTS.md',
+      );
+      expect(physicalPlans).toHaveLength(1);
+      expect(physicalPlans[0]).toMatchObject({
+        target: 'agents',
+        beforeContent: '# Shared user instructions\n',
+        resolvedTarget: 'AGENTS.md',
+        linkIdentities: [{ linkPath: 'CLAUDE.md', linkTarget: 'AGENTS.md' }],
+      });
+      expect(plans.some((plan) => plan.target === 'claude-skill')).toBe(false);
+      const physicalPlan = physicalPlans[0];
+      if (physicalPlan === undefined) {
+        throw new Error('expected shared physical adapter plan');
+      }
+
+      await applyV3AdapterFilePlan(root, physicalPlan);
+
+      expect((await lstat(claudePath)).isSymbolicLink()).toBe(true);
+      const content = await readFile(agentsPath, 'utf8');
+      expect(content).toContain('# Shared user instructions');
+      expect(content).toContain('mancode:continuity:claude:start');
+      expect(content).toContain('mancode:continuity:codex:start');
+    },
+  );
+
+  it.each([
+    ['regular', 'read'],
+    ['regular', 'publish'],
+    ['symlink', 'read'],
+    ['symlink', 'publish'],
+  ] as const)(
+    'rejects a hardlink added after planning a %s target on %s',
+    async (kind, operation) => {
+      const physicalPath = path.join(root, 'AGENTS.md');
+      const aliasPath = path.join(root, 'ALIAS.md');
+      const before = '# Original target\n';
+      await writeFile(physicalPath, before);
+      if (kind === 'symlink') {
+        await symlink('AGENTS.md', path.join(root, 'CLAUDE.md'));
+      }
+      const plans = await planV3AdapterUpgradeFiles(root, [
+        kind === 'symlink' ? 'claude-code' : 'codex',
+      ]);
+      const plan = plans.find(
+        (candidate) => candidate.beforeContent === before,
+      );
+      if (plan === undefined) throw new Error('expected physical adapter plan');
+      await link(physicalPath, aliasPath);
+      const original = await lstat(physicalPath);
+      expect(original.nlink).toBe(2);
+
+      await expect(
+        operation === 'read'
+          ? readV3AdapterFilePlanContent(root, plan)
+          : applyV3AdapterFilePlan(root, plan),
+      ).rejects.toThrow('MANCODE_V3_ADAPTER_TARGET_CONFLICT');
+      for (const target of [physicalPath, aliasPath]) {
+        await expect(readFile(target, 'utf8')).resolves.toBe(before);
+        expect(await lstat(target)).toMatchObject({
+          ino: original.ino,
+          dev: original.dev,
+          nlink: 2,
+        });
+      }
+      if (kind === 'symlink') {
+        expect(
+          (await lstat(path.join(root, 'CLAUDE.md'))).isSymbolicLink(),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects a journaled adapter plan after its symlink is retargeted',
+    async () => {
+      const agentsPath = path.join(root, 'AGENTS.md');
+      const alternatePath = path.join(root, 'ALTERNATE.md');
+      const claudePath = path.join(root, 'CLAUDE.md');
+      await writeFile(agentsPath, '# Original target\n');
+      await writeFile(alternatePath, '# Alternate target\n');
+      await symlink('AGENTS.md', claudePath);
+      const plans = await planV3AdapterUpgradeFiles(root, ['claude-code']);
+      const plan = plans.find((candidate) => candidate.resolvedTarget);
+      expect(plan).toBeDefined();
+      if (plan === undefined) throw new Error('expected symlink adapter plan');
+
+      await rm(claudePath);
+      await symlink('ALTERNATE.md', claudePath);
+
+      await expect(applyV3AdapterFilePlan(root, plan)).rejects.toThrow(
+        'MANCODE_V3_ADAPTER_TARGET_CONFLICT',
+      );
+      await expect(readFile(agentsPath, 'utf8')).resolves.toBe(
+        '# Original target\n',
+      );
+      await expect(readFile(alternatePath, 'utf8')).resolves.toBe(
+        '# Alternate target\n',
+      );
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects a journaled adapter plan after its resolved target is removed',
+    async () => {
+      const agentsPath = path.join(root, 'AGENTS.md');
+      const claudePath = path.join(root, 'CLAUDE.md');
+      await writeFile(agentsPath, '# Original target\n');
+      await symlink('AGENTS.md', claudePath);
+      const plans = await planV3AdapterUpgradeFiles(root, ['claude-code']);
+      const plan = plans.find((candidate) => candidate.resolvedTarget);
+      expect(plan).toBeDefined();
+      if (plan === undefined) throw new Error('expected symlink adapter plan');
+
+      await rm(agentsPath);
+
+      await expect(applyV3AdapterFilePlan(root, plan)).rejects.toThrow(
+        'MANCODE_ARTIFACT_PATH_UNSAFE',
+      );
+      expect((await lstat(claudePath)).isSymbolicLink()).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlink that points outside the project during planning and replay',
+    async () => {
+      const agentsPath = path.join(root, 'AGENTS.md');
+      const claudePath = path.join(root, 'CLAUDE.md');
+      const outsidePath = `${root}-outside.md`;
+      await writeFile(agentsPath, '# Original target\n');
+      await symlink('AGENTS.md', claudePath);
+      const plans = await planV3AdapterUpgradeFiles(root, ['claude-code']);
+      const plan = plans.find((candidate) => candidate.resolvedTarget);
+      expect(plan).toBeDefined();
+      if (plan === undefined) throw new Error('expected symlink adapter plan');
+
+      try {
+        await writeFile(outsidePath, '# Outside target\n');
+        await rm(claudePath);
+        await symlink(outsidePath, claudePath);
+
+        await expect(applyV3AdapterFilePlan(root, plan)).rejects.toThrow(
+          'MANCODE_ARTIFACT_PATH_UNSAFE',
+        );
+        await expect(
+          planV3AdapterUpgradeFiles(root, ['claude-code']),
+        ).rejects.toThrow('MANCODE_ARTIFACT_PATH_UNSAFE');
+        await expect(readFile(outsidePath, 'utf8')).resolves.toBe(
+          '# Outside target\n',
+        );
+      } finally {
+        await rm(outsidePath, { force: true });
       }
     },
   );

@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -14,10 +22,14 @@ import {
   inspectV3Adapter,
   inspectV3AdapterVersions,
   installV3Adapter,
+  planV3AdapterUpgradeFiles,
   v3ModeEntryPath,
 } from '../src/installers/v3-adapter.js';
+import { resolveLocalEntityHomeStore } from '../src/runtime/entity-home-store.js';
 import { withOperationCrashInjectionForTesting } from '../src/runtime/operation-crash-injection.js';
 import { executeOperationRecovery } from '../src/runtime/operation-recovery-executor.js';
+import { readOperationRecoveryPayload } from '../src/runtime/operation-recovery-store.js';
+import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
 import { createSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
 
@@ -474,6 +486,90 @@ describe('adapter managed-content digest and upgrade', () => {
     expect(agents).toContain('<!-- mancode:continuity:codex:start -->');
     expect(agents).toContain('<!-- mancode:continuity:zcode:start -->');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'forward-recovers a shared symlink target without replacing the link',
+    async () => {
+      const agentsPath = path.join(root, 'AGENTS.md');
+      const claudePath = path.join(root, 'CLAUDE.md');
+      await writeFile(agentsPath, '# Shared user instructions\n');
+      await symlink('AGENTS.md', claudePath);
+      const operationId = id(18);
+      const plans = await planV3AdapterUpgradeFiles(root, [
+        'claude-code',
+        'codex',
+      ]);
+      const sharedPlan = plans.find(
+        (plan) => plan.resolvedTarget === 'AGENTS.md',
+      );
+      expect(sharedPlan).toMatchObject({
+        target: 'agents',
+        linkIdentities: [{ linkPath: 'CLAUDE.md', linkTarget: 'AGENTS.md' }],
+      });
+      if (sharedPlan === undefined) {
+        throw new Error('expected shared adapter plan');
+      }
+      await upgradeV3Adapters({
+        projectRoot: root,
+        platforms: ['claude-code', 'codex'],
+        dryRun: true,
+        operationId,
+        now: NOW,
+      });
+
+      await expect(
+        withOperationCrashInjectionForTesting(
+          {
+            operationType: 'adapter_upgrade',
+            crashAfter: `replace-managed-adapters:${sharedPlan.target}`,
+          },
+          () =>
+            upgradeV3Adapters({
+              projectRoot: root,
+              platforms: ['claude-code', 'codex'],
+              explicitConfirmation: true,
+              sessionId,
+              operationId,
+              now: NOW,
+            }),
+        ),
+      ).rejects.toThrow('MANCODE_TEST_OPERATION_CRASH_INJECTED');
+
+      expect((await lstat(claudePath)).isSymbolicLink()).toBe(true);
+      const runtime = await readProjectRuntimeContext(root);
+      const payload = await readOperationRecoveryPayload(
+        resolveLocalEntityHomeStore(runtime.entityHomeStoreContext),
+        operationId,
+      );
+      expect(
+        payload?.actions.find(
+          (action) =>
+            action.kind === 'v3_adapter_file' && action.target === 'agents',
+        ),
+      ).toMatchObject({
+        resolvedTarget: 'AGENTS.md',
+        linkIdentities: [{ linkPath: 'CLAUDE.md', linkTarget: 'AGENTS.md' }],
+      });
+      await expect(
+        executeOperationRecovery({
+          projectRoot: root,
+          operationId,
+          actorId,
+          sessionId,
+          now: new Date(NOW.getTime() + 1_000),
+        }),
+      ).resolves.toMatchObject({
+        state: 'repaired',
+        journal: { state: 'committed', type: 'adapter_upgrade' },
+      });
+
+      expect((await lstat(claudePath)).isSymbolicLink()).toBe(true);
+      const content = await readFile(agentsPath, 'utf8');
+      expect(content).toContain('# Shared user instructions');
+      expect(content).toContain('mancode:continuity:claude:start');
+      expect(content).toContain('mancode:continuity:codex:start');
+    },
+  );
 
   it('recovers every registered-platform target from its write-before and write-after boundary', async () => {
     const discovery = await upgradeV3Adapters({

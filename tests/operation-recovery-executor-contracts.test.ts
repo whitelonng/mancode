@@ -16,6 +16,7 @@ import {
 } from '../src/runtime/operation-recovery-executor.js';
 import {
   createTaskAuthorityFileRecoveryAction,
+  createV3AdapterFileRecoveryAction,
   createWorkflowTaskDirectoryRecoveryAction,
   operationRecoveryPayloadDigest,
   parseOperationRecoveryPayload,
@@ -81,6 +82,28 @@ describe('operation recovery executor', () => {
       operationId: id(7),
       now: NOW,
     });
+  });
+
+  it('parses legacy adapter recovery payloads without physical target fields', () => {
+    const action = createV3AdapterFileRecoveryAction({
+      stepId: 'replace-managed-adapters',
+      target: 'agents',
+      beforeContent: null,
+      targetContent: '# Managed adapter\n',
+    });
+    expect(action).not.toHaveProperty('resolvedTarget');
+    expect(action).not.toHaveProperty('linkIdentities');
+
+    expect(
+      parseOperationRecoveryPayload({
+        schemaVersion: 1,
+        operationId: id(14),
+        type: 'adapter_upgrade',
+        primaryStoreId: 'project-local:.mancode/local',
+        actions: [action],
+        noOpStepIds: [],
+      }).actions,
+    ).toEqual([action]);
   });
 
   afterEach(async () => {

@@ -2,8 +2,16 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import type { OperationType } from './operation-journal.js';
 
+/**
+ * Bootstrap has a durable journal of its own, but it still uses the same
+ * test-only crash boundary machinery as ordinary operations.  It is kept out
+ * of OperationType because it is not an operation journal understood by the
+ * runtime recovery executor.
+ */
+export type CrashInjectionOperationType = OperationType | 'migration_bootstrap';
+
 export interface OperationCrashInjection {
-  operationType: OperationType;
+  operationType: CrashInjectionOperationType;
   crashAfter: 'prepared' | string;
 }
 
@@ -14,7 +22,11 @@ interface ActiveCrashInjection extends OperationCrashInjection {
 
 const activeInjection = new AsyncLocalStorage<ActiveCrashInjection>();
 
-export type OperationLockPausePoint = 'entity_locks_held';
+export type OperationLockPausePoint =
+  | 'entity_locks_held'
+  | 'bootstrap_lock_held'
+  | 'bootstrap_lock_created'
+  | 'bootstrap_reclaim_held';
 
 export interface OperationLockPauseController {
   /** Resolves only after the selected operation holds its canonical locks. */
@@ -45,7 +57,7 @@ export async function withOperationCrashInjectionForTesting<T>(
   if (!injection.crashAfter) {
     throw new Error('MANCODE_TEST_CRASH_POINT_INVALID');
   }
-  return activeInjection.run(
+  return await activeInjection.run(
     { ...injection, triggered: false, deferredCrashAfter: null },
     operation,
   );
@@ -62,7 +74,12 @@ export function createOperationLockPauseForTesting(input: {
   pauseAfter: OperationLockPausePoint;
 }): OperationLockPauseController {
   assertUlid(input.operationId, 'test lock pause operationId');
-  if (input.pauseAfter !== 'entity_locks_held') {
+  if (
+    input.pauseAfter !== 'entity_locks_held' &&
+    input.pauseAfter !== 'bootstrap_lock_held' &&
+    input.pauseAfter !== 'bootstrap_lock_created' &&
+    input.pauseAfter !== 'bootstrap_reclaim_held'
+  ) {
     throw new Error('MANCODE_TEST_LOCK_PAUSE_POINT_INVALID');
   }
   let signalReached!: () => void;
@@ -93,7 +110,7 @@ export function createOperationLockPauseForTesting(input: {
     async run<T>(operation: () => Promise<T>): Promise<T> {
       if (started) throw new Error('MANCODE_TEST_LOCK_PAUSE_ALREADY_STARTED');
       started = true;
-      return activeLockPause.run(state, async () => {
+      return await activeLockPause.run(state, async () => {
         try {
           const result = await operation();
           if (!state.triggered) {
@@ -129,7 +146,7 @@ export function pauseIfOperationLockInjectedForTesting(
 }
 
 export function throwIfOperationCrashInjected(
-  operationType: OperationType,
+  operationType: CrashInjectionOperationType,
   crashAfter: 'prepared' | string,
 ): void {
   const injection = activeInjection.getStore();
@@ -147,7 +164,7 @@ export function throwIfOperationCrashInjected(
 
 /** Arms a business-write crash until the caller has made its visible change. */
 export function armOperationCrashAfterVisibleWrite(
-  operationType: OperationType,
+  operationType: CrashInjectionOperationType,
   crashAfter: string,
 ): void {
   const injection = activeInjection.getStore();
@@ -164,7 +181,7 @@ export function armOperationCrashAfterVisibleWrite(
 
 /** Throws before the next journal transition, after the preceding write. */
 export function throwIfDeferredOperationCrashInjected(
-  operationType: OperationType,
+  operationType: CrashInjectionOperationType,
 ): void {
   const injection = activeInjection.getStore();
   if (

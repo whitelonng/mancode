@@ -45,6 +45,55 @@ renderer/schema version 和 required inventory；content digest 是可重建结�
 adapter upgrade 先在 staging 中生成预览，用户确认后再通过 journaled operation 发布。
 中断必须由原 operation repair；升级不能修改 workflow policy、requirements、plan 或 step。
 
+## Legacy 迁移与平台清单
+
+迁移的 `managedAdapters` inventory 决定激活时发布哪些平台。已有 manifest 时以其清单为准；
+没有 manifest 时依次使用显式选择、已有 stage 的清单、可识别的 legacy 平台证据。
+显式选择必须与已有 manifest/stage 一致，不能借迁移增删已登记的平台。
+没有可识别证据时返回 `MANCODE_MIGRATION_ADAPTER_INVENTORY_REQUIRED`，需显式选择平台。
+
+```bash
+mancode migrate context --dry-run --platform codex,cursor --json
+mancode migrate context --stage --platform codex,cursor --stage-id <stageId> --json
+mancode migrate context --stage --stage-id <stageId> --json
+```
+
+`--platform` 复用初始化的平台名称解析，支持逗号分隔的名称和 `all`；`none` 明确传入空清单
+`{}`，表示不发布平台适配器。它只适用于 `--dry-run` 和 `--stage`，非法名称以及在
+`--status`、`--activate`、`--rollback` 上提供该选项都会被拒绝。省略选项继续使用上述自动解析。
+显式名称在激活前记录为 `legacy-unmanaged`，激活后登记实际 renderer 版本。
+
+dry-run 是只读报告：包含源基线、任务、平台清单及其摘要，不创建兼容文件、不执行恢复。
+若 dual-read bootstrap 尚未完成，会报告 `MANCODE_MIGRATION_DUAL_READ_SHELL_RECOVERY_REQUIRED`；
+冲突或待人工修复状态会报告相应错误。stage 可根据持久化 bootstrap 状态继续未完成的发布，
+校验源数据和 inventory，并在兼容 shell 就绪后生成本地 stage。重试时保持相同的平台选择；
+指定同一个 `--stage-id` 可刷新已有 stage，保留 resolution 并递增 revision。
+源数据、平台证据或目标文件发生冲突时仍会阻止恢复，不应删除 journal 强行重建。
+过期锁只在原进程已退出且持久化状态可验证时回收。回收竞争或遗留的
+`.bootstrap.lock.reclaim` 保护目录会返回 `MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED`。
+先等待并重试；若仍存在，需确认所有迁移进程已经退出并检查持久化状态，再由操作者清理
+该保护目录。不会自动递归抢占回收锁，也不应删除 bootstrap journal。
+锁目录缺少有效 owner 时，同样返回 `MANCODE_MIGRATION_BOOTSTRAP_LOCK_STALE_UNVERIFIED`，
+不能仅凭目录年龄认定进程已退出；owner 写入失败也不会递归删除归属不明的锁。
+
+新激活 journal 会记录 adapter 目标原先不存在的父目录；回滚只清理其中仍为空的目录，
+使正常的“激活、回滚、重新 stage”恢复原平台证据。原有目录和后来写入的用户文件不删除。
+旧 journal 没有目录来源记录时不猜测删除；若平台证据确实改变，仍需人工检查冲突。
+旧版 greenfield journal 仅有 `resolvedTarget` 时继续支持受约束恢复：逻辑链接必须仍解析到
+记录的仓库内普通文件，目标内容也必须匹配。新版记录包含 `linkIdentities` 时继续严格验证链接身份。
+
+迁移激活和 adapter upgrade 会保留嵌入式 managed 区外的用户内容；managed 区内的手工编辑
+会被识别为内容漂移，经显式确认后由生成内容替换，不承诺保留区内修改。整文件托管目标
+同样按生成内容替换。支持的仓库内符号链接保持链接本身，写入解析目标并在发布、恢复时
+校验链接身份；仓库外、断链和非普通文件目标会被拒绝。hardlink 目标也被拒绝，因为原子
+替换会拆散其共享关系，无法可靠恢复未知的其他链接。
+
+恢复契约测试使用异常注入验证发布边界的重试和冲突处理。另可运行
+`node scripts/verify-migration-regressions.mjs <独立测试目录>`（先 build），脚本保留新建旧项目、
+逐条 CLI 日志和 `results.json`，验证真实 CLI 迁移及两处 SIGKILL 边界：config 发布后可在
+锁租约到期后恢复；锁目录创建但 owner 尚未写入时会安全拒绝自动恢复。这不是断电测试，
+也不能替代 Windows 符号链接验证。
+
 ## Bootstrap 合约
 
 每个平台都必须：

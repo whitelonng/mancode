@@ -10,6 +10,7 @@ import {
   rollbackLegacyMigration,
   stageLegacyMigration,
 } from '../context/migrate.js';
+import { parsePlatformSelection } from '../system/init-onboarding.js';
 
 export const EXIT_OK = 0;
 export const EXIT_INVALID_ARG = 2;
@@ -22,6 +23,7 @@ export interface MigrateContextOptions {
   activate?: boolean;
   rollback?: string;
   stageId?: string;
+  platform?: string;
   expectedStageRevision?: string;
   session?: string;
   confirm?: boolean;
@@ -57,14 +59,53 @@ export async function migrateContext(
       EXIT_INVALID_ARG,
     );
   }
+  if (options.platform !== undefined && !options.dryRun && !options.stage) {
+    return printError(
+      options.json,
+      'MANCODE_MIGRATION_ARGUMENT_INVALID',
+      '--platform is only supported with --dry-run or --stage.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const platforms =
+    options.platform === undefined
+      ? undefined
+      : options.platform.trim().toLowerCase() === 'none'
+        ? []
+        : parsePlatformSelection(options.platform);
+  if (platforms === null) {
+    return printError(
+      options.json,
+      'MANCODE_MIGRATION_ARGUMENT_INVALID',
+      'Unsupported platform selection. Use supported names, all, or none.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  const managedAdapters =
+    platforms === undefined
+      ? undefined
+      : Object.fromEntries(
+          platforms.map((platform) => [platform, 'legacy-unmanaged']),
+        );
   try {
     if (options.dryRun) {
-      return printResult(options.json, await dryRunLegacyMigration(rootDir));
+      return printResult(
+        options.json,
+        managedAdapters === undefined
+          ? await dryRunLegacyMigration(rootDir)
+          : await dryRunLegacyMigration(rootDir, managedAdapters),
+      );
     }
     if (options.stage) {
       return printResult(
         options.json,
-        await stageLegacyMigration({ projectRoot: rootDir }),
+        await stageLegacyMigration({
+          projectRoot: rootDir,
+          ...(options.stageId === undefined
+            ? {}
+            : { stageId: options.stageId }),
+          ...(managedAdapters === undefined ? {} : { managedAdapters }),
+        }),
       );
     }
     if (options.status) {
