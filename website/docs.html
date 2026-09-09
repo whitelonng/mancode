@@ -3,12 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Complete mancode documentation: installation, modes, workflow gates, verification, adapters, and maintenance." />
+    <title>mancode Docs — Installation, CLI &amp; AI Coding Workflows</title>
+    <meta name="description" content="Install mancode, configure your coding agent and learn CLI commands, task planning, verification and cross-session Continuity with step-by-step documentation." />
+    <link rel="canonical" href="https://whitelonng.github.io/mancode/docs.html" />
+    <link rel="alternate" hreflang="en" href="https://whitelonng.github.io/mancode/docs.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://whitelonng.github.io/mancode/docs.zh-CN.html" />
+    <link rel="alternate" hreflang="x-default" href="https://whitelonng.github.io/mancode/docs.html" />
+    <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="mancode" />
+    <meta property="og:title" content="mancode Docs — Installation, CLI &amp; AI Coding Workflows" />
+    <meta property="og:description" content="Install mancode, configure your coding agent and learn CLI commands, task planning, verification and cross-session Continuity with step-by-step documentation." />
+    <meta property="og:url" content="https://whitelonng.github.io/mancode/docs.html" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="280" />
+    <meta property="og:image:height" content="280" />
+    <meta property="og:image:alt" content="mancode logo" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="mancode Docs — Installation, CLI &amp; AI Coding Workflows" />
+    <meta name="twitter:description" content="Install mancode, configure your coding agent and learn CLI commands, task planning, verification and cross-session Continuity with step-by-step documentation." />
+    <meta name="twitter:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta name="twitter:image:alt" content="mancode logo" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://whitelonng.github.io/mancode/#website",
+            "url": "https://whitelonng.github.io/mancode/",
+            "name": "mancode",
+            "inLanguage": [
+              "en",
+              "zh-CN"
+            ]
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://whitelonng.github.io/mancode/#software",
+            "name": "mancode",
+            "url": "https://whitelonng.github.io/mancode/",
+            "codeRepository": "https://github.com/whitelonng/mancode",
+            "programmingLanguage": "TypeScript",
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+            "description": "A local-first AI coding agent workflow harness with cross-session project context."
+          },
+          {
+            "@type": "TechArticle",
+            "@id": "https://whitelonng.github.io/mancode/docs.html#webpage",
+            "url": "https://whitelonng.github.io/mancode/docs.html",
+            "name": "mancode Docs — Installation, CLI & AI Coding Workflows",
+            "description": "Install mancode, configure your coding agent and learn CLI commands, task planning, verification and cross-session Continuity with step-by-step documentation.",
+            "inLanguage": "en",
+            "isPartOf": {
+              "@id": "https://whitelonng.github.io/mancode/#website"
+            },
+            "about": {
+              "@id": "https://whitelonng.github.io/mancode/#software"
+            }
+          }
+        ]
+      }
+    </script>
     <meta name="theme-color" content="#08090a" />
     <link rel="icon" href="./logo.png" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./docs.css" />
-    <title>mancode Docs — Install, run, and study the workflow</title>
     <script>
       document.documentElement.classList.replace("no-js", "js");
       try {
@@ -17,16 +80,24 @@
     </script>
     <script src="./site.js" defer></script>
     <script src="./docs.js" defer></script>
+    <script
+      async
+      src="https://cloud.umami.is/script.js"
+      data-website-id="3188d270-69ac-460c-b106-49c2887dd873"
+      data-domains="whitelonng.github.io"
+      data-exclude-search="true"
+      data-exclude-hash="true"
+    ></script>
   </head>
   <body class="docs-body">
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="noise" aria-hidden="true"></div>
 
     <header class="docs-topbar">
-      <a class="brand" href="./index.html" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
+      <a class="brand" href="./" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
       <span class="docs-wordmark">Documentation / v0.6.4</span>
       <div class="docs-top-links">
-        <a href="./index.html">Website</a>
+        <a href="./">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
         <button class="docs-theme-toggle" type="button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span></button>
         <a class="language-link" href="./docs.zh-CN.html" lang="zh-CN" aria-label="切换到中文">中</a>
@@ -46,7 +117,7 @@
           <div class="docs-nav-group"><p>Start here</p><a class="active" href="#overview">Overview</a><a href="#install">Install &amp; initialize</a><a href="#files">Files &amp; privacy</a><a href="#continuity">Cross-session continuity</a><a href="#recommend">Choose a mode</a></div>
           <div class="docs-nav-group"><p>Use mancode</p><a href="#design">Design policy</a><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a></div>
           <div class="docs-nav-group"><p>Maintain</p><a href="#style">Refresh context</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></div>
-          <div class="docs-nav-group"><p>Links</p><a href="./index.html">Marketing site</a><a href="./docs.zh-CN.html">中文文档</a><a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">README on GitHub</a></div>
+          <div class="docs-nav-group"><p>Links</p><a href="./">Marketing site</a><a href="./docs.zh-CN.html">中文文档</a><a href="https://github.com/whitelonng/mancode/blob/main/README.en.md">README on GitHub</a></div>
         </nav>
       </aside>
 
@@ -96,7 +167,7 @@
 
         <section class="doc-section" id="files" data-searchable>
           <h2>Files &amp; privacy</h2>
-          <p>mancode works locally, scans only the current project, and sends no telemetry. It deliberately does not rewrite your project's <code>.gitignore</code>, so your team—not the installer—decides which generated context belongs in version control.</p>
+          <p>The mancode CLI works locally, scans only the current project, and sends no telemetry. It deliberately does not rewrite your project's <code>.gitignore</code>, so your team—not the installer—decides which generated context belongs in version control.</p>
           <table class="docs-table artifact-table"><thead><tr><th>Path</th><th>What it contains</th><th>Before committing</th></tr></thead><tbody>
             <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>Continuity authority, project policy, sessions, workflow metadata, and local runtime records. Legacy <code>state.json</code> exists only after explicit <code>--legacy</code> initialization.</td><td>Review workflow evidence and local records before sharing; raw host session keys are never persisted.</td></tr>
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>Detected stack, validation commands, and local UI tokens.</td><td>Inspect for internal project details and decide whether reproducibility justifies sharing.</td></tr>
@@ -499,7 +570,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
         </section>
 
         <p class="docs-search-empty" data-search-empty>No documentation sections match your search.</p>
-        <footer class="docs-footer"><p>mancode is local-first and sends no telemetry.</p><p><a href="./docs.zh-CN.html">中文文档 →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
+        <footer class="docs-footer"><p>The mancode CLI is local-first and sends no telemetry.</p><p><a href="./docs.zh-CN.html">中文文档 →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
       </main>
 
       <aside class="docs-toc" aria-label="On this page"><p>On this page</p><a href="#overview">Overview</a><a href="#install">Install</a><a href="#files">Files &amp; privacy</a><a href="#continuity">Cross-session continuity</a><a href="#recommend">Choose a mode</a><a href="#modes">Invoke modes</a><a href="#commands">CLI reference</a><a href="#workflow">Study /man</a><a href="#platforms">Platforms</a><a href="#style">Refresh</a><a href="#uninstall">Uninstall</a><a href="#troubleshooting">Troubleshooting</a></aside>
