@@ -3,11 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="mancode：给 AI 编码 Agent 恰到好处的工程纪律，以及明确可选的视觉方向。" />
+    <title>mancode — Claude Code、Codex 等 AI 编码 Agent 工作流工具</title>
+    <meta name="description" content="mancode 是本地优先的 AI 编码 Agent 工作流工具，支持 Claude Code、Codex、Cursor 等平台，提供需求规划、代码验证、团队协作和跨会话项目上下文管理。" />
+    <link rel="canonical" href="https://whitelonng.github.io/mancode/index.zh-CN.html" />
+    <link rel="alternate" hreflang="en" href="https://whitelonng.github.io/mancode/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://whitelonng.github.io/mancode/index.zh-CN.html" />
+    <link rel="alternate" hreflang="x-default" href="https://whitelonng.github.io/mancode/" />
+    <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="mancode" />
+    <meta property="og:title" content="mancode — Claude Code、Codex 等 AI 编码 Agent 工作流工具" />
+    <meta property="og:description" content="mancode 是本地优先的 AI 编码 Agent 工作流工具，支持 Claude Code、Codex、Cursor 等平台，提供需求规划、代码验证、团队协作和跨会话项目上下文管理。" />
+    <meta property="og:url" content="https://whitelonng.github.io/mancode/index.zh-CN.html" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="280" />
+    <meta property="og:image:height" content="280" />
+    <meta property="og:image:alt" content="mancode 标志" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="mancode — Claude Code、Codex 等 AI 编码 Agent 工作流工具" />
+    <meta name="twitter:description" content="mancode 是本地优先的 AI 编码 Agent 工作流工具，支持 Claude Code、Codex、Cursor 等平台，提供需求规划、代码验证、团队协作和跨会话项目上下文管理。" />
+    <meta name="twitter:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta name="twitter:image:alt" content="mancode 标志" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://whitelonng.github.io/mancode/#website",
+            "url": "https://whitelonng.github.io/mancode/",
+            "name": "mancode",
+            "inLanguage": [
+              "en",
+              "zh-CN"
+            ]
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://whitelonng.github.io/mancode/#software",
+            "name": "mancode",
+            "url": "https://whitelonng.github.io/mancode/",
+            "codeRepository": "https://github.com/whitelonng/mancode",
+            "programmingLanguage": "TypeScript",
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+            "description": "A local-first AI coding agent workflow harness with cross-session project context."
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://whitelonng.github.io/mancode/index.zh-CN.html#webpage",
+            "url": "https://whitelonng.github.io/mancode/index.zh-CN.html",
+            "name": "mancode — Claude Code、Codex 等 AI 编码 Agent 工作流工具",
+            "description": "mancode 是本地优先的 AI 编码 Agent 工作流工具，支持 Claude Code、Codex、Cursor 等平台，提供需求规划、代码验证、团队协作和跨会话项目上下文管理。",
+            "inLanguage": "zh-CN",
+            "isPartOf": {
+              "@id": "https://whitelonng.github.io/mancode/#website"
+            },
+            "about": {
+              "@id": "https://whitelonng.github.io/mancode/#software"
+            }
+          }
+        ]
+      }
+    </script>
     <meta name="theme-color" content="#08090a" />
     <link rel="icon" href="./logo.png" />
     <link rel="stylesheet" href="./styles.css" />
-    <title>mancode — 交付干净代码，不是 AI 臃肿。</title>
     <script>
       document.documentElement.classList.replace("no-js", "js");
       try {
@@ -15,13 +78,21 @@
       } catch {}
     </script>
     <script src="./site.js" defer></script>
+    <script
+      async
+      src="https://cloud.umami.is/script.js"
+      data-website-id="3188d270-69ac-460c-b106-49c2887dd873"
+      data-domains="whitelonng.github.io"
+      data-exclude-search="true"
+      data-exclude-hash="true"
+    ></script>
   </head>
   <body>
     <a class="skip-link" href="#main">跳到正文</a><div class="noise" aria-hidden="true"></div>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
       <nav class="main-nav" aria-label="主导航"><a href="#modes">模式</a><a href="#workflow">工作流</a><a href="#design">审美</a><a href="#platforms">平台</a><a href="#continuity">跨会话</a><a href="./docs.zh-CN.html">文档</a><a href="https://github.com/whitelonng/mancode">GitHub</a></nav>
-      <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span><b>主题</b></button><a class="language-link" href="./index.html" lang="en" aria-label="Switch to English">EN</a><a class="button button-small button-ghost header-cta" href="#install">开始使用 ↘</a></div>
+      <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色主题" title="切换主题"><span class="theme-toggle-icon" aria-hidden="true"><svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 9 9 9 9 0 0 1-9-9Z"></path></svg></span><b>主题</b></button><a class="language-link" href="./" lang="en" aria-label="Switch to English">EN</a><a class="button button-small button-ghost header-cta" href="#install">开始使用 ↘</a></div>
     </header>
 
     <main id="main">

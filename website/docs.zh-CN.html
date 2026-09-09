@@ -3,12 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="mancode 完整文档：安装、模式、工作流闸门、验证、平台适配与维护。" />
+    <title>mancode 中文文档 — 安装配置、CLI 命令与 AI 编码工作流</title>
+    <meta name="description" content="阅读 mancode 中文文档：安装与平台适配、CLI 命令、solo 开发、任务规划、验证与审查，以及 Continuity 跨会话续接和故障排查。" />
+    <link rel="canonical" href="https://whitelonng.github.io/mancode/docs.zh-CN.html" />
+    <link rel="alternate" hreflang="en" href="https://whitelonng.github.io/mancode/docs.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://whitelonng.github.io/mancode/docs.zh-CN.html" />
+    <link rel="alternate" hreflang="x-default" href="https://whitelonng.github.io/mancode/docs.html" />
+    <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="mancode" />
+    <meta property="og:title" content="mancode 中文文档 — 安装配置、CLI 命令与 AI 编码工作流" />
+    <meta property="og:description" content="阅读 mancode 中文文档：安装与平台适配、CLI 命令、solo 开发、任务规划、验证与审查，以及 Continuity 跨会话续接和故障排查。" />
+    <meta property="og:url" content="https://whitelonng.github.io/mancode/docs.zh-CN.html" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="280" />
+    <meta property="og:image:height" content="280" />
+    <meta property="og:image:alt" content="mancode 标志" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="mancode 中文文档 — 安装配置、CLI 命令与 AI 编码工作流" />
+    <meta name="twitter:description" content="阅读 mancode 中文文档：安装与平台适配、CLI 命令、solo 开发、任务规划、验证与审查，以及 Continuity 跨会话续接和故障排查。" />
+    <meta name="twitter:image" content="https://whitelonng.github.io/mancode/logo.png" />
+    <meta name="twitter:image:alt" content="mancode 标志" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://whitelonng.github.io/mancode/#website",
+            "url": "https://whitelonng.github.io/mancode/",
+            "name": "mancode",
+            "inLanguage": [
+              "en",
+              "zh-CN"
+            ]
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://whitelonng.github.io/mancode/#software",
+            "name": "mancode",
+            "url": "https://whitelonng.github.io/mancode/",
+            "codeRepository": "https://github.com/whitelonng/mancode",
+            "programmingLanguage": "TypeScript",
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+            "description": "A local-first AI coding agent workflow harness with cross-session project context."
+          },
+          {
+            "@type": "TechArticle",
+            "@id": "https://whitelonng.github.io/mancode/docs.zh-CN.html#webpage",
+            "url": "https://whitelonng.github.io/mancode/docs.zh-CN.html",
+            "name": "mancode 中文文档 — 安装配置、CLI 命令与 AI 编码工作流",
+            "description": "阅读 mancode 中文文档：安装与平台适配、CLI 命令、solo 开发、任务规划、验证与审查，以及 Continuity 跨会话续接和故障排查。",
+            "inLanguage": "zh-CN",
+            "isPartOf": {
+              "@id": "https://whitelonng.github.io/mancode/#website"
+            },
+            "about": {
+              "@id": "https://whitelonng.github.io/mancode/#software"
+            }
+          }
+        ]
+      }
+    </script>
     <meta name="theme-color" content="#08090a" />
     <link rel="icon" href="./logo.png" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./docs.css" />
-    <title>mancode 文档 — 安装、使用并深入理解工作流</title>
     <script>
       document.documentElement.classList.replace("no-js", "js");
       try {
@@ -17,6 +80,14 @@
     </script>
     <script src="./site.js" defer></script>
     <script src="./docs.js" defer></script>
+    <script
+      async
+      src="https://cloud.umami.is/script.js"
+      data-website-id="3188d270-69ac-460c-b106-49c2887dd873"
+      data-domains="whitelonng.github.io"
+      data-exclude-search="true"
+      data-exclude-hash="true"
+    ></script>
   </head>
   <body class="docs-body">
     <a class="skip-link" href="#content">跳到正文</a>
@@ -96,7 +167,7 @@
 
         <section class="doc-section" id="files" data-searchable>
           <h2>文件与隐私</h2>
-          <p>mancode 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
+          <p>mancode CLI 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
           <table class="docs-table artifact-table"><thead><tr><th>路径</th><th>包含什么</th><th>提交前怎么处理</th></tr></thead><tbody>
             <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>Continuity 权威、项目策略、会话、工作流元数据和本地运行时记录。只有显式使用 <code>--legacy</code> 初始化后才会出现旧 <code>state.json</code>。</td><td>共享前检查工作流证据和本地记录；原始宿主 session key 不会持久化。</td></tr>
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>识别出的技术栈、验证命令和本地 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
@@ -499,7 +570,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
         </section>
 
         <p class="docs-search-empty" data-search-empty>没有找到匹配的文档章节。</p>
-        <footer class="docs-footer"><p>mancode 本地优先，不发送遥测。</p><p><a href="./docs.html">English Docs →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
+        <footer class="docs-footer"><p>mancode CLI 本地优先，不发送遥测。</p><p><a href="./docs.html">English Docs →</a> &nbsp; · &nbsp; <a href="https://github.com/whitelonng/mancode">GitHub →</a></p></footer>
       </main>
 
       <aside class="docs-toc" aria-label="本页目录"><p>本页目录</p><a href="#overview">概览</a><a href="#install">安装</a><a href="#files">文件与隐私</a><a href="#continuity">跨会话续接</a><a href="#recommend">选择模式</a><a href="#modes">调用模式</a><a href="#commands">CLI 参考</a><a href="#workflow">深入研究 /man</a><a href="#platforms">平台</a><a href="#style">刷新</a><a href="#uninstall">卸载</a><a href="#troubleshooting">故障排查</a></aside>
