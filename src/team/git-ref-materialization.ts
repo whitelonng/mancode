@@ -10,6 +10,8 @@ import path from 'node:path';
 import { taskAggregateDigest } from '../context/aggregate.js';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
+import { assertPrivacyValueAllowed } from '../context/privacy-guard.js';
+import { readPrivacyPolicySnapshot } from '../context/privacy-policy.js';
 import { V3ContextStore } from '../context/store.js';
 import { taskRootPath } from '../context/task-locator.js';
 import { sameTaskRef } from '../context/task-ref.js';
@@ -19,9 +21,20 @@ import {
   parseWorkflowMetadata,
 } from '../context/workflow-metadata.js';
 import { replaceFileAtomically } from '../runtime/atomic-file.js';
-import { resolveCoordinationEntityHomeStore } from '../runtime/entity-home-store.js';
-import { acquireEntityLocks } from '../runtime/local-lock.js';
+import {
+  resolveCoordinationEntityHomeStore,
+  resolveLocalEntityHomeStore,
+} from '../runtime/entity-home-store.js';
+import {
+  type LocalLockHandle,
+  acquireEntityLocks,
+  readLocalLock,
+} from '../runtime/local-lock.js';
 import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
+import {
+  PROJECT_SCHEMA_LOCK,
+  acquireProjectWriteBarrier,
+} from '../runtime/project-write-barrier.js';
 import {
   type TaskHeadFenceV1,
   parseTaskHeadFence,
@@ -70,6 +83,8 @@ export interface MaterializeGitRefTaskBundleInput {
   pendingMetadata?: WorkflowMetadataV3 | null;
   /** The caller already holds the canonical task lock. */
   taskLockHeld?: boolean;
+  /** Existing schema lock held by this process; its persisted owner is verified. */
+  projectWriteBarrierOwner?: Ulid;
   operationId?: Ulid;
   now?: Date;
 }
@@ -122,15 +137,21 @@ export async function materializeGitRefTaskBundle(
   const store = resolveCoordinationEntityHomeStore(
     runtime.entityHomeStoreContext,
   );
-  const locks = input.taskLockHeld
-    ? []
-    : await acquireEntityLocks(
-        store,
-        operationId,
-        [taskEntityKey(bundle.taskRef)],
-        { now },
-      );
+  const barrier =
+    input.projectWriteBarrierOwner === undefined
+      ? await acquireProjectWriteBarrier(runtime, operationId, now)
+      : await reuseProjectWriteBarrier(runtime, input.projectWriteBarrierOwner);
+  let locks: LocalLockHandle[] = [];
   try {
+    locks = input.taskLockHeld
+      ? []
+      : await acquireEntityLocks(
+          store,
+          operationId,
+          [taskEntityKey(bundle.taskRef)],
+          { now },
+        );
+    await assertBundlePrivacyAllowed(projectRoot, bundle);
     await recoverTaskMaterializationsWhileLocked(
       projectRoot,
       bundle.taskRef.taskId,
@@ -238,6 +259,7 @@ export async function materializeGitRefTaskBundle(
     await Promise.allSettled(
       [...locks].reverse().map((lock) => lock.release()),
     );
+    await barrier?.release();
   }
 }
 
@@ -255,10 +277,16 @@ export async function recoverGitRefTaskMaterializations(
   for (const journal of journals) {
     if (journal.state === 'committed') continue;
     const recoveryOperationId = createUlid();
-    const locks = await acquireEntityLocks(store, recoveryOperationId, [
-      taskEntityKey(journal.targetBundle.taskRef),
-    ]);
+    const barrier = await acquireProjectWriteBarrier(
+      runtime,
+      recoveryOperationId,
+      new Date(),
+    );
+    let locks: LocalLockHandle[] = [];
     try {
+      locks = await acquireEntityLocks(store, recoveryOperationId, [
+        taskEntityKey(journal.targetBundle.taskRef),
+      ]);
       repaired += await recoverTaskMaterializationsWhileLocked(
         root,
         journal.targetBundle.taskRef.taskId,
@@ -267,6 +295,7 @@ export async function recoverGitRefTaskMaterializations(
       await Promise.allSettled(
         [...locks].reverse().map((lock) => lock.release()),
       );
+      await barrier.release();
     }
   }
   return repaired;
@@ -304,6 +333,11 @@ async function applyJournal(
   projectRoot: string,
   journal: GitRefMaterializationJournalV1,
 ): Promise<void> {
+  const runtime = await readProjectRuntimeContext(projectRoot);
+  if (runtime.workspaceId !== journal.workspaceId) {
+    throw new Error('MANCODE_WORKSPACE_BINDING_MISMATCH');
+  }
+  await assertBundlePrivacyAllowed(projectRoot, journal.targetBundle);
   const target = bundleFiles(journal.targetBundle);
   const predecessor =
     journal.predecessorBundle === null
@@ -338,10 +372,6 @@ async function applyJournal(
       );
     }
   }
-  const runtime = await readProjectRuntimeContext(projectRoot);
-  if (runtime.workspaceId !== journal.workspaceId) {
-    throw new Error('MANCODE_WORKSPACE_BINDING_MISMATCH');
-  }
   const store = resolveCoordinationEntityHomeStore(
     runtime.entityHomeStoreContext,
   );
@@ -365,6 +395,30 @@ async function applyJournal(
   ) {
     throw new Error('MANCODE_SPLIT_BRAIN');
   }
+}
+
+async function assertBundlePrivacyAllowed(
+  root: string,
+  bundle: GitRefTaskBundleV1,
+): Promise<void> {
+  const snapshot = await readPrivacyPolicySnapshot(root);
+  assertPrivacyValueAllowed(snapshot, bundle.codeRef);
+  for (const artifact of bundle.artifacts)
+    assertPrivacyValueAllowed(snapshot, artifact.content);
+}
+
+async function reuseProjectWriteBarrier(
+  runtime: Awaited<ReturnType<typeof readProjectRuntimeContext>>,
+  operationId: Ulid,
+): Promise<null> {
+  assertUlid(operationId, 'materialization schema barrier owner');
+  const lock = await readLocalLock(
+    resolveLocalEntityHomeStore(runtime.entityHomeStoreContext),
+    PROJECT_SCHEMA_LOCK,
+  );
+  if (lock?.operationId !== operationId || lock.processId !== process.pid)
+    throw new Error('MANCODE_LOCK_OWNERSHIP_LOST');
+  return null;
 }
 
 function classifyMaterialization(

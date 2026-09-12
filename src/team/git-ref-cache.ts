@@ -1,11 +1,13 @@
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { type Ulid, assertUlid } from '../context/ids.js';
+import { readPrivacyPolicySnapshot } from '../context/privacy-policy.js';
 import { assertKnownKeys, assertRecord } from '../context/validation.js';
 import { replaceFileAtomically } from '../runtime/atomic-file.js';
 import {
   type GitRefTeamManifestSnapshot,
   type GitRefTeamManifestV1,
+  assertGitRefPrivacyReference,
   parseGitRefTeamManifest,
 } from './git-ref-transport.js';
 import type { ProjectConfigV1 } from './policy.js';
@@ -41,6 +43,8 @@ export async function writeGitRefTeamCache(
     receipt: snapshot.receipt,
     manifest: snapshot.manifest,
   });
+  if (cache.manifest !== null)
+    await assertCachePrivacyAuthority(projectRoot, cache.manifest);
   const directory = await ensureSafeCacheDirectory(projectRoot);
   const target = gitRefCachePath(projectRoot);
   const temporary = path.join(
@@ -86,6 +90,19 @@ export async function readGitRefTeamCache(
     ) {
       return null;
     }
+    if (cache.manifest !== null) {
+      try {
+        await assertCachePrivacyAuthority(projectRoot, cache.manifest);
+      } catch (error) {
+        // An old cache is refreshable; invalid active local authority is not.
+        if (
+          error instanceof Error &&
+          error.message === 'MANCODE_TRANSPORT_PRIVACY_POLICY_MISMATCH'
+        )
+          return null;
+        throw error;
+      }
+    }
     return cache;
   } catch (error) {
     if (isNotFound(error)) return null;
@@ -94,6 +111,19 @@ export async function readGitRefTeamCache(
     }
     throw error;
   }
+}
+
+async function assertCachePrivacyAuthority(
+  root: string,
+  manifest: GitRefTeamManifestV1,
+): Promise<void> {
+  const snapshot = await readPrivacyPolicySnapshot(root);
+  assertGitRefPrivacyReference(
+    manifest.privacyPolicy ?? null,
+    snapshot === null
+      ? null
+      : { revision: snapshot.policy.revision, digest: snapshot.digest },
+  );
 }
 
 /** Derives status without network access; only explicit sync refreshes the cache. */

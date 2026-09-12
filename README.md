@@ -18,7 +18,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.4-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.4" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.5-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.5" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
@@ -130,7 +130,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.6.4。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.6.5。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
 需要 Node.js 22 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -582,7 +582,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.6.4
+mancode v0.6.5
 
 Project:     my-app
 Runtime:     ready
@@ -933,3 +933,9 @@ mancode 最适合被描述为：
 ## 许可证
 
 GNU Affero General Public License v3.0。
+
+### 隐私保护（开发版本）
+
+新增 `mancode privacy scan --file <文件> --json` 和 `privacy preview --file <文件> --output <新副本>`，支持严格 UTF-8 与 stdin。扫描只报告类别、规则、偏移和数量；预览是不可逆的新副本，不覆盖原件。扫描返回码：0 无命中、1 有命中、2 失败。
+
+首次初始化通过 `--shared-privacy`、`--gateway-privacy` 分别明确选择项目共享保护和当前用户/checkout 的网关偏好；未指定的新增能力默认关闭，重复初始化保留选择。网关偏好开启还需要另行启动和接入客户端。详见[使用边界与初始化说明](docs/privacy-guide.md)、[当前实施验收](docs/privacy-implementation-plan.md)及[规则来源与许可](docs/privacy-rule-sources.md)。

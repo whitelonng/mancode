@@ -2,6 +2,11 @@ import { getEncoding } from 'js-tiktoken';
 import { type ArtifactRef, parseArtifactRef } from './artifact-ref.js';
 import { canonicalizeJson, digestCanonicalJson } from './canonical.js';
 import { assertUlid } from './ids.js';
+import {
+  containsEnhancedSensitiveText,
+  isPrivacyExcluded,
+} from './privacy-guard.js';
+import type { PrivacyPolicySnapshot } from './privacy-policy.js';
 import { scanSharedText } from './privacy.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 
@@ -117,6 +122,7 @@ export interface ContextPackBuildInput {
   snapshot: ContextPackSnapshot;
   budgetLimit: number;
   sections: ContextPackSectionInput[];
+  privacy?: PrivacyPolicySnapshot | null;
 }
 
 export interface ContextPackV2 {
@@ -281,7 +287,18 @@ export function buildContextPack(input: ContextPackBuildInput): ContextPackV2 {
       omissions.push(omissionFor(section, 'purpose_excluded'));
       continue;
     }
-    if (containsSensitiveText(section.value)) {
+    if (isPrivacyExcluded(input.privacy, section.value)) {
+      omissions.push(omissionFor(section, 'privacy'));
+      continue;
+    }
+    if (
+      containsSensitiveText(section.value) ||
+      (input.privacy?.policy.enabled &&
+        containsEnhancedSensitiveText(
+          section.value,
+          input.privacy.policy.enabledRuleIds,
+        ))
+    ) {
       omissions.push(omissionFor(section, 'privacy'));
       if (isRequiredSection(section)) {
         throw new Error(`MANCODE_CONTEXT_REQUIRED_PRIVACY_BLOCKED: ${pointer}`);

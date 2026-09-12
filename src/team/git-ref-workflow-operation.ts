@@ -625,6 +625,7 @@ async function publishTaskMutation(
         actorId: input.context.session.actorId,
         sessionId: input.context.session.sessionId,
         taskLockHeld: true,
+        projectWriteBarrierOwner: input.context.operationId,
       },
     );
     if (recovery.state !== 'committed' || recovery.materialization === null) {
@@ -647,6 +648,7 @@ async function publishTaskMutation(
           actorId: input.context.session.actorId,
           sessionId: input.context.session.sessionId,
           taskLockHeld: true,
+          projectWriteBarrierOwner: input.context.operationId,
         },
       );
     } catch {

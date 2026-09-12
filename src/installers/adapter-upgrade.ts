@@ -102,8 +102,8 @@ export interface AdapterUpgradeResult {
   stagedTargets: string[];
   manifest: {
     changed: boolean;
-    beforeVersion: 1 | 2;
-    targetVersion: 1 | 2;
+    beforeVersion: 1 | 2 | 3;
+    targetVersion: 1 | 2 | 3;
   };
   status: Record<PlatformName, V3PlatformAdapterStatus>;
   journal: OperationJournalV1 | null;

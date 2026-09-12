@@ -36,6 +36,7 @@ export type OperationType =
   | 'greenfield_initialize'
   | 'adapter_upgrade'
   | 'project_policy_upgrade'
+  | 'privacy_policy_update'
   | 'v3_activate';
 
 export type OperationState =
@@ -115,6 +116,7 @@ const OPERATION_TYPES = new Set<OperationType>([
   'greenfield_initialize',
   'adapter_upgrade',
   'project_policy_upgrade',
+  'privacy_policy_update',
   'v3_activate',
 ]);
 const OPERATION_STATES = new Set<OperationState>([

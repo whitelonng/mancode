@@ -17,10 +17,17 @@ import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import {
   assertSchemaManifestPolicyUpgrade,
+  assertSchemaManifestPrivacyTransition,
   assertSchemaManifestTransition,
   parseSchemaManifest,
 } from '../context/manifest.js';
 import { parseMigrationStage } from '../context/migrate.js';
+import {
+  assertPrivacyExclusionsTransition,
+  assertPrivacyPolicyTransition,
+  parsePrivacyExclusions,
+  parsePrivacyPolicy,
+} from '../context/privacy-policy.js';
 import { parseRequirementsLedger } from '../context/requirements-ledger.js';
 import { parseReviewLedger } from '../context/review-ledger.js';
 import { V3ContextStore } from '../context/store.js';
@@ -39,6 +46,10 @@ import {
   parseProjectConfig,
   parseTeamPolicy,
 } from '../team/policy.js';
+import {
+  applyRemotePrivacyPolicyUpdate,
+  inspectRemotePrivacyPolicyUpdate,
+} from '../team/privacy-policy-transport.js';
 import { createClaim, readClaim, updateClaim } from './claim-store.js';
 import { recordLocalDiagnostic } from './diagnostics.js';
 import {
@@ -1081,6 +1092,9 @@ async function applyAction(
         action.targetContent,
       );
       return;
+    case 'privacy_remote_policy':
+      await applyRemotePrivacyPolicyUpdate(projectRoot, action.update);
+      return;
     case 'migration_stage_file':
       assertMigrationStageTransition(action);
       await writeMigrationStageFile(
@@ -1140,6 +1154,28 @@ function assertProjectAuthorityTransition(
   >,
   operationType: OperationJournalV1['type'],
 ): void {
+  if (
+    action.fileName === 'shared/context/privacy-policy.json' ||
+    action.fileName === 'shared/context/privacy-exclusions.json'
+  ) {
+    if (operationType !== 'privacy_policy_update')
+      throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
+    if (action.fileName === 'shared/context/privacy-policy.json')
+      assertPrivacyPolicyTransition(
+        action.beforeContent === null
+          ? null
+          : parsePrivacyPolicy(JSON.parse(action.beforeContent)),
+        parsePrivacyPolicy(JSON.parse(action.targetContent)),
+      );
+    else
+      assertPrivacyExclusionsTransition(
+        action.beforeContent === null
+          ? null
+          : parsePrivacyExclusions(JSON.parse(action.beforeContent)),
+        parsePrivacyExclusions(JSON.parse(action.targetContent)),
+      );
+    return;
+  }
   if (action.beforeContent === null) {
     throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
   }
@@ -1149,6 +1185,8 @@ function assertProjectAuthorityTransition(
       const next = parseSchemaManifest(JSON.parse(action.targetContent));
       if (operationType === 'project_policy_upgrade') {
         assertSchemaManifestPolicyUpgrade(previous, next);
+      } else if (operationType === 'privacy_policy_update') {
+        assertSchemaManifestPrivacyTransition(previous, next);
       } else {
         assertSchemaManifestTransition(previous, next);
       }
@@ -1224,6 +1262,17 @@ async function currentActionDigest(
       return content === null
         ? null
         : projectAuthorityContentDigest(action.fileName, content);
+    }
+    case 'privacy_remote_policy': {
+      const state = await inspectRemotePrivacyPolicyUpdate(
+        projectRoot,
+        action.update,
+      );
+      if (state === 'conflict')
+        throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
+      return state === 'before'
+        ? action.beforeDigest
+        : recoveryActionTargetDigest(action);
     }
     case 'migration_stage_file': {
       const content = await readMigrationStageFile(projectRoot, action.stageId);

@@ -25,6 +25,8 @@ export interface InitializeV3ProjectInput {
   managedAdapters?: ManagedAdapterInventory;
   /** Explicit init preference; omitted keeps V3's evidence-based auto mode. */
   teamPolicy?: TeamRecommendationPolicy;
+  /** Explicit opt-in for project-shared enhanced privacy. */
+  sharedPrivacy?: boolean;
   now?: Date;
 }
 
@@ -87,6 +89,7 @@ export async function initializeV3Project(
       projectConfig,
       teamPolicy,
       projectFacts,
+      sharedPrivacy: input.sharedPrivacy,
       now,
     },
     {

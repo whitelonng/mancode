@@ -21,5 +21,7 @@ export function createGitRefTeamManifestStore(
     transportEpoch: config.transport.epoch,
     configRevision: config.revision,
     configDigest: projectConfigDigest(config),
+    privacyPolicyReference:
+      manifest.manifestVersion === 3 ? manifest.privacyPolicy : null,
   });
 }

@@ -9,7 +9,18 @@ import {
   taskAggregateDigest,
 } from '../context/aggregate.js';
 import { digestCanonicalJson } from '../context/canonical.js';
+import { compareSemver } from '../context/compatibility.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
+import { assertPrivacyValueAllowed } from '../context/privacy-guard.js';
+import {
+  PRIVACY_MIN_VERSION,
+  type PrivacyPolicySnapshot,
+  assertPrivacyExclusionsTransition,
+  assertPrivacyPolicyTransition,
+  parsePrivacyExclusions,
+  parsePrivacyPolicy,
+  readPrivacyPolicySnapshot,
+} from '../context/privacy-policy.js';
 import {
   assertSafeSharedRelativePath,
   assertSharedTextSafe,
@@ -119,7 +130,8 @@ export interface GitRefRemoteMutationReceiptV1 {
     | 'authority_establish'
     | 'authority_freeze'
     | 'authority_unfreeze'
-    | 'authority_tombstone';
+    | 'authority_tombstone'
+    | 'privacy_policy';
   operationId: Ulid;
   actorId: Ulid;
   taskRef: TaskRef | null;
@@ -152,7 +164,9 @@ export interface GitRefAuthorityFreezeV1 {
 }
 
 export interface GitRefTeamManifestV1 {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
+  /** Present only in schema 2, which legacy clients reject. */
+  privacyPolicy?: PrivacyPolicySnapshot;
   workspaceId: Ulid;
   schemaEpoch: Ulid;
   minReaderVersion: string;
@@ -193,6 +207,8 @@ export interface GitRefTeamManifestStoreOptions {
   configRevision?: number;
   configDigest?: string;
   now?: () => Date;
+  /** Null/omitted binds an unupgraded client; an upgraded remote rejects it. */
+  privacyPolicyReference?: { revision: number; digest: string } | null;
 }
 
 export interface PublishGitRefActorProfileInput {
@@ -317,6 +333,10 @@ export class GitRefTeamManifestStore {
   private readonly expectedHeader: Partial<Omit<ManifestHeader, 'workspaceId'>>;
   private readonly initialHeader: ManifestHeader;
   private readonly now: () => Date;
+  private readonly privacyPolicyReference: {
+    revision: number;
+    digest: string;
+  } | null;
   private remoteIdentityHashPromise: Promise<string> | null = null;
 
   constructor(options: GitRefTeamManifestStoreOptions) {
@@ -341,6 +361,7 @@ export class GitRefTeamManifestStore {
       'git-ref configRevision',
     );
     parseOptionalDigest(options.configDigest, 'git-ref configDigest');
+    this.privacyPolicyReference = options.privacyPolicyReference ?? null;
     this.projectRoot = path.resolve(options.projectRoot);
     this.remote = options.remote;
     this.workspaceId = options.workspaceId;
@@ -405,6 +426,10 @@ export class GitRefTeamManifestStore {
     }
     if (validateExpectedHeader) {
       assertExpectedHeader(manifest, this.expectedHeader);
+      assertGitRefPrivacyReference(
+        manifest.privacyPolicy ?? null,
+        this.privacyPolicyReference,
+      );
     }
     assertManifestCoordinationDomain(
       manifest,
@@ -437,6 +462,101 @@ export class GitRefTeamManifestStore {
     };
   }
 
+  /** Maintenance inspection still validates domain/header and policy payload integrity. */
+  async inspectPrivacyPolicyAuthority(): Promise<GitRefTeamManifestSnapshot> {
+    const current = await this.pullManifest(false);
+    if (current.manifest !== null) {
+      const {
+        minReaderVersion: _reader,
+        minWriterVersion: _writer,
+        ...header
+      } = this.expectedHeader;
+      assertExpectedHeader(current.manifest, header);
+    }
+    return current;
+  }
+
+  async updatePrivacyPolicy(input: {
+    operationId: Ulid;
+    actorId: Ulid;
+    expectedRemoteRevision: number;
+    beforePrivacyPolicy: { revision: number; digest: string } | null;
+    targetPrivacyPolicy: PrivacyPolicySnapshot;
+  }): Promise<{ receipt: string; remoteRevision: number }> {
+    assertUlid(input.operationId, 'privacy operationId');
+    assertUlid(input.actorId, 'privacy actorId');
+    const target = parseGitRefPrivacyPolicySnapshot(
+      input.targetPrivacyPolicy,
+      this.workspaceId,
+    );
+    const current = await this.inspectPrivacyPolicyAuthority();
+    const manifest = current.manifest;
+    if (manifest === null || current.receipt === null)
+      throw new Error('MANCODE_TRANSPORT_AUTHORITY_REQUIRED');
+    assertActiveAuthority(manifest);
+    assertAuthorityActorJoined(manifest, input.actorId);
+    if (
+      manifest.privacyPolicy?.digest === target.digest &&
+      target.policy.lastOperationId === input.operationId
+    ) {
+      return { receipt: current.receipt, remoteRevision: manifest.revision };
+    }
+    if (manifest.revision !== input.expectedRemoteRevision)
+      throw new Error('MANCODE_TRANSPORT_REVISION_CONFLICT');
+    assertGitRefPrivacyReference(
+      manifest.privacyPolicy ?? null,
+      input.beforePrivacyPolicy,
+    );
+    assertPrivacyPolicyTransition(
+      manifest.privacyPolicy?.policy ?? null,
+      target.policy,
+    );
+    assertPrivacyExclusionsTransition(
+      manifest.privacyPolicy?.exclusions ?? null,
+      target.exclusions,
+    );
+    if (
+      target.policy.lastOperationId !== input.operationId ||
+      target.exclusions.lastOperationId !== input.operationId
+    )
+      throw new Error('MANCODE_PRIVACY_REMOTE_OPERATION_MISMATCH');
+    assertGitRefManifestPrivacyAllowed(manifest, target);
+    const timestamp = this.now().toISOString();
+    const receipt = createMutationReceipt({
+      kind: 'privacy_policy',
+      operationId: input.operationId,
+      actorId: input.actorId,
+      taskRef: null,
+      remoteRevision: manifest.revision + 1,
+      ownershipEpoch: null,
+      actorProfiles: manifest.actorProfiles,
+      ownershipFence: manifest.ownershipFences,
+      claims: manifest.claims,
+      handoffs: manifest.handoffs,
+      taskBundle: manifest.taskBundles,
+      committedAt: timestamp,
+    });
+    const next = parseGitRefTeamManifest({
+      ...manifest,
+      schemaVersion: 2,
+      privacyPolicy: target,
+      minReaderVersion:
+        compareSemver(manifest.minReaderVersion, PRIVACY_MIN_VERSION) < 0
+          ? PRIVACY_MIN_VERSION
+          : manifest.minReaderVersion,
+      minWriterVersion:
+        compareSemver(manifest.minWriterVersion, PRIVACY_MIN_VERSION) < 0
+          ? PRIVACY_MIN_VERSION
+          : manifest.minWriterVersion,
+      revision: manifest.revision + 1,
+      lastOperationId: input.operationId,
+      receipts: appendReceipt(manifest.receipts, receipt),
+      lastMutation: receipt,
+      updatedAt: timestamp,
+    });
+    return this.commitMutation(current, next);
+  }
+
   async publishActorProfile(
     input: PublishGitRefActorProfileInput,
   ): Promise<{ receipt: string; remoteRevision: number }> {
@@ -456,7 +576,9 @@ export class GitRefTeamManifestStore {
       current.manifest?.actorProfiles ?? [],
       profile,
     );
-    const base = current.manifest ?? emptyManifest(this.initialHeader);
+    const base =
+      current.manifest ??
+      emptyManifest(this.initialHeader, await this.initialPrivacyPolicy());
     const receipt = createMutationReceipt({
       kind: 'actor_profile',
       operationId: input.operationId,
@@ -508,7 +630,9 @@ export class GitRefTeamManifestStore {
     if (currentRevision !== expectedRevision) {
       throw new Error('MANCODE_TRANSPORT_REVISION_CONFLICT');
     }
-    const base = current.manifest ?? emptyManifest(this.initialHeader);
+    const base =
+      current.manifest ??
+      emptyManifest(this.initialHeader, await this.initialPrivacyPolicy());
     const previousFence = base.ownershipFences.find((candidate) =>
       sameTaskRef(candidate.taskRef, taskRef),
     );
@@ -633,6 +757,15 @@ export class GitRefTeamManifestStore {
       input.expectedRemoteRevision,
     );
     const current = await this.pullManifest(false);
+    if (
+      input.action !== 'establish' ||
+      current.manifest?.privacyPolicy !== undefined
+    ) {
+      assertGitRefPrivacyReference(
+        current.manifest?.privacyPolicy ?? null,
+        this.privacyPolicyReference,
+      );
+    }
     const currentRevision = current.manifest?.revision ?? 0;
     if (currentRevision !== expectedRevision) {
       const committed = committedAuthorityMutation(current, input);
@@ -837,8 +970,10 @@ export class GitRefTeamManifestStore {
       taskBundle: taskBundles,
       committedAt: timestamp,
     });
+    const privacyPolicy = await this.initialPrivacyPolicy();
     const next = parseGitRefTeamManifest({
-      schemaVersion: 1,
+      schemaVersion: privacyPolicy === null ? 1 : 2,
+      ...(privacyPolicy === null ? {} : { privacyPolicy }),
       ...this.initialHeader,
       transportEpoch: targetEpoch,
       authorityState: 'active',
@@ -1018,6 +1153,13 @@ export class GitRefTeamManifestStore {
     return { ...result, transportEpoch: next.transportEpoch };
   }
 
+  private async initialPrivacyPolicy(): Promise<PrivacyPolicySnapshot | null> {
+    if (this.privacyPolicyReference === null) return null;
+    const snapshot = await readPrivacyPolicySnapshot(this.projectRoot);
+    assertGitRefPrivacyReference(snapshot, this.privacyPolicyReference);
+    return snapshot;
+  }
+
   private remoteIdentityHash(): Promise<string> {
     this.remoteIdentityHashPromise ??= resolveGitRefRemoteIdentityHash(
       this.projectRoot,
@@ -1147,6 +1289,59 @@ function authoritySnapshotReceipt(
   });
 }
 
+export function parseGitRefPrivacyPolicySnapshot(
+  value: unknown,
+  workspaceId: Ulid,
+): PrivacyPolicySnapshot {
+  assertRecord(value, 'git-ref privacy snapshot');
+  assertKnownKeys(
+    value,
+    ['policy', 'exclusions', 'digest'],
+    'git-ref privacy snapshot',
+  );
+  const policy = parsePrivacyPolicy(value.policy);
+  const exclusions = parsePrivacyExclusions(value.exclusions);
+  if (
+    policy.workspaceId !== workspaceId ||
+    exclusions.workspaceId !== workspaceId ||
+    value.digest !== digestCanonicalJson(policy) ||
+    policy.exclusions.revision !== exclusions.revision ||
+    policy.exclusions.digest !== digestCanonicalJson(exclusions)
+  )
+    throw new Error('MANCODE_TRANSPORT_PRIVACY_DIGEST_MISMATCH');
+  return { policy, exclusions, digest: digestCanonicalJson(policy) };
+}
+
+export function assertGitRefPrivacyReference(
+  snapshot: PrivacyPolicySnapshot | null,
+  reference: { revision: number; digest: string } | null,
+): void {
+  if (
+    (snapshot?.policy.revision ?? 0) !== (reference?.revision ?? 0) ||
+    (snapshot?.digest ?? null) !== (reference?.digest ?? null)
+  )
+    throw new Error('MANCODE_TRANSPORT_PRIVACY_POLICY_MISMATCH');
+}
+
+export function assertGitRefManifestPrivacyAllowed(
+  manifest: GitRefTeamManifestV1,
+  override?: PrivacyPolicySnapshot,
+): void {
+  const privacy = override ?? manifest.privacyPolicy;
+  if (privacy === undefined) return;
+  for (const value of [
+    ...manifest.actorProfiles,
+    ...manifest.claims,
+    ...manifest.handoffs,
+  ])
+    assertPrivacyValueAllowed(privacy, value);
+  for (const bundle of manifest.taskBundles) {
+    assertPrivacyValueAllowed(privacy, bundle.codeRef);
+    for (const artifact of bundle.artifacts)
+      assertPrivacyValueAllowed(privacy, artifact.content);
+  }
+}
+
 export function parseGitRefTeamManifest(value: unknown): GitRefTeamManifestV1 {
   assertManifestSize(value);
   assertRecord(value, 'git-ref team manifest');
@@ -1158,6 +1353,7 @@ export function parseGitRefTeamManifest(value: unknown): GitRefTeamManifestV1 {
     normalized,
     [
       'schemaVersion',
+      ...(normalized.schemaVersion === 2 ? ['privacyPolicy'] : []),
       'workspaceId',
       'schemaEpoch',
       'minReaderVersion',
@@ -1181,7 +1377,7 @@ export function parseGitRefTeamManifest(value: unknown): GitRefTeamManifestV1 {
     ],
     'git-ref team manifest',
   );
-  if (normalized.schemaVersion !== 1) {
+  if (normalized.schemaVersion !== 1 && normalized.schemaVersion !== 2) {
     throw new Error('git-ref team manifest schemaVersion is invalid');
   }
   assertUlid(normalized.workspaceId, 'git-ref team manifest workspaceId');
@@ -1195,7 +1391,15 @@ export function parseGitRefTeamManifest(value: unknown): GitRefTeamManifestV1 {
     'git-ref team manifest revision',
   );
   const manifest: GitRefTeamManifestV1 = {
-    schemaVersion: 1,
+    schemaVersion: normalized.schemaVersion,
+    ...(normalized.schemaVersion === 2
+      ? {
+          privacyPolicy: parseGitRefPrivacyPolicySnapshot(
+            normalized.privacyPolicy,
+            normalized.workspaceId,
+          ),
+        }
+      : {}),
     workspaceId: normalized.workspaceId,
     schemaEpoch: normalized.schemaEpoch,
     minReaderVersion: parseVersion(
@@ -1274,6 +1478,13 @@ export function parseGitRefTeamManifest(value: unknown): GitRefTeamManifestV1 {
       'git-ref team manifest updatedAt',
     ),
   };
+  if (
+    manifest.schemaVersion === 2 &&
+    (compareSemver(manifest.minReaderVersion, PRIVACY_MIN_VERSION) < 0 ||
+      compareSemver(manifest.minWriterVersion, PRIVACY_MIN_VERSION) < 0)
+  )
+    throw new Error('MANCODE_TRANSPORT_PRIVACY_VERSION_REQUIRED');
+  assertGitRefManifestPrivacyAllowed(manifest);
   assertManifestUniqueness(manifest);
   assertManifestCrossEntityConsistency(manifest, legacyProfileManifest);
   return manifest;
@@ -1432,7 +1643,8 @@ export function parseGitRefRemoteMutationReceipt(
     value.kind !== 'authority_establish' &&
     value.kind !== 'authority_freeze' &&
     value.kind !== 'authority_unfreeze' &&
-    value.kind !== 'authority_tombstone'
+    value.kind !== 'authority_tombstone' &&
+    value.kind !== 'privacy_policy'
   ) {
     throw new Error('git-ref mutation receipt kind is invalid');
   }
@@ -2162,7 +2374,8 @@ function assertLastMutationEntityDigests(
     receipt.kind === 'authority_establish' ||
     receipt.kind === 'authority_freeze' ||
     receipt.kind === 'authority_unfreeze' ||
-    receipt.kind === 'authority_tombstone'
+    receipt.kind === 'authority_tombstone' ||
+    receipt.kind === 'privacy_policy'
   ) {
     ownershipFence = manifest.ownershipFences;
     claims = manifest.claims;
@@ -2464,9 +2677,13 @@ function parseReceiptEntityDigests(
   };
 }
 
-function emptyManifest(header: ManifestHeader): GitRefTeamManifestV1 {
+function emptyManifest(
+  header: ManifestHeader,
+  privacyPolicy: PrivacyPolicySnapshot | null = null,
+): GitRefTeamManifestV1 {
   return {
-    schemaVersion: 1,
+    schemaVersion: privacyPolicy === null ? 1 : 2,
+    ...(privacyPolicy === null ? {} : { privacyPolicy }),
     ...header,
     authorityState: 'active',
     authorityFreeze: null,

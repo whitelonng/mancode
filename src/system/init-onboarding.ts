@@ -12,6 +12,12 @@ import {
 export type InitLocale = 'zh-CN' | 'en';
 
 export interface InitPrompter {
+  /** Optional for programmatic callers; omitted retains disabled defaults. */
+  selectPrivacyProtection?(context: {
+    locale: InitLocale;
+    sharedPrivacy?: boolean;
+    gatewayPrivacy?: boolean;
+  }): Promise<{ sharedPrivacy: boolean; gatewayPrivacy: boolean } | null>;
   confirmGenericProject(context: {
     rootDir: string;
     locale: InitLocale;
@@ -200,6 +206,40 @@ export async function detectPlatformHints(
 
 export function createTerminalPrompter(): InitPrompter {
   return {
+    async selectPrivacyProtection({ locale, sharedPrivacy, gatewayPrivacy }) {
+      const rl = createInterface({ input: stdin, output: stdout });
+      try {
+        const choose = async (question: string): Promise<boolean | null> => {
+          const answer = (await rl.question(question)).trim().toLowerCase();
+          if (['q', 'quit', '退出'].includes(answer)) return null;
+          if (['y', 'yes', '是'].includes(answer)) return true;
+          if (['', 'n', 'no', '否'].includes(answer)) return false;
+          return null;
+        };
+        const shared =
+          sharedPrivacy ??
+          (await choose(
+            locale === 'zh-CN'
+              ? '开启项目共享内容增强保护？作用于 mancode 共享写入和输出；以后关闭也不降级项目格式 [y/N/q]: '
+              : 'Enable project-shared content protection? Covers mancode shared writes/outputs; disabling does not downgrade the project format [y/N/q]: ',
+          ));
+        if (shared === null) return null;
+        const gateway =
+          gatewayPrivacy ??
+          (await choose(
+            locale === 'zh-CN'
+              ? '为本用户在当前 checkout 开启 AI 网关偏好？需另外启动并接入客户端才保护请求 [y/N/q]: '
+              : 'Enable the AI gateway preference for this user and checkout? Start it and connect the client separately to protect requests [y/N/q]: ',
+          ));
+        return gateway === null
+          ? null
+          : { sharedPrivacy: shared, gatewayPrivacy: gateway };
+      } catch {
+        return null;
+      } finally {
+        rl.close();
+      }
+    },
     async confirmGenericProject({ rootDir, locale }) {
       const rl = createInterface({ input: stdin, output: stdout });
       try {

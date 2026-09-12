@@ -26,6 +26,10 @@ docs/*
 !docs/engineering.md
 !docs/12-lifecycle.md
 !docs/man-module-delivery-plan.md
+!docs/privacy-rule-sources.md
+!docs/privacy-upstream-license.txt
+!docs/privacy-guide.md
+!docs/privacy-implementation-plan.md
 
 # Node.js
 node_modules/

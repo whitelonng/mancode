@@ -1,8 +1,15 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { EntityHomeStore } from '../runtime/entity-home-store.js';
-import { acquireLocalLock } from '../runtime/local-lock.js';
+import {
+  type LocalLockHandle,
+  acquireLocalLock,
+} from '../runtime/local-lock.js';
 import { createUlid } from './ids.js';
+import {
+  acquireSharedPrivacyWriteBarrier,
+  assertSharedPrivacyValue,
+} from './privacy-guard.js';
 import { assertSharedTextSafe } from './privacy.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import { assertKnownKeys, assertRecord } from './validation.js';
@@ -274,11 +281,17 @@ async function mutateProjectGlossary(
       'MANCODE_GLOSSARY_EXPECTED_REVISION_INVALID: expected revision must be a non-negative integer',
     );
   }
-  const lock = await acquireLocalLock(store, {
-    operationId: createUlid(),
-    entityLockKey: GLOSSARY_LOCK_KEY,
-  });
+  const operationId = createUlid();
+  const barrier = await acquireSharedPrivacyWriteBarrier(
+    projectRoot,
+    operationId,
+  );
+  let lock: LocalLockHandle | null = null;
   try {
+    lock = await acquireLocalLock(store, {
+      operationId,
+      entityLockKey: GLOSSARY_LOCK_KEY,
+    });
     const current = await readProjectGlossary(projectRoot);
     if (current.revision !== expectedRevision) {
       throw new Error(
@@ -290,10 +303,12 @@ async function mutateProjectGlossary(
       revision: current.revision + 1,
       entries: mutate(current),
     });
+    await assertSharedPrivacyValue(projectRoot, next);
     await writeGlossaryFile(projectRoot, next);
     return next;
   } finally {
-    await lock.release().catch(() => undefined);
+    await lock?.release().catch(() => undefined);
+    await barrier?.release().catch(() => undefined);
   }
 }
 

@@ -6,6 +6,7 @@ import {
 } from '../team/authorization.js';
 import { digestCanonicalJson } from './canonical.js';
 import { type Ulid, assertUlid } from './ids.js';
+import { withSharedPrivacyWrite } from './privacy-guard.js';
 import { assertSharedTextSafe } from './privacy.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import { assertKnownKeys, assertRecord } from './validation.js';
@@ -151,6 +152,16 @@ export function confirmedDecisionPath(
  * emitted afterwards and retried, but it never rolls this authority back.
  */
 export async function publishConfirmedDecision(
+  projectRoot: string,
+  decision: ConfirmedDecisionV1,
+): Promise<ConfirmedDecisionV1> {
+  const parsed = parseConfirmedDecision(decision);
+  return withSharedPrivacyWrite(projectRoot, parsed.operationId, parsed, () =>
+    publishConfirmedDecisionUnlocked(projectRoot, parsed),
+  );
+}
+
+async function publishConfirmedDecisionUnlocked(
   projectRoot: string,
   decision: ConfirmedDecisionV1,
 ): Promise<ConfirmedDecisionV1> {

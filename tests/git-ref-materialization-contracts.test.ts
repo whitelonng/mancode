@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -7,11 +7,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
+import { updatePrivacyPolicy } from '../src/context/privacy-policy-operation.js';
 import { V3ContextStore } from '../src/context/store.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
+import { DEFAULT_RULE_IDS, RULESET_VERSION } from '../src/privacy/rules.js';
 import { resolveCoordinationEntityHomeStore } from '../src/runtime/entity-home-store.js';
 import { acquireEntityLocks } from '../src/runtime/local-lock.js';
 import { readProjectRuntimeContext } from '../src/runtime/project-runtime.js';
+import { acquireProjectWriteBarrier } from '../src/runtime/project-write-barrier.js';
 import { createSession } from '../src/runtime/session.js';
 import { taskEntityKey } from '../src/runtime/task-operation.js';
 import {
@@ -20,7 +23,10 @@ import {
   publishSharedActorProfile,
 } from '../src/team/actor.js';
 import { createGitRefTaskBundle } from '../src/team/git-ref-bundle.js';
-import { materializeGitRefTaskBundle } from '../src/team/git-ref-materialization.js';
+import {
+  materializeGitRefTaskBundle,
+  recoverGitRefTaskMaterializations,
+} from '../src/team/git-ref-materialization.js';
 import type {
   GitRefOwnershipFenceV1,
   GitRefTaskBundleV1,
@@ -39,6 +45,101 @@ afterEach(async () => {
 });
 
 describe('git-ref task bundle materialization', () => {
+  it('guards direct materialization and cached journal replay against current policy, including disabled exclusions', async () => {
+    const source = await bootstrap('privacy-source', id(50), id(51));
+    const target = await bootstrap('privacy-target', id(52), id(53));
+    const created = await createSharedWorkflow(source.root, source.sessionId);
+    await createV3Checkpoint({
+      projectRoot: source.root,
+      taskRef: created.taskRef,
+      sessionId: source.sessionId,
+      expectedTaskRevision: created.metadata.revision,
+      kind: 'diagnostic_started',
+      summary: 'Historical contact 13812345678',
+      operationId: id(54),
+      checkpointId: id(55),
+      now: NOW,
+    });
+    const sensitive = await bundle(source.root);
+    const setPolicy = (enabled: boolean, expectedRevision: number) =>
+      updatePrivacyPolicy({
+        projectRoot: target.root,
+        sessionId: target.sessionId,
+        operationId: id(60 + expectedRevision),
+        expectedRevision,
+        candidate: {
+          schemaVersion: 1,
+          enabled,
+          rulesetVersion: RULESET_VERSION,
+          enabledRuleIds: [...DEFAULT_RULE_IDS],
+        },
+        now: NOW,
+      });
+    await setPolicy(true, 0);
+    const input = {
+      projectRoot: target.root,
+      remoteRevision: 1,
+      ownershipFence: remoteFence(sensitive, 1, id(56)),
+      bundle: sensitive,
+      operationId: id(57),
+      now: NOW,
+    };
+    await expect(materializeGitRefTaskBundle(input)).rejects.toThrow(
+      'MANCODE_PRIVACY_BLOCKED',
+    );
+    const targetRoot = path.join(
+      target.root,
+      '.mancode/shared/workflows',
+      TASK_ID,
+    );
+    await expect(lstat(targetRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    await setPolicy(false, 1);
+    const barrier = await acquireProjectWriteBarrier(
+      await readProjectRuntimeContext(target.root),
+      id(58),
+      NOW,
+    );
+    try {
+      await expect(materializeGitRefTaskBundle(input)).rejects.toThrow(
+        'MANCODE_LOCK_HELD',
+      );
+    } finally {
+      await barrier.release();
+    }
+    const materialized = await materializeGitRefTaskBundle(input);
+    // Mutable summary mirrors checkpoint copy; activation requires cleaning it first.
+    await writeFile(
+      path.join(targetRoot, 'summary.md'),
+      'Safe current summary.\n',
+    );
+    await setPolicy(true, 2);
+    await setPolicy(false, 3);
+    if (materialized.journalPath === null)
+      throw new Error('expected materialization journal');
+    const journal = JSON.parse(
+      await readFile(materialized.journalPath, 'utf8'),
+    );
+    await writeFile(
+      materialized.journalPath,
+      JSON.stringify({ ...journal, state: 'applying' }),
+    );
+    const checkpointPath = path.join(
+      targetRoot,
+      'checkpoints',
+      `${id(55)}.json`,
+    );
+    await rm(checkpointPath);
+    await expect(
+      recoverGitRefTaskMaterializations(target.root),
+    ).rejects.toThrow('MANCODE_PRIVACY_ENTITY_EXCLUDED');
+    await expect(lstat(checkpointPath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(
+      JSON.parse(await readFile(materialized.journalPath, 'utf8')).state,
+    ).toBe('applying');
+  });
+
   it('creates a missing task and advances it only from an exact predecessor', async () => {
     const source = await bootstrap('source', id(3), id(4));
     const target = await bootstrap('target', id(5), id(6));

@@ -3,6 +3,10 @@ import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import { parseSchemaManifest } from '../context/manifest.js';
 import {
+  parsePrivacyExclusions,
+  parsePrivacyPolicy,
+} from '../context/privacy-policy.js';
+import {
   type RequirementsLedgerV1,
   parseRequirementsLedger,
 } from '../context/requirements-ledger.js';
@@ -35,6 +39,10 @@ import {
 import { type ClaimV1, parseClaim } from '../team/claims.js';
 import { type HandoffV1, parseHandoff } from '../team/handoff.js';
 import { parseProjectConfig, parseTeamPolicy } from '../team/policy.js';
+import {
+  type GitRefPrivacyPolicyUpdateV1,
+  parseGitRefPrivacyPolicyUpdate,
+} from '../team/privacy-policy-transport.js';
 import { getOperationDefinition } from './operation-definition.js';
 import type { OperationJournalV1, OperationType } from './operation-journal.js';
 import { type TaskHeadFenceV1, parseTaskHeadFence } from './task-head-fence.js';
@@ -130,6 +138,8 @@ export const PROJECT_AUTHORITY_FILE_NAMES = [
   'schema.json',
   'shared/config.json',
   'shared/team/policy.json',
+  'shared/context/privacy-policy.json',
+  'shared/context/privacy-exclusions.json',
 ] as const;
 
 export type ProjectAuthorityFileName =
@@ -142,6 +152,13 @@ export interface ProjectAuthorityFileRecoveryAction {
   beforeDigest: string | null;
   beforeContent: string | null;
   targetContent: string;
+}
+
+export interface PrivacyRemotePolicyRecoveryAction {
+  kind: 'privacy_remote_policy';
+  stepId: 'write-remote-policy';
+  update: GitRefPrivacyPolicyUpdateV1;
+  beforeDigest: string;
 }
 
 /** A stage is local migration bookkeeping, but its terminal state is durable. */
@@ -205,6 +222,7 @@ export type OperationRecoveryActionV1 =
   | WorkflowTaskDirectoryRecoveryAction
   | MigrationTaskDirectoryRecoveryAction
   | ProjectAuthorityFileRecoveryAction
+  | PrivacyRemotePolicyRecoveryAction
   | MigrationStageFileRecoveryAction
   | V3AdapterFileRecoveryAction
   | CheckpointRecoveryAction
@@ -260,6 +278,41 @@ export function parseOperationRecoveryPayload(
     throw new Error('operation recovery payload primaryStoreId is invalid');
   }
   const actions = parseActions(value.actions);
+  const remote = actions.find(
+    (action) => action.kind === 'privacy_remote_policy',
+  );
+  if (remote?.kind === 'privacy_remote_policy') {
+    if (
+      value.type !== 'privacy_policy_update' ||
+      remote.update.operationId !== value.operationId ||
+      actions.filter((action) => action.kind === 'privacy_remote_policy')
+        .length !== 1
+    )
+      throw new Error('MANCODE_PRIVACY_REMOTE_INTENT_INVALID');
+    const localPolicy = actions.find(
+      (action) =>
+        action.kind === 'project_authority_file' &&
+        action.fileName === 'shared/context/privacy-policy.json',
+    );
+    const localExclusions = actions.find(
+      (action) =>
+        action.kind === 'project_authority_file' &&
+        action.fileName === 'shared/context/privacy-exclusions.json',
+    );
+    if (
+      localPolicy?.kind !== 'project_authority_file' ||
+      localExclusions?.kind !== 'project_authority_file' ||
+      projectAuthorityContentDigest(
+        localPolicy.fileName,
+        localPolicy.targetContent,
+      ) !== remote.update.targetPrivacyPolicy.digest ||
+      projectAuthorityContentDigest(
+        localExclusions.fileName,
+        localExclusions.targetContent,
+      ) !== remote.update.targetPrivacyPolicy.policy.exclusions.digest
+    )
+      throw new Error('MANCODE_PRIVACY_REMOTE_INTENT_INVALID');
+  }
   if (
     actions.some(
       (action) =>
@@ -302,7 +355,8 @@ export function assertOperationRecoveryPayloadCoversJournal(
   journal: Pick<
     OperationJournalV1,
     'type' | 'entityLocks' | 'secondaryReservations'
-  >,
+  > &
+    Partial<Pick<OperationJournalV1, 'actorId'>>,
   payload: OperationRecoveryPayloadV1,
 ): void {
   if (payload.type !== journal.type) {
@@ -315,6 +369,12 @@ export function assertOperationRecoveryPayloadCoversJournal(
   let priorIndex = -1;
   const actionSteps = new Set<string>();
   for (const action of payload.actions) {
+    if (
+      action.kind === 'privacy_remote_policy' &&
+      journal.actorId !== undefined &&
+      action.update.actorId !== journal.actorId
+    )
+      throw new Error('MANCODE_PRIVACY_REMOTE_INTENT_INVALID');
     const index = stepIndexes.get(action.stepId);
     if (index === undefined || index < priorIndex) {
       throw new Error('MANCODE_OPERATION_RECOVERY_PAYLOAD_STEP_INVALID');
@@ -632,11 +692,17 @@ function assertActionLockCoverage(
             ? 'schema:project'
             : action.fileName === 'shared/config.json'
               ? 'config:project'
-              : 'policy:project',
+              : action.fileName.startsWith('shared/context/privacy-')
+                ? 'schema:project'
+                : 'policy:project',
         )
       ) {
         throw new Error('MANCODE_OPERATION_RECOVERY_LOCK_MISSING');
       }
+      return;
+    case 'privacy_remote_policy':
+      if (!hasLock('schema:project'))
+        throw new Error('MANCODE_OPERATION_RECOVERY_LOCK_MISSING');
       return;
     case 'migration_stage_file':
       if (!hasLock(`stage:${action.stageId}`)) {
@@ -705,6 +771,10 @@ export function projectAuthorityContentDigest(
       return digestCanonicalJson(parseProjectConfig(parsed));
     case 'shared/team/policy.json':
       return digestCanonicalJson(parseTeamPolicy(parsed));
+    case 'shared/context/privacy-policy.json':
+      return digestCanonicalJson(parsePrivacyPolicy(parsed));
+    case 'shared/context/privacy-exclusions.json':
+      return digestCanonicalJson(parsePrivacyExclusions(parsed));
   }
 }
 
@@ -804,6 +874,8 @@ export function recoveryActionResourceKey(
       return `migration-workflow-directory:${action.taskRef.namespace}:${action.taskRef.taskId}`;
     case 'project_authority_file':
       return `project-file:${action.fileName}`;
+    case 'privacy_remote_policy':
+      return `privacy-remote:${action.update.workspaceId}:${action.update.remoteIdentityHash}:${action.update.transportEpoch}`;
     case 'migration_stage_file':
       return `migration-stage:${action.stageId}`;
     case 'v3_adapter_file': {
@@ -840,6 +912,11 @@ export function recoveryActionTargetDigest(
         action.fileName,
         action.targetContent,
       );
+    case 'privacy_remote_policy':
+      return digestCanonicalJson({
+        revision: action.update.targetPrivacyPolicy.policy.revision,
+        digest: action.update.targetPrivacyPolicy.digest,
+      });
     case 'migration_stage_file':
       return migrationStageContentDigest(action.targetContent);
     case 'v3_adapter_file':
@@ -875,6 +952,8 @@ function parseActions(value: unknown): OperationRecoveryActionV1[] {
         return parseMigrationTaskDirectoryAction(action);
       case 'project_authority_file':
         return parseProjectAuthorityFileAction(action);
+      case 'privacy_remote_policy':
+        return parsePrivacyRemotePolicyAction(action);
       case 'migration_stage_file':
         return parseMigrationStageFileAction(action);
       case 'v3_adapter_file':
@@ -891,6 +970,39 @@ function parseActions(value: unknown): OperationRecoveryActionV1[] {
         throw new Error('operation recovery action kind is invalid');
     }
   });
+}
+
+export function createPrivacyRemotePolicyRecoveryAction(
+  update: GitRefPrivacyPolicyUpdateV1,
+): PrivacyRemotePolicyRecoveryAction {
+  return parsePrivacyRemotePolicyAction({
+    kind: 'privacy_remote_policy',
+    stepId: 'write-remote-policy',
+    update,
+    beforeDigest: digestCanonicalJson(update.beforePrivacyPolicy),
+  });
+}
+
+function parsePrivacyRemotePolicyAction(
+  value: Record<string, unknown>,
+): PrivacyRemotePolicyRecoveryAction {
+  assertKnownKeys(
+    value,
+    ['kind', 'stepId', 'update', 'beforeDigest'],
+    'privacy remote policy action',
+  );
+  const update = parseGitRefPrivacyPolicyUpdate(value.update);
+  if (
+    value.stepId !== 'write-remote-policy' ||
+    value.beforeDigest !== digestCanonicalJson(update.beforePrivacyPolicy)
+  )
+    throw new Error('MANCODE_PRIVACY_REMOTE_INTENT_INVALID');
+  return {
+    kind: 'privacy_remote_policy',
+    stepId: 'write-remote-policy',
+    update,
+    beforeDigest: value.beforeDigest as string,
+  };
 }
 
 function parseWorkflowTaskDirectoryAction(
