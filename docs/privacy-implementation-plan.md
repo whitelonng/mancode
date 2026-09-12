@@ -1,6 +1,6 @@
 # 隐私保护实施计划与验收记录
 
-用户于 2026-09-11 批准按 `research/maskit-integration-2026-09-11/report.md` 与 `review.md` 开发，并明确要求在 `develop` 分支由子 Agent 开发、主 Agent 统筹。原研究文档保留当时的授权状态和源码行号；本文件记录批准后的实现进展。开发版本为 0.6.5，尚未发布。
+用户于 2026-09-11 批准按 `research/maskit-integration-2026-09-11/report.md` 与 `review.md` 开发，并明确要求在 `develop` 分支由子 Agent 开发、主 Agent 统筹。原研究文档保留当时的授权状态和源码行号；本文件记录批准后的实现进展，适用于 0.6.5。
 
 ## 已批准的交付边界
 
@@ -96,6 +96,6 @@ OpenAI Responses 和 Anthropic Messages 的支持范围包括严格 JSON 与增�
 
 独立安装包复测发现 `client_password` / `DB_PASSWORD` 等带前缀的字段漏检，以及带引号多词密码只覆盖首词。修复集中在 `src/privacy/` 的公共扫描路径：完整匹配有界字段名，再用单向游标读取值，正确处理同一行多个赋值、转义引号与反斜杠、空值、未闭合引号，以及占位标记后追加敏感内容。原 UTF-16 偏移、失败关闭、1 MiB / 4,096 findings / 500 ms 预算保持不变。
 
-回归覆盖 raw JSON 与普通文本、CLI scan/preview、真实 shared workflow 写入前拒绝、两个协议的 gateway prose 及实际 HTTP 发往假上游的请求。保留 gateway 原有 metadata/嵌套 JSON 键语义路径；不改旧 `src/context/privacy.ts` 六分类契约、不迁移 live policy、不变更用户 provider 或本地开关。首个 ruleset 尚未发布，因此保持 `mancode-sensitive-text:1`，已发布规则变更仍要求显式版本和兼容性审查。
+回归覆盖 raw JSON 与普通文本、CLI scan/preview、真实 shared workflow 写入前拒绝、两个协议的 gateway prose 及实际 HTTP 发往假上游的请求。保留 gateway 原有 metadata/嵌套 JSON 键语义路径；不改旧 `src/context/privacy.ts` 六分类契约、不迁移 live policy、不变更用户 provider 或本地开关。这些修复在首个 ruleset 发布前完成，因此保持 `mancode-sensitive-text:1`，已发布规则变更仍要求显式版本和兼容性审查。
 
 修复冻结前的定向验证：10 个测试文件、138 项全部通过，其中命名凭据 14、scanner 58、CLI 12、shared policy 22、旧 privacy 契约 2、gateway protocol/server/engine/mapping/SSE 共 30 项。包含 0/1/2 个前导短横线兼容、metric 负例与 1 MiB 长值/未闭合引号子进程硬期限回归；实际 HTTP 测试在允许 loopback 的本机环境运行。`npm run typecheck`、相关 9 个源/测试文件的 `biome check` 与 `git diff --check` 均通过。全量覆盖率及重新打包后的独立验收由主 Agent 另行记录，此处不宣称完成。

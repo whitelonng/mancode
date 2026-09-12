@@ -1006,9 +1006,8 @@ from three capabilities to match how you work:
 | **Enhanced shared-content checks** | Keep sensitive values out of team context | Once explicitly enabled, matching shared writes handled by mancode are rejected. Use a dry-run to check activation requirements in an existing project. This does not automatically clean Git history or arbitrary files. |
 | **Optional local model gateway** | Hide sensitive values before supported requests reach the model provider | An explicitly connected client sends requests through the gateway, which replaces matches in supported fields with placeholders and restores them through limited response paths. Configure, start, and connect it separately; it never edits provider or login settings automatically. |
 
-**Availability**: these privacy capabilities are implemented on current `main`
-(0.6.5) and have not yet been published to npm. If you installed through npm,
-run `mancode privacy --help` first to check that your version includes them.
+**Availability**: these privacy capabilities are provided from v0.6.5 onward.
+Run `mancode privacy --help` first to check that your installed version includes them.
 
 Rules recognize supported formats of API keys, credentials, email addresses,
 Chinese mobile numbers and identity cards, selected payment cards, and local
