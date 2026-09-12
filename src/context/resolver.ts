@@ -32,6 +32,7 @@ import type {
 } from './context-pack.js';
 import { type LegacyAuthorityScan, scanLegacyAuthority } from './layout.js';
 import type { ManagedAdapter } from './manifest.js';
+import { isPrivacyExcluded } from './privacy-guard.js';
 import {
   type PendingOperationRecord,
   type StoredCoordinationSnapshot,
@@ -623,6 +624,7 @@ function buildStablePack(
     }
   }
   return buildContextPack({
+    privacy: project.privacy,
     generatedAt: (request.generatedAt ?? now).toISOString(),
     level: request.level,
     purpose: request.purpose,
@@ -650,6 +652,7 @@ function buildRepairPack(
 ): ContextPackV2 {
   const capabilities = snapshot.capabilities;
   return buildContextPack({
+    privacy: snapshot.project.privacy,
     generatedAt: (request.generatedAt ?? now).toISOString(),
     level: request.level,
     purpose: request.purpose,
@@ -795,7 +798,18 @@ function projectProjection(project: StoredProjectSnapshot) {
     defaultVisibility: project.policy.defaultVisibility,
     schemaEpoch: project.manifest.epoch,
     facts: project.projectFacts,
-    confirmedDecisions: project.confirmedDecisions,
+    ...(project.privacy === null || project.privacy === undefined
+      ? {}
+      : {
+          privacy: {
+            revision: project.privacy.policy.revision,
+            digest: project.privacy.digest,
+            excludedEntities: project.privacy.exclusions.entries.length,
+          },
+        }),
+    confirmedDecisions: project.confirmedDecisions.filter(
+      (decision) => !isPrivacyExcluded(project.privacy, decision),
+    ),
   };
 }
 
@@ -838,6 +852,7 @@ function projectSection(
     );
   }
   for (const decision of project.confirmedDecisions) {
+    if (isPrivacyExcluded(project.privacy, decision)) continue;
     provenance.push(
       entityProvenance(
         targetJsonPointer,

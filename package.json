@@ -1,6 +1,6 @@
 {
   "name": "mancode",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "AI coding agent workflow harness with mancode Continuity for cross-conversation tasks, decisions, verification, and team coordination.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -53,7 +53,11 @@
     "README.md",
     "README.en.md",
     "logo.png",
-    "LICENSE"
+    "LICENSE",
+    "docs/privacy-guide.md",
+    "docs/privacy-implementation-plan.md",
+    "docs/privacy-rule-sources.md",
+    "docs/privacy-upstream-license.txt"
   ],
   "scripts": {
     "build": "tsup",
@@ -71,7 +75,8 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "js-tiktoken": "^1.0.21"
+    "js-tiktoken": "^1.0.21",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

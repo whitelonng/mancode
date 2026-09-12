@@ -179,6 +179,10 @@ export interface TransportMigrationConfigAdapter {
 }
 
 interface TransportMigrationAdapters {
+  /** Real file adapters fence project-policy changes until the journal exists. */
+  acquireWriteBarrier?: (
+    operationId: Ulid,
+  ) => Promise<{ release(): Promise<void> }>;
   operationStore: EntityHomeStore;
   config: TransportMigrationConfigAdapter;
   source: TransportMigrationSourceAdapter;
@@ -265,8 +269,15 @@ export async function previewTransportMigration(
 export async function stageTransportMigration(
   input: TransportMigrationStartInput,
 ): Promise<StagedTransportMigration> {
-  const preview = await previewTransportMigration(input);
-  let journal = await createMigrationJournal(input, preview);
+  const barrier = await input.acquireWriteBarrier?.(input.operationId);
+  let preview: TransportMigrationPreview;
+  let journal: OperationJournalV1;
+  try {
+    preview = await previewTransportMigration(input);
+    journal = await createMigrationJournal(input, preview);
+  } finally {
+    await barrier?.release();
+  }
   try {
     throwIfOperationCrashInjected('transport_migrate', 'prepared');
     const result = await advanceToStaged(input, journal, preview.manifest);

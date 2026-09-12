@@ -54,7 +54,17 @@ export interface SchemaManifestV2 {
   };
 }
 
-export type SchemaManifest = SchemaManifestV1 | SchemaManifestV2;
+export interface SchemaManifestV3
+  extends Omit<SchemaManifestV1, 'manifestVersion'> {
+  manifestVersion: 3;
+  workflowPolicyDefaults: { planning: 1 | 2 };
+  privacyPolicy: { revision: number; digest: string };
+}
+
+export type SchemaManifest =
+  | SchemaManifestV1
+  | SchemaManifestV2
+  | SchemaManifestV3;
 
 const ACTIVATION_STATES = new Set<ActivationState>([
   'initializing',
@@ -78,9 +88,13 @@ const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 export function parseSchemaManifest(value: unknown): SchemaManifest {
   assertRecord(value, 'schema manifest');
-  if (value.manifestVersion !== 1 && value.manifestVersion !== 2) {
+  if (
+    value.manifestVersion !== 1 &&
+    value.manifestVersion !== 2 &&
+    value.manifestVersion !== 3
+  ) {
     throw new Error(
-      `MANCODE_MANIFEST_VERSION_UNSUPPORTED: observed=${String(value.manifestVersion)} supported=1,2 requiredWriter=0.4.0`,
+      `MANCODE_MANIFEST_VERSION_UNSUPPORTED: observed=${String(value.manifestVersion)} supported=1,2,3 requiredWriter=0.6.5`,
     );
   }
   const manifestVersion = value.manifestVersion;
@@ -97,7 +111,8 @@ export function parseSchemaManifest(value: unknown): SchemaManifest {
       'legacyBaseline',
       'managedAdapters',
       'lastOperationId',
-      ...(manifestVersion === 2 ? ['workflowPolicyDefaults'] : []),
+      ...(manifestVersion >= 2 ? ['workflowPolicyDefaults'] : []),
+      ...(manifestVersion === 3 ? ['privacyPolicy'] : []),
     ],
     'schema manifest',
   );
@@ -125,16 +140,25 @@ export function parseSchemaManifest(value: unknown): SchemaManifest {
   const manifest: SchemaManifest =
     manifestVersion === 1
       ? { manifestVersion: 1, ...common }
-      : {
-          manifestVersion: 2,
-          ...common,
-          workflowPolicyDefaults: parseWorkflowPolicyDefaults(
-            value.workflowPolicyDefaults,
-          ),
-        };
+      : manifestVersion === 2
+        ? {
+            manifestVersion: 2,
+            ...common,
+            workflowPolicyDefaults: parseWorkflowPolicyDefaults(
+              value.workflowPolicyDefaults,
+            ),
+          }
+        : {
+            manifestVersion: 3,
+            ...common,
+            workflowPolicyDefaults: parsePrivacyManifestPlanningDefaults(
+              value.workflowPolicyDefaults,
+            ),
+            privacyPolicy: parsePrivacyPolicyReference(value.privacyPolicy),
+          };
   assertManifestStateShape(manifest);
   if (
-    manifest.manifestVersion === 2 &&
+    manifest.manifestVersion >= 2 &&
     (compareVersions(manifest.minReaderVersion, '0.4.0') < 0 ||
       compareVersions(manifest.minWriterVersion, '0.4.0') < 0)
   ) {
@@ -142,6 +166,14 @@ export function parseSchemaManifest(value: unknown): SchemaManifest {
       'schema manifest V2 requires minReaderVersion and minWriterVersion 0.4.0 or newer',
     );
   }
+  if (
+    manifest.manifestVersion === 3 &&
+    (compareVersions(manifest.minReaderVersion, '0.6.5') < 0 ||
+      compareVersions(manifest.minWriterVersion, '0.6.5') < 0)
+  )
+    throw new Error(
+      'schema manifest V3 requires minReaderVersion and minWriterVersion 0.6.5 or newer',
+    );
   return manifest;
 }
 
@@ -191,6 +223,15 @@ export function assertSchemaManifestTransition(
       'schema manifest identity and legacy baseline are immutable',
     );
   }
+  if (
+    previous.manifestVersion === 3 &&
+    next.manifestVersion === 3 &&
+    (previous.privacyPolicy.revision !== next.privacyPolicy.revision ||
+      previous.privacyPolicy.digest !== next.privacyPolicy.digest ||
+      previous.workflowPolicyDefaults.planning !==
+        next.workflowPolicyDefaults.planning)
+  )
+    throw new Error('MANCODE_PRIVACY_MANIFEST_TRANSITION_REQUIRED');
   if (previous.activationState === next.activationState) return;
   if (
     !allowedManifestTransitions(previous.activationState).has(
@@ -203,13 +244,76 @@ export function assertSchemaManifestTransition(
   }
 }
 
+export function assertSchemaManifestPrivacyTransition(
+  previous: SchemaManifest,
+  next: SchemaManifest,
+): asserts next is SchemaManifestV3 {
+  if (
+    next.manifestVersion !== 3 ||
+    previous.epoch !== next.epoch ||
+    previous.layoutVersion !== next.layoutVersion ||
+    previous.activationState !== 'v3_active' ||
+    next.activationState !== 'v3_active' ||
+    previous.activatedAt !== next.activatedAt ||
+    !sameLegacyBaseline(previous.legacyBaseline, next.legacyBaseline) ||
+    !managedAdapterInventoriesMatch(
+      previous.managedAdapters,
+      next.managedAdapters,
+    ) ||
+    compareVersions(next.minReaderVersion, previous.minReaderVersion) < 0 ||
+    compareVersions(next.minWriterVersion, previous.minWriterVersion) < 0 ||
+    next.lastOperationId === null ||
+    next.lastOperationId === previous.lastOperationId ||
+    next.privacyPolicy.revision !==
+      (previous.manifestVersion === 3 ? previous.privacyPolicy.revision : 0) +
+        1 ||
+    next.workflowPolicyDefaults.planning !==
+      (previous.manifestVersion === 1
+        ? 1
+        : previous.workflowPolicyDefaults.planning)
+  )
+    throw new Error('MANCODE_PRIVACY_MANIFEST_TRANSITION_INVALID');
+}
+
+function parsePrivacyManifestPlanningDefaults(
+  value: unknown,
+): SchemaManifestV3['workflowPolicyDefaults'] {
+  assertRecord(value, 'workflow policy defaults');
+  assertKnownKeys(value, ['planning'], 'workflow policy defaults');
+  if (value.planning !== 1 && value.planning !== 2)
+    throw new Error('schema manifest planning policy must be 1 or 2');
+  return { planning: value.planning };
+}
+
+function parsePrivacyPolicyReference(
+  value: unknown,
+): SchemaManifestV3['privacyPolicy'] {
+  assertRecord(value, 'privacy policy reference');
+  assertKnownKeys(value, ['revision', 'digest'], 'privacy policy reference');
+  if (
+    !Number.isSafeInteger(value.revision) ||
+    (value.revision as number) < 1 ||
+    typeof value.digest !== 'string' ||
+    !DIGEST_PATTERN.test(value.digest)
+  )
+    throw new Error('MANCODE_PRIVACY_POLICY_REFERENCE_INVALID');
+  return { revision: value.revision as number, digest: value.digest };
+}
+
 export function assertSchemaManifestPolicyUpgrade(
   previous: SchemaManifest,
   next: SchemaManifest,
-): asserts next is SchemaManifestV2 {
+): asserts next is SchemaManifestV2 | SchemaManifestV3 {
+  const legacyUpgrade =
+    previous.manifestVersion === 1 && next.manifestVersion === 2;
+  const privacyUpgrade =
+    previous.manifestVersion === 3 &&
+    next.manifestVersion === 3 &&
+    previous.workflowPolicyDefaults.planning === 1 &&
+    previous.privacyPolicy.revision === next.privacyPolicy.revision &&
+    previous.privacyPolicy.digest === next.privacyPolicy.digest;
   if (
-    previous.manifestVersion !== 1 ||
-    next.manifestVersion !== 2 ||
+    (!legacyUpgrade && !privacyUpgrade) ||
     previous.layoutVersion !== next.layoutVersion ||
     previous.epoch !== next.epoch ||
     previous.activationState !== 'v3_active' ||

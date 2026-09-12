@@ -11,6 +11,8 @@ import {
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
+import { readPrivacyPolicySnapshot } from '../src/context/privacy-policy.js';
+import { V3ContextStore } from '../src/context/store.js';
 import type { TaskRef } from '../src/context/task-ref.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { listClaims } from '../src/runtime/claim-store.js';
@@ -22,6 +24,7 @@ import {
   publishSharedActorProfile,
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
+import { createGitRefTeamManifestStore } from '../src/team/git-ref-client.js';
 import { GitRefTeamManifestStore } from '../src/team/git-ref-transport.js';
 import { handoffSuccessorClaimId } from '../src/team/handoff-operation.js';
 import { createTransportMigrationFileAdapters } from '../src/team/transport-migration-adapters.js';
@@ -48,6 +51,49 @@ afterEach(async () => {
 });
 
 describe('filesystem and git-ref transport migration adapters', () => {
+  it('carries the active privacy policy into remote authority and fences staging after authority changes', async () => {
+    const fixture = await bootstrap(true);
+    const before = await readPrivacyPolicySnapshot(fixture.projectRoot);
+    const operationId = id(45);
+    const adapters = await createTransportMigrationFileAdapters({
+      projectRoot: fixture.projectRoot,
+      actorId: fixture.actorId,
+      targetMode: 'git-ref',
+      targetRemote: 'origin',
+      operationId,
+      now: () => NOW,
+    });
+    const result = await executeTransportMigration({
+      ...adapters,
+      operationId,
+      actorId: fixture.actorId,
+      sessionId: fixture.sessionId,
+      expectedConfigRevision: 1,
+      joined: true,
+      explicitConfirmation: true,
+      now: NOW,
+    });
+    expect(result.journal.state).toBe('committed');
+    const project = await new V3ContextStore(
+      fixture.projectRoot,
+    ).readProjectSnapshot();
+    const remote = (
+      await createGitRefTeamManifestStore(
+        fixture.projectRoot,
+        project.config,
+        project.manifest,
+      ).pull()
+    ).manifest;
+    expect(remote).toMatchObject({
+      schemaVersion: 2,
+      privacyPolicy: { digest: before?.digest },
+      minWriterVersion: '0.6.5',
+    });
+    await expect(adapters.acquireWriteBarrier(id(46))).rejects.toThrow(
+      'MANCODE_PRIVACY_BASELINE_CHANGED',
+    );
+  });
+
   it('repairs a visible local-to-git-ref config CAS and then migrates back to a fresh local authority', async () => {
     const fixture = await bootstrap();
     const firstOperationId = id(20);
@@ -384,7 +430,7 @@ interface Fixture {
   taskRevision: number;
 }
 
-async function bootstrap(): Promise<Fixture> {
+async function bootstrap(sharedPrivacy = false): Promise<Fixture> {
   const container = await mkdtemp(
     path.join(tmpdir(), 'mancode-migration-adapters-'),
   );
@@ -413,6 +459,7 @@ async function bootstrap(): Promise<Fixture> {
     operationId: id(1),
     workspaceId: id(2),
     schemaEpoch: id(3),
+    sharedPrivacy,
     now: NOW,
   });
   const actorId = id(4);

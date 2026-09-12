@@ -1,7 +1,11 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/cli.ts', 'src/index.ts'],
+  entry: {
+    cli: 'src/cli.ts',
+    index: 'src/index.ts',
+    'gateway/worker': 'src/gateway/worker.ts',
+  },
   format: ['esm'],
   target: 'node22',
   platform: 'node',

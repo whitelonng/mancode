@@ -20,6 +20,11 @@ import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
 import { managedAdapterNames } from '../context/manifest.js';
 import {
+  assertPrivacyRecoveryActionsAllowed,
+  assertSharedTaskWriteAtRoot,
+} from '../context/privacy-guard.js';
+import { readPrivacyPolicySnapshot } from '../context/privacy-policy.js';
+import {
   type StoredCoordinationSnapshot,
   type StoredProjectSnapshot,
   type StoredTaskSnapshot,
@@ -461,6 +466,10 @@ export async function createTaskOperationJournal(
   assertOperationJournalMatchesDefinition(journal);
   if (recovery !== null) {
     assertOperationRecoveryPayloadCoversJournal(journal, recovery);
+    const privacy = await readPrivacyPolicySnapshot(context.projectRoot);
+    if ((privacy?.digest ?? null) !== (context.project.privacy?.digest ?? null))
+      throw new Error('MANCODE_PRIVACY_POLICY_CHANGED');
+    assertPrivacyRecoveryActionsAllowed(privacy, recovery.actions);
     await writeOperationRecoveryPayload(context.homeStore, recovery);
   }
   const created = await createPreparedOperationJournal(
@@ -625,6 +634,13 @@ export async function writeTaskArchiveAtRoot(
   operationId: Ulid,
   action: TaskArchiveRecoveryAction,
 ): Promise<void> {
+  await assertSharedTaskWriteAtRoot(
+    taskRoot,
+    'requirements.json',
+    action.requirementsContent,
+  );
+  if (action.planContent !== null)
+    await assertSharedTaskWriteAtRoot(taskRoot, 'plan.md', action.planContent);
   assertUlid(operationId, 'task archive operationId');
   if (action.archiveId !== operationId) {
     throw new Error('MANCODE_REFRAME_ARCHIVE_OPERATION_MISMATCH');
@@ -764,6 +780,7 @@ export async function writeTaskAuthorityFileAtRoot(
     throw new Error('MANCODE_ARTIFACT_PATH_UNSAFE');
   }
   assertUlid(operationId, 'task authority operationId');
+  await assertSharedTaskWriteAtRoot(taskRoot, fileName, content);
   await assertSafeTaskDirectory(taskRoot);
   const target = path.join(taskRoot, fileName);
   const temporary = path.join(
@@ -809,6 +826,11 @@ export async function writeTaskCheckpointAtRoot(
 ): Promise<CheckpointV1> {
   const checkpoint = parseCheckpoint(value);
   await assertSafeTaskDirectory(taskRoot);
+  await assertSharedTaskWriteAtRoot(
+    taskRoot,
+    'checkpoint.json',
+    serializeTaskAuthority(checkpoint),
+  );
   const directory = await ensureSafeTaskChildDirectory(taskRoot, 'checkpoints');
   const target = path.join(directory, `${checkpoint.checkpointId}.json`);
   const serialized = serializeTaskAuthority(checkpoint);

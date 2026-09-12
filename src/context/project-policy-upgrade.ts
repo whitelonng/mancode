@@ -54,7 +54,9 @@ import { type Ulid, assertUlid, createUlid } from './ids.js';
 import { scanLegacyAuthority } from './layout.js';
 import { managedAdapterNames } from './manifest.js';
 import {
+  type SchemaManifest,
   type SchemaManifestV2,
+  type SchemaManifestV3,
   assertSchemaManifestPolicyUpgrade,
   parseSchemaManifest,
   serializeSchemaManifest,
@@ -79,7 +81,7 @@ export interface ProjectPolicyUpgradePreviewInput {
 export interface ProjectPolicyUpgradePreview {
   schemaVersion: 1;
   policy: 2;
-  currentManifestVersion: 1 | 2;
+  currentManifestVersion: 1 | 2 | 3;
   willUpgrade: boolean;
   beforeDigest: string;
   afterDigest: string | null;
@@ -103,7 +105,7 @@ export interface ProjectPolicyUpgradeResult {
   policy: 2;
   state: 'committed' | 'already_upgraded';
   operation: OperationJournalV1 | null;
-  manifest: SchemaManifestV2;
+  manifest: SchemaManifestV2 | SchemaManifestV3;
 }
 
 const UPGRADE_OPERATION = 'project_policy_upgrade' as const;
@@ -122,7 +124,7 @@ export async function dryRunProjectPolicyUpgrade(
   let afterDigest: string | null = null;
   let minReaderVersion = project.manifest.minReaderVersion;
   let minWriterVersion = project.manifest.minWriterVersion;
-  if (project.manifest.manifestVersion === 1 && blockers.length === 0) {
+  if (needsPlanningUpgrade(project.manifest) && blockers.length === 0) {
     const candidate = buildV2Manifest(project.manifest, operationId);
     afterDigest = digestManifest(candidate);
     minReaderVersion = candidate.minReaderVersion;
@@ -145,7 +147,7 @@ export async function dryRunProjectPolicyUpgrade(
     policy: 2,
     currentManifestVersion: project.manifest.manifestVersion,
     willUpgrade:
-      project.manifest.manifestVersion === 1 && blockers.length === 0,
+      needsPlanningUpgrade(project.manifest) && blockers.length === 0,
     beforeDigest,
     afterDigest,
     minReaderVersion,
@@ -177,7 +179,7 @@ export async function upgradeProjectPolicy(
     throw new Error('MANCODE_SESSION_NOT_FOUND');
   }
   const initial = await store.readProjectSnapshot();
-  if (initial.manifest.manifestVersion === 2) {
+  if (hasPlanningPolicy2(initial.manifest)) {
     const recovered = await recoverInterruptedProjectPolicyUpgrade({
       root,
       store,
@@ -205,17 +207,14 @@ export async function upgradeProjectPolicy(
   let journal: OperationJournalV1 | null = null;
   try {
     const project = await store.readProjectSnapshot();
-    if (project.manifest.manifestVersion !== 1) {
-      if (project.manifest.manifestVersion === 2) {
-        return {
-          schemaVersion: 1,
-          policy: 2,
-          state: 'already_upgraded',
-          operation: null,
-          manifest: project.manifest,
-        };
-      }
-      throw new Error('MANCODE_EXPECTED_REVISION_CONFLICT');
+    if (hasPlanningPolicy2(project.manifest)) {
+      return {
+        schemaVersion: 1,
+        policy: 2,
+        state: 'already_upgraded',
+        operation: null,
+        manifest: project.manifest,
+      };
     }
     await assertUpgradePreflight(root, project);
     await assertProjectPolicyUpgradePreview(root, operationId, project);
@@ -273,7 +272,9 @@ export async function upgradeProjectPolicy(
       authorizationBasis,
       recoveryPayloadDigest: operationRecoveryPayloadDigest(payload),
       entityLocks: [PROJECT_SCHEMA_LOCK],
-      expectedRevisions: { [PROJECT_SCHEMA_LOCK]: 1 },
+      expectedRevisions: {
+        [PROJECT_SCHEMA_LOCK]: project.manifest.manifestVersion,
+      },
       steps: getOperationDefinition(UPGRADE_OPERATION).steps.map((step) => ({
         id: step.id,
         state: 'pending',
@@ -371,7 +372,7 @@ async function recoverInterruptedProjectPolicyUpgrade(input: {
     throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
   }
   const project = await input.store.readProjectSnapshot();
-  if (project.manifest.manifestVersion !== 2) {
+  if (!hasPlanningPolicy2(project.manifest)) {
     throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
   }
   return {
@@ -388,7 +389,7 @@ async function collectUpgradeBlockers(
   project: Awaited<ReturnType<V3ContextStore['readProjectSnapshot']>>,
 ): Promise<string[]> {
   const blockers: string[] = [];
-  if (project.manifest.manifestVersion !== 1) return blockers;
+  if (!needsPlanningUpgrade(project.manifest)) return blockers;
   try {
     await assertUpgradePreflight(root, project);
   } catch (error) {
@@ -401,7 +402,7 @@ async function assertUpgradePreflight(
   root: string,
   project: Awaited<ReturnType<V3ContextStore['readProjectSnapshot']>>,
 ): Promise<void> {
-  if (project.manifest.manifestVersion !== 1) {
+  if (!needsPlanningUpgrade(project.manifest)) {
     throw new Error('MANCODE_PROJECT_POLICY_ALREADY_UPGRADED');
   }
   if (project.manifest.activationState !== 'v3_active') {
@@ -429,15 +430,12 @@ async function assertUpgradePreflight(
 }
 
 function buildV2Manifest(
-  manifest: Extract<
-    Awaited<ReturnType<V3ContextStore['readProjectSnapshot']>>['manifest'],
-    { manifestVersion: 1 }
-  >,
+  manifest: SchemaManifest,
   operationId: Ulid,
-): SchemaManifestV2 {
+): SchemaManifestV2 | SchemaManifestV3 {
   const candidate = parseSchemaManifest({
     ...manifest,
-    manifestVersion: 2,
+    manifestVersion: manifest.manifestVersion === 3 ? 3 : 2,
     minReaderVersion: maxVersion(manifest.minReaderVersion, '0.4.0'),
     minWriterVersion: maxVersion(manifest.minWriterVersion, '0.4.0'),
     workflowPolicyDefaults: { planning: 2 },
@@ -445,6 +443,19 @@ function buildV2Manifest(
   });
   assertSchemaManifestPolicyUpgrade(manifest, candidate);
   return candidate;
+}
+
+function hasPlanningPolicy2(
+  manifest: SchemaManifest,
+): manifest is SchemaManifestV2 | SchemaManifestV3 {
+  return (
+    manifest.manifestVersion !== 1 &&
+    manifest.workflowPolicyDefaults.planning === 2
+  );
+}
+
+function needsPlanningUpgrade(manifest: SchemaManifest): boolean {
+  return !hasPlanningPolicy2(manifest);
 }
 
 async function readSchemaContent(root: string): Promise<string> {
@@ -618,7 +629,7 @@ async function assertProjectPolicyUpgradePreview(
     }
     throw error;
   }
-  if (project.manifest.manifestVersion !== 1) {
+  if (!needsPlanningUpgrade(project.manifest)) {
     throw new Error('MANCODE_PROJECT_UPGRADE_PREVIEW_STALE');
   }
   const target = buildV2Manifest(project.manifest, operationId);

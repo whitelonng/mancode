@@ -45,6 +45,10 @@ import {
   type ParentSnapshotSource,
   parentSnapshotStaleReasons,
 } from './parent-snapshot.js';
+import {
+  type PrivacyPolicySnapshot,
+  readPrivacyPolicySnapshot,
+} from './privacy-policy.js';
 import { type ProjectFactsV1, parseProjectFacts } from './project-facts.js';
 import {
   type RequirementsLedgerV1,
@@ -93,6 +97,7 @@ export interface StoredProjectSnapshot {
   policy: TeamPolicyV1;
   projectFacts: ProjectFactsV1 | null;
   confirmedDecisions: ConfirmedDecisionV1[];
+  privacy?: PrivacyPolicySnapshot | null;
   fingerprint: string;
 }
 
@@ -244,18 +249,32 @@ export class V3ContextStore {
         ),
         listConfirmedDecisions(this.projectRoot),
       ]);
+    const privacy = await readPrivacyPolicySnapshot(this.projectRoot, manifest);
+    if (privacy !== null && privacy.policy.workspaceId !== config.workspaceId)
+      throw new Error('MANCODE_PRIVACY_POLICY_WORKSPACE_MISMATCH');
+    // Bind content and policy to one manifest generation; activation can race
+    // any of the parallel reads above, including a previously unconfigured read.
+    const verifiedManifest = await this.readRequiredJson(
+      this.mancodeRoot(),
+      'schema.json',
+      parseSchemaManifest,
+    );
+    if (digestCanonicalJson(manifest) !== digestCanonicalJson(verifiedManifest))
+      throw new Error('MANCODE_PROJECT_SNAPSHOT_CHANGED');
     return {
       manifest,
       config,
       policy,
       projectFacts,
       confirmedDecisions,
+      privacy,
       fingerprint: digestCanonicalJson({
         manifest,
         config,
         policy,
         projectFacts,
         confirmedDecisions,
+        ...(privacy === null ? {} : { privacy }),
       }),
     };
   }

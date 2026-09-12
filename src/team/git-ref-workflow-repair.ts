@@ -117,6 +117,8 @@ export interface RecoverGitRefWorkflowRepairOptions {
   sessionId?: Ulid;
   /** The caller already holds the canonical task operation lock. */
   taskLockHeld?: boolean;
+  /** The originating operation retains the schema barrier until local repair completes. */
+  projectWriteBarrierOwner?: Ulid;
 }
 
 /**
@@ -244,6 +246,7 @@ export async function recoverGitRefWorkflowRepair(
       predecessorBundle: journal.prepared.predecessorBundle,
       pendingMetadata: journal.pendingMetadata,
       taskLockHeld: true,
+      projectWriteBarrierOwner: options.projectWriteBarrierOwner,
       operationId: createUlid(),
     });
     journal = await transitionJournal(

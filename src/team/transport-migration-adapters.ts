@@ -29,6 +29,7 @@ import {
   readCheckoutBranch,
   readProjectRuntimeContext,
 } from '../runtime/project-runtime.js';
+import { acquireProjectWriteBarrier } from '../runtime/project-write-barrier.js';
 import { parseTaskHeadFence } from '../runtime/task-head-fence.js';
 import {
   readTaskHeadFence,
@@ -108,6 +109,7 @@ export interface CreateTransportMigrationFileAdaptersInput {
 }
 
 export interface TransportMigrationFileAdapters {
+  acquireWriteBarrier(operationId: Ulid): Promise<{ release(): Promise<void> }>;
   operationStore: EntityHomeStore;
   checkoutId: Ulid;
   config: FileSystemTransportMigrationConfigAdapter;
@@ -124,6 +126,7 @@ interface AdapterContext {
   schemaEpoch: Ulid;
   minReaderVersion: string;
   minWriterVersion: string;
+  privacyPolicyReference: { revision: number; digest: string } | null;
   sourceConfig: ProjectConfigV1;
   targetMode: CoordinationTransport;
   targetRemote: string | null;
@@ -177,6 +180,10 @@ export async function createTransportMigrationFileAdapters(
     schemaEpoch: project.manifest.epoch,
     minReaderVersion: project.manifest.minReaderVersion,
     minWriterVersion: project.manifest.minWriterVersion,
+    privacyPolicyReference:
+      project.manifest.manifestVersion === 3
+        ? project.manifest.privacyPolicy
+        : null,
     sourceConfig,
     targetMode,
     targetRemote,
@@ -187,6 +194,24 @@ export async function createTransportMigrationFileAdapters(
     createTargetAdapter(context),
   ]);
   return {
+    acquireWriteBarrier: async (operationId) => {
+      const barrier = await acquireProjectWriteBarrier(
+        runtime,
+        operationId,
+        context.now(),
+      );
+      try {
+        if (
+          (await new V3ContextStore(projectRoot).readProjectSnapshot())
+            .fingerprint !== project.fingerprint
+        )
+          throw new Error('MANCODE_PRIVACY_BASELINE_CHANGED');
+        return barrier;
+      } catch (error) {
+        await barrier.release();
+        throw error;
+      }
+    },
     operationStore,
     checkoutId: runtime.checkoutId,
     config: new FileSystemTransportMigrationConfigAdapter(
@@ -224,9 +249,17 @@ export class FileSystemTransportMigrationConfigAdapter
       throw new Error('MANCODE_WORKSPACE_BINDING_MISMATCH');
     }
     const lockId = createUlid();
+    const barrier = await acquireProjectWriteBarrier(
+      await readProjectRuntimeContext(this.projectRoot),
+      lockId,
+      new Date(),
+    );
     const locks = await acquireEntityLocks(this.coordinationStore, lockId, [
       `config:${next.workspaceId}`,
-    ]);
+    ]).catch(async (error) => {
+      await barrier.release();
+      throw error;
+    });
     try {
       const current = await readProjectConfigFile(this.projectRoot);
       if (current.workspaceId !== this.coordinationStore.workspaceId) {
@@ -248,6 +281,7 @@ export class FileSystemTransportMigrationConfigAdapter
       await Promise.allSettled(
         [...locks].reverse().map((lock) => lock.release()),
       );
+      await barrier.release();
     }
   }
 }
@@ -814,6 +848,7 @@ class GitRefTransportMigrationTargetAdapter extends FileStagedTransportTarget {
       remote: this.remote,
       workspaceId: manifest.workspaceId,
       now: () => new Date(manifest.createdAt),
+      privacyPolicyReference: this.context.privacyPolicyReference,
     }).pull();
     const remoteRevision = probe.manifest?.revision ?? 0;
     const nextRemoteRevision = remoteRevision + 1;
@@ -871,6 +906,7 @@ class GitRefTransportMigrationTargetAdapter extends FileStagedTransportTarget {
       remote: this.remote,
       workspaceId: manifest.workspaceId,
       now: () => new Date(manifest.createdAt),
+      privacyPolicyReference: this.context.privacyPolicyReference,
     }).pull();
     const remote = snapshot.manifest;
     if (
@@ -911,6 +947,7 @@ class GitRefTransportMigrationTargetAdapter extends FileStagedTransportTarget {
       configRevision: nextConfig.revision,
       configDigest: projectConfigDigest(nextConfig),
       now: () => new Date(manifest.createdAt),
+      privacyPolicyReference: this.context.privacyPolicyReference,
     });
   }
 }
@@ -1083,6 +1120,7 @@ async function createSourceAdapter(
       configRevision: context.sourceConfig.revision,
       configDigest: projectConfigDigest(context.sourceConfig),
       now: context.now,
+      privacyPolicyReference: context.privacyPolicyReference,
     }),
   );
 }

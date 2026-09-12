@@ -31,12 +31,20 @@ import { assertGreenfieldInitializationPreflight } from './layout.js';
 import {
   type ManagedAdapterInventory,
   type SchemaManifest,
-  type SchemaManifestV2,
   assertSchemaManifestTransition,
   managedAdapterNames,
   parseSchemaManifest,
-  parseSchemaManifestV2,
 } from './manifest.js';
+import { assertPrivacyValueAllowed } from './privacy-guard.js';
+import {
+  PRIVACY_EXCLUSIONS_FILE,
+  PRIVACY_MIN_VERSION,
+  PRIVACY_POLICY_FILE,
+  type PrivacyPolicySnapshot,
+  createInitialPrivacyPolicy,
+  parsePrivacyExclusions,
+  parsePrivacyPolicy,
+} from './privacy-policy.js';
 import {
   type ProjectFactsV1,
   parseProjectFacts,
@@ -62,6 +70,8 @@ export interface GreenfieldInitializationJournalV1 {
   configDigest: string;
   policyDigest: string;
   projectFactsDigest: string;
+  /** Absent in existing journals whose initialization did not enable privacy. */
+  privacyPolicyDigest?: string;
   adapterPlans: V3AdapterFilePlan[];
   bindingRegistered: boolean;
   createdAt: string;
@@ -80,6 +90,7 @@ export interface GreenfieldInitializationInput {
   teamPolicy: TeamPolicyV1;
   /** Optional detected facts; omitted inputs receive a safe unknown record. */
   projectFacts?: ProjectFactsV1;
+  sharedPrivacy?: boolean;
   now?: Date;
 }
 
@@ -135,7 +146,15 @@ export async function stageGreenfieldInitialization(
   }
 
   const now = (normalized.now ?? new Date()).toISOString();
-  const manifest = initializationManifest(normalized, now);
+  const privacy =
+    normalized.sharedPrivacy === true
+      ? createInitialPrivacyPolicy({
+          workspaceId: normalized.workspaceId,
+          operationId: normalized.operationId,
+          now,
+        })
+      : null;
+  const manifest = initializationManifest(normalized, privacy);
   const requiredAdapters = managedAdapterNames(normalized.managedAdapters);
   const adapterPlans =
     requiredAdapters.length === 0
@@ -151,6 +170,7 @@ export async function stageGreenfieldInitialization(
   );
   const policy = initializationPolicy(normalized.teamPolicy, normalized, now);
   const projectFacts = initializationProjectFacts(normalized, now);
+  assertPrivacyValueAllowed(privacy, projectFacts);
   const journal: GreenfieldInitializationJournalV1 = {
     schemaVersion: 1,
     operationId: normalized.operationId,
@@ -162,6 +182,7 @@ export async function stageGreenfieldInitialization(
     configDigest: digestCanonicalJson(config),
     policyDigest: digestCanonicalJson(policy),
     projectFactsDigest: digestCanonicalJson(projectFacts),
+    ...(privacy === null ? {} : { privacyPolicyDigest: privacy.digest }),
     adapterPlans,
     bindingRegistered: false,
     createdAt: now,
@@ -174,6 +195,7 @@ export async function stageGreenfieldInitialization(
     policy,
     projectFacts,
     journal,
+    privacy,
   );
   throwIfOperationCrashInjected('greenfield_initialize', 'prepared');
   throwIfOperationCrashInjected(
@@ -349,6 +371,7 @@ export function parseGreenfieldInitializationJournal(
       'configDigest',
       'policyDigest',
       'projectFactsDigest',
+      'privacyPolicyDigest',
       'adapterPlans',
       'bindingRegistered',
       'createdAt',
@@ -404,6 +427,14 @@ export function parseGreenfieldInitializationJournal(
       value.projectFactsDigest,
       'projectFactsDigest',
     ),
+    ...(value.privacyPolicyDigest === undefined
+      ? {}
+      : {
+          privacyPolicyDigest: parseDigest(
+            value.privacyPolicyDigest,
+            'privacyPolicyDigest',
+          ),
+        }),
     adapterPlans: parseAdapterPlans(value.adapterPlans),
     bindingRegistered: value.bindingRegistered,
     createdAt: parseTimestamp(value.createdAt, 'createdAt'),
@@ -500,6 +531,7 @@ async function writeGreenfieldLayout(
   policy: TeamPolicyV1,
   projectFacts: ProjectFactsV1,
   journal: GreenfieldInitializationJournalV1,
+  privacy: PrivacyPolicySnapshot | null,
 ): Promise<void> {
   await Promise.all([
     mkdir(path.join(stagingRoot, 'shared', 'context'), { recursive: true }),
@@ -539,6 +571,18 @@ async function writeGreenfieldLayout(
       projectFacts,
     ),
     writeJson(journalPath(stagingRoot, journal.operationId), journal),
+    ...(privacy === null
+      ? []
+      : [
+          writeJson(
+            path.join(stagingRoot, PRIVACY_POLICY_FILE),
+            privacy.policy,
+          ),
+          writeJson(
+            path.join(stagingRoot, PRIVACY_EXCLUSIONS_FILE),
+            privacy.exclusions,
+          ),
+        ]),
     writeFile(
       path.join(stagingRoot, '.gitignore'),
       `${V3_IGNORE.join('\n')}\n`,
@@ -599,6 +643,7 @@ async function assertStageMatchesJournal(
   }
   assertConfigPolicyMatchesJournal(config, policy, journal);
   assertProjectFactsMatchesJournal(projectFacts, journal);
+  await assertPrivacyMatchesJournal(root, manifest, journal);
 }
 
 async function assertPublishedConfigPolicyMatchesJournal(
@@ -612,6 +657,40 @@ async function assertPublishedConfigPolicyMatchesJournal(
   ]);
   assertConfigPolicyMatchesJournal(config, policy, journal);
   assertProjectFactsMatchesJournal(projectFacts, journal);
+  await assertPrivacyMatchesJournal(root, await readManifest(root), journal);
+}
+
+async function assertPrivacyMatchesJournal(
+  root: string,
+  manifest: SchemaManifest,
+  journal: GreenfieldInitializationJournalV1,
+): Promise<void> {
+  if (journal.privacyPolicyDigest === undefined) {
+    if (manifest.manifestVersion === 3)
+      throw new Error('MANCODE_GREENFIELD_REPAIR_REQUIRED');
+    return;
+  }
+  // The staging root has not been renamed to .mancode yet, so validate its fixed files directly.
+  if (manifest.manifestVersion !== 3)
+    throw new Error('MANCODE_GREENFIELD_REPAIR_REQUIRED');
+  const policy = parsePrivacyPolicy(
+    JSON.parse(await readFile(path.join(root, PRIVACY_POLICY_FILE), 'utf8')),
+  );
+  const exclusions = parsePrivacyExclusions(
+    JSON.parse(
+      await readFile(path.join(root, PRIVACY_EXCLUSIONS_FILE), 'utf8'),
+    ),
+  );
+  if (
+    digestCanonicalJson(policy) !== journal.privacyPolicyDigest ||
+    manifest.privacyPolicy.digest !== journal.privacyPolicyDigest ||
+    manifest.privacyPolicy.revision !== policy.revision ||
+    policy.workspaceId !== journal.workspaceId ||
+    exclusions.workspaceId !== journal.workspaceId ||
+    policy.exclusions.revision !== exclusions.revision ||
+    policy.exclusions.digest !== digestCanonicalJson(exclusions)
+  )
+    throw new Error('MANCODE_GREENFIELD_REPAIR_REQUIRED');
 }
 
 function assertConfigPolicyMatchesJournal(
@@ -725,7 +804,13 @@ function normalizeInput(
   assertConfigPolicyConsistency(config, policy);
   const manifest = initializationManifest(
     input,
-    (input.now ?? new Date()).toISOString(),
+    input.sharedPrivacy === true
+      ? createInitialPrivacyPolicy({
+          workspaceId: input.workspaceId,
+          operationId: input.operationId,
+          now: (input.now ?? new Date()).toISOString(),
+        })
+      : null,
   );
   parseSchemaManifest(manifest);
   return {
@@ -742,20 +827,34 @@ function normalizeInput(
 
 function initializationManifest(
   input: GreenfieldInitializationInput,
-  _now: string,
-): SchemaManifestV2 {
-  return parseSchemaManifestV2({
-    manifestVersion: 2,
+  privacy: PrivacyPolicySnapshot | null,
+): SchemaManifest {
+  return parseSchemaManifest({
+    manifestVersion: privacy === null ? 2 : 3,
     layoutVersion: 3,
     epoch: input.schemaEpoch,
     activationState: 'initializing',
-    minReaderVersion: minimumVersion(input.minReaderVersion, '0.4.0'),
-    minWriterVersion: minimumVersion(input.minWriterVersion, '0.4.0'),
+    minReaderVersion: minimumVersion(
+      input.minReaderVersion,
+      privacy === null ? '0.4.0' : PRIVACY_MIN_VERSION,
+    ),
+    minWriterVersion: minimumVersion(
+      input.minWriterVersion,
+      privacy === null ? '0.4.0' : PRIVACY_MIN_VERSION,
+    ),
     activatedAt: null,
     legacyBaseline: null,
     managedAdapters: input.managedAdapters,
     lastOperationId: input.operationId,
     workflowPolicyDefaults: { planning: 2 },
+    ...(privacy === null
+      ? {}
+      : {
+          privacyPolicy: {
+            revision: privacy.policy.revision,
+            digest: privacy.digest,
+          },
+        }),
   });
 }
 

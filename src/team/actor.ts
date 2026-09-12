@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { digestCanonicalJson } from '../context/canonical.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
+import { withSharedPrivacyWrite } from '../context/privacy-guard.js';
 import { assertSharedTextSafe } from '../context/privacy.js';
 import { assertKnownKeys, assertRecord } from '../context/validation.js';
 
@@ -104,6 +105,16 @@ export function createSharedActorProfile(
  * ID collision that would silently merge identities from two machines.
  */
 export async function publishSharedActorProfile(
+  projectRoot: string,
+  profile: SharedActorProfileV1,
+): Promise<SharedActorProfileV1> {
+  const parsed = parseSharedActorProfile(profile);
+  return withSharedPrivacyWrite(projectRoot, createUlid(), parsed, () =>
+    publishSharedActorProfileUnlocked(projectRoot, parsed),
+  );
+}
+
+async function publishSharedActorProfileUnlocked(
   projectRoot: string,
   profile: SharedActorProfileV1,
 ): Promise<SharedActorProfileV1> {

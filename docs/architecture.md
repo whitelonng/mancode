@@ -32,6 +32,8 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 │   ├── config.json                # 项目策略与 transport 配置
 │   ├── context/project.json       # 可共享项目事实
 │   ├── context/glossary.json      # 用户确认的项目术语表
+│   ├── context/privacy-policy.json # 显式激活的增强隐私策略
+│   ├── context/privacy-exclusions.json # 不可重新导出的历史实体摘要
 │   ├── workflows/                 # shared Task Aggregate
 │   ├── team/                      # actor、claim、handoff、checkpoint
 │   └── memory/decisions/          # 明确确认的共享决策
@@ -61,7 +63,9 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 
 ## 版本与兼容
 
-`schema.json` 支持 manifest version 1 和 2，layout version 固定为 3。新初始化项目直接写入 V2；历史 V1 项目只有完成显式 Policy 2 upgrade 后才写入 V2。激活状态包括 `initializing`、`dual_read`、`activating`、`v3_active` 和 `repair_required`。
+`schema.json` 支持 manifest version 1、2 和 3，layout version 固定为 3。新初始化项目默认写入 V2；首次显式选择增强共享隐私时写入 V3。历史 V1 项目完成显式 Policy 2 upgrade 后写入 V2；V1/V2 项目也可通过独立隐私事务升级为 V3。激活状态包括 `initializing`、`dual_read`、`activating`、`v3_active` 和 `repair_required`。
+
+V3 manifest 的 `privacyPolicy` 保存 revision/digest 引用，实际策略与永久历史排除表位于 `shared/context`，读取时必须完整校验绑定。`workflowPolicyDefaults.planning` 独立保留为 1 或 2：启用隐私不隐式升级 planning policy，关闭隐私不降级 manifest、不删除排除表。V3 要求 reader/writer 至少为 0.6.5。
 
 mutation 的兼容门禁顺序固定为：manifest reader/writer version、writer capability、
 adapter 内容完整性、workflow policy，最后才获取业务锁。任一门禁失败都不得创建 journal
@@ -92,3 +96,11 @@ task revision、aggregate digest、owner 和 ownership epoch 都不得变化。�
 该 receipt 到达后同步 Git、pull transport 并 resume。
 
 远端不会自动同步业务代码。bundle、ownership fence 和 remote revision 只协调 mancode 权威；调用者仍需自行同步 Git 分支。
+
+显式隐私升级使 git-ref manifest 使用格式 2，并携带完整策略/排除表快照。事务先 CAS 远端，再按 journal 提交本地 manifest 和策略文件。旧 clone 的策略引用不匹配时拒绝写入，必须先接收已提交的共享权威文件再 pull；旧缓存不能替代当前策略。敏感 actor/claim/handoff 历史不原地修改，dry-run 返回保留基础保护或明确建立新 workspace 的处理路径；活跃 bundle 的敏感 checkpoint 必须先用安全 checkpoint 替换并同步。
+
+## 隐私模块边界
+
+`src/privacy/` 提供有界 TypeScript 文本检测、校验及不可逆副本脱敏；输出只含规则、类别和偏移元数据。旧 `src/context/privacy.ts` 的持久化解析规则独立保留，避免新增检测改变旧实体摘要或解析语义。`src/context/privacy-policy*` 管理版本化共享策略、历史排除和恢复事务，写入、Context Pack、git-ref materialization及恢复分别在对应边界执行检查。
+
+`src/gateway/` 是可选的本机前台模型网关，处理支持的 Responses/Anthropic Messages HTTP/SSE 文本协议、有限生命周期的可逆映射与严格失败关闭。配置和token绑定本地用户、真实workspace及checkout，不进入共享权威；启用偏好、进程确认、配置摘要和路由观察分开呈现。网关不自动修改宿主provider，不代表任意Git、工具网络、图像或opaque协议块都受保护。具体范围与验证见[隐私使用指南](privacy-guide.md)和[验收记录](privacy-implementation-plan.md)。

@@ -35,6 +35,7 @@ import {
   operationRepair,
   operationShow,
 } from './commands/operation.js';
+import { registerPrivacyCommands } from './commands/privacy.js';
 import { projectUpgrade } from './commands/project.js';
 import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
@@ -90,6 +91,22 @@ export function createCliProgram(): Command {
     .option('--team', 'Force enable team mode')
     .option('--no-team', 'Force disable team mode')
     .option(
+      '--shared-privacy',
+      'Enable project-shared enhanced privacy on first init',
+    )
+    .option(
+      '--no-shared-privacy',
+      'Leave shared enhanced privacy disabled on first init',
+    )
+    .option(
+      '--gateway-privacy',
+      'Enable this user/checkout gateway preference on first init',
+    )
+    .option(
+      '--no-gateway-privacy',
+      'Leave the local gateway preference disabled on first init',
+    )
+    .option(
       '--style <name>',
       'Legacy aesthetic style (only supported with mancode init --legacy)',
     )
@@ -98,7 +115,22 @@ export function createCliProgram(): Command {
     .addOption(new Option('--v3').hideHelp())
     .option('--legacy', 'Use the legacy state.json initializer')
     .option('--lang <locale>', 'Initialization language: zh-CN or en')
-    .action(async (options) => {
+    .action(async (options, command: Command) => {
+      const args =
+        command.parent &&
+        'rawArgs' in command.parent &&
+        Array.isArray(command.parent.rawArgs)
+          ? command.parent.rawArgs
+          : [];
+      if (
+        ['shared-privacy', 'gateway-privacy'].some(
+          (name) => args.includes(`--${name}`) && args.includes(`--no-${name}`),
+        )
+      ) {
+        console.error('Conflicting privacy initialization options.');
+        process.exitCode = 2;
+        return;
+      }
       const code = await init(process.cwd(), {
         ...options,
         fromCli: true,
@@ -180,6 +212,8 @@ export function createCliProgram(): Command {
       const code = await status(process.cwd(), options);
       process.exitCode = code;
     });
+
+  registerPrivacyCommands(program);
 
   const projectProgram = program
     .command('project')

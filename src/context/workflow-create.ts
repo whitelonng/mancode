@@ -83,6 +83,8 @@ import { type Ulid, assertUlid, createUlid } from './ids.js';
 import { scanLegacyAuthority } from './layout.js';
 import { managedAdapterNames } from './manifest.js';
 import type { ParentSnapshot } from './parent-snapshot.js';
+import { assertPrivacyRecoveryActionsAllowed } from './privacy-guard.js';
+import { readPrivacyPolicySnapshot } from './privacy-policy.js';
 import {
   type RequirementsLedgerV1,
   parseRequirementsLedger,
@@ -282,7 +284,7 @@ export async function createV3Workflow(
     planningPolicyVersion: input.delivery
       ? 3
       : parent === null
-        ? project.manifest.manifestVersion === 2 && workflowMode === 'man'
+        ? project.manifest.manifestVersion !== 1 && workflowMode === 'man'
           ? project.manifest.workflowPolicyDefaults.planning
           : 1
         : parent.metadata.governance.policyVersions.planning === 3
@@ -419,6 +421,10 @@ export async function createV3Workflow(
     await assertDirectoryAbsent(
       stagingDirectory,
       'MANCODE_WORKFLOW_STAGING_CONFLICT',
+    );
+    assertPrivacyRecoveryActionsAllowed(
+      await readPrivacyPolicySnapshot(projectRoot),
+      recoveryPayload.actions,
     );
     const sessionProjection = await enqueueSessionPointerProjection(
       projectRoot,

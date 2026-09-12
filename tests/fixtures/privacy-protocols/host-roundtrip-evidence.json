@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-11T16:35:04.992Z",
+  "results": [
+    {
+      "kind": "real-host-roundtrip",
+      "host": "codex",
+      "protocol": "responses",
+      "exitCode": 0,
+      "responseObserved": true,
+      "canaryRestored": true,
+      "diagnosticsBytes": 826,
+      "gatewayCodes": [],
+      "diagnostics": [],
+      "upstreamCalls": 1,
+      "protectedCanary": true
+    },
+    {
+      "kind": "real-host-roundtrip",
+      "host": "claude",
+      "protocol": "messages",
+      "exitCode": 0,
+      "responseObserved": true,
+      "canaryRestored": true,
+      "diagnosticsBytes": 0,
+      "gatewayCodes": [],
+      "diagnostics": [],
+      "upstreamCalls": 1,
+      "protectedCanary": true
+    },
+    {
+      "kind": "real-host-read-roundtrip",
+      "host": "claude",
+      "exitCode": 0,
+      "responseObserved": true,
+      "canaryRestored": true,
+      "diagnosticsBytes": 0,
+      "gatewayCodes": [],
+      "upstreamCalls": 2,
+      "pathMasked": true,
+      "toolResultObserved": true,
+      "resultMasked": true,
+      "diagnostics": [],
+      "hostPermissionBypass": false
+    }
+  ],
+  "limits": "No desktop/subscription/cloud claim; no real model. Read adapter uses separately captured schema."
+}

@@ -13,19 +13,22 @@ export type CompatibilityOperation =
   | 'activation_repair'
   | 'greenfield_initialize'
   | 'adapter_upgrade'
-  | 'project_policy_upgrade';
+  | 'project_policy_upgrade'
+  | 'privacy_policy_update';
 
 export type WriterCapability =
   | 'planning-policy:1'
   | 'planning-policy:2'
   | 'adapter-digest:1'
-  | 'reframe-local:1';
+  | 'reframe-local:1'
+  | 'privacy-policy:1';
 
 export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
   'planning-policy:1',
   'planning-policy:2',
   'adapter-digest:1',
   'reframe-local:1',
+  'privacy-policy:1',
 ];
 
 export type CompatibilityFailureCode =
@@ -225,6 +228,17 @@ function requiredWriterCapabilities(
   input: CompatibilityGateInput,
 ): readonly WriterCapability[] {
   if (input.operation === 'read') return [];
+  if (
+    input.manifest.manifestVersion === 3 ||
+    input.operation === 'privacy_policy_update'
+  )
+    return [
+      'planning-policy:1',
+      'planning-policy:2',
+      'adapter-digest:1',
+      'privacy-policy:1',
+      ...(input.operation === 'reframe' ? ['reframe-local:1' as const] : []),
+    ];
   if (input.operation === 'adapter_upgrade') {
     return ['planning-policy:1', 'adapter-digest:1'];
   }

@@ -5,7 +5,8 @@ import {
   type ProjectProfile,
   primaryUiLibrary,
 } from '../system/project-profile.js';
-import { type Ulid, assertUlid } from './ids.js';
+import { type Ulid, assertUlid, createUlid } from './ids.js';
+import { withSharedPrivacyWrite } from './privacy-guard.js';
 import { assertSharedTextSafe } from './privacy.js';
 import { assertKnownKeys, assertRecord } from './validation.js';
 
@@ -162,6 +163,19 @@ export async function readProjectFacts(
 
 /** Facts are detected/rebuildable, so a refresh safely replaces the whole record. */
 export async function writeProjectFacts(
+  projectRoot: string,
+  facts: ProjectFactsV1,
+): Promise<ProjectFactsV1> {
+  const parsed = parseProjectFacts(facts);
+  return withSharedPrivacyWrite(
+    projectRoot,
+    parsed.lastOperationId ?? createUlid(),
+    parsed,
+    () => writeProjectFactsUnlocked(projectRoot, parsed),
+  );
+}
+
+async function writeProjectFactsUnlocked(
   projectRoot: string,
   facts: ProjectFactsV1,
 ): Promise<ProjectFactsV1> {

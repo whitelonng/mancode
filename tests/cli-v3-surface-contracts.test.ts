@@ -24,7 +24,26 @@ describe('V3 CLI command surface', () => {
           'migrate',
           'adapter',
           'design',
+          'privacy',
         ]),
+      );
+      expect(commandAt(cliProgram, 'privacy', 'scan')).toBeDefined();
+      expect(commandAt(cliProgram, 'privacy', 'enable')).toBeDefined();
+      expect(commandAt(cliProgram, 'privacy', 'status')).toBeDefined();
+      expect(commandAt(cliProgram, 'privacy', 'gateway', 'run')).toBeDefined();
+      expect(
+        commandAt(cliProgram, 'privacy', 'gateway', 'doctor'),
+      ).toBeDefined();
+      expect(commandAt(cliProgram, 'privacy', 'disable')).toBeDefined();
+      expect(commandAt(cliProgram, 'privacy', 'policy', 'apply')).toBeDefined();
+      expect(
+        requiredOptions(commandAt(cliProgram, 'privacy', 'preview')),
+      ).toEqual(['--output']);
+      expect(commandAt(cliProgram, 'init').helpInformation()).toContain(
+        '--shared-privacy',
+      );
+      expect(commandAt(cliProgram, 'init').helpInformation()).toContain(
+        '--gateway-privacy',
       );
       expect(commandAt(cliProgram, 'context', 'session', 'new')).toBeDefined();
       expect(commandAt(cliProgram, 'context', 'session', 'show')).toBeDefined();
@@ -107,6 +126,29 @@ describe('V3 CLI command surface', () => {
       expect(publicHelpText(cliProgram).join('\n')).not.toMatch(/\bV3\b/);
     } finally {
       parse.mockRestore();
+    }
+  });
+  it('rejects conflicting init privacy flags before any initialization', async () => {
+    const { createCliProgram } = await import('../src/cli.js');
+    const previous = process.exitCode;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      for (const flag of ['shared-privacy', 'gateway-privacy']) {
+        await createCliProgram().parseAsync([
+          'node',
+          'mancode',
+          'init',
+          `--${flag}`,
+          `--no-${flag}`,
+        ]);
+        expect(process.exitCode).toBe(2);
+      }
+      expect(error.mock.calls.flat().join(' ')).toContain(
+        'Conflicting privacy initialization options',
+      );
+    } finally {
+      process.exitCode = previous;
+      error.mockRestore();
     }
   });
 });

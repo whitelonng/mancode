@@ -86,6 +86,7 @@ export const OPERATION_AUTHORIZATION_ACTIONS: Record<
   greenfield_initialize: ['team_policy_config_transport'],
   adapter_upgrade: ['project_maintenance'],
   project_policy_upgrade: ['project_maintenance'],
+  privacy_policy_update: ['project_maintenance'],
   v3_activate: ['team_policy_config_transport'],
 };
 
@@ -649,6 +650,20 @@ export const OPERATION_DEFINITIONS: Record<
       prepare('validate', ['schema:'], ['schema:']),
       write('write-manifest', ['schema:'], ['schema:']),
       write('verify-manifest', ['schema:'], ['schema:']),
+      commit('commit', ['schema:'], ['schema:']),
+    ],
+  ),
+  privacy_policy_update: definition(
+    'privacy_policy_update',
+    'write-manifest',
+    false,
+    false,
+    [
+      prepare('validate', ['schema:'], ['schema:']),
+      write('write-remote-policy', ['schema:'], ['schema:']),
+      write('write-exclusions', ['schema:'], ['schema:']),
+      write('write-policy', ['schema:'], ['schema:']),
+      write('write-manifest', ['schema:'], ['schema:']),
       commit('commit', ['schema:'], ['schema:']),
     ],
   ),

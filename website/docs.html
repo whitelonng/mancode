@@ -95,7 +95,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.6.4</span>
+      <span class="docs-wordmark">Documentation / v0.6.5</span>
       <div class="docs-top-links">
         <a href="./">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -175,6 +175,15 @@
             <tr><td><code>.mancode/shared/context/decisions/</code><br /><code>.mancode/shared/team/</code></td><td>Confirmed decisions and durable coordination authority.</td><td>Commit only information intentionally written for the team.</td></tr>
             <tr><td><code>.claude/</code>, <code>.cursor/</code>, <code>.agents/</code>, <code>.dsh/</code>, <code>.github/</code>, <code>AGENTS.md</code></td><td>Adapter instructions, commands or prompts, skills, hooks, and managed blocks.</td><td>Share when the adapter is part of the team's development workflow. Content outside mancode's managed blocks remains yours.</td></tr>
           </tbody></table>
+          <h3>Optional enhanced privacy</h3>
+          <p><code>privacy scan</code> reads a UTF-8 file or stdin and reports safe rule/category offsets; exits 0 for clean input, 1 for findings, and 2 for errors. <code>privacy preview</code> writes a separate irreversible copy and never overwrites the source or an existing target. First initialization asks separately about <code>--shared-privacy</code> and <code>--gateway-privacy</code>; their <code>--no-shared-privacy</code> and <code>--no-gateway-privacy</code> forms explicitly disable them. Unspecified non-interactive choices stay off, and repeated initialization preserves prior settings.</p>
+          <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode privacy scan --file notes.txt --json
+<span class="command-prompt">$</span> mancode privacy preview --file notes.txt --output notes.redacted.txt --json
+<span class="command-prompt">$</span> mancode privacy enable --dry-run --json
+<span class="command-prompt">$</span> mancode privacy enable --expected-revision 0 --session &lt;session-id&gt; --client codex --json</code></pre><button type="button" data-copy-code>Copy</button></div>
+          <p>Shared policy uses revision/digest authority and recoverable operations. Dry-run reports local and remote blockers without original values. Immutable sensitive decisions and checkpoints remain excluded after <code>privacy disable</code>; disabling also preserves the upgraded format and existing basic checks. Immutable remote actor/claim/handoff history requires retaining basic protection or explicitly creating a new workspace for cleaned content. An active sensitive checkpoint must be replaced with a safe checkpoint and synced before enabling.</p>
+          <p>The optional foreground gateway requires an initialized workspace and checkout. Configure it with <code>privacy gateway enable --upstream openai --env-key OPENAI_API_KEY --client-host codex-cli/0.153.4</code>, inspect an explicit client fragment with <code>privacy gateway print-config --host codex</code>, then run <code>privacy gateway run</code>. Anthropic uses <code>--upstream anthropic --env-key ANTHROPIC_API_KEY --client-host claude-code/2.1.142</code> and <code>--host claude</code>. Settings stay local; enabling never edits provider or login configuration. <code>privacy status --json</code> distinguishes policy, configuration, process and route observations.</p>
+          <p>Verified CLI HTTP/SSE text round trips and the exact Claude Read schema are bounded support, not desktop, subscription, cloud, arbitrary tools or opaque-block coverage. See the <a href="https://github.com/whitelonng/mancode/blob/main/docs/privacy-guide.md">privacy guide</a> for migration, recovery and protocol limits.</p>
           <div class="docs-note"><strong>Safety boundary</strong><p><code>mancode manps</code> scans and reports by default. Remediation is explicit. Irreversible project operations still require human confirmation; installing mancode does not grant the agent permission to publish, delete, or rewrite unrelated work.</p></div>
         </section>
 
@@ -360,6 +369,24 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
               <code data-cli-command="operation show">mancode operation show</code> ·
               <code data-cli-command="operation repair">mancode operation repair</code> ·
               <code data-cli-command="operation abort">mancode operation abort</code>
+            </td></tr>
+            <tr><td>Privacy</td><td>
+              <code data-cli-command="privacy">mancode privacy</code> ·
+              <code data-cli-command="privacy scan">mancode privacy scan</code> ·
+              <code data-cli-command="privacy preview">mancode privacy preview</code> ·
+              <code data-cli-command="privacy status">mancode privacy status</code> ·
+              <code data-cli-command="privacy enable">mancode privacy enable</code> ·
+              <code data-cli-command="privacy disable">mancode privacy disable</code> ·
+              <code data-cli-command="privacy policy">mancode privacy policy</code> ·
+              <code data-cli-command="privacy policy upgrade">mancode privacy policy upgrade</code> ·
+              <code data-cli-command="privacy policy apply">mancode privacy policy apply</code> ·
+              <code data-cli-command="privacy gateway">mancode privacy gateway</code> ·
+              <code data-cli-command="privacy gateway enable">mancode privacy gateway enable</code> ·
+              <code data-cli-command="privacy gateway disable">mancode privacy gateway disable</code> ·
+              <code data-cli-command="privacy gateway status">mancode privacy gateway status</code> ·
+              <code data-cli-command="privacy gateway doctor">mancode privacy gateway doctor</code> ·
+              <code data-cli-command="privacy gateway run">mancode privacy gateway run</code> ·
+              <code data-cli-command="privacy gateway print-config">mancode privacy gateway print-config</code>
             </td></tr>
             <tr><td>Team coordination</td><td>
               <code data-cli-command="team">mancode team</code> ·

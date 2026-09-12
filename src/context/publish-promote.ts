@@ -61,6 +61,8 @@ import {
 } from './aggregate.js';
 import { digestCanonicalJson } from './canonical.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
+import { assertPrivacyRecoveryActionsAllowed } from './privacy-guard.js';
+import { readPrivacyPolicySnapshot } from './privacy-policy.js';
 import { assertSharedTextSafe } from './privacy.js';
 import {
   type PromotionFromQuarantinePlanV1,
@@ -391,6 +393,10 @@ export async function promoteV3Task(
       recoveryPayloadDigest: operationRecoveryPayloadDigest(recoveryPayload),
     });
     assertOperationRecoveryPayloadCoversJournal(prepared, recoveryPayload);
+    assertPrivacyRecoveryActionsAllowed(
+      await readPrivacyPolicySnapshot(sourceContext.projectRoot),
+      recoveryPayload.actions,
+    );
     await writeOperationRecoveryPayload(destinationHomeStore, recoveryPayload);
     // The shared destination owns the primary journal. Before the local
     // reservation is durable no business authority has changed, so recovery
