@@ -111,8 +111,8 @@ describe('shared privacy policy authority', () => {
     expect(manifest).toMatchObject({
       manifestVersion: 3,
       privacyPolicy: { revision: 1, digest: snapshot?.digest },
-      minReaderVersion: '0.6.5',
-      minWriterVersion: '0.6.5',
+      minReaderVersion: VERSION,
+      minWriterVersion: VERSION,
     });
     await expect(
       readFile(path.join(other, '.mancode/local/actor.json')),
@@ -167,7 +167,7 @@ describe('shared privacy policy authority', () => {
       JSON.parse(
         await readFile(path.join(root, '.mancode/schema.json'), 'utf8'),
       ),
-    ).toMatchObject({ manifestVersion: 3, minWriterVersion: '0.6.5' });
+    ).toMatchObject({ manifestVersion: 3, minWriterVersion: VERSION });
     await expect(
       updatePrivacyPolicy({
         projectRoot: root,

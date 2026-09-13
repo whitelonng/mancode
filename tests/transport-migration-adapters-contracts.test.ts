@@ -40,6 +40,8 @@ import {
 } from '../src/team/transport-migration.js';
 import { confirmManteamPlan } from './helpers/manteam-plan.js';
 
+import { VERSION } from '../src/version.js';
+
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-18T02:00:00.000Z');
 const roots: string[] = [];
@@ -87,7 +89,7 @@ describe('filesystem and git-ref transport migration adapters', () => {
     expect(remote).toMatchObject({
       schemaVersion: 2,
       privacyPolicy: { digest: before?.digest },
-      minWriterVersion: '0.6.5',
+      minWriterVersion: VERSION,
     });
     await expect(adapters.acquireWriteBarrier(id(46))).rejects.toThrow(
       'MANCODE_PRIVACY_BASELINE_CHANGED',

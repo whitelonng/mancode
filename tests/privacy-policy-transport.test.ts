@@ -48,6 +48,8 @@ import {
   prepareRemotePrivacyPolicyUpdate,
 } from '../src/team/privacy-policy-transport.js';
 
+import { VERSION } from '../src/version.js';
+
 const execFile = promisify(execFileCallback);
 const roots: string[] = [];
 const now = new Date('2026-09-12T01:00:00.000Z');
@@ -96,7 +98,7 @@ describe('distributed privacy policy', () => {
       schemaVersion: 2,
       revision: 3,
       privacyPolicy: { digest: target.digest },
-      minReaderVersion: '0.6.5',
+      minReaderVersion: VERSION,
       lastMutation: { kind: 'privacy_policy', operationId: id(10) },
     });
     await expect(f.b.store.pull()).rejects.toThrow(
@@ -191,8 +193,8 @@ describe('distributed privacy policy', () => {
     const manifest = (await client.inspectPrivacyPolicyAuthority()).manifest;
     expect(manifest).toMatchObject({
       schemaVersion: 2,
-      minReaderVersion: '0.6.5',
-      minWriterVersion: '0.6.5',
+      minReaderVersion: VERSION,
+      minWriterVersion: VERSION,
       privacyPolicy: { policy: { enabled: false, revision: 2 } },
     });
     expect(() =>
