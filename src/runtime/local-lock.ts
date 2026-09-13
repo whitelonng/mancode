@@ -1,5 +1,13 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  link,
+  lstat,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import { assertKnownKeys, assertRecord } from '../context/validation.js';
@@ -55,29 +63,32 @@ export async function acquireLocalLock(
   input: AcquireLocalLockInput,
 ): Promise<LocalLockHandle> {
   const owner = createLockOwner(store, input);
-  const directory = lockPath(store, owner.entityLockKey);
+  const target = lockPath(store, owner.entityLockKey);
   await mkdir(lockDirectory(store), { recursive: true });
-  let acquiredDirectory = false;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await mkdir(directory);
-      acquiredDirectory = true;
-      break;
-    } catch (error) {
-      if (!isAlreadyExists(error)) throw error;
-      if (!(await reclaimExpiredDeadLock(store, owner.entityLockKey, owner))) {
-        throw new Error('MANCODE_LOCK_HELD');
+  const temporary = temporaryOwnerPath(target);
+  try {
+    await writeOwnerFile(temporary, owner);
+    let acquired = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        // The exclusive link publishes complete ownership in one operation.
+        // A crash before it leaves only an unclaimed temporary file.
+        await link(temporary, target);
+        acquired = true;
+        break;
+      } catch (error) {
+        if (!isAlreadyExists(error)) throw error;
+        if (
+          !(await reclaimExpiredDeadLock(store, owner.entityLockKey, owner))
+        ) {
+          throw new Error('MANCODE_LOCK_HELD');
+        }
       }
     }
-  }
-  if (!acquiredDirectory) throw new Error('MANCODE_LOCK_HELD');
-  try {
-    // Contenders can already see the directory. Publish only complete JSON,
-    // as renewals do, so an in-flight owner write remains normal contention.
-    await atomicWriteLockOwner(directory, owner);
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
+    if (!acquired) throw new Error('MANCODE_LOCK_HELD');
+  } finally {
+    // Cleanup cannot undo or misreport an already published lock.
+    await rm(temporary, { force: true }).catch(() => undefined);
   }
   let released = false;
   let currentOwner = owner;
@@ -94,7 +105,7 @@ export async function acquireLocalLock(
       if (!sameLockOwner(current, currentOwner)) {
         throw new Error('MANCODE_LOCK_OWNERSHIP_LOST');
       }
-      await atomicWriteLockOwner(directory, next);
+      await atomicWriteLockOwner(target, next);
       currentOwner = next;
     },
     async release(): Promise<void> {
@@ -103,7 +114,7 @@ export async function acquireLocalLock(
       if (!sameLockOwner(current, currentOwner)) {
         throw new Error('MANCODE_LOCK_OWNERSHIP_LOST');
       }
-      await rm(directory, { recursive: true, force: false });
+      await rm(target, { recursive: true, force: false });
       released = true;
     },
   };
@@ -195,18 +206,35 @@ export async function readLocalLock(
 ): Promise<LocalLockOwnerV1 | null> {
   assertEntityLockKey(entityLockKey);
   try {
-    const raw = await readFile(
-      path.join(lockPath(store, entityLockKey), 'owner.json'),
-      'utf8',
-    );
-    const owner = parseLocalLockOwner(JSON.parse(raw));
-    if (
-      owner.storeId !== store.storeId ||
-      owner.entityLockKey !== entityLockKey
-    ) {
-      throw new Error('MANCODE_LOCK_CORRUPT');
+    const target = lockPath(store, entityLockKey);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const entry = await lstat(target);
+      if (!entry.isFile() && !entry.isDirectory()) {
+        throw new Error('MANCODE_LOCK_CORRUPT');
+      }
+      let raw: string;
+      try {
+        raw = await readFile(
+          entry.isDirectory() ? path.join(target, 'owner.json') : target,
+          'utf8',
+        );
+      } catch (error) {
+        // A released legacy directory can be replaced by a file (or vice versa)
+        // after lstat. Recheck the shape rather than relying on platform errno.
+        const current = await lstat(target);
+        if (entry.isDirectory() !== current.isDirectory()) continue;
+        throw error;
+      }
+      const owner = parseLocalLockOwner(JSON.parse(raw));
+      if (
+        owner.storeId !== store.storeId ||
+        owner.entityLockKey !== entityLockKey
+      ) {
+        throw new Error('MANCODE_LOCK_CORRUPT');
+      }
+      return owner;
     }
-    return owner;
+    throw new Error('MANCODE_LOCK_HELD');
   } catch (error) {
     if (isNotFound(error)) return null;
     if (error instanceof SyntaxError) throw new Error('MANCODE_LOCK_CORRUPT');
@@ -314,7 +342,7 @@ function renewLockOwner(owner: LocalLockOwnerV1, now: Date): LocalLockOwnerV1 {
 }
 
 /**
- * A crashed process must not leave an unrecoverable directory lock behind.
+ * Reclaim complete file locks and legacy directory locks after owner death.
  * We reclaim only an expired lease whose process is demonstrably gone. An
  * expired but live process remains protected: stealing it could create two
  * writers during a long operation.
@@ -361,19 +389,30 @@ function processIsAlive(processId: number): boolean {
 }
 
 async function atomicWriteLockOwner(
-  directory: string,
+  target: string,
   owner: LocalLockOwnerV1,
 ): Promise<void> {
-  const target = path.join(directory, 'owner.json');
-  const temporary = path.join(
-    directory,
-    `.owner.${process.pid}.${Date.now()}.tmp`,
-  );
-  await writeFile(temporary, `${JSON.stringify(owner, null, 2)}\n`, {
+  const temporary = temporaryOwnerPath(target);
+  try {
+    await writeOwnerFile(temporary, owner);
+    await rename(temporary, target);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+function temporaryOwnerPath(target: string): string {
+  return `${target}.pending.${process.pid}.${randomUUID()}`;
+}
+
+async function writeOwnerFile(
+  target: string,
+  owner: LocalLockOwnerV1,
+): Promise<void> {
+  await writeFile(target, `${JSON.stringify(owner, null, 2)}\n`, {
     encoding: 'utf8',
     flag: 'wx',
   });
-  await rename(temporary, target);
 }
 
 function parseLeaseMs(value: number | undefined): number {

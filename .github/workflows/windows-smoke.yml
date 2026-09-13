@@ -15,6 +15,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Lock publication and crash recovery
+        run: npx vitest run tests/local-lock.test.ts tests/local-lock-crash.test.ts tests/entity-home-store-contracts.test.ts
       - name: CMD
         shell: cmd
         run: npm run test:windows-smoke
