@@ -139,17 +139,23 @@ export async function reviseV3Plan(
       planDecisionSupplied: input.planDecision !== undefined,
       sessionActorId: context.session.actorId,
     });
-    assertPlanRevisionEligible(
-      context.task.metadata,
-      context.task.requirements,
-      executionScopeBinding,
-    );
     const implementationScope =
       submittedScope ?? context.task.metadata.implementationScope;
     const scopeChanged =
       submittedScope !== null &&
       submittedScope.digest !==
         context.task.metadata.implementationScope.digest;
+    const executionResumption = assertPlanOnlyExecutionResumption({
+      metadata: context.task.metadata,
+      planDecision,
+      authorityChanged: planChanged || scopeChanged,
+      sessionActorId: context.session.actorId,
+    });
+    assertPlanRevisionEligible(
+      context.task.metadata,
+      context.task.requirements,
+      executionScopeBinding || executionResumption,
+    );
     if (planDecision === 'governed_execution') {
       assertExecutableImplementationScope(implementationScope);
       if (isManDelivery(context.task.metadata)) {
@@ -223,10 +229,10 @@ export async function reviseV3Plan(
     });
     const taskHeadFence = nextTaskHeadFence(context, aggregate, timestamp);
 
-    if (planDecision === 'plan_only') {
+    if (planDecision === 'plan_only' || executionResumption) {
       await enqueueSessionPointerProjection(context.projectRoot, {
         operationId: context.operationId,
-        action: 'clear',
+        action: executionResumption ? 'resume' : 'clear',
         sessionId: context.session.sessionId,
         expectedPreviousTaskRef: context.session.activeTaskRef,
         taskRef,
@@ -353,7 +359,7 @@ export async function reviseV3Plan(
       await replaceTaskHeadFence(context.homeStore, taskHeadFence);
     }
     const operation = await commitTaskOperation(context, journal);
-    if (planDecision === 'plan_only') {
+    if (planDecision === 'plan_only' || executionResumption) {
       try {
         await reconcileProjectionIntents(
           context.projectRoot,
@@ -361,7 +367,7 @@ export async function reviseV3Plan(
           context.now,
         );
       } catch {
-        // Planned authority is committed; doctor can finish the projection.
+        // Plan authority is committed; doctor can finish the projection.
       }
     }
     return {
@@ -405,9 +411,9 @@ function parsePlanDecision(value: unknown): V3PlanDecision | null {
 function assertPlanRevisionEligible(
   metadata: WorkflowMetadataV3,
   requirements: RequirementsLedgerV1,
-  executionScopeBinding: boolean,
+  approvedAuthorityPreserved: boolean,
 ): void {
-  if (executionScopeBinding) {
+  if (approvedAuthorityPreserved) {
     assertReadyPlanRequirements(metadata, requirements);
     return;
   }
@@ -424,6 +430,44 @@ function assertPlanRevisionEligible(
     throw new Error('MANCODE_PLAN_REQUIREMENTS_OR_DECISION_INVALID');
   }
   assertReadyPlanRequirements(metadata, requirements);
+}
+
+/** An explicit execution decision may continue an unchanged, owned local plan. */
+function assertPlanOnlyExecutionResumption(input: {
+  metadata: WorkflowMetadataV3;
+  planDecision: V3PlanDecision | null;
+  authorityChanged: boolean;
+  sessionActorId: Ulid;
+}): boolean {
+  const { metadata } = input;
+  if (
+    metadata.governance.planDecision !== 'plan_only' ||
+    input.planDecision !== 'governed_execution'
+  ) {
+    return false;
+  }
+  if (
+    metadata.workflowMode !== 'man' ||
+    metadata.taskRef.namespace !== 'local' ||
+    metadata.coordination !== 'single'
+  ) {
+    throw new Error('MANCODE_PLAN_RESUME_LOCAL_MAN_ONLY');
+  }
+  if (
+    !['planned', 'in_progress'].includes(metadata.status) ||
+    metadata.currentStep !== 4 ||
+    metadata.governance.planVersion < 1 ||
+    metadata.soloExecution !== null
+  ) {
+    throw new Error('MANCODE_PLAN_RESUME_NOT_ELIGIBLE');
+  }
+  if (metadata.ownerActorId !== input.sessionActorId) {
+    throw new Error('MANCODE_TASK_OWNER_REQUIRED');
+  }
+  if (input.authorityChanged) {
+    throw new Error('MANCODE_PLAN_RESUME_AUTHORITY_CHANGED');
+  }
+  return true;
 }
 
 function assertReadyPlanRequirements(

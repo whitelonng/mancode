@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { type TaskRef, sameTaskRef } from '../context/task-ref.js';
 import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
 import type { CapabilityLevel, Freshness } from './capabilities.js';
@@ -251,6 +252,8 @@ function hasPotentialPathIntersection(
 
 function isPathSubsetOf(candidate: string, boundary: string): boolean {
   if (candidate === boundary) return true;
+  if (containsComplexGlob(candidate) || containsComplexGlob(boundary))
+    return false;
   const candidatePrefix = staticPathPrefix(candidate);
   const boundaryPrefix = staticPathPrefix(boundary);
   if (!candidatePrefix.startsWith(boundaryPrefix)) return false;
@@ -260,6 +263,17 @@ function isPathSubsetOf(candidate: string, boundary: string): boolean {
 
 function globPatternsMayOverlap(left: string, right: string): boolean {
   if (left === right) return true;
+  const leftIsGlob = containsGlob(left);
+  const rightIsGlob = containsGlob(right);
+  if (!leftIsGlob && !rightIsGlob) return false;
+  // Resolve concrete files exactly for simple globs. Complex patterns and
+  // glob/glob relations retain the conservative prefix proof below.
+  if (!leftIsGlob && !containsComplexGlob(right)) {
+    return path.posix.matchesGlob(left, right);
+  }
+  if (!rightIsGlob && !containsComplexGlob(left)) {
+    return path.posix.matchesGlob(right, left);
+  }
   const leftPrefix = staticPathPrefix(left);
   const rightPrefix = staticPathPrefix(right);
   return (
@@ -268,7 +282,7 @@ function globPatternsMayOverlap(left: string, right: string): boolean {
 }
 
 function staticPathPrefix(value: string): string {
-  const wildcard = value.search(/[*!?\[]/);
+  const wildcard = value.search(/[*!?\[\]{}()]/);
   const prefix = wildcard === -1 ? value : value.slice(0, wildcard);
   return prefix.endsWith('/')
     ? prefix
@@ -276,7 +290,11 @@ function staticPathPrefix(value: string): string {
 }
 
 function containsGlob(value: string): boolean {
-  return /[*!?\[]/.test(value);
+  return /[*!?\[\]{}()]/.test(value);
+}
+
+function containsComplexGlob(value: string): boolean {
+  return /[!\[\]{}()]/.test(value);
 }
 
 function hasIntersection(left: string[], right: string[]): boolean {

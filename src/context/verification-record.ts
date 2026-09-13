@@ -40,6 +40,10 @@ import {
   verificationLedgerDigest,
 } from './verification-ledger.js';
 import {
+  assertSoloHandoffSession,
+  isActiveSoloHandoff,
+} from './workflow-metadata.js';
+import {
   type WorkflowMetadataV3,
   assertWorkflowMetadataTransition,
   parseWorkflowMetadata,
@@ -85,6 +89,7 @@ export async function recordV3Verification(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    assertSoloHandoffSession(context.task.metadata, context.session);
     const subject = isManDelivery(context.task.metadata)
       ? await captureManSubject(input.projectRoot, context.task)
       : null;
@@ -234,6 +239,7 @@ function assertVerificationEligible(
   metadata: WorkflowMetadataV3,
   hasPlan: boolean,
 ): void {
+  if (isActiveSoloHandoff(metadata) && hasPlan) return;
   if (metadata.status !== 'in_progress' && metadata.status !== 'blocked') {
     throw new Error('MANCODE_VERIFICATION_WORKFLOW_NOT_ACTIVE');
   }

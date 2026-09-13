@@ -224,28 +224,48 @@ describe('V3 adapter bootstrap integration', () => {
         'classify each remaining unknown as blocking, recommendable, or defaultable',
       );
       expect(bootstrap).toContain(
-        'hard-risk change involving authentication, payment, sensitive data, deletion, migration, public APIs, untrusted input, concurrency, infrastructure',
+        'Continue when existing authorization covers the action and its factual premises remain unchanged',
       );
       expect(bootstrap).toContain(`- ${ACCEPTED_STATE_NARRATIVE_GUIDANCE}`);
       expect(bootstrap.split(ACCEPTED_STATE_NARRATIVE_GUIDANCE)).toHaveLength(
         2,
       );
-      if (['AGENTS.md', 'CLAUDE.md'].includes(path.basename(target))) {
-        expect(bootstrap).toContain(
-          '仅用于显式启用模块交付策略的新 `/man` 任务',
-        );
-        expect(bootstrap).toContain('项目指定的计划基线目录，默认 `doc/`');
-        expect(bootstrap).toContain('已有 `docs/` 等明确约定时沿用它');
-        expect(bootstrap).toContain('mancode-progress-data');
-        expect(bootstrap).toContain('被忽略不代表本地不可读');
-        expect(bootstrap).toContain('交付未发布');
-        expect(bootstrap).toContain('优先定位并修复根因，避免治标不治本');
-        expect(bootstrap).toContain(
-          '完整性校验、缓存键、证据适用性和发布溯源仍可使用哈希',
-        );
-        expect(bootstrap).not.toContain('扩大到十几行');
-      } else
-        expect(bootstrap).not.toContain('project:documentation-handoff-policy');
+      expect(bootstrap).not.toContain('mancode-progress-data');
+      expect(bootstrap).not.toContain('project:engineering-execution-quality');
+      expect(bootstrap).not.toContain('project:documentation-handoff-policy');
+      expect(bootstrap).toContain('Pause the affected action');
+      expect(bootstrap).toContain(
+        'authorization reuse never invents an approval',
+      );
+      expect(bootstrap).toContain(
+        'stop governance discovery and state creation only',
+      );
+      expect(bootstrap).toContain(
+        'answer ordinary questions and continue authorized Solo work',
+      );
+      expect(bootstrap).toContain('Mutate Continuity authority only');
+      expect(bootstrap).toContain(
+        'Edit project code and documentation with normal tools',
+      );
+      expect(bootstrap).toContain(
+        'With no active or supplied TaskRef and no invoked mode',
+      );
+      expect(bootstrap).toContain('Never silently downgrade a mode');
+      expect(bootstrap).toContain('activeTask.workflowMode');
+      expect(bootstrap).toContain('activeTask.governance.policyVersions');
+      expect(bootstrap).toContain('activeTask.governance.planDecision');
+      expect(bootstrap).toContain(
+        '`solo_handoff` uses `mansolo` with inherited commitments',
+      );
+      expect(bootstrap).toContain(
+        'preserve old policies and any `plan_only` decision',
+      );
+      expect(bootstrap).toContain(
+        path
+          .relative(root, v3ModeEntryPath(root, platform, 'man'))
+          .split(path.sep)
+          .join('/'),
+      );
       expect(bootstrap).toContain(
         'explicitly asking for research, a plan, architecture, migration design, or formal acceptance authorizes the `man` planning path',
       );
@@ -293,16 +313,10 @@ describe('V3 adapter bootstrap integration', () => {
       if (platform === 'claude-code') {
         expect(installed.target).toBe('CLAUDE.md');
         expect(bootstrap).toContain('mancode:continuity:claude:start');
-        expect(bootstrap).toContain(
-          '<!-- project:documentation-handoff-policy:end -->',
-        );
       }
       if (platform === 'codex') {
         expect(installed.target).toBe('AGENTS.md');
         expect(bootstrap).toContain('mancode:continuity:codex:start');
-        expect(bootstrap).toContain(
-          '<!-- project:engineering-execution-quality:end -->',
-        );
       }
       if (platform === 'dsh') {
         expect(installed.target).toBe('AGENTS.md');
@@ -357,7 +371,76 @@ describe('V3 adapter bootstrap integration', () => {
             sessionCommands.every((command) => command.includes('--client')),
           ).toBe(true);
         }
+        if (mode !== 'man') {
+          expect(entry).not.toContain('mancode-progress-data');
+          expect(entry).not.toContain('project:engineering-execution-quality');
+        }
         if (mode === 'man') {
+          expect(entry).toContain('仅用于显式启用模块交付策略的新 `/man` 任务');
+          expect(entry).toContain('这些任务的 Solo handoff 继承相同的交付标准');
+          expect(entry).toContain('otherwise `doc/`');
+          expect(entry).toContain('including an existing `docs/`');
+          expect(entry).toContain('without making a duplicate');
+          expect(entry).toContain('The bound plan must not exist only in chat');
+          expect(entry).toContain('task-owned plan commit');
+          expect(entry).toContain('For delivery policy 3 only');
+          expect(entry).toContain('被忽略不代表本地不可读');
+          expect(entry).toContain('Do not invent the architecture');
+          expect(entry).toContain('credentials, accounts or secrets');
+          expect(entry).toContain(
+            'force-add private files (including ignored `架构/` or `项目接口/` files)',
+          );
+          expect(entry).toContain('mancode-progress-data');
+          expect(entry).toContain(
+            'without blocking development or guessing HTML',
+          );
+          expect(entry).toContain('business decisions');
+          expect(entry).toContain('交付未发布');
+          expect(entry).toContain('not a completed versioned delivery');
+          expect(entry).toContain('优先定位并修复根因，避免治标不治本');
+          expect(entry).toContain(
+            '完整性校验、缓存键、证据适用性和发布溯源仍可使用哈希',
+          );
+          expect(entry).toContain(
+            '完整 diff 审核、跨阶段恢复读回和证据适用性检查仍须执行',
+          );
+          expect(entry).toContain(
+            'Restore the existing task and its original policy',
+          );
+          expect(entry).toContain('do not omit a required stage');
+          expect(entry).toContain(
+            'stable IDs F-1 through F-3 (zero findings is valid)',
+          );
+          expect(entry).toContain(
+            'At material stage boundaries, waits and handoffs',
+          );
+          expect(entry).toContain(
+            'source, dependency or relevant environment changes',
+          );
+          expect(entry).toContain(
+            'Missing optional Skills do not erase authorization or valid evidence',
+          );
+          expect(entry).toContain(
+            'Preserve user-required tools, exact acceptance methods and observation surfaces',
+          );
+          expect(entry).toContain(
+            'Passing local unit tests does not establish project-level acceptance',
+          );
+          expect(entry).toContain(
+            'unless independent review is explicitly required',
+          );
+          expect(entry).toContain(
+            'One total review does not forbid necessary checks',
+          );
+          expect(entry).toContain(
+            'use resolved finding IDs instead of dropping issues',
+          );
+          expect(entry).toContain(
+            'Closing a finding never substitutes for the required renewed acceptance evidence',
+          );
+          expect(entry).toContain(
+            'keep their current verification/review apply and completion protocol',
+          );
           expect(entry).toContain('read-only project orientation');
           expect(entry).toContain(
             'without creating an actor, session, TaskRef, or workflow',
@@ -404,7 +487,9 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             'summarize the resolved requirements and any remaining defaults',
           );
-          expect(entry).toContain('clarity does not waive risk');
+          expect(entry).toContain(
+            'authorization reuse never invents an approval',
+          );
           expect(entry).toContain('mancode context glossary add');
           expect(entry).toContain(
             'Never write to the glossary without operator confirmation.',
@@ -418,6 +503,12 @@ describe('V3 adapter bootstrap integration', () => {
             'ask one focused question and wait instead of inventing product behavior',
           );
           expect(entry).toContain('explicit but unsound fix instruction');
+          expect(entry).toContain('workflow verify <namespace:ULID> apply');
+          expect(entry).toContain('do not fabricate a Man plan decision');
+          expect(entry).toContain('manual_test_required');
+          expect(entry).toContain(
+            'does not replace its parent task acceptance',
+          );
         }
         if (mode === 'manps') {
           expect(entry).toContain(
@@ -430,6 +521,23 @@ describe('V3 adapter bootstrap integration', () => {
         }
         if (mode === 'mansolo') {
           expect(entry).toContain('Ordinary focused work needs no TaskRef');
+          expect(entry).toContain(
+            'These exemptions do not apply to commitments inherited through a governed handoff',
+          );
+          expect(entry).toContain('required acceptance and review commitments');
+          expect(entry).toContain(
+            'An ineligible transition does not authorize another mode',
+          );
+          expect(entry).toContain(
+            'workflow handoff <namespace:ULID> --complete',
+          );
+          expect(entry).toContain('inspect the task-owned diff');
+          expect(entry).toContain('record formal verification and review');
+          expect(entry).toContain(
+            'Missing, failed or stale evidence blocks completion',
+          );
+          expect(entry).toContain('Inherited planning policy 3');
+          expect(entry).toContain('before handoff --complete');
           expect(entry).toContain(
             'Only an explicit governed handoff mutation requires',
           );
@@ -507,7 +615,7 @@ describe('V3 adapter bootstrap integration', () => {
             'with the unchanged task revision to rebind the remote code head',
           );
           expect(entry).toContain(
-            'ownership conflict, or hard-risk direction remains',
+            'ownership conflict, or new unauthorized impact remains',
           );
           expect(entry).toContain(
             'do not leave ownership questions or partial answers only in chat history',
@@ -537,6 +645,16 @@ describe('V3 adapter bootstrap integration', () => {
         }
         if (mode === 'man' || mode === 'manba' || mode === 'manteam') {
           expect(entry).toContain(`mancode workflow create ${mode}`);
+          expect(entry).toContain('For every Continuity authority mutation');
+          expect(entry).toContain(
+            'Project code and documentation edits use normal tools',
+          );
+          expect(entry).toContain(
+            'Continue when existing authorization covers the action',
+          );
+          expect(entry).toContain(
+            'authorization reuse never invents an approval',
+          );
         }
       }
 

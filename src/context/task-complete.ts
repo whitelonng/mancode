@@ -94,6 +94,12 @@ export async function completeV3Task(
   try {
     assertCompletionOutcome(context.task.metadata, input.outcome);
     if (
+      context.task.metadata.workflowMode === 'manba' &&
+      context.task.metadata.ownerActorId !== context.session.actorId
+    ) {
+      throw new Error('MANCODE_TASK_OWNER_REQUIRED');
+    }
+    if (
       taskRef.namespace === 'shared' &&
       context.project.config.transport.mode !== 'local'
     ) {
@@ -117,6 +123,7 @@ export async function completeV3Task(
         hasPendingRepairOperation: false,
         activeClaimCount: activeClaims.length,
         claimsWillReleaseOrTransfer: activeClaims.length > 0,
+        diagnosticOutcome: input.outcome,
       },
     );
     const timestamp = context.now.toISOString();

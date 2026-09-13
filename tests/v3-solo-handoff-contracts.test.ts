@@ -14,10 +14,23 @@ import {
   requirementsLedgerDigest,
 } from '../src/context/requirements-ledger.js';
 import {
+  type ReviewLedgerV1,
+  parseReviewLedger,
+  reviewLedgerDigest,
+} from '../src/context/review-ledger.js';
+import { applyV3ReviewLedger } from '../src/context/review-remediation.js';
+import {
   completeV3SoloHandoff,
   startV3SoloHandoff,
 } from '../src/context/solo-handoff.js';
+import { V3ContextStore } from '../src/context/store.js';
 import { taskRootPath } from '../src/context/task-locator.js';
+import {
+  type VerificationLedgerV1,
+  parseVerificationLedger,
+  verificationLedgerDigest,
+} from '../src/context/verification-ledger.js';
+import { recordV3Verification } from '../src/context/verification-record.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { parseWorkflowMetadata } from '../src/context/workflow-metadata.js';
 import { createSession, readSession } from '../src/runtime/session.js';
@@ -103,11 +116,26 @@ describe('V3 solo handoff', () => {
       created.taskRef,
     );
 
+    await expect(
+      completeV3SoloHandoff({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: started.metadata.revision,
+        now: NOW,
+      }),
+    ).rejects.toThrow('review');
+    const verified = await recordHandoffEvidence(
+      root,
+      created.taskRef,
+      sessionId,
+    );
+
     const completed = await completeV3SoloHandoff({
       projectRoot: root,
       taskRef: created.taskRef,
       sessionId,
-      expectedTaskRevision: started.metadata.revision,
+      expectedTaskRevision: verified.metadata.revision,
       operationId: id(17),
       now: NOW,
     });
@@ -115,7 +143,8 @@ describe('V3 solo handoff', () => {
       metadata: {
         status: 'completed',
         currentStep: 9,
-        revision: 5,
+        revision: 7,
+        governance: { reviewStatus: 'passed', verificationStatus: 'passed' },
         soloExecution: { state: 'completed' },
       },
       operation: { type: 'solo_handoff', state: 'committed' },
@@ -300,11 +329,25 @@ describe('V3 solo handoff', () => {
       },
     });
 
+    await expect(
+      completeV3SoloHandoff({
+        projectRoot: root,
+        taskRef: created.taskRef,
+        sessionId,
+        expectedTaskRevision: bound.metadata.revision,
+        now: NOW,
+      }),
+    ).rejects.toThrow('review');
+    const verified = await recordHandoffEvidence(
+      root,
+      created.taskRef,
+      sessionId,
+    );
     const completed = await completeV3SoloHandoff({
       projectRoot: root,
       taskRef: created.taskRef,
       sessionId,
-      expectedTaskRevision: bound.metadata.revision,
+      expectedTaskRevision: verified.metadata.revision,
       operationId: id(77),
       now: NOW,
     });
@@ -400,4 +443,173 @@ function id(offset: number): Ulid {
     Date.parse('2026-07-17T00:00:00.000Z') + offset,
     new Uint8Array(10).fill(offset),
   );
+}
+
+function currentVerification(
+  previous: VerificationLedgerV1,
+  requirements: RequirementsLedgerV1,
+  planVersion: number,
+  remediationRound: number,
+): VerificationLedgerV1 {
+  const criterion = requirements.acceptanceCriteria[0];
+  if (criterion === undefined) throw new Error('missing test criterion');
+  const draft: VerificationLedgerV1 = {
+    ...previous,
+    revision: 99,
+    status: 'passed',
+    requirementsDigest: requirements.contentDigest,
+    planVersion,
+    remediationRound,
+    checks: [
+      {
+        displayId: criterion.displayId,
+        legacyId: criterion.legacyId,
+        checkId: id(77),
+        criterionId: criterion.criterionId,
+        required: criterion.required,
+        verificationRequirement: criterion.verificationRequirement,
+        automated: {
+          evidenceId: id(78),
+          status: 'passed',
+          summary: 'The deterministic verification command passed.',
+          command: 'npm test',
+          exitCode: 0,
+          artifactRef: null,
+          confirmedByActorId: null,
+          confirmationSource: null,
+          updatedAt: NOW.toISOString(),
+        },
+        manual: null,
+      },
+    ],
+    contentDigest: '',
+    lastOperationId: id(79),
+    updatedAt: NOW.toISOString(),
+  };
+  return parseVerificationLedger(
+    { ...draft, contentDigest: verificationLedgerDigest(draft) },
+    requirements,
+  );
+}
+
+function currentReview(
+  previous: ReviewLedgerV1,
+  requirementsDigest: string,
+  planVersion: number,
+): ReviewLedgerV1 {
+  const draft: ReviewLedgerV1 = {
+    ...previous,
+    revision: 99,
+    status: 'passed',
+    requirementsDigest,
+    planVersion,
+    requiredDomains: ['quality'],
+    domains: [{ domain: 'quality', status: 'passed', reportRef: null }],
+    blockers: [],
+    remediationRound: 0,
+    skip: null,
+    contentDigest: '',
+    lastOperationId: id(75),
+    updatedAt: NOW.toISOString(),
+  };
+  return parseReviewLedger({
+    ...draft,
+    contentDigest: reviewLedgerDigest(draft),
+  });
+}
+
+async function recordHandoffEvidence(
+  root: string,
+  taskRef: RequirementsLedgerV1['taskRef'],
+  sessionId: Ulid,
+) {
+  const store = new V3ContextStore(root);
+  const before = await store.readTaskSnapshot(taskRef);
+  if (before.metadata.ownerActorId === null) throw new Error('Missing owner');
+  const other = await createSession(root, {
+    actorId: before.metadata.ownerActorId,
+    client: 'vitest',
+    identitySource: 'explicit',
+    now: NOW,
+  });
+  const submittedReview = currentReview(
+    before.review,
+    before.requirements.contentDigest,
+    before.metadata.governance.planVersion,
+  );
+  const submittedVerification = currentVerification(
+    before.verification,
+    before.requirements,
+    before.metadata.governance.planVersion,
+    before.review.remediationRound,
+  );
+  await expect(
+    applyV3ReviewLedger({
+      projectRoot: root,
+      taskRef,
+      sessionId: other.sessionId,
+      expectedTaskRevision: before.metadata.revision,
+      review: submittedReview,
+      now: NOW,
+    }),
+  ).rejects.toThrow('SOLO_HANDOFF_NOT_ACTIVE');
+  await expect(
+    recordV3Verification({
+      projectRoot: root,
+      taskRef,
+      sessionId: other.sessionId,
+      expectedTaskRevision: before.metadata.revision,
+      verification: submittedVerification,
+      now: NOW,
+    }),
+  ).rejects.toThrow('SOLO_HANDOFF_NOT_ACTIVE');
+  expect((await store.readTaskSnapshot(taskRef)).metadata).toEqual(
+    before.metadata,
+  );
+  const review = await applyV3ReviewLedger({
+    projectRoot: root,
+    taskRef,
+    sessionId,
+    expectedTaskRevision: before.metadata.revision,
+    review: currentReview(
+      before.review,
+      before.requirements.contentDigest,
+      before.metadata.governance.planVersion,
+    ),
+    now: NOW,
+  });
+  await expect(
+    completeV3SoloHandoff({
+      projectRoot: root,
+      taskRef,
+      sessionId,
+      expectedTaskRevision: review.metadata.revision,
+      now: NOW,
+    }),
+  ).rejects.toThrow('verification ledger');
+  const verified = await recordV3Verification({
+    projectRoot: root,
+    taskRef,
+    sessionId,
+    expectedTaskRevision: review.metadata.revision,
+    verification: currentVerification(
+      review.verification,
+      before.requirements,
+      before.metadata.governance.planVersion,
+      review.review.remediationRound,
+    ),
+    now: NOW,
+  });
+  expect(verified.metadata.governance.planDecision).toBe('solo_handoff');
+  expect(verified.metadata.soloExecution).toEqual(
+    before.metadata.soloExecution,
+  );
+  expect(verified.metadata.implementationScope).toEqual(
+    before.metadata.implementationScope,
+  );
+  expect(verified.metadata.governance.policyVersions).toEqual(
+    before.metadata.governance.policyVersions,
+  );
+  expect((await store.readTaskSnapshot(taskRef)).plan).toEqual(before.plan);
+  return verified;
 }

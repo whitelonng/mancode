@@ -1,0 +1,124 @@
+{
+  "recordedAt": "2026-09-12T09:00:07.613Z",
+  "sourceHead": "8651f21e052fca3a8bfcd396f098701a9a9f2823",
+  "tokenizer": {
+    "encoding": "cl100k_base",
+    "package": "js-tiktoken",
+    "version": "1.0.21"
+  },
+  "note": "Static text only; not actual host input tokens, billing, latency, or behavior. Installed AGENTS includes project facts; generated bootstrap is the managed block alone. Existing uncommitted source changes are not encoded by sourceHead; file hashes identify measured inputs.",
+  "installed": {
+    "AGENTS.md": {
+      "bytes": 8441,
+      "lines": 71,
+      "tokens_cl100k_base": 1832,
+      "sha256": "753a265e34827a02dccd4ab78ef5af00bdbc97285d5df35a889b8b27667ccbc4"
+    },
+    ".agents/skills/man/SKILL.md": {
+      "bytes": 11136,
+      "lines": 52,
+      "tokens_cl100k_base": 2363,
+      "sha256": "be5912bd81d0c4f1fabcdb5076288f71359359cd80c05a1e34b4404b3a1feb6e"
+    },
+    "src/installers/v3-adapter.ts": {
+      "bytes": 137143,
+      "lines": 3307,
+      "tokens_cl100k_base": 32287,
+      "sha256": "c1efa8452ad8d728c11c56bcb2a442579156957102fe72aeb29134c68db3f34f"
+    },
+    "src/context/design-guidance.ts": {
+      "bytes": 931,
+      "lines": 5,
+      "tokens_cl100k_base": 179,
+      "sha256": "25214a17ca2cf4d9a9011073d4bc32ed219ad950178a17b17c828d2d13c90bc8"
+    },
+    "src/context/accepted-state-narrative-guidance.ts": {
+      "bytes": 543,
+      "lines": 2,
+      "tokens_cl100k_base": 102,
+      "sha256": "df9cd93cf570c51b16568d87f239a51e1c77acfff19ba64e6721ed80fea48a1b"
+    }
+  },
+  "generated": {
+    "codex": {
+      "bootstrap": {
+        "bytes": 11293,
+        "lines": 56,
+        "tokens_cl100k_base": 2845,
+        "sha256": "96864d837f1ac8fc20f4891b3b5ca8b397b96719dbbfbbb142436caeecfeaf11"
+      },
+      "modes": {
+        "man": {
+          "bytes": 19652,
+          "lines": 62,
+          "tokens_cl100k_base": 4074,
+          "sha256": "236aeb3b0828b866701b8b0cbbb2ee11a931745138526d3b5ec83a87fb27f9e9"
+        },
+        "manba": {
+          "bytes": 3333,
+          "lines": 31,
+          "tokens_cl100k_base": 757,
+          "sha256": "6ba6a52d8fc98fe0642422a4efcd2c5cd4b3c14658ef898f1758d68d9ae9334d"
+        },
+        "manteam": {
+          "bytes": 6668,
+          "lines": 38,
+          "tokens_cl100k_base": 1385,
+          "sha256": "73a564893fc94728b9c757ea83b55fcaa3942b5a73411832e055c96d09967363"
+        },
+        "manps": {
+          "bytes": 1557,
+          "lines": 26,
+          "tokens_cl100k_base": 344,
+          "sha256": "6056d615a4d3f1a5686cb3fdd30cb9e6bc8c0bf22516653089e5bf961f201e4b"
+        },
+        "mansolo": {
+          "bytes": 3849,
+          "lines": 32,
+          "tokens_cl100k_base": 806,
+          "sha256": "b125a8174298262da83fa500a6960039c0a8839e2f2db37486451085a2962d66"
+        }
+      }
+    },
+    "claude-code": {
+      "bootstrap": {
+        "bytes": 11086,
+        "lines": 56,
+        "tokens_cl100k_base": 2784,
+        "sha256": "2aa0c888f0d6b1a49ae804a8f2158cbc7854220c0566df11769beb38af212602"
+      },
+      "modes": {
+        "man": {
+          "bytes": 19402,
+          "lines": 62,
+          "tokens_cl100k_base": 4000,
+          "sha256": "551a161940b9676c460b85e34aa40ef253975db27e184840a697a6fce2a7bf76"
+        },
+        "manba": {
+          "bytes": 3123,
+          "lines": 31,
+          "tokens_cl100k_base": 693,
+          "sha256": "00c723d7300cab5ae14a78648ae49b9fc2103e9f59d6113b21e450173ee32ecb"
+        },
+        "manteam": {
+          "bytes": 6458,
+          "lines": 38,
+          "tokens_cl100k_base": 1320,
+          "sha256": "092bba6b0a74965aaccca67f7e165e4c7c1f459f3055b16dc9a3047e1e2da0bc"
+        },
+        "manps": {
+          "bytes": 1557,
+          "lines": 26,
+          "tokens_cl100k_base": 344,
+          "sha256": "6056d615a4d3f1a5686cb3fdd30cb9e6bc8c0bf22516653089e5bf961f201e4b"
+        },
+        "mansolo": {
+          "bytes": 3647,
+          "lines": 32,
+          "tokens_cl100k_base": 744,
+          "sha256": "c1f2cc8c6ecffa4d6db32eef9b23bd737e00d1b672e2e0f767cefbbb855b312f"
+        }
+      }
+    }
+  }
+}

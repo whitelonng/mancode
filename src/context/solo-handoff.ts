@@ -21,6 +21,7 @@ import {
   buildTaskAggregateManifest,
 } from './aggregate.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
+import { assertManDeliveryReady } from './man-delivery-runtime.js';
 import {
   assertRequirementsScopeConsistent,
   requirementsAreReady,
@@ -181,6 +182,7 @@ export async function completeV3SoloHandoff(
   let journal: OperationJournalV1 | null = null;
   try {
     assertSoloCompletionEligible(context);
+    await assertManDeliveryReady(input.projectRoot, context.task);
     const timestamp = context.now.toISOString();
     const completionGateMetadata = completedSoloAssignmentMetadata(
       context.task.metadata,
@@ -427,7 +429,7 @@ function completedSoloMetadata(
   return next;
 }
 
-function completedSoloAssignmentMetadata(
+export function completedSoloAssignmentMetadata(
   previous: WorkflowMetadataV3,
   completedAt: string,
 ): WorkflowMetadataV3 {

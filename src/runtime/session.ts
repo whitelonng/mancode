@@ -59,6 +59,8 @@ export interface ResumeSessionInput {
 export interface ClearSessionTaskPointerInput {
   /** Refuse to clear a pointer that another command has already replaced. */
   expectedTaskRef?: TaskRef;
+  /** Recheck a delayed projection while holding the session mutation lock. */
+  isStillApplicable?: () => Promise<boolean>;
   now?: Date;
 }
 
@@ -218,6 +220,9 @@ export async function clearSessionTaskPointer(
         session.activeTaskRef.namespace !== expected.namespace ||
         session.activeTaskRef.taskId !== expected.taskId)
     ) {
+      return session;
+    }
+    if (input.isStillApplicable && !(await input.isStillApplicable())) {
       return session;
     }
     const updated: SessionStateV1 = {

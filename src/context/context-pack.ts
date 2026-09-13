@@ -7,7 +7,7 @@ import {
   isPrivacyExcluded,
 } from './privacy-guard.js';
 import type { PrivacyPolicySnapshot } from './privacy-policy.js';
-import { scanSharedText } from './privacy.js';
+import { redactSharedText, scanSharedText } from './privacy.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 
 export const CONTEXT_PACK_SCHEMA_VERSION = 2;
@@ -291,11 +291,17 @@ export function buildContextPack(input: ContextPackBuildInput): ContextPackV2 {
       omissions.push(omissionFor(section, 'privacy'));
       continue;
     }
+    const projected = projectGovernanceLocalPaths(
+      section,
+      input.privacy?.policy.enabled
+        ? input.privacy.policy.enabledRuleIds
+        : undefined,
+    );
     if (
-      containsSensitiveText(section.value) ||
+      containsSensitiveText(projected.value) ||
       (input.privacy?.policy.enabled &&
         containsEnhancedSensitiveText(
-          section.value,
+          projected.value,
           input.privacy.policy.enabledRuleIds,
         ))
     ) {
@@ -305,7 +311,7 @@ export function buildContextPack(input: ContextPackBuildInput): ContextPackV2 {
       }
       continue;
     }
-    included.set(pointer, section);
+    included.set(pointer, projected);
   }
 
   while (true) {
@@ -603,6 +609,129 @@ function containsSensitiveText(value: unknown): boolean {
     return Object.values(value).some((item) => containsSensitiveText(item));
   }
   return false;
+}
+
+/** Local tooling paths may be hidden in a view, never rewritten in authority. */
+function projectGovernanceLocalPaths(
+  section: ContextPackSectionInput,
+  enhancedRuleIds: readonly string[] | undefined,
+): ContextPackSectionInput {
+  if (!isRequiredSection(section) || !isRecord(section.value)) return section;
+  const original = section.value;
+  const redactions: string[] = [];
+  const projectText = (
+    value: string,
+    pointer: string,
+    command = false,
+  ): string => {
+    const findings = scanSharedText(value);
+    if (
+      findings.length === 0 ||
+      findings.some((finding) => finding.kind !== 'absolute_path')
+    ) {
+      return value;
+    }
+    const text = redactSharedText(value).text;
+    // Check the path-only view before omitting an entire command, so a phone
+    // number or credential in another argument keeps its original rejection.
+    if (
+      enhancedRuleIds !== undefined &&
+      containsEnhancedSensitiveText(text, enhancedRuleIds)
+    ) {
+      return value;
+    }
+    const target = `${section.targetJsonPointer}${pointer}`;
+    redactions.push(`${target}:absolute_path`);
+    if (command) {
+      // A masked argv is not a reproducible command; do not invite execution.
+      redactions.push(`${target}:command_omitted_not_executable`);
+      return '[REDACTED:non_executable_command]';
+    }
+    return text;
+  };
+  let value: Record<string, unknown>;
+  if (section.targetJsonPointer === '/governance/requirements') {
+    value = { ...original };
+    if (Array.isArray(original.technicalDecisions)) {
+      value.technicalDecisions = original.technicalDecisions.map(
+        (decision, index) =>
+          isRecord(decision) && typeof decision.statement === 'string'
+            ? {
+                ...decision,
+                statement: projectText(
+                  decision.statement,
+                  `/technicalDecisions/${index}/statement`,
+                ),
+              }
+            : decision,
+      );
+    }
+    if (
+      isRecord(original.functionalScope) &&
+      Array.isArray(original.functionalScope.outOfScope)
+    ) {
+      // These are semantic exclusions, not executable path boundaries. Keep
+      // implementationScope and inScope under their original strict checks.
+      value.functionalScope = {
+        ...original.functionalScope,
+        outOfScope: original.functionalScope.outOfScope.map((entry, index) =>
+          typeof entry === 'string'
+            ? projectText(entry, `/functionalScope/outOfScope/${index}`)
+            : entry,
+        ),
+      };
+    }
+  } else if (
+    section.targetJsonPointer === '/governance/review' &&
+    isRecord(original.delivery) &&
+    typeof original.delivery.correctness === 'string'
+  ) {
+    value = {
+      ...original,
+      delivery: {
+        ...original.delivery,
+        correctness: projectText(
+          original.delivery.correctness,
+          '/delivery/correctness',
+        ),
+      },
+    };
+  } else if (
+    section.targetJsonPointer === '/governance/verification' &&
+    Array.isArray(original.checks)
+  ) {
+    value = {
+      ...original,
+      checks: original.checks.map((check, index) =>
+        isRecord(check) &&
+        isRecord(check.automated) &&
+        typeof check.automated.command === 'string'
+          ? {
+              ...check,
+              automated: {
+                ...check.automated,
+                command: projectText(
+                  check.automated.command,
+                  `/checks/${index}/automated/command`,
+                  true,
+                ),
+              },
+            }
+          : check,
+      ),
+    };
+  } else {
+    return section;
+  }
+  if (redactions.length === 0) return section;
+  return {
+    ...section,
+    value,
+    provenance: section.provenance.map((entry) => ({
+      ...entry,
+      redactions: [...new Set([...entry.redactions, ...redactions])].sort(),
+    })),
+  };
 }
 
 function assertBuildInput(input: ContextPackBuildInput): void {

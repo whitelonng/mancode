@@ -288,8 +288,11 @@ export async function inspectOperationProjectionState(
   });
   for (const intent of intents) {
     const key = projectionStateKey(intent.target.kind);
+    // A completed session intent acknowledges a one-time pointer update, not
+    // an invariant that later session switches or task completion must retain.
     const availability =
-      intent.state === 'superseded'
+      intent.state === 'superseded' ||
+      (intent.state === 'completed' && intent.target.kind === 'session_pointer')
         ? 'not_applicable'
         : await inspectProjection(projectRoot, intent.target);
     state[key] = mergeProjectionAvailability(state[key], availability);
@@ -679,14 +682,38 @@ async function inspectSessionProjection(
   if (task.metadata.revision < target.taskRevision) return 'conflict';
   const clearsPointer = workflowRequiresClearedSession(task.metadata);
   if (target.action === 'clear') {
-    if (!clearsPointer) return 'conflict';
+    if (!clearsPointer) {
+      return task.metadata.revision > target.taskRevision
+        ? 'not_applicable'
+        : 'conflict';
+    }
     if (session.activeTaskRef === null) return 'present';
+    if (
+      task.metadata.status === 'planned' &&
+      task.metadata.governance.planDecision === 'plan_only' &&
+      sameTaskRef(session.activeTaskRef, target.taskRef) &&
+      session.lastSeenRevision !== null &&
+      session.lastSeenRevision >= target.taskRevision
+    ) {
+      // An explicit rebind at or after the clear's authority must survive replay.
+      return 'not_applicable';
+    }
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
       : 'not_applicable';
   }
   if (clearsPointer) {
     if (session.activeTaskRef === null) return 'not_applicable';
+    if (
+      task.metadata.status === 'planned' &&
+      task.metadata.governance.planDecision === 'plan_only' &&
+      sameTaskRef(session.activeTaskRef, target.taskRef) &&
+      session.lastSeenRevision !== null &&
+      session.lastSeenRevision >= task.metadata.revision
+    ) {
+      // A later explicit rebind supersedes an older resume intent as well.
+      return 'not_applicable';
+    }
     return sameTaskRef(session.activeTaskRef, target.taskRef)
       ? 'missing'
       : 'not_applicable';
@@ -728,6 +755,14 @@ async function applySessionProjection(
   ) {
     await clearSessionTaskPointer(projectRoot, target.sessionId, {
       expectedTaskRef: target.taskRef,
+      isStillApplicable: async () => {
+        const current = await readProjectionTask(projectRoot, target.taskRef);
+        return (
+          current !== null &&
+          workflowRequiresClearedSession(current.metadata) &&
+          (await inspectSessionProjection(projectRoot, target)) === 'missing'
+        );
+      },
       now,
     });
     return;

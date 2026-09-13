@@ -27,7 +27,10 @@ import { scanSharedText } from './privacy.js';
 import type { ReviewLedgerV1 } from './review-ledger.js';
 import type { StoredTaskSnapshot } from './store.js';
 import type { VerificationLedgerV1 } from './verification-ledger.js';
-import type { WorkflowMetadataV3 } from './workflow-metadata.js';
+import {
+  type WorkflowMetadataV3,
+  isActiveSoloHandoff,
+} from './workflow-metadata.js';
 
 const execFile = promisify(execFileCallback);
 export const MAN_DELIVERY_POLICY = 3;
@@ -56,8 +59,7 @@ export interface ManDeliveryFinalization {
 export function isManDelivery(metadata: WorkflowMetadataV3): boolean {
   return (
     metadata.workflowMode === 'man' &&
-    metadata.governance.policyVersions.planning === MAN_DELIVERY_POLICY &&
-    metadata.governance.planDecision !== 'solo_handoff'
+    metadata.governance.policyVersions.planning === MAN_DELIVERY_POLICY
   );
 }
 
@@ -320,7 +322,17 @@ function manDeliveryFinalization(
   pendingCommit: string[],
 ): ManDeliveryFinalization {
   const blockers: ManDeliveryFinalization['blockers'] = [];
-  if (task.metadata.governance.planDecision !== 'governed_execution')
+  if (
+    task.metadata.governance.planDecision !== 'governed_execution' &&
+    !isActiveSoloHandoff(task.metadata) &&
+    !(
+      task.metadata.governance.planDecision === 'solo_handoff' &&
+      task.metadata.status === 'completed' &&
+      task.metadata.soloExecution?.state === 'completed' &&
+      task.metadata.soloExecution.planVersion ===
+        task.metadata.governance.planVersion
+    )
+  )
     blockers.push({
       code: 'plan_execution_required',
       status: task.metadata.governance.planDecision ?? 'unconfirmed',
@@ -338,7 +350,13 @@ function manDeliveryFinalization(
       status: task.review.status === 'passed' ? 'stale' : task.review.status,
       nextAction:
         task.review.status === 'blocked'
-          ? 'Fix the recorded findings, verify the changed module, and submit the targeted review result.'
+          ? task.review.blockers.some((finding) => finding.status === 'open')
+            ? 'Fix the recorded findings, verify the changed module, and submit the targeted review result.'
+            : task.review.delivery?.coverage.some(
+                  (criterion) => criterion.status === 'missing',
+                )
+              ? 'Complete the missing accepted behavior within the approved scope, verify it, and update the module review.'
+              : 'Record the missing acceptance evidence when verification is available, then update the module review.'
           : 'Complete one module review for the current subject and apply its review ledger.',
     });
 
@@ -694,7 +712,8 @@ export async function syncManDeliveryRecord(
 ) {
   const bound = await readBoundManPlan(root, task);
   if (
-    task.metadata.governance.planDecision === 'governed_execution' &&
+    (task.metadata.governance.planDecision === 'governed_execution' ||
+      isActiveSoloHandoff(task.metadata)) &&
     !manScopeContains(task.metadata, bound.source.path)
   )
     assertManPlanInScope(task.metadata, bound.source.path);
@@ -762,7 +781,7 @@ export async function syncManDeliveryRecord(
       ? '已完成'
       : verified && task.review.status !== 'blocked'
         ? '待审核'
-        : task.metadata.currentStep >= 5
+        : task.metadata.currentStep >= 5 || isActiveSoloHandoff(task.metadata)
           ? '进行中'
           : '未完成';
   return syncManProgressPage(

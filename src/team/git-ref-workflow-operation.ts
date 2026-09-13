@@ -318,6 +318,7 @@ export async function completeGitRefTask(
         hasPendingRepairOperation: false,
         activeClaimCount: activeClaims.length,
         claimsWillReleaseOrTransfer: activeClaims.length > 0,
+        diagnosticOutcome: input.outcome,
       },
     );
     const timestamp = now.toISOString();

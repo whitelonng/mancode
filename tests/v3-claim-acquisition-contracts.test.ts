@@ -194,6 +194,64 @@ describe('V3 claim acquisition', () => {
       errors.mockRestore();
     }
   });
+
+  it('acquires an exact file without dropping disjoint excludes and still rejects duplicate or out-of-scope claims', async () => {
+    const { sessionId } = await bootstrap(root);
+    const workflow = await createV3Workflow({
+      projectRoot: root,
+      task: 'Claim the approved ticket handler without widening its scope.',
+      workflowMode: 'manteam',
+      sessionId,
+      client: 'vitest',
+      sharedPrivacyConfirmed: true,
+      implementationScope: {
+        include: ['src/app.mjs'],
+        exclude: [
+          'AGENTS.md',
+          'package.json',
+          'src/server.mjs',
+          'src/store.mjs',
+        ],
+        modules: [],
+      },
+      taskId: id(30),
+      operationId: id(31),
+      now: NOW,
+    });
+    const confirmed = await confirmManteamPlan({
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId,
+      requirements: workflow.requirements,
+      now: NOW,
+    });
+    const input = {
+      projectRoot: root,
+      taskRef: workflow.taskRef,
+      sessionId,
+      expectedTaskRevision: confirmed.taskRevision,
+      scope: { paths: ['src/app.mjs'], modules: [], apis: [], schemas: [] },
+      now: NOW,
+    };
+    const result = await acquireV3Claim({
+      ...input,
+      claimId: id(32),
+      operationId: id(33),
+    });
+    expect(result.claim.scope).toEqual(input.scope);
+    expect(result.operation.state).toBe('committed');
+    await expect(
+      acquireV3Claim({ ...input, claimId: id(34), operationId: id(35) }),
+    ).rejects.toThrow('MANCODE_SCOPE_CONFLICT');
+    await expect(
+      acquireV3Claim({
+        ...input,
+        scope: { ...input.scope, paths: ['src/store.mjs'] },
+        claimId: id(36),
+        operationId: id(37),
+      }),
+    ).rejects.toThrow('MANCODE_SCOPE_OUTSIDE_IMPLEMENTATION_SCOPE');
+  });
 });
 
 async function bootstrap(projectRoot: string): Promise<{ sessionId: Ulid }> {

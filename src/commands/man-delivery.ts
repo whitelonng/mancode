@@ -24,6 +24,7 @@ import {
   reviewLedgerDigest,
 } from '../context/review-ledger.js';
 import { applyV3ReviewLedger } from '../context/review-remediation.js';
+import { completedSoloAssignmentMetadata } from '../context/solo-handoff.js';
 import type { StoredTaskSnapshot } from '../context/store.js';
 import { parseTaskRef } from '../context/task-ref.js';
 import { assertKnownKeys, assertRecord } from '../context/validation.js';
@@ -33,6 +34,10 @@ import {
   verificationLedgerDigest,
 } from '../context/verification-ledger.js';
 import { recordV3Verification } from '../context/verification-record.js';
+import {
+  assertSoloHandoffSession,
+  isActiveSoloHandoff,
+} from '../context/workflow-metadata.js';
 import { openV3TaskOperation } from '../runtime/task-operation.js';
 import {
   printV3Error,
@@ -90,7 +95,16 @@ export async function manDeliveryCommand(
     if (action === 'check') {
       await assertManDeliveryReady(project.projectRoot, task);
       assertTaskCompletionGate(
-        { ...task, planDigest: task.plan?.digest ?? null },
+        {
+          ...task,
+          metadata: isActiveSoloHandoff(task.metadata)
+            ? completedSoloAssignmentMetadata(
+                task.metadata,
+                new Date().toISOString(),
+              )
+            : task.metadata,
+          planDigest: task.plan?.digest ?? null,
+        },
         {
           activeChildTaskRefs:
             await project.store.listActiveChildTaskRefs(taskRef),
@@ -119,6 +133,7 @@ export async function manDeliveryCommand(
     const actorId = context.session.actorId;
     try {
       task = context.task;
+      assertSoloHandoffSession(task.metadata, context.session);
       if (action === 'sync') {
         const progress = await syncManDeliveryRecord(project.projectRoot, task);
         const synced = await project.store.readTaskSnapshot(taskRef);
@@ -134,9 +149,10 @@ export async function manDeliveryCommand(
         });
       }
       if (
-        task.metadata.governance.planDecision !== 'governed_execution' ||
-        task.metadata.currentStep < 5 ||
-        task.metadata.status !== 'in_progress'
+        !isActiveSoloHandoff(task.metadata) &&
+        (task.metadata.governance.planDecision !== 'governed_execution' ||
+          task.metadata.currentStep < 5 ||
+          task.metadata.status !== 'in_progress')
       ) {
         throw new Error('MANCODE_MAN_DELIVERY_EXECUTION_REQUIRED');
       }

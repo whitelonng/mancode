@@ -48,6 +48,7 @@ export interface TaskAggregateInput {
 }
 
 export interface TaskCompletionContext {
+  diagnosticOutcome?: WorkflowMetadataV3['outcome'];
   activeChildTaskRefs: TaskRef[];
   hasPendingRepairOperation: boolean;
   activeClaimCount: number;
@@ -55,6 +56,61 @@ export interface TaskCompletionContext {
 }
 
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
+
+/** Diagnostic outcomes use their current acceptance evidence, not a Man plan. */
+function assertDiagnosticCompletionGate(
+  input: TaskAggregateInput,
+  context: TaskCompletionContext,
+): void {
+  const { metadata, requirements, review, verification } = input;
+  if (
+    metadata.governance.requirementsStatus !== 'ready' ||
+    requirements.status !== 'confirmed' ||
+    !requirementsAreReady(requirements)
+  ) {
+    throw new Error('task completion requires ready confirmed requirements');
+  }
+  assertVerificationLedgerRequirements(verification, requirements);
+  assertVerificationLedgerAgainstContext(verification, {
+    requirementsDigest: requirements.contentDigest,
+    planVersion: metadata.governance.planVersion,
+    remediationRound: review.remediationRound,
+  });
+  if (context.diagnosticOutcome === 'manual_test_required') {
+    if (verification.status !== 'manual_required') {
+      throw new Error(
+        'diagnostic completion requires current manual-required evidence',
+      );
+    }
+    // The ledger's manual_required status can otherwise mask failed or pending
+    // hybrid components. This terminal outcome records only an explicit handoff.
+    for (const check of verification.checks.filter((item) => item.required)) {
+      for (const evidence of [check.automated, check.manual]) {
+        if (evidence === null) continue;
+        if (
+          evidence.status !== 'passed' &&
+          !(evidence.status === 'manual_required' && evidence.summary?.trim())
+        ) {
+          throw new Error('diagnostic completion has unresolved verification');
+        }
+      }
+    }
+  } else {
+    if (
+      context.diagnosticOutcome !== 'fixed' &&
+      context.diagnosticOutcome !== 'verified' &&
+      context.diagnosticOutcome !== 'no_repro'
+    ) {
+      throw new Error('MANCODE_MANBA_OUTCOME_REQUIRED');
+    }
+    if (verification.status !== 'passed') {
+      throw new Error(
+        'task completion requires current required acceptance evidence',
+      );
+    }
+  }
+  assertTaskCompletionContext(metadata, context);
+}
 
 export function buildTaskAggregateManifest(
   input: TaskAggregateInput,
@@ -194,6 +250,10 @@ export function assertTaskCompletionGate(
   if (metadata.transitionState !== 'stable') {
     throw new Error('workflows with a pending operation cannot complete');
   }
+  if (metadata.workflowMode === 'manba') {
+    assertDiagnosticCompletionGate(input, context);
+    return;
+  }
   if (metadata.governance.planDecision === null) {
     throw new Error('task completion requires a plan decision');
   }
@@ -204,8 +264,7 @@ export function assertTaskCompletionGate(
     assertExecutableImplementationScope(metadata.implementationScope);
   }
   if (metadata.governance.planDecision === 'solo_handoff') {
-    assertSoloHandoffCompletionGate(input, context);
-    return;
+    assertSoloHandoffCompletionGate(input);
   }
   if (metadata.soloExecution?.state === 'active') {
     throw new Error(
@@ -243,16 +302,11 @@ export function assertTaskCompletionGate(
 }
 
 /**
- * A solo handoff preserves the legacy contract: a confirmed plan is handed to
- * one local session instead of traversing the governed review/verification
- * stages. It still requires ready requirements, a stable completed assignment,
- * a plan artifact, and the normal child/repair/claim context checks.
+ * A solo assignment changes the executor, not the inherited acceptance gates.
+ * Validate assignment authority before the common review/verification checks.
  */
-function assertSoloHandoffCompletionGate(
-  input: TaskAggregateInput,
-  context: TaskCompletionContext,
-): void {
-  const { metadata, requirements } = input;
+function assertSoloHandoffCompletionGate(input: TaskAggregateInput): void {
+  const { metadata } = input;
   if (
     metadata.workflowMode !== 'man' ||
     metadata.coordination !== 'single' ||
@@ -262,14 +316,6 @@ function assertSoloHandoffCompletionGate(
   ) {
     throw new Error('task completion solo handoff assignment is invalid');
   }
-  if (
-    metadata.governance.requirementsStatus !== 'ready' ||
-    requirements.status !== 'confirmed' ||
-    !requirementsAreReady(requirements)
-  ) {
-    throw new Error('task completion requires ready confirmed requirements');
-  }
-  assertTaskCompletionContext(metadata, context);
 }
 
 function assertRequirementsCache(

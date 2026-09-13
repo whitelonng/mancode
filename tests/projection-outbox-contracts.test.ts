@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   enqueueAuditEventProjection,
+  inspectOperationProjectionState,
   listProjectionIntents,
   reconcileProjectionIntents,
 } from '../src/runtime/projection-outbox.js';
@@ -12,7 +13,11 @@ import {
   createSharedActorProfile,
   publishSharedActorProfile,
 } from '../src/team/actor.js';
-import { type TeamEventV1, listTeamEvents } from '../src/team/events.js';
+import {
+  type TeamEventV1,
+  listTeamEvents,
+  teamEventDirectory,
+} from '../src/team/events.js';
 
 const EVENT_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7H';
 const OTHER_EVENT_ID = '01JZ4B6W5Z0A1B2C3D4E5F6G7J';
@@ -86,6 +91,25 @@ describe('durable projection outbox contract', () => {
         NOW,
       ),
     ).rejects.toThrow('MANCODE_PROJECTION_INTENT_CONFLICT');
+  });
+
+  it('still detects a missing durable audit event after its intent completed', async () => {
+    const root = await temporaryRoot();
+    const actor = await createLocalActor(root, {
+      actorId: ACTOR_ID,
+      displayName: 'Projection User',
+      now: NOW,
+    });
+    await publishSharedActorProfile(root, createSharedActorProfile(actor, NOW));
+    await enqueueAuditEventProjection(root, actorJoinedEvent(), NOW);
+    await reconcileProjectionIntents(root, OPERATION_ID, NOW);
+    expect(
+      await listProjectionIntents(root, { includeTerminal: true }),
+    ).toMatchObject([{ state: 'completed' }]);
+    await rm(teamEventDirectory(root), { recursive: true });
+    expect(
+      await inspectOperationProjectionState(root, OPERATION_ID),
+    ).toMatchObject({ auditEvent: 'missing' });
   });
 });
 

@@ -47,6 +47,10 @@ import {
 } from './verification-ledger.js';
 import type { VerificationLedgerV1 } from './verification-ledger.js';
 import {
+  assertSoloHandoffSession,
+  isActiveSoloHandoff,
+} from './workflow-metadata.js';
+import {
   type WorkflowMetadataV3,
   assertWorkflowMetadataTransition,
   parseWorkflowMetadata,
@@ -97,6 +101,7 @@ export async function applyV3ReviewLedger(
   });
   let journal: OperationJournalV1 | null = null;
   try {
+    assertSoloHandoffSession(context.task.metadata, context.session);
     const subject = isManDelivery(context.task.metadata)
       ? await captureManSubject(input.projectRoot, context.task)
       : null;
@@ -289,6 +294,7 @@ function assertReviewEligible(
   metadata: WorkflowMetadataV3,
   hasPlan: boolean,
 ): void {
+  if (isActiveSoloHandoff(metadata) && hasPlan) return;
   if (metadata.workflowMode !== 'man' && metadata.workflowMode !== 'manteam') {
     throw new Error('MANCODE_REVIEW_WORKFLOW_MODE_INVALID');
   }

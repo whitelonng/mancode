@@ -45,7 +45,9 @@ describe('published 0.3.18 CLI compatibility boundary', () => {
   });
 
   it('rejects a V2 authority mutation before changing any authority bytes', async () => {
-    await expectRootBinUnregistered();
+    // A workspace may already expose its current CLI; the legacy fixture must not replace it.
+    const rootBin = path.join(process.cwd(), 'node_modules', '.bin');
+    const rootBinBefore = await snapshotTree(rootBin);
     const fixture = await readFile(LEGACY_FIXTURE);
     expect(
       `sha512-${createHash('sha512').update(fixture).digest('base64')}`,
@@ -150,6 +152,7 @@ describe('published 0.3.18 CLI compatibility boundary', () => {
     expect(await snapshotTree(path.join(root, '.mancode'))).toEqual(
       authorityBefore,
     );
+    expect(await snapshotTree(rootBin)).toEqual(rootBinBefore);
   });
 });
 
@@ -188,14 +191,6 @@ function runLegacyCli(
       },
     );
   });
-}
-
-async function expectRootBinUnregistered(): Promise<void> {
-  for (const name of ['mancode', 'mancode.cmd', 'mancode.ps1']) {
-    await expect(
-      lstat(path.join(process.cwd(), 'node_modules', '.bin', name)),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-  }
 }
 
 async function extractLegacyPackage(

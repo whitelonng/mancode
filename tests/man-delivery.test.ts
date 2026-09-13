@@ -20,6 +20,7 @@ import { finalizeV3Requirements } from '../src/context/requirements-finalize.js'
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
 import { reviewLedgerDigest } from '../src/context/review-ledger.js';
 import { applyV3ReviewLedger } from '../src/context/review-remediation.js';
+import { startV3SoloHandoff } from '../src/context/solo-handoff.js';
 import { V3ContextStore } from '../src/context/store.js';
 import type { TaskRef } from '../src/context/task-ref.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
@@ -120,7 +121,7 @@ describe('opted-in man module delivery through the public workflow command', () 
       ).code,
     ).toBe(0);
   }
-  beforeEach(async () => {
+  async function setup(governed = true) {
     root = await mkdtemp(path.join(tmpdir(), 'mancode-module-'));
     await git(['init', '-q']);
     await git(['config', 'user.name', 'Fixture']);
@@ -204,13 +205,137 @@ describe('opted-in man module delivery through the public workflow command', () 
         exclude: [],
         modules: [],
       },
-      planDecision: 'governed_execution',
+      ...(governed ? { planDecision: 'governed_execution' as const } : {}),
     });
     await mkdir(path.join(root, '.mancode/local/drafts'), { recursive: true });
-  });
+  }
+  beforeEach(() => setup());
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
     vi.restoreAllMocks();
+  });
+
+  it('governed solo retains policy-3 delivery evidence, rejects stale and failed evidence, and completes the same assigned task', async () => {
+    await rm(root, { recursive: true, force: true });
+    await setup(false);
+    const approved = await snapshot();
+    await startV3SoloHandoff({
+      projectRoot: root,
+      taskRef,
+      sessionId,
+      expectedTaskRevision: approved.metadata.revision,
+    });
+    const assigned = await snapshot();
+    const handoff = async () => {
+      const output = logs();
+      try {
+        const code = await workflow(
+          root,
+          'handoff',
+          [`local:${taskRef.taskId}`],
+          {
+            complete: true,
+            json: true,
+            session: sessionId,
+            client: 'vitest',
+            expectedRevision: String((await snapshot()).metadata.revision),
+          },
+        );
+        return {
+          code,
+          output: output.mock.calls.map((call) => String(call[0])).join('\n'),
+        };
+      } finally {
+        output.mockRestore();
+      }
+    };
+    expect((await command('check')).output).toContain(
+      'VERIFICATION_INCOMPLETE',
+    );
+    expect((await handoff()).code).not.toBe(0);
+    if (assigned.metadata.ownerActorId === null)
+      throw new Error('Missing owner');
+    const wrong = await createSession(root, {
+      actorId: assigned.metadata.ownerActorId,
+      client: 'vitest',
+      identitySource: 'explicit',
+    });
+    const originalSession = sessionId;
+    sessionId = wrong.sessionId;
+    expect((await command('sync')).output).toContain('SOLO_HANDOFF_NOT_ACTIVE');
+    expect((await verify()).output).toContain('SOLO_HANDOFF_NOT_ACTIVE');
+    expect((await review()).output).toContain('SOLO_HANDOFF_NOT_ACTIVE');
+    expect((await handoff()).output).toContain('SOLO_HANDOFF_NOT_ACTIVE');
+    sessionId = originalSession;
+    await command(
+      'verify',
+      {
+        surface: 'component',
+        argv: [process.execPath, '-e', 'process.exit(1)'],
+      },
+      'AC-1',
+    );
+    expect((await snapshot()).verification.status).toBe('failed');
+    expect((await handoff()).code).not.toBe(0);
+    await finishEvidence();
+    expect((await handoff()).code).not.toBe(0);
+    const reviewed = await review();
+    expect(reviewed.code, reviewed.output).toBe(0);
+    await writeFile(
+      path.join(root, 'app.cjs'),
+      'exports.run=()=>2; // revised subject',
+    );
+    expect((await command('check')).output).toContain(
+      'VERIFICATION_INCOMPLETE',
+    );
+    expect((await handoff()).code).not.toBe(0);
+    await finishEvidence();
+    expect((await review()).code).toBe(0);
+    expect((await command('sync')).code).toBe(0);
+    expect((await handoff()).code).not.toBe(0);
+    await git(['add', '.']);
+    await git([
+      'commit',
+      '-qm',
+      'Complete assigned export with current evidence',
+    ]);
+    const checked = await command('check');
+    expect(checked.code, checked.output).toBe(0);
+    const output = logs();
+    try {
+      expect(
+        await workflow(root, 'complete', [`local:${taskRef.taskId}`], {
+          json: true,
+          session: sessionId,
+          client: 'vitest',
+          expectedRevision: String((await snapshot()).metadata.revision),
+        }),
+      ).not.toBe(0);
+    } finally {
+      output.mockRestore();
+    }
+    const done = await handoff();
+    expect(done.code, done.output).toBe(0);
+    const completed = await snapshot();
+    expect(completed.metadata.status).toBe('completed');
+    expect(completed.metadata.governance.planDecision).toBe('solo_handoff');
+    expect(completed.metadata.soloExecution).toMatchObject({
+      state: 'completed',
+      assignedSessionId: originalSession,
+    });
+    expect(completed.metadata.governance.policyVersions).toEqual(
+      assigned.metadata.governance.policyVersions,
+    );
+    expect(completed.metadata.implementationScope).toEqual(
+      approved.metadata.implementationScope,
+    );
+    expect(completed.requirements).toEqual(approved.requirements);
+    expect(completed.plan).toEqual(approved.plan);
+    expect(completed.review.status).toBe('passed');
+    expect(completed.verification.status).toBe('passed');
+    expect(
+      JSON.parse((await command('inspect')).output).finalization.status,
+    ).toBe('ready');
   });
 
   it('requires a module review, accepts zero findings, preserves tests, commits then completes without an upstream', async () => {
@@ -354,6 +479,15 @@ describe('opted-in man module delivery through the public workflow command', () 
       ).code,
     ).toBe(0);
     expect((await snapshot()).review.status).toBe('blocked');
+    expect(
+      JSON.parse((await command('inspect')).output).finalization.blockers,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'review_incomplete',
+        nextAction:
+          'Complete the missing accepted behavior within the approved scope, verify it, and update the module review.',
+      }),
+    );
     expect((await snapshot()).metadata.status).not.toBe('blocked');
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '进行中',
@@ -375,6 +509,37 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect((await review()).code).toBe(0);
   });
 
+  it('keeps missing acceptance evidence unverified without requesting code repairs or repeating valid checks', async () => {
+    expect((await verify('AC-1,AC-2')).code).toBe(0);
+    const evidence = (await snapshot()).verification.checks;
+    const result = await review({
+      coverage: ['AC-1', 'AC-2', 'AC-3'].map((acceptanceId) => ({
+        acceptanceId,
+        status: acceptanceId === 'AC-3' ? 'unverified' : 'met',
+        evidence:
+          acceptanceId === 'AC-3'
+            ? 'Required observation is unavailable; no implementation defect was found.'
+            : 'Existing passing component evidence remains applicable.',
+      })),
+    });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.output).finalization.blockers).toContainEqual(
+      expect.objectContaining({
+        code: 'review_incomplete',
+        status: 'blocked',
+        nextAction:
+          'Record the missing acceptance evidence when verification is available, then update the module review.',
+      }),
+    );
+    const current = await snapshot();
+    expect(current.review.blockers).toEqual([]);
+    expect(current.verification.checks).toEqual(evidence);
+    expect((await command('check')).output).toContain(
+      'VERIFICATION_INCOMPLETE',
+    );
+    expect(current.metadata.status).not.toBe('completed');
+  });
+
   it('records required repairs and blocks both uncommitted and committed scope expansion', async () => {
     await finishEvidence();
     expect(
@@ -392,6 +557,15 @@ describe('opted-in man module delivery through the public workflow command', () 
       ).code,
     ).toBe(0);
     const blocked = await snapshot();
+    expect(
+      JSON.parse((await command('inspect')).output).finalization.blockers,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'review_incomplete',
+        nextAction:
+          'Fix the recorded findings, verify the changed module, and submit the targeted review result.',
+      }),
+    );
     const erased = { ...blocked.review, blockers: [] };
     await expect(
       applyV3ReviewLedger({

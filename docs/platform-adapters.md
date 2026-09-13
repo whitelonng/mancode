@@ -99,7 +99,8 @@ dry-run 是只读报告：包含源基线、任务、平台清单及其摘要，
 每个平台都必须：
 
 - 能发现原来的 `man`、`manba`、`manteam`、`manps` 和 `mansolo` 入口。
-- 在开始任务前解析 Continuity manifest、session、TaskRef 和 Context Pack。
+- 读取 compact status；受治理任务进一步解析 session、TaskRef 和 Context Pack，普通 Solo 不创建治理权威。
+- 已有 TaskRef 必须加载原模式入口和任务 policy 后接续；`plan_only`、完整治理和 Solo handoff 的边界不能因会话切换丢失。
 - 不保存易过期的 task/session 状态副本。
 - 未证明宿主 session 传播时要求显式 session。
 - 保留用户自写配置，并支持重复安装和安全卸载。
@@ -110,11 +111,15 @@ dry-run 是只读报告：包含源基线、任务、平台清单及其摘要，
 显示 `stale`，必须继续通过 `adapter upgrade --dry-run` 和显式确认发布；它不构成新的
 adapter schema，因此不单独提升 renderer schema version。
 
+## 常驻规则与模式规则
+
+`AGENTS.md` / `CLAUDE.md` 的常驻 bootstrap 负责发现入口、区分普通 Solo 与已有治理任务，以及共同的授权和真实报告边界。限定于新 `/man` 模块交付策略的文档交接和工程执行规则放在完整 `man` 入口中；恢复旧任务时仍按其原 policy 适用。项目计划目录优先沿用明确约定，默认 `doc/`。普通 Solo 无需正式计划或审核账本，Solo handoff 则保留原任务承诺。
+
+`man` 入口保留持久需求、发现编号、计划确认、文件范围、阶段接续、相关集成验证和审核修复闭环。模型可在已确认边界内选择实现方法，规则整理不改变完成门禁。状态只保存在既有 Continuity 权威中，不写入 bootstrap 或第二套提示词状态。
+
+新 man 入口显式使用 `workflow create man --delivery`，引导一次模块总审、真实验证、文档回写和提交/发布分离。受管 `mansolo` 交接继承任务原 policy 下的正式审查和验收门禁；普通 Solo 仍不创建治理状态。`manba` 使用诊断需求、当前验证证据和 typed outcome 完成，不要求 Man 计划或模块总审。详细数据格式与限制见 [新 man 模块交付](./workflows.md#新-man一次模块审核与文档交付)。仅更新源码不会改写已安装文件；现有项目仍走上文的 adapter upgrade 预览和确认流程。
+
 ## Legacy hooks
-
-初始化生成的 `AGENTS.md` / `CLAUDE.md` 现在包含限定于新 `/man` 模块交付策略的文档交接和执行效率规则。项目计划目录优先沿用明确约定，默认 `doc/`；不强制其他模式建计划、审核或提交。规则不保存任务状态，也不授权修改未批准的业务代码。
-
-新 man 入口显式使用 `workflow create man --delivery`，引导一次模块总审、真实验证、文档回写和提交/发布分离。`manba`、`manteam`、`manps`、`mansolo` 的入口流程不变。详细数据格式与限制见 [新 man 模块交付](./workflows.md#新-man一次模块审核与文档交付)。仅更新源码不会改写已安装文件；现有项目仍走上文的 adapter upgrade 预览和确认流程。
 
 只有 `mancode init --legacy` 安装读取 `.mancode/state.json` 的旧 Claude Code hooks。Continuity adapter 不应创建、读取或刷新 legacy authority。
 

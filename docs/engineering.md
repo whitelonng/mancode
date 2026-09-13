@@ -57,8 +57,22 @@ metadata、requirements、plan、ledger、claim 和 handoff；只有受支持的
 才能归档旧权威、释放 claim 并返回需求澄清步骤。
 
 默认 Solo 不主动运行这套深入发现；普通小任务仍保持轻量。Solo 接手已有 `/man`
-计划时必须继承其 requirements、plan 和 `implementationScope`，不能重新规划或扩权。
+计划时必须继承其 requirements、plan、`implementationScope`、必需验收和正式 review/verification 门禁，不能重新规划、扩权或自行降低标准。原 assigned session 登记证据并通过适用的交付检查后，才可完成 handoff；已完成的历史记录不追溯重写。
 这些状态写入既有 ledger、plan revision 和 workflow metadata，不建立第二套提示词 authority。
+
+已经明确且仍适用的用户授权可以复用。只有事实冲突、会改变决策的未知项或新增的未授权实质影响才需要聚焦确认；不能只因出现 API、认证等关键词重复询问。既有计划确认、范围变更和 reframe 仍是受治理任务的权威边界。
+
+## 长任务质量与接续
+
+`man` 的精简以规则归属和去重为主，不减少工程阶段。实质阶段结束、等待或交接时，保存已知决定、实际进度、剩余工作和有效证据；恢复时读取原模式入口、TaskRef 的 Context Pack、批准计划及当前记录。`plan_only` 不授权实施，普通 Solo 的豁免也不覆盖原治理任务。
+
+local、single 的 man 可在明确获准实施后，通过原 `plan confirm` 将 Step 4 的
+`plan_only` 续接为 `governed_execution`；必须保留原批准计划、版本和有效 scope，
+需求仍就绪，session actor 与 owner 一致，状态为 planned 或合法的 in_progress。
+已有阻塞先按原协议解除；resume 和 lifecycle 本身不授予实施权。续接沿用原 TaskRef、
+账本和完成门禁，旧会话清理投影不得清除已经恢复的执行会话。
+
+验证应覆盖批准的用户行为、受影响调用链、必要的权限/负向/兼容路径与跨层集成；局部测试不能替代项目级验收。总审应读取批准目标、从模块 baseHead 起的完整 diff、入口调用链及验证证据；自审须如实标明。具体问题使用稳定 finding ID，修复后登记解决并运行相关复验；“一次总审”不排除有新缺陷依据的必要复核。源码、依赖或相关环境变化后重新核对证据适用性，缺少能力时保留未验证状态。
 
 ## 基于已接受状态的交付叙事
 

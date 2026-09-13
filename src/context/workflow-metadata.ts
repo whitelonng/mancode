@@ -966,3 +966,29 @@ function parseTimestamp(value: unknown, label: string): string {
 function parseTimestampOrNull(value: unknown, label: string): string | null {
   return value === null ? null : parseTimestamp(value, label);
 }
+
+/** A governed assignment keeps its original Man plan and stage authority. */
+export function isActiveSoloHandoff(metadata: WorkflowMetadataV3): boolean {
+  return (
+    metadata.workflowMode === 'man' &&
+    metadata.coordination === 'single' &&
+    metadata.status === 'planned' &&
+    metadata.governance.planDecision === 'solo_handoff' &&
+    metadata.soloExecution?.state === 'active' &&
+    metadata.soloExecution.planVersion === metadata.governance.planVersion
+  );
+}
+
+export function assertSoloHandoffSession(
+  metadata: WorkflowMetadataV3,
+  session: { sessionId: Ulid; actorId: Ulid },
+): void {
+  if (metadata.governance.planDecision !== 'solo_handoff') return;
+  if (
+    !isActiveSoloHandoff(metadata) ||
+    metadata.soloExecution?.assignedSessionId !== session.sessionId ||
+    metadata.ownerActorId !== session.actorId
+  ) {
+    throw new Error('MANCODE_SOLO_HANDOFF_NOT_ACTIVE');
+  }
+}

@@ -84,6 +84,41 @@ describe('claim validity and conflict contract', () => {
       }),
     ).toMatchObject({ level: 'warning', acquisition: 'confirm_or_narrow' });
   });
+
+  it.each([
+    ['src/app.mjs', 'src/store.mjs', 'none', 'allow'],
+    ['package.json', 'AGENTS.md', 'none', 'allow'],
+    ['src/app.mjs', 'src/app.mjs', 'blocker', 'reject'],
+    ['package.json', 'package.json', 'blocker', 'reject'],
+    ['src/app.mjs', 'src/*.mjs', 'warning', 'confirm_or_narrow'],
+    ['src/app.mjs', 'src/*.ts', 'none', 'allow'],
+    ['src/*.mjs', 'src/app.mjs', 'warning', 'confirm_or_narrow'],
+    ['src/*.ts', 'src/app.mjs', 'none', 'allow'],
+    ['src/**', 'src/auth/**', 'warning', 'confirm_or_narrow'],
+    ['src/**', 'src-private/**', 'none', 'allow'],
+  ])(
+    'assesses file claims %s against %s as %s',
+    (candidate, active, level, acquisition) => {
+      const existingScope = {
+        paths: [active],
+        modules: [],
+        apis: [],
+        schemas: [],
+      };
+      const existing = parseClaim({
+        ...claim(),
+        scope: existingScope,
+        scopeDigest: digestCanonicalJson(existingScope),
+      });
+      expect(
+        assessClaimConflicts(
+          { ...existingScope, paths: [candidate] },
+          [existing],
+          { transportFreshness: 'fresh', claimAcquisition: 'enforced' },
+        ),
+      ).toMatchObject({ level, acquisition });
+    },
+  );
 });
 
 function validationContext(

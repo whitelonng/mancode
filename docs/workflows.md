@@ -1,6 +1,6 @@
 # 工作流与团队协作
 
-mancode 不把“当前模式”保存成全局开关。平台入口创建或恢复显式 session 与 TaskRef，再读取 Context Pack。
+mancode 不把“当前模式”保存成全局开关。受治理的模式入口创建或恢复显式 session 与 TaskRef，再读取 Context Pack；普通 Solo 不创建这些治理状态。
 
 ## 模式
 
@@ -24,8 +24,10 @@ mancode 不把“当前模式”保存成全局开关。平台入口创建或恢
 | --- | --- |
 | 目标与需求清晰、与项目证据一致、风险低 | 默认 Solo 直接执行最窄改动，不创建 session 或 TaskRef，不做形式化追问 |
 | 目标清晰、需求有缺口 | 先把未知项分成 blocking、recommendable、defaultable；只为会改变决策的 blocking 项停下提问 |
-| 表述明确但与项目证据冲突，或涉及认证、支付、敏感数据、删除、迁移、公开 API、并发、基础设施等高风险边界 | 展示证据和影响，推荐更安全路径，取得聚焦确认后再继续；“明确”不等于“正确或安全” |
+| 请求与项目证据冲突，或出现尚未获授权的认证、支付、敏感数据、删除、迁移、公开 API、并发、基础设施等实质影响 | 展示具体证据和影响，只暂停受影响的动作，取得聚焦确认后继续；已有且仍适用的明确授权无需重复询问 |
 | 用户明确请求计划、架构、迁移设计或正式验收 | 可直接进入 `/man` 规划路径；普通实现中途遇到这类决策时只推荐 `/man`，不得静默切换权威 |
+
+已确认的需求、计划、文件范围和有效用户决定持续适用。普通 Solo 中明确授权且无事实冲突的局部 API 修复，可以直接实施；不能只因命中风险关键词再次要求确认。新范围、行为或验收变化仍须遵循原有 plan confirmation、scope change 或 reframe 协议。Continuity 权威状态只通过公共 CLI 修改，这不限制代码和文档使用正常编辑工具。
 
 受治理任务在等待 blocking 回答前，必须把已知事实、部分决定和开放问题写入 requirements draft：
 
@@ -48,11 +50,17 @@ draft 的 `blockingUnknowns` 必须列出开放决定；scope、coverage、techn
 8. 仅在 full 深度执行安全与边界审查。
 9. 必要问题修复、复验、交付记录和完成。新模块交付策略按下节收敛复核，不叠加审核流水线；旧任务仍遵循原策略。
 
+`man` 面向长任务和项目交付。计划须覆盖实施阶段、依赖和相关集成验收；每个局部模块通过测试不等于项目验收通过。实质阶段结束、等待或交接时，通过既有 draft、checkpoint 和交付记录保存实际进度、未决事项与证据，避免只留在聊天里。
+
+跨会话恢复已有 TaskRef 时，先读取其 Context Pack、原模式入口、批准计划和当前记录，按任务原有 policy 继续缺失环节。`plan_only` 仍止于规划；`governed_execution` 在批准范围内连续执行，无需逐阶段重复请示。普通 Solo 的轻量规则不能覆盖 `man`，受支持的 Solo handoff 也必须继承原 requirements、plan、implementationScope、必需验收和完成协议。工具暂时不可用时保留未验证状态，不能静默切换模式或降低标准。
+
+受管 `solo_handoff` 继承正式 review/verification ledger 门禁。使用原 assigned session 登记当前需求和计划对应的证据与审查；缺失、失败或 stale 的记录不能完成交接。planning policy 3 继续使用 `workflow delivery` 的 verify/confirm、review、sync 和 check，保留文档回写、范围与任务提交检查，通过后执行 `workflow handoff <TaskRef> --complete`。旧 policy 使用原 verification/review apply 协议，不自动升级策略。普通无 TaskRef 的 Solo 不受这些要求影响，已完成的历史交接记录不被重写。
+
 需求未 ready、计划未确认、执行任务缺少非空 implementation scope、验证失败、审查 blocker 未清零、存在活动子任务或未完成 repair 时，任务不能完成。升级前已进入执行阶段的本地 Man 任务可在用户确认完整边界后，用内容不变的当前 plan 和 `--scope-file` 执行一次兼容 plan revision；它只补绑 scope，并使旧 review/verification 失效。
 
 ### 新 `/man`：一次模块审核与文档交付
 
-新入口创建任务时传 `--delivery`，显式选用 planning policy 3。省略该选项仍沿用项目默认策略。只有 `man` 可启用；旧任务不能静默升级或降级，其他模式及 Solo handoff 不受影响。更新运行时后，还需按 adapter upgrade 协议更新宿主入口，不能只手改 skill。
+新入口创建任务时传 `--delivery`，显式选用 planning policy 3。省略该选项仍沿用项目默认策略。只有 `man` 可启用；旧任务不能静默升级或降级，其他模式不因此升级。该任务后续选择 Solo handoff 时仍继承相同交付门禁。更新运行时后，还需按 adapter upgrade 协议更新宿主入口，不能只手改 skill。
 
 policy 3 的每个必需验收项还要按证据槽位声明精确的期望观察面。例如自动化真实 HTTP 验收使用 `{"id":"AC-1","description":"真实 HTTP 返回约定结果","required":true,"method":"automated","verificationSurfaces":{"automated":"real_http"}}`；manual 使用 `manual`，hybrid 同时声明 `automated` 和 `manual`。历史 requirements 和非 delivery 任务仍可读取缺少该字段的记录。
 
@@ -149,6 +157,13 @@ taskId 来自基线中的显式 progress-task 标记，未提供时为完整 Tas
 
 ## 状态与 revision
 
+`manba` 使用诊断完成协议：先 finalize 诊断需求，实际执行相关检查，通过
+`workflow verify <TaskRef> apply --file <verification-ledger.json>` 登记当前证据，
+再调用 `workflow complete <TaskRef> --outcome <outcome>`，各写命令均携带当前 revision、
+session 和 client。它不要求伪造 Man 的 plan decision 或模块总审。`fixed`、`verified`
+和 `no_repro` 要求必需验证通过；`manual_test_required` 只表示已记录仍待人工验证的事项，
+不能隐藏失败、缺失或过期证据。子诊断的 outcome 不替代父任务验收。
+
 工作流状态为 `in_progress`、`planned`、`blocked`、`completed` 或 `abandoned`。终态不可恢复；`blocked` 只能在阻塞条件被显式处理后回到 `in_progress`。
 
 每个写命令都需要当前 `expected-revision`。这是一条 compare-and-swap 约束，不是可选提示。revision、requirements digest 或 plan version 变化后，旧 review 和 verification 可能变为 `stale`。
@@ -175,6 +190,14 @@ repo-relative 文件边界，`exclude` 优先，`modules` 不单独授权写文�
 获取最新 revision，再用于下一次 `--expected-revision`。没有明确边界时不能选择
 `governed_execution` 或 Solo handoff；只保留计划时可以暂不提供边界并使用
 `--plan-decision plan_only`。不要手工编辑 metadata 或 ledger。
+
+后续明确批准实施时，local、single 的 man 任务可在同一 TaskRef 上继续：先恢复到由任务
+owner 持有的 active session，再使用上述 `plan confirm --plan-decision governed_execution`
+命令及当前 revision。该路径仅接受 Step 4 的 `plan_only`，状态须为 planned 或合法的
+in_progress；需求仍就绪，已批准计划、版本和有效实施范围均保持不变。已有 blocker
+须先按原生命周期协议解除；缺少范围、改变计划/需求或 scope 时不能借续接顺带放行。
+`context resume` 或 lifecycle 更新本身不授予实施权，续接不清空审核/验证记录，也不降低
+原完成门禁。
 
 ## Policy 2 与需求重新对齐
 
@@ -226,6 +249,12 @@ mancode operation repair <REFRAME_OPERATION_ULID> \
 session 是 checkout-local 的调用身份，不决定任务是否完成。没有真实宿主传播证据时，mutating command 必须显式传 `--session`。
 
 `mancode context show` 按 `bootstrap`、`task` 或 `full` 级别生成 Context Pack。它只返回与当前 revision 和 digest 一致的内容；发现未完成 operation 时返回 repair envelope。
+
+Context Pack 是派生视图。治理说明中的受支持本机路径可仅在输出副本脱敏，并在
+`provenance.redactions` 标记具体字段；原账本及来源摘要不变。被标记为
+`[REDACTED:non_executable_command]` 的验证命令不能执行或当作完整命令回写账本，
+应从当前项目核对实际可运行的检查。视图的 `packDigest` 对应实际输出，不能用它替代
+原 authority digest；其他敏感内容与显式隐私排除仍按原规则处理。
 
 ## 团队协作
 
