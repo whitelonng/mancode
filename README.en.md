@@ -25,7 +25,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.5-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.5" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.6-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -104,9 +104,9 @@ already use.
 - **Align requirements before planning**: `/man` investigates the project,
   clarifies decisions that would change the solution, recommends viable
   options, and produces a durable plan without automatically starting full execution.
-- **Choose the delivery depth**: after plan approval, keep the plan, hand it to
-  default `solo` for lightweight implementation, or continue the full `/man`
-  validation and bounded risk-review workflow.
+- **Choose the executor**: after plan approval, keep the plan, hand implementation
+  to one Solo session, or continue full `/man` execution. A governed Solo handoff
+  retains the original plan, scope, review, and acceptance gates.
 - **Bind module delivery to a document**: opt into `--delivery` for a new `/man`
   task and connect one Markdown plan to implementation scope, acceptance
   criteria, verification evidence, review, and completion.
@@ -178,32 +178,52 @@ mancode is useful for:
 - UI codebases with existing design conventions (when a UI is present)
 - Teams that want local workflow memory and a CLI that sends no telemetry
 
-### Review-aware for the latest coding models
+### Model Autonomy and Engineering Standards
 
-Newer reasoning models often review their own work, while smaller models may do
-little review unless instructed. mancode now accounts for both behaviors:
+Persistent guidance keeps project facts and necessary boundaries. Skills supply
+specialist methods on demand; the task's requirements, plan, review, verification,
+and completion gates preserve its engineering commitments.
 
-- `solo` stays lightweight: one self-check limited to the current diff, the
-  narrowest meaningful validation, no extra reviewer, and no review loop.
-- `/man` chooses one targeted quality review for routine governed work, or a
-  full quality + security review for hard-risk changes such as auth, payment,
-  sensitive data, migrations, public APIs, untrusted input, concurrency, or
-  infrastructure.
-- Review findings need changed-line evidence and user impact. The workflow CLI
-  records required domains and blockers, permits one remediation round, and
-  refuses completion while required review work remains open.
+- Ordinary `solo` needs no actor identity, session, TaskRef, or formal plan. The
+  model chooses implementation steps, runs proportionate checks, and inspects the
+  actual diff. Add a reviewer when needed.
+- `/man` retains requirements, approved plans, scope, verification, review, and
+  commit requirements. Reuse authorization while it remains applicable; new
+  material decisions or impacts outside the approved scope still need confirmation.
+- Man → Solo changes the executor, not the delivery standard. Missing, failed,
+  or stale evidence blocks completion; ordinary Solo exemptions do not apply.
+- Findings require concrete evidence and user impact. Remediation follows the
+  original task policy, with additional review when new defects justify it.
+- A successful reviewer process or verification command does not replace passing
+  ledger entries and the completion gate. Keep self-review declarations honest.
 
-This keeps modern self-reviewing models from auditing forever without lowering
-the quality gate for models that need explicit review structure.
+The model can choose tools and implementation steps without rewriting approved
+goals or acceptance criteria.
+
+### v0.6.6 Updates
+
+- Resume an authorized `man` plan-only task through its original `plan confirm`,
+  preserving the approved plan, scope, and TaskRef.
+- Complete `manba` from diagnostic requirements, actual verification evidence,
+  and a typed outcome, without an inapplicable Man plan or module review.
+- Fix exact-file claim/exclusion false positives in `manteam` while retaining
+  duplicate-claim, scope, and exclusion checks.
+- Record formal review and verification for governed Solo handoffs. Runtime locks
+  avoid partial-owner reads and abandoned initialization locks; Windows CI directly
+  exercises write faults and killed-process recovery.
+
+For `manba`, `fixed`, `verified`, and `no_repro` require passing required evidence.
+`manual_test_required` records explicitly outstanding manual checks; it does not
+mean the behavior was verified or satisfy a parent task's acceptance.
 
 <span id="installation"></span>
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.5. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.6. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
-Requires Node.js 22 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
+Requires Node.js 22.5.0 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
 are supported. Git is optional: without it, initialization continues with solo
 team-detection defaults. Claude Code hooks run with Node and do not require Bash
 or jq.
@@ -272,6 +292,28 @@ mancode adapter upgrade --platform codex --dry-run # Stage a preview only
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
+### Upgrade to v0.6.6
+
+Finish active mancode writes before upgrading and use one CLI version throughout
+the workspace:
+
+```bash
+npm install -g mancode@0.6.6
+cd your-project
+mancode adapter status --json
+mancode adapter upgrade --platform codex --dry-run --json
+# Inspect the preview, then use its operationId and a valid project session/client
+mancode adapter upgrade --platform codex --confirm \
+  --operation-id <operationId> --session <id> --client codex
+```
+
+Replace the platform and client for other hosts. Updating the npm package does
+not overwrite installed project Skills; use adapter upgrade to synchronize them.
+Existing tasks retain their policies and must not be recreated to bypass gates.
+The new runtime reads legacy directory locks; older CLIs reject the new file locks,
+so mixed versions are not fully interoperable. Anonymous historical lock directories
+are not automatically removed. Filesystems without hard-link support fail closed.
+
 ### What Gets Installed
 
 By default, `mancode init` creates mancode workflow and platform integration files:
@@ -312,7 +354,7 @@ Context Pack:
 |---|---|---|
 | `solo` | Daily coding · practice day | No persistent mode; uses project facts, YAGNI checks, and one bounded diff self-check |
 | `/manba` | Diagnosis and real validation · Mamba mentality | Reproduces defects, finds root causes, drives real user flows, and runs regression checks |
-| `/man` | Work needing requirement alignment or a formal plan · playoffs | Research, recommendations, and a durable plan; then choose lightweight solo delivery or the full 9-step workflow |
+| `/man` | Work needing requirement alignment or a formal plan · playoffs | Research, recommendations, and a durable plan; then choose governed Solo handoff or full execution |
 | `/manteam` | Team projects · five on the floor, one mind | Shared memory, decisions, coordination, and Conventional Commits |
 | `/manps` | Cleanup and maintenance · preseason | Project health scan with Markdown and JSON reports |
 | `/mansolo` | Returning to lightweight work | Writes no legacy mode; performs an explicit handoff only when needed |
@@ -366,20 +408,20 @@ cost, or acceptance, and recommends 2–3 options when a decision benefits from
 guidance. It writes the plan under `.mancode/local/workflows/<ULID>/` only
 after the requirements are ready.
 
-Finishing the plan does not automatically start the full workflow. At the plan
-gate, choose lightweight `solo` implementation, full `/man` execution, plan-only,
-or plan revision. Only full execution continues through implementation, validation,
-and risk review:
+Finishing the plan does not authorize implementation. At the plan gate, choose a
+governed Solo handoff, full `/man` execution, plan-only, or plan revision. Both
+implementation paths retain the original review and acceptance commitments. The
+following outlines full `/man`; follow the task's existing policy and Context Pack:
 
 1. **Scout report**: maps existing code, risks, and unknowns.
 2. **Clarification**: asks every unresolved decision-changing question, across as many batches as needed, without repeating confirmed answers; it makes a clear recommendation when a suitable approach exists.
 3. **Plan**: Plan Coach checks input readiness, then creates a durable plan with technical choices, boundaries, and acceptance criteria.
-4. **Plan gate**: choose lightweight solo delivery, full `/man`, plan-only, or plan revision.
+4. **Plan gate**: choose governed Solo handoff, full `/man`, plan-only, or plan revision.
 5. **Implementation**: Head Coach applies the confirmed plan.
 6. **Validation and review scope**: run build, lint, tests, smoke checks, then select targeted or full review from the actual diff and hard-risk triggers.
 7. **Film session 1**: evidence-backed quality review, limited to the changed behavior.
 8. **Film session 2**: security and boundary review for full-review tasks only; duplicate root causes are suppressed.
-9. **Wrap-up**: one blocker remediation round, final verification without re-running completed reviewers, summary, workflow status, and memory updates.
+9. **Wrap-up**: resolve blockers under the task policy, complete necessary review and verification, save delivery records, and pass the completion gate.
 
 Skipped steps are recorded. Artifacts remain on disk so you can inspect why a
 decision was made later.
@@ -395,8 +437,10 @@ mancode workflow create man "Add an export module" \
 ```
 
 `--delivery` is an explicit, immutable opt-in for new `man` tasks. It does not
-upgrade existing tasks, apply to `manba`, `manteam`, `manps`, or `mansolo`, or
-change the default lightweight `solo` path. The delivery plan is one versioned
+upgrade existing tasks or other modes, or change ordinary lightweight Solo.
+A subsequent Solo handoff of that Man task retains the same delivery policy and
+assigned session: verify, review, sync, commit, and check before `workflow handoff --complete`.
+The delivery plan is one versioned
 Markdown file, preferably in the project's existing plan directory. Its
 baseline and delivery-record markers let mancode update the record without
 overwriting the surrounding document.
@@ -772,7 +816,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.5
+mancode v0.6.6
 
 Project:     my-app
 Runtime:     ready
@@ -1218,10 +1262,9 @@ not shared state.
 
 ### Does `--delivery` change existing workflows?
 
-No. `--delivery` is an explicit opt-in for a new `man` workflow. It does not
-upgrade existing tasks or change `solo`, `/manba`, `/manteam`, `/manps`, or
-`/mansolo`. The document-bound delivery record is an additional completion path,
-not a replacement for the existing workflow authority.
+It does not automatically upgrade existing tasks or other modes. `--delivery`
+is an explicit opt-in for a new `man` workflow. A subsequent Solo handoff of that
+task retains its delivery gates; it does not become an ordinary ungoverned Solo task.
 
 ### Does a verification command returning exit code 0 mean the feature passed?
 

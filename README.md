@@ -18,7 +18,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.5-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.5" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.6-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.6" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
@@ -79,7 +79,7 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 - **分享前先保护敏感数据**：在本机识别凭据和个人信息、生成脱敏副本；按需拦截敏感共享写入，或在支持的模型请求字段发往上游前替换原值。
 - **在存在 UI 时匹配现有设计系统**：检查项目 UI 依赖、Tailwind 配置、CSS 变量和已有组件，让 agent 复用现有颜色、字体和交互模式。
 - **先把需求和计划对齐**：`/man` 会调研项目、引导澄清会改变方案的需求、推荐可行选项并生成可确认的持久计划；计划完成后不会自动进入完整实施。
-- **自由选择执行强度**：计划确认后，可只保留计划、交给默认 `solo` 轻量开发，或继续完整 `/man` 的验证与有界风险审查。
+- **自由选择执行方式**：计划确认后，可只保留计划、交给单个 Solo 会话实施，或继续完整 `/man`；受管 Solo 交接仍继承原计划、范围、审查和验收门禁。
 - **保留工作流产物**：调研、计划、审查报告和总结会保存到 `.mancode/<namespace>/workflows/<ULID>/`。
 - **文档绑定的模块交付**：把需求、计划、实现范围、验收标准、验证证据、review 和完成门禁绑定到同一个 workflow。
 - **可恢复的交付与重构**：支持 delivery record、checkpoint、reframe 和 operation recovery，避免中断后把半完成状态当成最终结果。
@@ -120,27 +120,38 @@ mancode 不是 Claude Code、Cursor、Codex 或 Copilot 的替代品。它是在
 - 已有 UI 组件、主题、CSS 变量或设计约定的界面项目
 - 希望保留本地团队记忆、使用不发送遥测的 CLI 的团队
 
-### 针对最新模型审查能力的优化
+### 模型自主性与工程标准
 
-新的推理模型往往自带较强自审倾向，较小模型则可能在没有明确要求时很少审查。mancode
-同时考虑了这两种行为：
+常驻指引保留项目事实和必要边界，专业 Skill 按需提供方法；工程标准由任务原有的
+requirements、plan、review、verification 和完成门禁维持。
 
-- `solo` 保持轻量：只对本次 diff 做一次受限自检，运行最窄的有效验证，不调用额外 reviewer，也不开 review 循环。
-- `/man` 对普通治理任务执行一次定向质量审查；鉴权、支付、敏感数据、迁移、公开 API、未可信输入、并发或基础设施等硬风险才执行质量 + 安全完整审查。
-- finding 必须有改动行证据和用户影响。workflow CLI 会记录所需审查领域和 blocker，只允许一轮修复；审查未完成或 blocker 未清零时不能完成任务。
+- 普通 `solo` 不要求身份、session、TaskRef 或正式计划；模型选择实施方法，运行与风险相称的验证并检查实际 diff。只有需要时才增加 reviewer。
+- `/man` 保留需求澄清、批准计划、范围、验证、审查和提交要求。已有授权仍适用时继续执行，不因关键词重复审批；新的实质决定或越界影响仍需确认。
+- Man → Solo 只改变执行者，不降低交付标准。证据缺失、失败或过期时不能完成，普通 Solo 的豁免不适用于交接任务。
+- finding 必须有具体证据和用户影响。修复与复查遵循任务原 policy；有新问题时补查，不为固定轮数重复审查，也不能因做过一次 review 就忽略新缺陷。
 - reviewer 进程成功退出不等于 review ledger 已通过；验证命令返回 0 也不等于验收已经满足，最终状态以结构化 ledger 和 completion gate 为准。
 - 交付标题、summary、commit、PR 和 handoff 应基于已接受目标、权威基线、实际读回状态和本任务 diff；无法读回的外部状态必须标记为未验证。
 
-这样既不会让强模型一直 review，也不会因为弱模型不主动审查而降低任务质量。
+模型可以灵活选择工具与实现步骤，但不能自行改写已批准的目标和验收标准。
+
+### v0.6.6 更新
+
+- `man` 的 `plan_only` 可在明确获准实施后，通过原任务的 `plan confirm` 恢复完整执行，保留计划、范围和任务标识。
+- `manba` 使用诊断需求、真实验证证据和 typed outcome 正式完成，不再要求不适用的 Man 计划或总审。
+- `manteam` 修复精确文件与排除路径的误判，保留重复认领、真实越界和 exclude 优先检查。
+- 受管 Solo 可登记正式审查与验收；运行时锁修复并发半写读取和初始化中断占锁，Windows CI 直接验证故障与强杀恢复。
+
+`manba` 的 `fixed`、`verified`、`no_repro` 要求必需证据通过；`manual_test_required`
+只记录仍待人工验证的事项，不表示已验证，也不替代父任务验收。
 
 <span id="安装方法"></span>
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.6.5。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.6.6。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
-需要 Node.js 22 或更高版本。原生支持 macOS、Linux、Windows CMD、
+需要 Node.js 22.5.0 或更高版本。原生支持 macOS、Linux、Windows CMD、
 PowerShell 和 Git Bash。Git 是可选依赖：未安装时仍可初始化，只会把团队
 自动检测安全降级为 solo。Claude Code hooks 由 Node 执行，不需要 Bash 或 jq。
 
@@ -199,6 +210,25 @@ mancode adapter upgrade --platform codex --dry-run # 只生成 staging 预览
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
+### 升级到 v0.6.6
+
+先结束旧版本正在执行的 mancode 写操作，并统一升级同一工作区使用的 CLI：
+
+```bash
+npm install -g mancode@0.6.6
+cd your-project
+mancode adapter status --json
+mancode adapter upgrade --platform codex --dry-run --json
+# 审阅预览后，使用返回的 operationId 和本项目有效的 session/client
+mancode adapter upgrade --platform codex --confirm \
+  --operation-id <operationId> --session <id> --client codex
+```
+
+其他平台替换 `--platform` 和对应 client。更新 npm 包不会自动覆盖现有项目 Skill；
+需要通过上述 adapter upgrade 同步入口。原任务继续使用原 policy，不重新创建任务来绕过门禁。
+新运行时可读旧目录锁；旧 CLI 遇到新文件锁会拒绝操作，不保证新旧版本混用。
+无法确认归属的历史空锁目录不会自动删除；不支持硬链接的文件系统会拒绝获取锁。
+
 ### 安装后创建哪些文件？
 
 默认的 `mancode init` 会创建 mancode 工作流目录和平台适配文件：
@@ -237,7 +267,7 @@ mancode 不把“当前模式”写进持久状态。需要某种工作方式时
 |---|---|---|
 | `solo` | 日常编码 · 日常训练 | 不创建持久模式，按项目事实执行 YAGNI 检查和一次受限 diff 自检 |
 | `/manba` | 诊断与真实验证 · 曼巴心态 | 复现缺陷、定位根因、驱动真实用户路径并执行回归检查 |
-| `/man` | 需要需求对齐或正式计划的改动 · 季后赛 | 调研、方案推荐和持久计划；确认后选择 solo 轻量开发或完整 9 步治理 |
+| `/man` | 需要需求对齐或正式计划的改动 · 季后赛 | 调研、方案推荐和持久计划；确认后选择受管 Solo 交接或完整治理 |
 | `/manteam` | 团队项目 · 上场五人，一条心 | 共享记忆、决策记录、协作和 Conventional Commits |
 | `/manps` | 清理和维护 · 季前赛 | 输出 Markdown 和 JSON 项目健康报告 |
 | `/mansolo` | 回到轻量工作 | 不写 legacy mode；需要时执行显式 handoff |
@@ -288,19 +318,19 @@ $mansolo
 方案、优缺点和明确建议。需求足够清楚后，计划才会写入
 `.mancode/local/workflows/<ULID>/plan.md`。
 
-计划完成不会自动开始完整开发。用户在计划关卡选择：交给 `solo` 按已确认计划
-轻量开发、继续完整 `/man`、只保留计划，或修改计划。只有选择完整 `/man` 才继续
-后续实施、验证和风险审查：
+计划完成不会自动授权开发。用户在计划关卡选择受管 Solo 交接、完整 `/man`、只保留计划，
+或修改计划。两种实施路径都保留原任务的审查和验收承诺；以下是完整 `/man` 的阶段概览，
+具体执行按任务已有 policy 和当前 Context Pack：
 
 1. **球探报告**：梳理既有代码、风险和未知项。
 2. **需求澄清**：按需求就绪程度引导对齐；问出所有会改变方案且无法从项目查清的疑问，可按需分多批，不限制数量、不重复已确认内容，有合适方案时直接给出推荐。
 3. **计划**：Plan Coach 先检查输入是否完整，再输出包含技术选择、边界和验收标准的持久计划。
-4. **计划关卡**：选择 solo 轻量执行、完整 `/man`、只保留计划或修改计划。
+4. **计划关卡**：选择受管 Solo 交接、完整 `/man`、只保留计划或修改计划。
 5. **实施**：Head Coach 按确认计划实现。
 6. **验证与审查范围**：运行 build、lint、test、smoke test，再根据实际 diff 和硬风险选择定向或完整审查。
 7. **录像分析 1**：只对改动行为做有证据的质量审查。
 8. **录像分析 2**：仅完整审查任务执行安全与边界审查，并抑制相同根因的重复评论。
-9. **收尾**：一轮 blocker 修复、不重复 reviewer 的最终复验、summary、workflow 状态和 memory 更新。
+9. **收尾**：按原 policy 修复 blocker、补齐必要复查与最终验证，保存交付记录并通过完成门禁。
 
 跳过的步骤会被记录。所有产物保留在本地，之后可以回看当时为什么做某个决策。
 
@@ -316,7 +346,8 @@ mancode workflow create man "添加导出功能" \
 该模式将一份 Markdown 计划作为交付基线，并绑定 implementation scope、验收项、验证证据、
 review、计划回写和最终完成状态。模块按可独立验收的结果划分，而不是按文件或函数划分。
 计划只讨论或规划，不会授权实现；`--delivery` 只影响新建的 `man` workflow，不会升级旧任务，
-也不会改变 `solo`、`manba`、`manteam`、`manps` 或 `mansolo` 的既有流程。
+也不会升级普通 Solo 或其他模式。该 Man 任务后续交给 Solo 时，仍继承同一 delivery 策略，
+使用原 assigned session 完成 verify、review、sync、提交和 check，再执行 `workflow handoff --complete`。
 
 典型交付命令：
 
@@ -589,7 +620,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.6.5
+mancode v0.6.6
 
 Project:     my-app
 Runtime:     ready
@@ -922,8 +953,8 @@ decision 协作；checkout-local session 不会被误当作共享状态。
 
 ### `--delivery` 会影响已有任务吗？
 
-不会。它只对新建并显式启用 `--delivery` 的 `/man` workflow 生效。旧任务和其他模式不会被自动
-迁移、升级或改变流程。
+不会自动升级旧任务或其他模式。它只对新建并显式启用 `--delivery` 的 `/man` workflow 生效；
+该任务后续交给 Solo 时仍继承原 delivery 门禁，不会变成无治理的普通 Solo。
 
 ### verification 通过是否代表功能一定正确？
 
