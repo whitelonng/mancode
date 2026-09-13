@@ -30,10 +30,10 @@ afterEach(async () => {
 describe('entity home stores and canonical local locks', () => {
   it('separates local task storage from the shared coordination store', () => {
     const context = {
-      projectRoot: '/checkout/project',
+      projectRoot: path.resolve('/checkout/project'),
       workspaceId: WORKSPACE_ID,
       checkoutId: CHECKOUT_ID,
-      gitCommonDir: '/repo/.git',
+      gitCommonDir: path.resolve('/repo/.git'),
       repositoryBindingId: BINDING_ID,
     };
     const local = resolveTaskEntityHomeStore(context, {
@@ -45,11 +45,21 @@ describe('entity home stores and canonical local locks', () => {
       taskId: TASK_ID,
     });
     expect(local.storeId).toBe(`checkout:${CHECKOUT_ID}:${WORKSPACE_ID}`);
-    expect(local.root).toBe('/checkout/project/.mancode/local/runtime');
+    expect(local.root).toBe(
+      path.join(context.projectRoot, '.mancode', 'local', 'runtime'),
+    );
     expect(shared.storeId).toBe(`workspace:${BINDING_ID}:${WORKSPACE_ID}`);
-    expect(shared.root).toBe(`/repo/.git/mancode/workspaces/${WORKSPACE_ID}`);
+    expect(shared.root).toBe(
+      path.join(context.gitCommonDir, 'mancode', 'workspaces', WORKSPACE_ID),
+    );
     expect(claimDirectory(shared)).toBe(
-      `/repo/.git/mancode/workspaces/${WORKSPACE_ID}/claims`,
+      path.join(
+        context.gitCommonDir,
+        'mancode',
+        'workspaces',
+        WORKSPACE_ID,
+        'claims',
+      ),
     );
     expect(() => claimDirectory(local)).toThrow(/shared coordination/);
 
@@ -60,7 +70,13 @@ describe('entity home stores and canonical local locks', () => {
     });
     expect(nonGit.storeId).toBe(`non-git:${WORKSPACE_ID}`);
     expect(nonGit.root).toBe(
-      `/checkout/project/.mancode/runtime/non-git/${WORKSPACE_ID}`,
+      path.join(
+        context.projectRoot,
+        '.mancode',
+        'runtime',
+        'non-git',
+        WORKSPACE_ID,
+      ),
     );
   });
 
