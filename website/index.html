@@ -235,8 +235,7 @@
           <h2>Every task<br />is not game seven.</h2>
           <p>
             Start light. Add process only when risk earns it. mancode lets the same coding agent move
-            from daily practice to production-grade review without changing tools. Newer models that
-            already self-review get a hard stopping point; models that need guidance keep an explicit quality gate.
+            from daily practice to production-grade review without changing tools. Ordinary Solo stays lightweight; governed tasks retain their original gates, with review depth guided by risk and new evidence.
           </p>
         </div>
 
@@ -264,7 +263,7 @@
               <div class="mode-panel-head"><span>Intensity / 01</span><span class="status-dot">Default</span></div>
               <div class="mode-panel-body">
                 <div><p class="mode-code">solo</p><h3>Move fast.<br />Stay on system.</h3></div>
-                <div class="mode-detail"><p>For everyday changes that need context, not ceremony—even with newer models that already self-review.</p><ul><li>Lightweight hooks</li><li>One bounded diff self-check</li><li>No extra reviewer loop</li></ul></div>
+                <div class="mode-detail"><p>For everyday changes that need context, not ceremony—even with newer models that already self-review.</p><ul><li>Lightweight hooks</li><li>Check the actual diff</li><li>Independent review when needed</li></ul></div>
               </div>
               <div class="intensity-meter"><i></i><span>Practice</span><span>Playoffs</span></div>
             </article>
@@ -282,7 +281,7 @@
               <div class="mode-panel-head"><span>Intensity / 05</span><span class="status-dot">Plan first</span></div>
               <div class="mode-panel-body">
                 <div><p class="mode-code">/man</p><h3>Plan every<br />possession.</h3></div>
-                <div class="mode-detail"><p>Align requirements, compare options, and approve a durable plan before choosing delivery depth.</p><ul><li>Guided requirement alignment</li><li>Lightweight solo handoff</li><li>Optional full nine-step governance</li></ul></div>
+                <div class="mode-detail"><p>Align requirements, compare options, and approve a durable plan before choosing delivery depth.</p><ul><li>Guided requirement alignment</li><li>Solo handoff with inherited gates</li><li>Optional full nine-step governance</li></ul></div>
               </div>
               <div class="intensity-meter level-5"><i></i><span>Practice</span><span>Playoffs</span></div>
             </article>
@@ -317,8 +316,7 @@
           <div><p class="eyebrow">/man workflow</p><h2>From scout report<br />to final buzzer.</h2></div>
           <p>
             Every planning run leaves a readable trail under
-            <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>. After approval, hand the plan to lightweight solo
-            delivery or continue through the full governed workflow.
+            <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>. After approval, assign delivery to solo or continue the Man workflow. Both paths retain the approved plan, scope, review, and acceptance gates.
           </p>
         </div>
 
@@ -331,7 +329,7 @@
           <li class="phase-run"><b>06</b><span>Verify</span><small>Build, lint, test, smoke</small></li>
           <li class="phase-review"><b>07</b><span>Targeted review</span><small>Evidence-backed quality findings</small></li>
           <li class="phase-review"><b>08</b><span>Risk defense</span><small>Security review only when risk requires it</small></li>
-          <li class="phase-close"><b>09</b><span>Close out</span><small>One remediation, verify, stop</small></li>
+          <li class="phase-close"><b>09</b><span>Close out</span><small>Resolve blockers, reverify, complete</small></li>
         </ol>
         <div class="workflow-legend reveal" aria-label="Workflow phase legend">
           <span><i class="legend-cyan"></i> Scout</span>

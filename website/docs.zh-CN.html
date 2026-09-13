@@ -128,7 +128,7 @@
           <p class="eyebrow">从日常训练到关键比赛</p>
           <h1>给你的编程 Agent<br />一套真正可执行的战术。</h1>
           <p>mancode 是一套本地优先的 Agent 工作流框架。它不替代 Claude Code、Cursor、Codex、Copilot、ZCode、Kimi Code、Qoder 或 DeepSeek Harness，而是给现有 Agent 增加项目上下文、任务强度、持久化产物、验收证据和评审闸门。</p>
-          <div class="docs-note"><strong>两个层次</strong><p>日常使用时，你在 Agent 对话中调用 <code>solo</code>、<code>/manba</code> 或 <code>/man</code>。安装好的适配器会在背后调用 <code>mancode workflow</code> 维护持久记录。后面的 CLI 参考用于解释这份记录，并不是要求你手工再做一遍流程。</p></div>
+          <div class="docs-note"><strong>两个层次</strong><p>日常使用时，你在 Agent 对话中调用 <code>solo</code>、<code>/manba</code> 或 <code>/man</code>。受治理模式入口通过 <code>mancode workflow</code> 维护持久记录；普通 Solo 无需任务、身份或 session。后面的 CLI 参考用于解释这份记录，并不是要求你手工再做一遍流程。</p></div>
         </section>
 
         <section class="doc-section" id="install" data-searchable>
@@ -203,7 +203,7 @@
           <h2>选择最小够用的模式</h2>
           <p>任务长短不是唯一标准。应根据错误决策的代价，选择能够留下足够证据和评审、同时又不过度增加流程负担的最轻模式。</p>
           <div class="mode-guide">
-            <article><small>日常改动</small><h3>solo</h3><p>适合小功能、重构或 UI 微调。加载项目上下文，做最窄的有效验证，再进行一次受限 diff 自检，不引入独立评审循环。</p></article>
+            <article><small>日常改动</small><h3>solo</h3><p>适合小功能、重构或 UI 微调。加载项目上下文，做最窄的有效验证，检查实际 diff，必要时增加独立审查。</p></article>
             <article><small>Bug 或行为不确定</small><h3>/manba</h3><p>先复现，再定位根因，验证真实用户路径，并提供回归证据。</p></article>
             <article><small>高风险决策</small><h3>/man</h3><p>冻结需求和版本化计划，然后由用户选择交给 solo 实施，或继续受治理的实现、验证与评审。</p></article>
             <article><small>团队或维护</small><h3>/manteam · /manps</h3><p>增加共享记忆和交接记录，或者在维护前执行确定性的项目健康扫描。</p></article>
@@ -242,7 +242,7 @@
 
         <section class="doc-section" id="modes" data-searchable>
           <h2>调用模式</h2>
-          <p>模式名称是通用的，但调用方式取决于平台的扩展机制。下面这些内容应输入 Agent 对话框，而不是操作系统终端。<code>/mansolo</code> 或 <code>$mansolo</code> 会显式回到默认 <code>solo</code> 模式。</p>
+          <p>模式名称是通用的，但调用方式取决于平台的扩展机制。下面这些内容应输入 Agent 对话框，而不是操作系统终端。<code>/mansolo</code> 或 <code>$mansolo</code> 回到专注 Solo 执行；显式受治理交接仍保留原任务权威和门禁。</p>
           <table class="docs-table"><thead><tr><th>模式</th><th>最适合</th><th>行为</th></tr></thead><tbody>
             <tr><td><code>solo</code></td><td>日常开发</td><td>项目上下文、轻量规则、相关验证和一次受限 diff 自检。</td></tr>
             <tr><td><code>manba</code></td><td>诊断问题</td><td>复现优先的调试，明确根因，验证用户路径并留下回归证据。</td></tr>
@@ -437,7 +437,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>深入研究 /man 工作流</h2>
-          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择轻量交接、仅保留计划，或继续治理式执行。每个闸门都由 Continuity 的 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 文件支撑。</p>
+          <p><code>/man</code> 是一个渐进式九步协议：先让决策变得可检查，再由用户选择保留原门禁的 Solo 交接、仅保留计划，或继续 Man 执行。每个闸门都由 Continuity 的 <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code> 文件支撑。</p>
           <div class="docs-note"><strong>谁来运行这些命令？</strong><p>安装后的 Continuity mode entry 会创建任务并读取 Context Pack。下面展示的是供研究、排错或集成使用的机器契约。Continuity 使用显式 <code>namespace:ULID</code> TaskRef，不依赖旧的活动指针。</p></div>
 
           <h3>九个步骤与闸门</h3>
@@ -448,9 +448,9 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <tr><td>4 · Plan gate</td><td>复述计划，让用户选择交给 solo、治理式执行、只保留计划或继续修订。</td><td>没有明确选择之前，不允许进入实现。</td></tr>
             <tr><td>5 · Implement</td><td>只实现已确认计划所需的最小改动。</td><td>保持范围；出现会改变决策的新事实时回到澄清或计划修订。</td></tr>
             <tr><td>6 · Verify</td><td>执行识别出的 build、lint、typecheck、test、smoke 和每一条必需验收标准。</td><td>每个必需验收 ID 都有当前通过证据；手工检查必须获得用户显式确认。</td></tr>
-            <tr><td>7 · 质量评审</td><td>只检查变更 diff 和直接影响，最多记录三个有证据的新问题。</td><td>先写报告和稳定 blocker ID，再进入修复。</td></tr>
+            <tr><td>7 · 质量评审</td><td>只检查变更 diff 和直接影响，按任务 policy 记录可行动、有证据的问题。</td><td>先写报告和稳定 blocker ID，再进入修复。</td></tr>
             <tr><td>8 · 安全/边界评审</td><td>只有 full review 执行：检查安全、权限、恢复、资源与边界；targeted review 把此域标为不适用。</td><td>所需评审域全部完成，同一根因不得重复计数。</td></tr>
-            <tr><td>9 · 修复与完成</td><td>在一轮 remediation 中解决 blocker；发生改动后重新验证并写总结。</td><td>blocker 清零、验证仍然有效、存在 <code>summary.md</code>，才能设为 <code>completed</code>。</td></tr>
+            <tr><td>9 · 修复与完成</td><td>按任务 policy 解决 blocker；改动后重新验证，有新证据时追加审查。</td><td>blocker 清零、验证仍然有效、存在 <code>summary.md</code>，才能设为 <code>completed</code>。</td></tr>
           </tbody></table>
 
           <h3>结构化需求台账</h3>
@@ -486,14 +486,14 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
 
           <h3>Step 4 的三种决策</h3>
           <div class="decision-grid">
-            <article class="command-card"><header><h3>交给 solo</h3><span>实施</span></header><p>计划已经稳定，但实现风险属于日常范围。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
-<span class="command-prompt"># solo 实现并验证后</span>
+            <article class="command-card"><header><h3>交给 solo</h3><span>实施</span></header><p>Solo 执行原批准计划，保留范围、正式审查与验收，以及 policy 3 交付门禁。长任务通常应继续使用 Man。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt"># 指派 session 满足原任务审查、验收与交付门禁后</span>
 <span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --complete --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
             <article class="command-card"><header><h3>治理式执行</h3><span>继续</span></header><p>实现、证据和独立评审都需要保留在九步记录内。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
             <article class="command-card"><header><h3>只保留计划</h3><span>停止</span></header><p>用户需要的交付物是计划，而不是代码。</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>复制</button></div></article>
           </div>
           <p>三种选择都要求活动中的 <code>man</code> 工作流、已确认需求和 <code>plan.md</code>。使用 <code>workflow plan ... revise</code> 修订计划；每次成功写入都会返回下一个命令需要的 revision。</p>
-          <p>新生成的 <code>man</code> 入口通过 <code>--delivery</code> 显式启用 planning policy 3。它在同一份可版本化计划中区分批准基线与交付记录，沿用项目计划目录约定，新项目默认 <code>doc/</code>。其他模式、旧任务和 Solo handoff 保持原契约。</p>
+          <p>新生成的 <code>man</code> 入口通过 <code>--delivery</code> 显式启用 planning policy 3。它在同一份可版本化计划中区分批准基线与交付记录，沿用项目计划目录约定，新项目默认 <code>doc/</code>。其他模式与旧任务保留原 policy；Solo handoff 继承原任务 policy 和交付要求。</p>
           <p><code>workflow delivery &lt;TaskRef&gt; inspect|verify|confirm|review|sync|check|publication</code> 支持一次模块总审、实际命令证据、人工确认、文档回写，以及提交与发布分离检查。写操作需要活动 session 和最新 expected revision。一个命令确实覆盖多个验收项时，可用 <code>--acceptance AC-1,AC-2</code> 一次登记，不重复运行。总审检查目标兑现、具体缺陷与不必要的复杂度，允许零 finding。无上游或推送失败是交付未发布，不是业务阻塞；这些机制不等于已经证明 agent 的语义判断或生产适用性。</p>
 
           <h3>一条合法的 Continuity 顺序</h3>

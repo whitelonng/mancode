@@ -128,7 +128,7 @@
           <p class="eyebrow">Practice to playoffs</p>
           <h1>Give your coding agent<br />a real playbook.</h1>
           <p>mancode is a local-first workflow harness for the coding agent you already use. It adds project context, task intensity, durable artifacts, acceptance evidence, and review gates without replacing Claude Code, Cursor, Codex, Copilot, ZCode, Kimi Code, Qoder, or DeepSeek Harness.</p>
-          <div class="docs-note"><strong>Two layers</strong><p>You normally talk to your agent with <code>solo</code>, <code>/manba</code>, or <code>/man</code>. The installed adapter then uses <code>mancode workflow</code> to maintain the durable record. The CLI reference below explains that record; it is not a second workflow you must perform by hand.</p></div>
+          <div class="docs-note"><strong>Two layers</strong><p>You normally talk to your agent with <code>solo</code>, <code>/manba</code>, or <code>/man</code>. Governed mode entries use <code>mancode workflow</code> to maintain durable records; ordinary Solo needs no task, identity, or session. The CLI reference below explains that record; it is not a second workflow you must perform by hand.</p></div>
         </section>
 
         <section class="doc-section" id="install" data-searchable>
@@ -203,7 +203,7 @@
           <h2>Choose the smallest mode</h2>
           <p>Task length is not the deciding factor. Choose the lightest mode that leaves enough evidence and review for the cost of a wrong decision.</p>
           <div class="mode-guide">
-            <article><small>Routine change</small><h3>solo</h3><p>A small feature, refactor, or UI tweak. Uses project context, narrow validation, and one bounded diff self-check without a separate reviewer loop.</p></article>
+            <article><small>Routine change</small><h3>solo</h3><p>A small feature, refactor, or UI tweak. Uses project context, narrow validation, and an actual diff self-check, with an independent reviewer when needed.</p></article>
             <article><small>Bug or uncertain behavior</small><h3>/manba</h3><p>Reproduces the failure, diagnoses the cause, validates a real user path, and runs regression checks.</p></article>
             <article><small>High-risk decision</small><h3>/man</h3><p>Freezes requirements and a versioned plan, then either hands off to solo or continues through governed implementation, verification, and review.</p></article>
             <article><small>Team or maintenance</small><h3>/manteam · /manps</h3><p>Adds shared memory and handoff records, or runs deterministic health scans before maintenance work.</p></article>
@@ -242,7 +242,7 @@
 
         <section class="doc-section" id="modes" data-searchable>
           <h2>Invoke a mode</h2>
-          <p>Mode names are portable, but invocation follows the extension model of each agent. Run them in the agent chat—not in your operating-system shell. <code>/mansolo</code> or <code>$mansolo</code> explicitly returns to the default <code>solo</code> mode.</p>
+          <p>Mode names are portable, but invocation follows the extension model of each agent. Run them in the agent chat—not in your operating-system shell. <code>/mansolo</code> or <code>$mansolo</code> returns to focused Solo work. An explicit governed handoff retains its original task authority and gates.</p>
           <table class="docs-table"><thead><tr><th>Mode</th><th>Best for</th><th>Behavior</th></tr></thead><tbody>
             <tr><td><code>solo</code></td><td>Daily coding</td><td>Project context, lightweight rules, relevant validation, and one bounded diff self-check.</td></tr>
             <tr><td><code>manba</code></td><td>Diagnosis</td><td>Reproduction-first debugging with cause, user-path validation, and regression evidence.</td></tr>
@@ -437,7 +437,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
         <section class="doc-section" id="workflow" data-searchable>
           <h2>Study the /man workflow</h2>
-          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a lightweight handoff, a plan-only result, or governed execution. Every gate is backed by Continuity files under <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>.</p>
+          <p><code>/man</code> is a progressive nine-step protocol. It first makes the decision inspectable, then lets the user choose between a Solo handoff with inherited gates, a plan-only result, or continued Man execution. Every gate is backed by Continuity files under <code>.mancode/&lt;namespace&gt;/workflows/&lt;ULID&gt;/</code>.</p>
           <div class="docs-note"><strong>Who runs these commands?</strong><p>The installed Continuity mode entry creates the task and reads its Context Pack. The commands below are the machine contract for studying, debugging, or integrating the process. Continuity identifies tasks with explicit <code>namespace:ULID</code> TaskRefs and does not use a legacy active pointer.</p></div>
 
           <h3>The nine steps and their gates</h3>
@@ -448,9 +448,9 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
             <tr><td>4 · Plan gate</td><td>Echo the plan and ask the user to choose solo handoff, governed execution, plan only, or revision.</td><td>No implementation is legal before an explicit decision.</td></tr>
             <tr><td>5 · Implement</td><td>Make the smallest change that satisfies the confirmed plan.</td><td>Stay inside scope; new decision-changing facts return to clarification or plan revision.</td></tr>
             <tr><td>6 · Verify</td><td>Run detected build, lint, typecheck, tests, smoke checks, and each required acceptance criterion.</td><td>Every required acceptance ID has current passing evidence. Manual checks require explicit user confirmation.</td></tr>
-            <tr><td>7 · Quality review</td><td>Review only the changed diff and direct impact; record at most three new, evidenced findings.</td><td>Write the report and stable blocker IDs. Findings are recorded before fixes.</td></tr>
+            <tr><td>7 · Quality review</td><td>Review only the changed diff and direct impact; record actionable, evidenced findings under the task policy.</td><td>Write the report and stable blocker IDs. Findings are recorded before fixes.</td></tr>
             <tr><td>8 · Security / boundary review</td><td>Full review only: inspect security, permissions, recovery, resources, and boundaries. Targeted review marks this domain not applicable.</td><td>The required review domains are complete; duplicate root causes stay deduplicated.</td></tr>
-            <tr><td>9 · Remediate &amp; finish</td><td>Resolve open blockers in one remediation round, reverify if anything changed, and summarize.</td><td>Zero blockers, current verification, <code>summary.md</code>, then status <code>completed</code>.</td></tr>
+            <tr><td>9 · Remediate &amp; finish</td><td>Resolve open blockers under the task policy, reverify changed code, and review again when new evidence warrants it.</td><td>Zero blockers, current verification, <code>summary.md</code>, then status <code>completed</code>.</td></tr>
           </tbody></table>
 
           <h3>Requirements ledger</h3>
@@ -486,14 +486,14 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
 
           <h3>The Step 4 decision</h3>
           <div class="decision-grid">
-            <article class="command-card"><header><h3>Solo handoff</h3><span>Deliver</span></header><p>Use when the plan is settled but implementation risk is routine.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
-<span class="command-prompt"># after solo implements and verifies</span>
+            <article class="command-card"><header><h3>Solo handoff</h3><span>Deliver</span></header><p>Solo executes the approved plan under the original scope, formal review and verification, and policy 3 delivery gates. Long tasks should normally continue in Man.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --to solo --expected-revision &lt;revision&gt; --session &lt;session-id&gt;
+<span class="command-prompt"># after the assigned session satisfies the original review, verification, and delivery gates</span>
 <span class="command-prompt">$</span> mancode workflow handoff &lt;local:ULID&gt; --complete --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
             <article class="command-card"><header><h3>Governed execution</h3><span>Continue</span></header><p>Use when implementation, evidence, and independent review should remain inside the nine-step record.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision governed_execution --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
             <article class="command-card"><header><h3>Plan only</h3><span>Stop</span></header><p>Use when the requested deliverable is the confirmed plan, not code.</p><div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode workflow plan &lt;local:ULID&gt; confirm --plan-decision plan_only --expected-revision &lt;revision&gt; --session &lt;session-id&gt;</code></pre><button type="button" data-copy-code>Copy</button></div></article>
           </div>
           <p>All three choices require an active <code>man</code> workflow, confirmed requirements, and <code>plan.md</code>. Revise the plan with <code>workflow plan ... revise</code>; every successful mutation returns the revision required by the next command.</p>
-          <p>Newly generated <code>man</code> entries create tasks with <code>--delivery</code> (planning policy 3). This opt-in binds an approved baseline and a separate delivery record in one versionable plan, using the project's directory convention or <code>doc/</code> by default. Other modes, older tasks, and Solo handoffs keep their existing contracts.</p>
+          <p>Newly generated <code>man</code> entries create tasks with <code>--delivery</code> (planning policy 3). This opt-in binds an approved baseline and a separate delivery record in one versionable plan, using the project's directory convention or <code>doc/</code> by default. Other modes and older tasks retain their existing policies. Solo handoffs inherit the original task policy and delivery requirements.</p>
           <p><code>workflow delivery &lt;TaskRef&gt; inspect|verify|confirm|review|sync|check|publication</code> supports one module-level review, real command evidence, manual confirmation, document writeback, and separate commit/publication checks. Mutating actions require the active session and latest expected revision. A relevant command can cover multiple criteria through <code>--acceptance AC-1,AC-2</code> without repeated runs. Review checks goal coverage, concrete defects, and unnecessary complexity; zero findings is valid. Missing upstreams or failed pushes mean unpublished delivery, not a business blocker. This mechanism does not certify an agent's semantic judgment or production readiness.</p>
 
           <h3>A valid Continuity sequence</h3>
