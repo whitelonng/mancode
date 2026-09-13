@@ -72,11 +72,9 @@ export async function acquireLocalLock(
   }
   if (!acquiredDirectory) throw new Error('MANCODE_LOCK_HELD');
   try {
-    await writeFile(
-      path.join(directory, 'owner.json'),
-      `${JSON.stringify(owner, null, 2)}\n`,
-      { encoding: 'utf8', flag: 'wx' },
-    );
+    // Contenders can already see the directory. Publish only complete JSON,
+    // as renewals do, so an in-flight owner write remains normal contention.
+    await atomicWriteLockOwner(directory, owner);
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
