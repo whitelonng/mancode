@@ -1,10 +1,27 @@
-import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import {
+  link,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
+import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
 import {
   type AuthorizationBasisV1,
   parseAuthorizationBasis,
 } from '../team/authorization.js';
 import { digestCanonicalJson } from './canonical.js';
+import {
+  type ConfirmedDecision,
+  type ConfirmedDecisionV2,
+  DECISION_RELATIONS_CAPABILITY,
+  assertDecisionRelationsPublishable,
+  parseDecisionDetails,
+} from './decision-record.js';
 import { type Ulid, assertUlid } from './ids.js';
 import { withSharedPrivacyWrite } from './privacy-guard.js';
 import { assertSharedTextSafe } from './privacy.js';
@@ -50,7 +67,7 @@ export function createConfirmedDecision(
   ) {
     throw new Error('MANCODE_CONFIRMED_DECISION_AUTHORIZATION_INVALID');
   }
-  return parseConfirmedDecision({
+  return parseConfirmedDecisionV1({
     schemaVersion: 1,
     decisionId: input.decisionId,
     title: parseDecisionText(input.title, 'confirmed decision title', 256),
@@ -67,7 +84,7 @@ export function createConfirmedDecision(
   });
 }
 
-export function parseConfirmedDecision(value: unknown): ConfirmedDecisionV1 {
+function parseConfirmedDecisionV1(value: unknown): ConfirmedDecisionV1 {
   assertRecord(value, 'confirmed decision');
   assertKnownKeys(
     value,
@@ -122,7 +139,32 @@ export function parseConfirmedDecision(value: unknown): ConfirmedDecisionV1 {
   };
 }
 
-export function confirmedDecisionDigest(decision: ConfirmedDecisionV1): string {
+export function parseConfirmedDecision(value: unknown): ConfirmedDecision {
+  assertRecord(value, 'confirmed decision');
+  if (value.schemaVersion === 1) return parseConfirmedDecisionV1(value);
+  if (value.schemaVersion !== 2)
+    throw new Error('MANCODE_DECISION_SCHEMA_UNSUPPORTED');
+  const { details, schemaVersion: _version, ...base } = value;
+  const checked = parseConfirmedDecisionV1({ ...base, schemaVersion: 1 });
+  return {
+    ...checked,
+    schemaVersion: 2,
+    details: parseDecisionDetails(details),
+  };
+}
+
+export function createStructuredDecision(
+  input: CreateConfirmedDecisionInput,
+  details: unknown,
+): ConfirmedDecisionV2 {
+  return {
+    ...createConfirmedDecision(input),
+    schemaVersion: 2,
+    details: parseDecisionDetails(details),
+  };
+}
+
+export function confirmedDecisionDigest(decision: ConfirmedDecision): string {
   return digestCanonicalJson(parseConfirmedDecision(decision));
 }
 
@@ -153,27 +195,84 @@ export function confirmedDecisionPath(
  */
 export async function publishConfirmedDecision(
   projectRoot: string,
-  decision: ConfirmedDecisionV1,
-): Promise<ConfirmedDecisionV1> {
+  decision: ConfirmedDecision,
+  options: {
+    confirmFormatUpgrade?: boolean;
+    writerCapabilities?: readonly string[];
+  } = {},
+): Promise<ConfirmedDecision> {
   const parsed = parseConfirmedDecision(decision);
-  return withSharedPrivacyWrite(projectRoot, parsed.operationId, parsed, () =>
-    publishConfirmedDecisionUnlocked(projectRoot, parsed),
+  if (
+    parsed.schemaVersion === 2 &&
+    (!options.confirmFormatUpgrade ||
+      !options.writerCapabilities?.includes(DECISION_RELATIONS_CAPABILITY))
+  )
+    throw new Error('MANCODE_DECISION_FORMAT_UPGRADE_REQUIRED');
+  if (parsed.schemaVersion === 2) await readProjectRuntimeContext(projectRoot);
+  const committed = await withSharedPrivacyWrite(
+    projectRoot,
+    parsed.operationId,
+    parsed,
+    async () => {
+      const existing = await readConfirmedDecision(
+        projectRoot,
+        parsed.decisionId,
+      );
+      if (existing) {
+        if (
+          confirmedDecisionDigest(existing) === confirmedDecisionDigest(parsed)
+        )
+          return existing;
+        throw new Error('MANCODE_CONFIRMED_DECISION_ID_CONFLICT');
+      }
+      if (parsed.schemaVersion === 2)
+        assertDecisionRelationsPublishable(
+          await listConfirmedDecisions(projectRoot),
+          parsed,
+        );
+      await (
+        await import('../runtime/project-progress-events.js')
+      ).markProgressCommitPending(projectRoot, parsed.operationId);
+      return publishConfirmedDecisionUnlocked(projectRoot, parsed);
+    },
   );
+  try {
+    const { notifyCommittedProgress } = await import(
+      '../runtime/project-progress-events.js'
+    );
+    await notifyCommittedProgress(
+      projectRoot,
+      { project: true },
+      undefined,
+      parsed.operationId,
+    );
+  } catch {
+    console.error(
+      'Project progress update pending (MANCODE_PROGRESS_UPDATE_FAILED); run mancode progress refresh.',
+    );
+  }
+  return committed;
 }
 
 async function publishConfirmedDecisionUnlocked(
   projectRoot: string,
-  decision: ConfirmedDecisionV1,
-): Promise<ConfirmedDecisionV1> {
+  decision: ConfirmedDecision,
+): Promise<ConfirmedDecision> {
   const parsed = parseConfirmedDecision(decision);
   const directory = confirmedDecisionDirectory(projectRoot);
   await ensureSafeDirectory(projectRoot, directory);
   const target = confirmedDecisionPath(projectRoot, parsed.decisionId);
   try {
-    await writeFile(target, `${JSON.stringify(parsed, null, 2)}\n`, {
-      encoding: 'utf8',
-      flag: 'wx',
-    });
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(parsed, null, 2)}\n`, {
+        encoding: 'utf8',
+        flag: 'wx',
+      });
+      await link(temporary, target);
+    } finally {
+      await rm(temporary, { force: true });
+    }
     return parsed;
   } catch (error) {
     if (!isAlreadyExists(error)) throw error;
@@ -194,10 +293,10 @@ async function publishConfirmedDecisionUnlocked(
 export async function readConfirmedDecision(
   projectRoot: string,
   decisionId: string,
-): Promise<ConfirmedDecisionV1 | null> {
+): Promise<ConfirmedDecision | null> {
   assertUlid(decisionId, 'confirmed decision decisionId');
   try {
-    return parseConfirmedDecision(
+    const decision = parseConfirmedDecision(
       JSON.parse(
         await readSafeText(
           confirmedDecisionDirectory(projectRoot),
@@ -205,6 +304,9 @@ export async function readConfirmedDecision(
         ),
       ),
     );
+    if (decision.decisionId !== decisionId)
+      throw new Error('MANCODE_CONFIRMED_DECISION_ID_MISMATCH');
+    return decision;
   } catch (error) {
     if (isNotFound(error)) return null;
     if (error instanceof SyntaxError) {
@@ -216,7 +318,7 @@ export async function readConfirmedDecision(
 
 export async function listConfirmedDecisions(
   projectRoot: string,
-): Promise<ConfirmedDecisionV1[]> {
+): Promise<ConfirmedDecision[]> {
   const directory = confirmedDecisionDirectory(projectRoot);
   let entries: string[];
   try {
@@ -226,7 +328,7 @@ export async function listConfirmedDecisions(
     if (isNotFound(error)) return [];
     throw error;
   }
-  const decisions: ConfirmedDecisionV1[] = [];
+  const decisions: ConfirmedDecision[] = [];
   for (const entry of entries.sort(compareUtf8)) {
     if (!entry.endsWith('.json')) continue;
     if (!DECISION_FILENAME.test(entry)) {

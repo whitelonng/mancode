@@ -11,8 +11,10 @@ import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { CURRENT_WRITER_CAPABILITIES } from '../src/context/compatibility.js';
 import {
   createConfirmedDecision,
+  createStructuredDecision,
   publishConfirmedDecision,
 } from '../src/context/confirmed-decision.js';
+import { projectDecisions } from '../src/context/decision-record.js';
 import {
   addGlossaryEntry,
   readProjectGlossary,
@@ -708,16 +710,49 @@ describe('shared privacy policy authority', () => {
       },
       now,
     );
-    const decision = createConfirmedDecision({
+    const predecessor = createConfirmedDecision({
       decisionId: createUlid(),
-      title: 'Contact reference',
-      statement: 'Call 13812345678',
+      title: 'Original contact process',
+      statement: 'Use the prior process.',
       actorId: actor.actorId,
       operationId: createUlid(),
       authorization,
       now,
     });
-    await publishConfirmedDecision(root, decision);
+    await publishConfirmedDecision(root, predecessor);
+    const decision = createStructuredDecision(
+      {
+        decisionId: createUlid(),
+        title: 'Contact reference',
+        statement: 'Call 13812345678',
+        actorId: actor.actorId,
+        operationId: createUlid(),
+        authorization,
+        now,
+      },
+      {
+        capability: 'decision-relations:1',
+        recordKind: 'decision',
+        rationale: 'Update contact handling.',
+        alternatives: [],
+        tradeoffs: [],
+        revisitWhen: [],
+        applicability: { modules: ['support'], paths: [] },
+        clauses: [{ id: 'contact', statement: 'Call 13812345678' }],
+        relations: [
+          {
+            action: 'supersede',
+            targetId: predecessor.decisionId,
+            targetDigest: digestCanonicalJson(predecessor),
+            clauses: 'all',
+          },
+        ],
+      },
+    );
+    await publishConfirmedDecision(root, decision, {
+      confirmFormatUpgrade: true,
+      writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+    });
     const task = await createV3Workflow({
       projectRoot: root,
       task: 'Review a shared checkpoint',
@@ -770,6 +805,9 @@ describe('shared privacy policy authority', () => {
     );
     const runtime = await readProjectRuntimeContext(root);
     const project = await new V3ContextStore(root).readProjectSnapshot();
+    expect(
+      projectDecisions(project.confirmedDecisions, project.privacy),
+    ).toEqual({ entries: [], validityUnavailable: true });
     const codeHead = (
       await promisify(execFileCallback)('git', ['rev-parse', 'HEAD'], {
         cwd: root,

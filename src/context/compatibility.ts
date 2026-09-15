@@ -21,7 +21,8 @@ export type WriterCapability =
   | 'planning-policy:2'
   | 'adapter-digest:1'
   | 'reframe-local:1'
-  | 'privacy-policy:1';
+  | 'privacy-policy:1'
+  | 'decision-relations:1';
 
 export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
   'planning-policy:1',
@@ -29,6 +30,7 @@ export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
   'adapter-digest:1',
   'reframe-local:1',
   'privacy-policy:1',
+  'decision-relations:1',
 ];
 
 export type CompatibilityFailureCode =

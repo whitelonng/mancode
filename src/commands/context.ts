@@ -1,4 +1,12 @@
+import { open } from 'node:fs/promises';
 import { CURRENT_WRITER_CAPABILITIES } from '../context/compatibility.js';
+import {
+  type ContextIndexRequest,
+  loadContextIndexSnapshot,
+  parseContextBatchRequests,
+  queryContextIndex,
+  serializeContextIndex,
+} from '../context/context-index.js';
 import type { ContextLevel, ContextPurpose } from '../context/context-pack.js';
 import {
   addGlossaryEntry,
@@ -8,6 +16,7 @@ import {
 } from '../context/glossary.js';
 import { isUlid } from '../context/ids.js';
 import { managedAdapterNames } from '../context/manifest.js';
+import { assertSafeSharedRelativePath } from '../context/privacy.js';
 import {
   previewV3TaskPromotion,
   promoteV3Task,
@@ -457,6 +466,189 @@ export async function contextResume(
       error instanceof Error ? error.message : 'Unable to resume context.',
     );
   }
+}
+
+export interface ContextIndexOptions extends ContextResumeOptions {
+  document?: string[];
+  file?: string;
+  module?: string[];
+  path?: string[];
+  task?: string;
+  purpose?: string;
+  cursor?: string;
+  snapshot?: string;
+  version?: string;
+  history?: boolean;
+}
+
+/** Index APIs deliberately emit compact JSON: this is the measured return body. */
+export async function contextIndexQuery(
+  rootDir: string,
+  action: ContextIndexRequest['action'],
+  value: string | undefined,
+  options: ContextIndexOptions,
+): Promise<number> {
+  let discloseErrors = false;
+  try {
+    const requests =
+      action === 'read-batch'
+        ? await readContextBatchFile(options.file)
+        : undefined;
+    if ((value?.length ?? 0) > 4096 || (options.cursor?.length ?? 0) > 128) {
+      throw new Error('MANCODE_CONTEXT_INDEX_ARGUMENT_INVALID');
+    }
+    if (
+      (options.module?.length ?? 0) > 32 ||
+      (options.document?.length ?? 0) > 32 ||
+      options.document?.some(
+        (value) => !/^[a-z][a-z0-9-]{0,63}$/.test(value),
+      ) ||
+      (options.path?.length ?? 0) > 32 ||
+      options.module?.some((value) => !value.trim() || value.length > 128) ||
+      options.path?.some((value) => value.length > 256)
+    )
+      throw new Error('MANCODE_CONTEXT_INDEX_ARGUMENT_INVALID');
+    const selectedPaths = options.path?.map(assertSafeSharedRelativePath);
+    const project = await readV3CommandProject(rootDir);
+    discloseErrors =
+      !project.project.privacy ||
+      (!project.project.privacy.policy.enabled &&
+        project.project.privacy.exclusions.entries.length === 0);
+    const session = await resolveV3ReadSession(project, options);
+    const refTask =
+      action === 'read' && value && /^(local|shared):[^/]+\//.test(value)
+        ? value.split('/')[0]
+        : requests
+            ?.map((item) =>
+              /^(local|shared):[^/]+\//.test(item.ref)
+                ? item.ref.split('/')[0]
+                : undefined,
+            )
+            .find(Boolean);
+    const taskRef =
+      options.task || refTask
+        ? parseTaskRef(options.task ?? refTask ?? '')
+        : (session?.activeTaskRef ?? null);
+    if (
+      requests?.some(
+        (item) =>
+          /^(local|shared):[^/]+\//.test(item.ref) &&
+          item.ref.split('/')[0] !==
+            (taskRef ? `${taskRef.namespace}:${taskRef.taskId}` : undefined),
+      )
+    )
+      throw new Error('MANCODE_CONTEXT_BATCH_TASK_MISMATCH');
+    const purpose = parsePurpose(options.purpose);
+    const checkout = async () =>
+      JSON.stringify({
+        root: project.projectRoot,
+        workspaceId: project.runtime.workspaceId,
+        checkoutId: project.runtime.checkoutId,
+        head: await readCheckoutCodeHead(project.projectRoot),
+      });
+    const snapshot = await loadContextIndexSnapshot(
+      project.store,
+      taskRef,
+      action === 'read' || action === 'read-batch' ? 'handoff' : purpose,
+      checkout,
+      {
+        modules: options.module,
+        paths: selectedPaths,
+        documentIds: options.document,
+      },
+      {
+        expectedSchemaEpoch: project.project.manifest.epoch,
+        readerVersion: VERSION,
+        writerVersion: VERSION,
+        writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+        adapterVersions: await inspectV3AdapterVersions(
+          project.projectRoot,
+          managedAdapterNames(project.project.manifest.managedAdapters),
+        ),
+      },
+    );
+    const result = queryContextIndex(snapshot, {
+      action,
+      purpose,
+      ...(action === 'search' ? { query: value } : { ref: value }),
+      version: options.version,
+      cursor: options.cursor,
+      snapshot: options.snapshot,
+      history: options.history,
+      requests,
+    });
+    console.log(serializeContextIndex(result));
+    return result.status === 'stale' ||
+      result.status === 'unavailable' ||
+      result.items?.some(
+        (item) => item.status === 'stale' || item.status === 'unavailable',
+      )
+      ? EXIT_V3_BLOCKED
+      : EXIT_V3_OK;
+  } catch (error) {
+    // Do not echo untrusted queries, paths or authority parser errors into the envelope.
+    const code = contextIndexErrorCode(error, discloseErrors);
+    console.log(
+      JSON.stringify({
+        format: 'context-index-v1',
+        status: 'unavailable',
+        code,
+        actionReady: false,
+      }),
+    );
+    return EXIT_V3_BLOCKED;
+  }
+}
+
+async function readContextBatchFile(file: string | undefined) {
+  if (!file) throw new Error('MANCODE_CONTEXT_BATCH_FILE_REQUIRED');
+  const handle = await open(file, 'r');
+  try {
+    const content = Buffer.alloc(32769);
+    const { bytesRead } = await handle.read(content, 0, content.length, 0);
+    if (bytesRead > 32768)
+      throw new Error('MANCODE_CONTEXT_BATCH_ARGUMENT_INVALID');
+    try {
+      return parseContextBatchRequests(
+        JSON.parse(content.subarray(0, bytesRead).toString('utf8')),
+      );
+    } catch {
+      throw new Error('MANCODE_CONTEXT_BATCH_ARGUMENT_INVALID');
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Diagnostics are fixed categories, never raw paths or parser text from protected records. */
+export function contextIndexErrorCode(
+  error: unknown,
+  discloseErrors: boolean,
+): string {
+  const message = error instanceof Error ? error.message : '';
+  const fsCode = (error as NodeJS.ErrnoException | null)?.code;
+  if (discloseErrors) {
+    if (fsCode === 'EACCES' || fsCode === 'EPERM')
+      return 'MANCODE_CONTEXT_PERMISSION_DENIED';
+    if (
+      fsCode === 'ENOENT' ||
+      /^MANCODE_(?:CONTEXT_ENTITY_UNAVAILABLE|TASK_NOT_FOUND)(?::|$)/.test(
+        message,
+      )
+    )
+      return 'MANCODE_CONTEXT_NOT_FOUND';
+    if (
+      error instanceof SyntaxError ||
+      /^MANCODE_CONTEXT_ENTITY_CORRUPT(?::|$)/.test(message)
+    )
+      return 'MANCODE_CONTEXT_CORRUPT';
+  }
+  if (
+    /^MANCODE_[A-Z_]{1,100}$/.test(message) &&
+    !/PRIVACY|NOT_FOUND|CORRUPT|PERMISSION/.test(message)
+  )
+    return message;
+  return 'MANCODE_CONTEXT_INDEX_UNAVAILABLE';
 }
 
 /** Implements `mancode context show [--task ...] ...`. */

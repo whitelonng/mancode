@@ -885,6 +885,27 @@ async function initializeV3(
     } else {
       console.log(`   mancode bootstrap: ${selectedPlatforms.join(', ')}`);
     }
+    try {
+      const { bindProjectProgress } = await import(
+        '../context/project-progress-storage.js'
+      );
+      const { notifyCommittedProgress } = await import(
+        '../runtime/project-progress-events.js'
+      );
+      await bindProjectProgress(rootDir);
+      await notifyCommittedProgress(rootDir, {
+        full: true,
+        reason: 'initialization',
+      });
+    } catch (error) {
+      const code =
+        error instanceof Error && /^MANCODE_[A-Z_]+$/.test(error.message)
+          ? error.message
+          : 'MANCODE_PROGRESS_INITIALIZATION_FAILED';
+      console.error(
+        `Project initialized; progress page needs attention (${code}).`,
+      );
+    }
     return EXIT_OK;
   } catch (error) {
     if (scratchBackup !== null) {

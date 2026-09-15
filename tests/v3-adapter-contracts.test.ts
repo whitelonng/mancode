@@ -180,6 +180,25 @@ describe('V3 adapter bootstrap integration', () => {
       const bootstrap = await readFile(target, 'utf8');
       expect(bootstrap).toContain('# mancode bootstrap');
       expect(bootstrap).toContain('mancode context show --purpose orient');
+      expect(
+        bootstrap.indexOf('mancode context index --purpose orient'),
+      ).toBeLessThan(
+        bootstrap.indexOf('mancode context show --purpose orient'),
+      );
+      expect(bootstrap).toContain('format: context-index-v1');
+      expect(bootstrap).toContain('task.workflowMode');
+      expect(bootstrap).toContain('task.policyVersions');
+      expect(bootstrap).toContain(
+        'mancode context read <ref> --version <version>',
+      );
+      expect(bootstrap).toContain('after context compaction');
+      expect(bootstrap).toContain('--snapshot <snapshot>');
+      expect(bootstrap).toContain(
+        'unavailable/stale/privacy error is not permission',
+      );
+      expect(bootstrap).toContain(
+        'not a verified host injection or file-write guard',
+      );
       expect(bootstrap).toContain(
         './node_modules/.bin/mancode` when it exists, otherwise use `mancode',
       );
@@ -329,6 +348,23 @@ describe('V3 adapter bootstrap integration', () => {
           v3ModeEntryPath(root, platform, mode),
           'utf8',
         );
+        expect(entry).toContain('## Bounded context protocol');
+        expect(entry).toContain(
+          'mancode context index --document <relatedDocument>',
+        );
+        expect(entry).toContain('read or batch item returns `relatedDocument`');
+        expect(entry).toContain(
+          'required global sections and dependencies before acting',
+        );
+        expect(entry).toContain('approved plan, full scope and checkpoint');
+        expect(entry).toContain(
+          'Preserve existing policy, revision, plan approval',
+        );
+        expect(entry).toContain('Do not refresh every tool call');
+        expect(entry).toContain('mancode progress preview');
+        expect(entry).toContain('without model calls');
+        expect(entry).toContain('Never inject the HTML or full page JSON');
+        expect(entry).toContain('Only an older CLI without index support');
         if (
           platform === 'claude-code' ||
           platform === 'codex' ||

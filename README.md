@@ -382,7 +382,7 @@ mancode workflow delivery <TASK_REF> publication --json
 
 mancode 把目标、需求、计划、检查结果和交接信息保存在稳定 `TaskRef` 下。换一个聊天
 窗口、重启编码 Agent，或者从另一个受支持的 CLI 继续时，新会话可以恢复同一项任务，
-再按当前目的读取精简的 Context Pack，而不必依赖上一段对话仍然打开。
+再按当前目的取得有界索引、按版本读取必需正文，而不必依赖上一段对话仍然打开。
 
 它续接的是**任务上下文**，不是原始聊天记录。不同客户端的 session 仍然隔离；新会话
 必须使用自己的 client 身份，并显式恢复已有 TaskRef。这样既能延续工作，也不会把一个
@@ -392,11 +392,18 @@ mancode 把目标、需求、计划、检查结果和交接信息保存在稳定
 mancode status --brief --json
 mancode context session new --client claude-code
 mancode context resume <namespace:ULID> --session <id> --client claude-code
-mancode context show --purpose orient --session <id> --client claude-code
+mancode context index --purpose orient --session <id> --client claude-code
+mancode context read <ref> --version <version> --purpose implement --session <id> --client claude-code
 ```
 
 原来的 `/man`、`/manba` 和 `/manteam` 入口会处理这些步骤。上面的 CLI 形式适合排查、
 自动化或手工恢复任务。
+
+支持 `context-index-v1` 的更新入口默认只取引用（整个索引返回体最多 1,600 个工具计量 token），正文按需读取。只在旧 CLI 缺少索引命令时保留 Context Pack V2 回退；历史 policy 和既有批准门禁不变。压缩恢复需重读当前必需约束，普通 Solo 查询不创建身份或任务。详见[索引与历史读取](docs/project-intelligence.md#有界上下文索引)及[平台边界](docs/platform-adapters.md#索引入口与恢复边界)。
+
+### 可视化项目进度
+
+已有项目运行 `mancode progress init` 接入唯一进度页。`mancode progress preview` 打开前台本地预览，Ctrl-C 停止；`mancode progress refresh` 更新离线快照，`--shared` 生成仅共享内容的快照。关键任务事件提交后由代码更新页面，浏览器空闲检查不调用模型。Agent 不需要重复写 HTML 或轮询总结；普通 Solo 不因页面强制建任务。详见[进度页边界](docs/project-intelligence.md#每项目进度页)。
 
 ### 需求重构与 checkpoint 恢复
 

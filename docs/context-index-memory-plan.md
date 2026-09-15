@@ -16,7 +16,7 @@
 
 执行授权包含索引优先读取、长期决定关联和可视化项目跟踪，以及相应测试。用户指定外部测试根目录；只新建本任务测试子目录，不覆盖既有测试记录。尚未登记为任务的普通 Solo 操作不得伪装成实时受管任务。
 
-实施文件范围：`include: [.gitignore, src/cli.ts, src/index.ts, src/context/**, src/commands/**, src/runtime/**, src/team/**, src/templates/**, src/installers/**, tests/**, docs/context-index-memory-plan.md, docs/architecture.md, docs/workflows.md, docs/project-intelligence.md, docs/platform-adapters.md, README.md, README.en.md]`；`exclude: [src/gateway/**, src/privacy/**, research/**, .agents/**, .codex/**]`；`modules: [上下文索引与读取, 决策有效性, 项目进度投影与预览, 平台入口与兼容, 验证与文档]`。每处修改仍须对应本文行为，不以目录范围授权无关重构。运行时仅通过公开命令维护治理状态。发布、部署及修改参考页面所属业务项目不在本次执行范围。
+实施文件范围：`include: [.gitignore, src/cli.ts, src/index.ts, src/context/**, src/commands/**, src/runtime/**, src/team/**, src/templates/**, src/installers/**, tests/**, docs/context-index-memory-plan.md, docs/architecture.md, docs/workflows.md, docs/project-intelligence.md, docs/platform-adapters.md, README.md, README.en.md, website/docs.html, website/docs.zh-CN.html]`；`exclude: [src/gateway/**, src/privacy/**, research/**, .agents/**, .codex/**]`；`modules: [上下文索引与读取, 决策有效性, 项目进度投影与预览, 平台入口与兼容, 验证与文档]`。网站两页仅补齐新增命令及必要使用说明，功能与下述验收保持不变。每处修改仍须对应本文行为，不以目录范围授权无关重构。运行时仅通过公开命令维护治理状态。发布、部署及修改参考页面所属业务项目不在本次执行范围。
 
 ## 2. 仓库证据与设计取舍
 
@@ -248,9 +248,52 @@ Token 成本边界：页面生成和刷新没有模型调用；Agent 登记新�
 
 <!-- mancode:delivery-record:start -->
 Task: local:01M2J23Z0DPAGK9PNSZWBPD8E0
-Plan version: 2
-Review: stale
-Verification: stale
+Plan version: 3
+Review: blocked
+Verification: pending
 
-Next: finish relevant verification, then review the complete module.
+Reviewer declaration: independent
+Direction: Consolidated actual independent index/decision/document reviews, progress total review and targeted repairs, plus bilingual website diff review; all changes map to approved plan version 3. Overall acceptance remains incomplete for AC9 and AC12.
+Correctness: Final 167-file regression: 1502 tests passed; lint, typecheck, build, 16 compiled adapters and current real HTTP/browser checks passed. Independent I-R01..05, D-R01..02 and P-R01..08 findings were repaired and rechecked; their logs remain in the specified evidence directory. These earlier informal findings were not previously in this ledger, so no synthetic resolved IDs are submitted. Publication detection is a remaining feature gap, and genuine host recovery lacks observation.
+Proportionality: Reuse existing task and decision authority. Explicit immutable relationship opt-in, bounded index/body reads and reusable projections avoid adding a vector store or model polling. Filesystem/HTTP/locking checks address demonstrated privacy and recovery failures. Website changes only add the eight new CLI entries and usage text.
+Next: Keep task open. Decide how publication outcomes should be durably recorded within the approved authority model, implement and verify that remaining AC12 behavior, then obtain real fresh-host/compaction evidence for AC9. Unrelated untracked research must be handled separately before formal completion; do not include it in this task commit.
+- P-R09: open — AC12 requires publication failures to be distinguishable. Current authority exposes no durable publication outcome and the page only reports unobserved; automatic publication failure tracking remains unimplemented. Do not interpret the honest unknown label as fulfillment.
+- AC-1: met — Bounded whole JSON, no default bodies: context-index, command and CLI contracts; final full regression passed.
+- AC-2: met — 10/1000/10000 fixtures, required selection and whole collection snapshot cursor invalidation: context-index tests.
+- AC-3: met — Declared document dependencies include global constraints and differently named storage sentinel; actual child-agent CLI trial used the rule before changing app.cjs.
+- AC-4: met — Immutable decision relations, partial clause projection, hidden successors and concurrent resolution; independent I-R01..I-R05 repairs closed.
+- AC-5: met — Plan/document bytes, privacy, checkout, collection members and stable double reads invalidate old versions; document and cross-clone contracts passed.
+- AC-6: met — Batch and single continuations preserve every body byte, including conditions and exceptions; measured complete reads include every continuation.
+- AC-7: met — Privacy applies before visible output/cache, hidden successor cannot revive ancestor; privacy/decision/document contracts and independent review passed.
+- AC-8: met — Rebuildable cache, V2 fallback and unchanged historical policies; adapter and compiled platform contracts passed; ordinary queries need no new identity.
+- AC-9: unverified — Adapter contracts and stable batch reuse passed. Actual fresh host conversation and genuine host compaction recovery remain unverified.
+- AC-10: met — Actual child Agent located task, read approved scope and dependency constraints, changed only app.cjs, observed failure then 2 passing tests, handed results to parent; completion gate rejected missing review. This is a scoped host trial, not a cross-actor handoff or a claim of finished fixture governance.
+- AC-11: met — Unique binding, repeated init, custom HTML protection and V1 support: storage/CLI contracts.
+- AC-12: missing — Lifecycle and evidence mapping, including planned+plan_only, passed independent P08 review. Automatic publication-failure detection is NOT implemented: no durable local source exists; page honestly shows unobserved without checking a remote.
+- AC-13: met — Two actual CLI changes appeared within 3 seconds through real HTTP; current browser live update 993 ms, disconnect visible, server failure/recovery contracts passed.
+- AC-14: met — Actual local and shared offline snapshots rendered; current browser recorded no external requests and consistent shared version.
+- AC-15: met — Atomic publication, Git exclusion, version CAS and interrupted commit recovery; independent P-R02/P-R06/P-R07 repairs and regression passed.
+- AC-16: met — Actual mixed fixture local view contains both classes; shared HTML has one shared title/count and no private title or local ref. Browser shared offline result and HTTP security/Git race contracts passed.
+- AC-17: met — 390px browser no horizontal page overflow; filtering, source expansion, keyboard tabs observed; bounded module/task rendering and on-demand paging contracts passed.
+- AC-18: met — No model/agent calls in rendering or notification paths; idle polls do not rewrite HTML; real CLI events update it without extra model summaries.
+- AC-19: met — Real cache/HTTP IO with 10/1000/10000 in-memory authority fixtures; 10000 tasks task-event reads 136595 B/writes 136676 B, 1 reprojected task. 10000 decisions+1task reads 542119 B/writes 542188 B. Idle has no authority enumeration. Not a 10000-disk-authority full CLI benchmark.
+- AC-1: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-2: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-3: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-4: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-5: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-6: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-7: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-8: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-9: automated=passed(surface=component); manual=pending(surface=unspecified); Executed argv in project root; captured exit code 0.
+- AC-10: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-11: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-12: automated=passed(surface=component); manual=pending(surface=unspecified); Executed argv in project root; captured exit code 0.
+- AC-13: automated=passed(surface=real_http); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-14: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-15: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-16: automated=passed(surface=real_http); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-17: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
+- AC-18: automated=passed(surface=real_http); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-19: automated=passed(surface=real_http); manual=n/a; Executed argv in project root; captured exit code 0.
 <!-- mancode:delivery-record:end -->

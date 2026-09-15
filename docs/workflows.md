@@ -1,6 +1,6 @@
 # 工作流与团队协作
 
-mancode 不把“当前模式”保存成全局开关。受治理的模式入口创建或恢复显式 session 与 TaskRef，再读取 Context Pack；普通 Solo 不创建这些治理状态。
+mancode 不把“当前模式”保存成全局开关。受治理的模式入口创建或恢复显式 session 与 TaskRef，再按能力读取有界上下文索引；普通 Solo 不创建这些治理状态。
 
 ## 模式
 
@@ -37,6 +37,21 @@ mancode workflow requirements local:<ULID> draft \
 ```
 
 draft 的 `blockingUnknowns` 必须列出开放决定；scope、coverage、technical decisions 或 acceptance 可以暂不完整。后续会话通过 TaskRef 恢复同一澄清状态，每次回答后更新 draft；只有 blocking 项清零且 requirements 完整时才能 `finalize`。`manba` 在修复前还必须先从复现、测试、文档、历史或语义 owner 建立预期行为，无法确定时先问一个聚焦问题。
+
+## 各阶段按需读取
+
+支持 `context-index-v1` 的入口以 `context index --purpose <purpose>` 获取少量引用，再按版本读取必需正文；不默认灌入全部任务、计划、spec 或历史。
+
+| 阶段 | 当前行动前展开 |
+|---|---|
+| orient | 仅定位；写入前切换到实际阶段 |
+| plan | 当前目标、需求/验收、范围及适用决定 |
+| implement | 当前批准计划相关内容、完整适用 scope/约束、恢复检查点 |
+| review | 批准基线、相关契约、实际完整 diff、未解决项和必要调用链 |
+| verify | 验收条件、当前内容/环境基线、证据及未解决项 |
+| handoff | 当前授权、批准依据、scope、剩余工作、阻塞和证据 |
+
+分段读取以内容单元的完整性为准；`more_required` 未结束时不依据局部片段行动。分页完成后核对同一查询的 `--snapshot`。上下文压缩只保留“曾读过”的事实不能代替正文，恢复时重读当前必需约束；仍可见的相同版本在稳定行动批次可复用。历史诊断显式加 `--history`，旧计划不能授予新执行权。以上读取不替代既有批准、scope、revision、review 和完成门禁。
 
 ## `man` 流程
 

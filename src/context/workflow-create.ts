@@ -489,7 +489,18 @@ export async function createV3Workflow(
     if (taskHeadFence !== null) {
       await createTaskHeadFence(homeStore, taskHeadFence);
     }
+    await (
+      await import('../runtime/project-progress-events.js')
+    ).markProgressCommitPending(projectRoot, journal.operationId);
     journal = await commitJournal(homeStore, journal, now);
+    await (
+      await import('../runtime/project-progress-events.js')
+    ).notifyCommittedProgress(
+      projectRoot,
+      { taskRefs: [taskRef] },
+      undefined,
+      journal.operationId,
+    );
   } catch (error) {
     if (journalCreated) {
       try {

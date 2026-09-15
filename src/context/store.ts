@@ -35,10 +35,8 @@ import {
 } from './aggregate.js';
 import type { ArtifactRef } from './artifact-ref.js';
 import { digestCanonicalJson } from './canonical.js';
-import {
-  type ConfirmedDecisionV1,
-  listConfirmedDecisions,
-} from './confirmed-decision.js';
+import { listConfirmedDecisions } from './confirmed-decision.js';
+import type { ConfirmedDecision } from './decision-record.js';
 import { assertUlid } from './ids.js';
 import { type SchemaManifest, parseSchemaManifest } from './manifest.js';
 import {
@@ -96,7 +94,7 @@ export interface StoredProjectSnapshot {
   config: ProjectConfigV1;
   policy: TeamPolicyV1;
   projectFacts: ProjectFactsV1 | null;
-  confirmedDecisions: ConfirmedDecisionV1[];
+  confirmedDecisions: ConfirmedDecision[];
   privacy?: PrivacyPolicySnapshot | null;
   fingerprint: string;
 }

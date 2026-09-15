@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   contextClose,
   contextDoctor,
+  contextIndexErrorCode,
+  contextIndexQuery,
   contextReconcileTaskHead,
   contextResume,
   contextSessionNew,
@@ -27,6 +29,7 @@ import {
   resolveV3CommandSession,
 } from '../src/commands/v3-support.js';
 import { workflow } from '../src/commands/workflow.js';
+import { confirmedDecisionDigest } from '../src/context/confirmed-decision.js';
 import { createUlid } from '../src/context/ids.js';
 import {
   REQUIREMENT_DIMENSIONS,
@@ -60,6 +63,97 @@ describe('V3 CLI command contracts', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('offers anonymous bounded project indexes without creating an actor or session', async () => {
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(
+        await contextIndexQuery(root, 'index', undefined, { json: true }),
+      ).toBe(0);
+      const result = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(result).toMatchObject({
+        format: 'context-index-v1',
+        task: null,
+        actionReady: false,
+      });
+      expect(await readLocalActor(root)).toBeNull();
+      expect(result).not.toHaveProperty('content');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('keeps anonymous index, search and read behind the existing reader compatibility gate', async () => {
+    const manifestPath = path.join(root, '.mancode/schema.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        minReaderVersion: '999.0.0',
+        minWriterVersion: '999.0.0',
+      }),
+    );
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const requestsFile = path.join(root, 'requests.json');
+      await writeFile(
+        requestsFile,
+        JSON.stringify([{ ref: 'query', version: 'v1' }]),
+      );
+      for (const action of ['index', 'search', 'read', 'read-batch'] as const) {
+        expect(
+          await contextIndexQuery(
+            root,
+            action,
+            action === 'index' ? undefined : 'query',
+            {
+              json: true,
+              ...(action === 'read-batch' ? { file: requestsFile } : {}),
+            },
+          ),
+        ).toBe(3);
+        expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
+          status: 'unavailable',
+          code: 'MANCODE_READER_VERSION_TOO_OLD',
+        });
+      }
+      await writeFile(
+        manifestPath,
+        JSON.stringify({ ...manifest, minWriterVersion: '999.0.0' }),
+      );
+      expect(
+        await contextIndexQuery(root, 'index', undefined, { json: true }),
+      ).toBe(0);
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('classifies safe failures without exposing protected entity existence or raw paths', () => {
+    const permission = Object.assign(new Error('secret /private/source'), {
+      code: 'EACCES',
+    });
+    const corrupt = new Error(
+      'MANCODE_CONTEXT_ENTITY_CORRUPT: secret/path.json',
+    );
+    const missing = new Error(
+      'MANCODE_CONTEXT_ENTITY_UNAVAILABLE: secret/path.json',
+    );
+    expect(contextIndexErrorCode(permission, true)).toBe(
+      'MANCODE_CONTEXT_PERMISSION_DENIED',
+    );
+    expect(contextIndexErrorCode(corrupt, true)).toBe(
+      'MANCODE_CONTEXT_CORRUPT',
+    );
+    expect(contextIndexErrorCode(missing, true)).toBe(
+      'MANCODE_CONTEXT_NOT_FOUND',
+    );
+    for (const error of [permission, corrupt, missing])
+      expect(contextIndexErrorCode(error, false)).toBe(
+        'MANCODE_CONTEXT_INDEX_UNAVAILABLE',
+      );
   });
 
   it('requires a local identity before bootstrap and exposes an explicit session handoff', async () => {
@@ -558,6 +652,69 @@ describe('V3 CLI command contracts', () => {
       };
       expect(createPayload.taskRef.namespace).toBe('local');
       const task = `${createPayload.taskRef.namespace}:${createPayload.taskRef.taskId}`;
+      expect(
+        await contextIndexQuery(root, 'index', undefined, {
+          task,
+          purpose: 'implement',
+          json: true,
+        }),
+      ).toBe(0);
+      const indexed = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      const requirements = indexed.entries.find(
+        (entry: { kind: string }) => entry.kind === 'requirements',
+      );
+      expect(requirements).toBeDefined();
+      expect(indexed.task).toMatchObject({
+        workflowMode: 'man',
+        policyVersions: { planning: expect.any(Number) },
+      });
+      expect(
+        await contextIndexQuery(root, 'read', requirements.ref, {
+          version: requirements.version,
+          json: true,
+        }),
+      ).toBe(0);
+      const body = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(body).toMatchObject({
+        format: 'context-index-v1',
+        status: 'complete',
+        actionReady: false,
+      });
+      expect(body.content).toContain('Create from the V3 command.');
+      const batchFile = path.join(root, 'read-requests.json');
+      await writeFile(
+        batchFile,
+        JSON.stringify([
+          { ref: requirements.ref, version: requirements.version },
+        ]),
+      );
+      expect(
+        await contextIndexQuery(root, 'read-batch', undefined, {
+          file: batchFile,
+          purpose: 'implement',
+          json: true,
+        }),
+      ).toBe(0);
+      const batch = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(batch.items).toHaveLength(1);
+      expect(batch.items[0].content).toContain('Create from the V3 command.');
+      await writeFile(
+        batchFile,
+        JSON.stringify([
+          { ref: requirements.ref, version: requirements.version },
+          { ref: `local:${createUlid()}/scope`, version: requirements.version },
+        ]),
+      );
+      expect(
+        await contextIndexQuery(root, 'read-batch', undefined, {
+          file: batchFile,
+          purpose: 'implement',
+          json: true,
+        }),
+      ).toBe(3);
+      expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0])).code).toBe(
+        'MANCODE_CONTEXT_BATCH_TASK_MISMATCH',
+      );
 
       expect(
         await contextResume(root, task, {
@@ -697,6 +854,159 @@ describe('V3 CLI command contracts', () => {
       expect(planPack.pack.project.confirmedDecisions).toMatchObject([
         { title: 'Use the V3 resolver' },
       ]);
+      const previous = (await new V3ContextStore(root).readProjectSnapshot())
+        .confirmedDecisions[0];
+      if (!previous) throw new Error('missing decision fixture');
+      const detailsFile = path.join(root, 'decision-details.json');
+      await writeFile(
+        detailsFile,
+        JSON.stringify({
+          capability: 'decision-relations:1',
+          recordKind: 'decision',
+          rationale: 'Reduce repeated context.',
+          alternatives: [],
+          tradeoffs: [],
+          revisitWhen: [],
+          applicability: { modules: ['context'], paths: ['src/context/**'] },
+          clauses: [
+            { id: 'bounded', statement: 'Use a bounded context index.' },
+          ],
+          relations: [
+            {
+              action: 'supersede',
+              targetId: previous.decisionId,
+              targetDigest: confirmedDecisionDigest(previous),
+              clauses: 'all',
+            },
+          ],
+        }),
+      );
+      const richOptions = {
+        title: 'Bounded context',
+        statement: 'Read selected indexes.',
+        details: detailsFile,
+        confirm: true,
+        session: sessionId,
+        client: 'fixture',
+        json: true,
+      };
+      expect(await teamDecisionPublish(root, richOptions)).not.toBe(0);
+      expect(
+        await teamDecisionPublish(root, {
+          ...richOptions,
+          confirmFormatUpgrade: true,
+        }),
+      ).toBe(0);
+      const richReceipt = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(richReceipt.decision).toHaveProperty('schemaVersion', 2);
+      expect(richReceipt.decision).not.toHaveProperty('details');
+      expect(
+        await contextIndexQuery(root, 'index', undefined, {
+          module: ['context'],
+          purpose: 'implement',
+          json: true,
+        }),
+      ).toBe(0);
+      const richIndex = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(richIndex.entries).toHaveLength(1);
+      expect(richIndex.entries[0]).toMatchObject({
+        ref: `decision:${richReceipt.decision.decisionId}`,
+        required: true,
+      });
+      expect(
+        await contextShow(root, {
+          task,
+          session: sessionId,
+          client: 'fixture',
+          purpose: 'plan',
+          level: 'task',
+          json: true,
+        }),
+      ).toBe(0);
+      const updatedPack = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(updatedPack.pack.project.confirmedDecisions).toHaveLength(1);
+      expect(updatedPack.pack.project.confirmedDecisions[0].decisionId).toBe(
+        richReceipt.decision.decisionId,
+      );
+      // Simulate a valid immutable decision arriving from another clone.
+      const rich = (
+        await new V3ContextStore(root).readProjectSnapshot()
+      ).confirmedDecisions.find(
+        (entry) => entry.decisionId === richReceipt.decision.decisionId,
+      );
+      if (!rich) throw new Error('missing structured decision fixture');
+      const competitor = { ...rich, decisionId: createUlid() };
+      await writeFile(
+        path.join(
+          root,
+          '.mancode/shared/memory/decisions',
+          `${competitor.decisionId}.json`,
+        ),
+        JSON.stringify(competitor),
+      );
+      const resolutionRecords = [rich, competitor].map((entry) => ({
+        decisionId: entry.decisionId,
+        digest: confirmedDecisionDigest(entry),
+      }));
+      const resolutionDetails = {
+        ...JSON.parse(await readFile(detailsFile, 'utf8')),
+        relations: resolutionRecords.map((entry) => ({
+          action: 'supersede',
+          targetId: entry.decisionId,
+          targetDigest: entry.digest,
+          clauses: 'all',
+        })),
+        resolution: { records: resolutionRecords },
+      };
+      await writeFile(
+        detailsFile,
+        JSON.stringify({
+          ...resolutionDetails,
+          resolution: { records: resolutionRecords.slice(0, 1) },
+        }),
+      );
+      expect(
+        await teamDecisionPublish(root, {
+          ...richOptions,
+          confirmFormatUpgrade: true,
+        }),
+      ).toBe(3);
+      const staleDetails = structuredClone(resolutionDetails);
+      const staleReference = staleDetails.resolution.records[0];
+      const staleRelation = staleDetails.relations[0];
+      if (!staleReference || !staleRelation)
+        throw new Error('missing resolution fixture');
+      staleReference.digest = `sha256:${'0'.repeat(64)}`;
+      staleRelation.targetDigest = staleReference.digest;
+      await writeFile(detailsFile, JSON.stringify(staleDetails));
+      expect(
+        await teamDecisionPublish(root, {
+          ...richOptions,
+          confirmFormatUpgrade: true,
+        }),
+      ).toBe(3);
+      await writeFile(detailsFile, JSON.stringify(resolutionDetails));
+      expect(
+        await teamDecisionPublish(root, {
+          ...richOptions,
+          confirmFormatUpgrade: true,
+        }),
+      ).toBe(0);
+      const resolutionReceipt = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(
+        await contextIndexQuery(root, 'index', undefined, {
+          module: ['context'],
+          purpose: 'implement',
+          json: true,
+        }),
+      ).toBe(0);
+      const resolvedIndex = JSON.parse(String(logs.mock.calls.at(-1)?.[0]));
+      expect(resolvedIndex.entries).toHaveLength(1);
+      expect(resolvedIndex.entries[0]).toMatchObject({
+        ref: `decision:${resolutionReceipt.decision.decisionId}`,
+        state: 'current',
+      });
+      expect(resolvedIndex.gaps).not.toContain('decision_conflict');
       expect(await teamStatus(root, { json: true })).toBe(0);
       const sessionFiles = await readdir(
         path.join(root, '.mancode', 'local', 'sessions'),

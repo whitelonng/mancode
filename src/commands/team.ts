@@ -1,8 +1,15 @@
+import { readFile } from 'node:fs/promises';
 import { createV3Checkpoint } from '../context/checkpoint-create.js';
+import { CURRENT_WRITER_CAPABILITIES } from '../context/compatibility.js';
+import {
+  confirmedDecisionDigest,
+  createStructuredDecision,
+} from '../context/confirmed-decision.js';
 import {
   createConfirmedDecision,
   publishConfirmedDecision,
 } from '../context/confirmed-decision.js';
+import { parseDecisionDetails } from '../context/decision-record.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
 import { assertSharedTextSafe } from '../context/privacy.js';
 import { V3ContextStore } from '../context/store.js';
@@ -159,6 +166,8 @@ export interface TeamTransportRecoverOptions {
 }
 
 export interface TeamDecisionPublishOptions {
+  details?: string;
+  confirmFormatUpgrade?: boolean;
   title?: string;
   statement?: string;
   task?: string;
@@ -582,6 +591,18 @@ export async function teamDecisionPublish(
   try {
     assertSharedTextSafe(options.title, 'confirmed decision title');
     assertSharedTextSafe(options.statement, 'confirmed decision statement');
+    if (options.details !== undefined && options.confirmFormatUpgrade !== true)
+      throw new Error('MANCODE_DECISION_FORMAT_UPGRADE_REQUIRED');
+    const detailsText =
+      options.details === undefined
+        ? undefined
+        : await readFile(options.details, 'utf8');
+    if (detailsText !== undefined && detailsText.length > 1_000_000)
+      throw new Error('MANCODE_DECISION_DETAILS_TOO_LARGE');
+    const details =
+      detailsText === undefined
+        ? undefined
+        : parseDecisionDetails(JSON.parse(detailsText));
     const project = await readV3CommandProject(rootDir);
     const actor = await readLocalActor(project.projectRoot);
     if (actor === null) throw new Error('MANCODE_LOCAL_ACTOR_REQUIRED');
@@ -616,7 +637,7 @@ export async function teamDecisionPublish(
       },
     });
     const operationId = createUlid();
-    const decisionTarget = createConfirmedDecision({
+    const decisionInput = {
       decisionId: createUlid(),
       title: options.title,
       statement: options.statement,
@@ -624,7 +645,11 @@ export async function teamDecisionPublish(
       actorId: actor.actorId,
       operationId,
       authorization,
-    });
+    };
+    const decisionTarget =
+      details === undefined
+        ? createConfirmedDecision(decisionInput)
+        : createStructuredDecision(decisionInput, details);
     const eventTarget: TeamEventV1 = {
       schemaVersion: 1,
       eventId: createUlid(),
@@ -643,6 +668,10 @@ export async function teamDecisionPublish(
     const decision = await publishConfirmedDecision(
       project.projectRoot,
       decisionTarget,
+      {
+        confirmFormatUpgrade: options.confirmFormatUpgrade,
+        writerCapabilities: CURRENT_WRITER_CAPABILITIES,
+      },
     );
     const event = await writeTeamEvent(project.projectRoot, eventTarget);
     try {
@@ -656,7 +685,14 @@ export async function teamDecisionPublish(
     }
     return printV3Result(options.json, {
       schemaVersion: 1,
-      decision,
+      decision:
+        decision.schemaVersion === 1
+          ? decision
+          : {
+              schemaVersion: 2,
+              decisionId: decision.decisionId,
+              digest: confirmedDecisionDigest(decision),
+            },
       event,
       trustBoundary: authorization.trustBoundary,
     });
@@ -1174,6 +1210,13 @@ export async function teamSyncPull(
       snapshot,
     );
     const cachedManifest = cache.manifest;
+    await (
+      await import('../runtime/project-progress-events.js')
+    ).notifyCommittedProgress(project.projectRoot, {
+      project: true,
+      taskRefs: selectedBundles.map((bundle) => bundle.taskRef),
+      reason: 'team_sync',
+    });
     return printV3Result(options.json, {
       schemaVersion: 1,
       remoteRevision: cachedManifest?.revision ?? 0,

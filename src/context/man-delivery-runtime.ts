@@ -749,6 +749,28 @@ export async function syncManDeliveryRecord(
       await rm(temporary, { force: true });
     }
   }
+  const { readProjectProgressBinding } = await import(
+    './project-progress-storage.js'
+  );
+  if (await readProjectProgressBinding(root)) {
+    const { notifyCommittedProgress } = await import(
+      '../runtime/project-progress-events.js'
+    );
+    const ref = task.metadata.taskRef;
+    const result = await notifyCommittedProgress(root, {
+      taskRefs: [ref],
+      ...(subject
+        ? { currentSubjects: { [`${ref.namespace}:${ref.taskId}`]: subject } }
+        : {}),
+      reason: 'delivery_synced',
+    });
+    return result.status === 'updated'
+      ? { status: 'synced' as const }
+      : {
+          status: 'manual_sync' as const,
+          reason: result.code ?? 'progress_binding_unavailable',
+        };
+  }
   let taskId: string;
   try {
     taskId =

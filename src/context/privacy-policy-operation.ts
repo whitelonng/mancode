@@ -446,6 +446,9 @@ export async function updatePrivacyPolicy(input: PrivacyPolicyUpdateInput) {
     await writeOperationRecoveryPayload(localStore, payload);
     journal = await createPreparedOperationJournal(localStore, journal);
     throwIfOperationCrashInjected(OPERATION, 'prepared');
+    await (
+      await import('../runtime/project-progress-events.js')
+    ).markProgressCommitPending(root, operationId);
     for (const definition of getOperationDefinition(OPERATION).steps) {
       journal = await updateOperationJournal(
         localStore,
@@ -481,6 +484,17 @@ export async function updatePrivacyPolicy(input: PrivacyPolicyUpdateInput) {
     const snapshot = await readPrivacyPolicySnapshot(root);
     if (snapshot === null || snapshot.digest !== digestCanonicalJson(policy))
       throw new Error('MANCODE_OPERATION_RECOVERY_CONFLICT');
+    await (
+      await import('../runtime/project-progress-events.js')
+    ).notifyCommittedProgress(
+      root,
+      {
+        project: true,
+        reason: 'privacy_changed',
+      },
+      undefined,
+      operationId,
+    );
     return { state: 'committed' as const, operationId, snapshot };
   } catch (error) {
     if (journal !== null && journal.state !== 'committed') {

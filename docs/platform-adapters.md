@@ -147,3 +147,11 @@ MANCODE_SPIKE_SECOND_SESSION_ID=<window-b-session> \
 ## 发布声明
 
 “文件能生成”不等于“宿主已验证”。每个平台的双窗口 session、子命令传播和子 agent 继承必须在同一发布候选上记录，才能通过内部 Beta gate。ZCode、Kimi Code、Qoder 和 DeepSeek Harness 在完成该验证前保持 provisional 描述。
+
+## 索引入口与恢复边界
+
+更新后的 Continuity renderer 为八个平台生成同一套索引优先读取协议。首次索引响应必须确认 `format: context-index-v1`；只有选定 CLI 不支持索引命令时才使用原 `context show` V2 契约。安装文件不会自动跟随源代码变化，需要沿现有 adapter upgrade 内容完整性流程更新；不手改生成的托管区。
+
+默认引导只获取引用。Agent 使用 `context read <ref> --version <version>` 按需展开，保留查询的 TaskRef、purpose、模块/路径条件和已有 session/client。任务小信封提供 `workflowMode`、`policyVersions` 和 `planDecision`，恢复时加载相应模式，旧任务不被隐式升级。阶段切换、依据变化与上下文压缩后重读当前必需依据；稳定行动批次中仍可见的相同版本可复用，不在每个工具调用前重复读取。
+
+这些是已安装入口的行为指引。没有真实宿主试用证据时，不能宣称宿主已自动注入、强制读取、可靠保留压缩前正文或拦截任意文件写入。session hook 的既有能力验证要求不变。普通 Solo 可匿名查询项目索引，不因该入口创建 actor、session 或任务；页面数据也不作为默认上下文。

@@ -30,9 +30,9 @@ import type {
   ContextPackSectionPointer,
   ProvenanceEntry,
 } from './context-pack.js';
+import { decisionContextValue, projectDecisions } from './decision-record.js';
 import { type LegacyAuthorityScan, scanLegacyAuthority } from './layout.js';
 import type { ManagedAdapter } from './manifest.js';
-import { isPrivacyExcluded } from './privacy-guard.js';
 import {
   type PendingOperationRecord,
   type StoredCoordinationSnapshot,
@@ -807,9 +807,18 @@ function projectProjection(project: StoredProjectSnapshot) {
             excludedEntities: project.privacy.exclusions.entries.length,
           },
         }),
-    confirmedDecisions: project.confirmedDecisions.filter(
-      (decision) => !isPrivacyExcluded(project.privacy, decision),
-    ),
+    confirmedDecisions: projectDecisions(
+      project.confirmedDecisions,
+      project.privacy,
+    )
+      .entries.filter((entry) =>
+        ['current', 'partial', 'reference'].includes(entry.state),
+      )
+      .map(decisionContextValue),
+    ...(projectDecisions(project.confirmedDecisions, project.privacy)
+      .validityUnavailable
+      ? { decisionValidity: 'unavailable' }
+      : {}),
   };
 }
 
@@ -851,8 +860,12 @@ function projectSection(
       ),
     );
   }
-  for (const decision of project.confirmedDecisions) {
-    if (isPrivacyExcluded(project.privacy, decision)) continue;
+  for (const entry of projectDecisions(
+    project.confirmedDecisions,
+    project.privacy,
+  ).entries) {
+    if (!['current', 'partial', 'reference'].includes(entry.state)) continue;
+    const decision = entry.decision;
     provenance.push(
       entityProvenance(
         targetJsonPointer,

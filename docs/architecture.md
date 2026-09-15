@@ -61,6 +61,12 @@ Markdown 计划和报告是人类可读产物。完成门禁以结构化实体�
 
 进程中断后，普通 writer 不会把新旧实体拼成稳定结果。`mancode context doctor` 和 `mancode operation` 根据 journal 继续 repair；只有能证明没有可见业务写时才允许 abort。
 
+## 索引投影
+
+`context-index.ts` 从相同权威构造有界引用和版本化正文读取，新增 `context-index-v1` 输出，与既有 Context Pack V2 并存。索引不是权威，也不保存阅读即批准的账本。候选集合快照绑定工作区/checkout、查询、成员版本、关联及隐私状态；未提交计划内容同样参与新鲜度检查。默认覆盖显式任务与决定关系，未知依赖保留缺口。
+
+`decision-record.ts` 解析不可变决定的适用条款和替代/撤销投影。有效性与可见性分别计算，隐私排除后继不能让旧约束复活。V1 记录仍可读取且不虚构适用关系；显式选择 V2 写入会要求支持决定关系的读写端，不能把新格式误称为对旧 V1 解析器透明兼容。
+
 ## 版本与兼容
 
 `schema.json` 支持 manifest version 1、2 和 3，layout version 固定为 3。新初始化项目默认写入 V2；首次显式选择增强共享隐私时写入 V3。历史 V1 项目完成显式 Policy 2 upgrade 后写入 V2；V1/V2 项目也可通过独立隐私事务升级为 V3。激活状态包括 `initializing`、`dual_read`、`activating`、`v3_active` 和 `repair_required`。

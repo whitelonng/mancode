@@ -4,12 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
 import { adapterStatus, adapterUpgrade } from './commands/adapter.js';
 import {
+  type ContextIndexOptions,
   contextBeta,
   contextClose,
   contextCompact,
   contextDiagnostics,
   contextDoctor,
   contextGlossary,
+  contextIndexQuery,
   contextPublish,
   contextReconcileTaskHead,
   contextResume,
@@ -36,6 +38,7 @@ import {
   operationShow,
 } from './commands/operation.js';
 import { registerPrivacyCommands } from './commands/privacy.js';
+import { registerProgressCommands } from './commands/progress.js';
 import { projectUpgrade } from './commands/project.js';
 import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
@@ -71,6 +74,10 @@ import { uninstall } from './commands/uninstall.js';
 import { version } from './commands/version.js';
 import { WORKFLOW_SUBCOMMANDS } from './commands/workflow-subcommands.js';
 import { workflow } from './commands/workflow.js';
+import {
+  notifyCommittedProgress,
+  readProgressNotification,
+} from './runtime/project-progress-events.js';
 import { VERSION } from './version.js';
 
 export function createCliProgram(): Command {
@@ -214,6 +221,21 @@ export function createCliProgram(): Command {
     });
 
   registerPrivacyCommands(program);
+  registerProgressCommands(program, {
+    readNotification: readProgressNotification,
+    onBound: async (root, controller) => {
+      const result = await notifyCommittedProgress(
+        root,
+        { full: true },
+        controller,
+      );
+      if (result.status === 'pending') throw new Error(result.code);
+    },
+    onRefresh: async (root, change, controller) => {
+      const result = await notifyCommittedProgress(root, change, controller);
+      if (result.status === 'pending') throw new Error(result.code);
+    },
+  });
 
   const projectProgram = program
     .command('project')
@@ -372,6 +394,70 @@ export function createCliProgram(): Command {
     .action(async (options) => {
       process.exitCode = await contextShow(process.cwd(), options);
     });
+
+  for (const [command, action] of [
+    ['index', 'index'],
+    ['search <query>', 'search'],
+    ['read <ref>', 'read'],
+    ['read-batch', 'read-batch'],
+  ] as const) {
+    contextProgram
+      .command(command)
+      .description(
+        'Read bounded context indexes or versioned content (compact JSON)',
+      )
+      .option(
+        '--file <file>',
+        'JSON array of up to 8 {ref,version} requests for read-batch',
+      )
+      .option(
+        '--task <namespace:id>',
+        'Explicit TaskRef; optional for project queries',
+      )
+      .option('--session <id>', 'Existing session ID')
+      .option('--client <name>', 'Client identity')
+      .option(
+        '--purpose <purpose>',
+        'orient, plan, implement, review, verify, or handoff',
+      )
+      .option('--cursor <cursor>', 'Continue the same candidate snapshot')
+      .option(
+        '--snapshot <id>',
+        'Revalidate the candidate snapshot before acting',
+      )
+      .option('--version <digest>', 'Required expected version for read')
+      .option('--history', 'Include historical task references')
+      .option(
+        '--module <name>',
+        'Explicit relevant module',
+        (value: string, previous: string[]) => [...previous, value],
+        [],
+      )
+      .option(
+        '--document <id>',
+        'Declared document and its required constraints',
+        (value: string, previous: string[]) => [...previous, value],
+        [],
+      )
+      .option(
+        '--path <path>',
+        'Relevant repository-relative path',
+        (value: string, previous: string[]) => [...previous, value],
+        [],
+      )
+      .option('--json', 'Compact JSON (always enabled for bounded output)')
+      .action(async (...args: unknown[]) => {
+        const noArgument = action === 'index' || action === 'read-batch';
+        const value = noArgument ? undefined : (args[0] as string);
+        const options = args[noArgument ? 0 : 1] as ContextIndexOptions;
+        process.exitCode = await contextIndexQuery(
+          process.cwd(),
+          action,
+          value,
+          options,
+        );
+      });
+  }
 
   const contextSessionProgram = contextProgram
     .command('session')
@@ -822,6 +908,14 @@ export function createCliProgram(): Command {
   teamDecisionProgram
     .command('publish')
     .description('Publish one immutable confirmed decision')
+    .option(
+      '--details <file>',
+      'Structured decision-v2 details JSON; upgrades the decision collection format',
+    )
+    .option(
+      '--confirm-format-upgrade',
+      'Accept that older V1-only readers will reject this project context',
+    )
     .requiredOption('--title <text>', 'Short decision title')
     .requiredOption('--statement <text>', 'Confirmed decision statement')
     .option('--task <namespace:id>', 'Optional shared TaskRef that produced it')

@@ -500,7 +500,7 @@ remain marked unverified.
 mancode keeps goals, requirements, plans, validation results, and handoff notes
 under a stable `TaskRef`. When you open a new chat window, restart your coding
 agent, or continue from another supported CLI, the new session can resume the
-same task and load a purpose-specific Context Pack without depending on the old
+same task and read a bounded index plus selected versioned content without depending on the old
 conversation remaining open.
 
 This resumes **task context**, not raw chat history. Sessions from different
@@ -512,11 +512,18 @@ one window's temporary state as another window's identity.
 mancode status --brief --json
 mancode context session new --client claude-code
 mancode context resume <namespace:ULID> --session <id> --client claude-code
-mancode context show --purpose orient --session <id> --client claude-code
+mancode context index --purpose orient --session <id> --client claude-code
+mancode context read <ref> --version <version> --purpose implement --session <id> --client claude-code
 ```
 
 The original `/man`, `/manba`, and `/manteam` entries handle these steps. The
 CLI form above is useful for diagnostics, automation, or manual recovery.
+
+Updated entries supporting `context-index-v1` fetch references first (at most 1,600 tool-counted tokens for the entire index response), then read selected bodies. Only older CLIs without index support retain the Context Pack V2 fallback; historical policies and approval gates remain unchanged. Re-read needed constraints after compaction. Ordinary Solo queries create no identity or task. See [index and history reads](docs/project-intelligence.md#有界上下文索引) and [host boundaries](docs/platform-adapters.md#索引入口与恢复边界).
+
+### Visual Project Progress
+
+For an existing project, run `mancode progress init` to bind one progress page. `mancode progress preview` runs a foreground local preview until Ctrl-C; `mancode progress refresh` repairs the offline snapshot, and `--shared` produces a shared-only snapshot. Committed task milestones update the page through code, without model calls during rendering or idle browser checks. Agents do not rewrite HTML or poll for summaries, and ordinary Solo work needs no task registration. See [progress boundaries](docs/project-intelligence.md#每项目进度页).
 
 ### Reframe and Checkpoint Recovery
 

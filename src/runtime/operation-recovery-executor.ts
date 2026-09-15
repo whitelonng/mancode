@@ -251,6 +251,14 @@ export async function executeOperationRecovery(
       located.journal,
       input.replacementCheckpointId,
     );
+    await (
+      await import('./project-progress-events.js')
+    ).notifyCommittedProgress(
+      input.projectRoot,
+      { full: true, reason: 'terminal_operation_repaired' },
+      undefined,
+      input.operationId,
+    );
     return {
       state: 'already_terminal',
       journal: located.journal,
@@ -1017,7 +1025,7 @@ async function applyPayload(
     journal.steps.length - 1,
     now,
   );
-  return updateOperationJournal(
+  const committed = await updateOperationJournal(
     primaryStore,
     {
       ...applying,
@@ -1026,6 +1034,13 @@ async function applyPayload(
     },
     { canAbort: false },
   );
+  await (await import('./project-progress-events.js')).notifyCommittedProgress(
+    projectRoot,
+    { full: true, reason: 'operation_repaired' },
+    undefined,
+    journal.operationId,
+  );
+  return committed;
 }
 
 async function completeJournalThrough(

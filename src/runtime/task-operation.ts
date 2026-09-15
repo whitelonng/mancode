@@ -98,6 +98,10 @@ import {
   updateOperationJournal,
 } from './operation-store.js';
 import {
+  markProgressCommitPending,
+  notifyCommittedProgress,
+} from './project-progress-events.js';
+import {
   type ProjectRuntimeContext,
   readCheckoutCodeHead,
   readProjectRuntimeContext,
@@ -515,6 +519,7 @@ export async function commitTaskOperation(
 ): Promise<OperationJournalV1> {
   throwIfDeferredOperationCrashInjected(previous.type);
   await context.renewLocks();
+  await markProgressCommitPending(context.projectRoot, previous.operationId);
   const next = await updateOperationJournal(
     context.homeStore,
     {
@@ -527,6 +532,14 @@ export async function commitTaskOperation(
   );
   throwIfOperationCrashInjected(previous.type, 'commit');
   await refreshActiveSessionRevision(context);
+  await notifyCommittedProgress(
+    context.projectRoot,
+    {
+      taskRefs: [context.taskRef],
+    },
+    undefined,
+    previous.operationId,
+  );
   return next;
 }
 

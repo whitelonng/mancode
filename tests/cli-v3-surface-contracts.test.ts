@@ -53,6 +53,12 @@ describe('V3 CLI command surface', () => {
       expect(
         commandAt(cliProgram, 'context', 'session', 'spike'),
       ).toBeDefined();
+      for (const action of ['index', 'search', 'read', 'read-batch']) {
+        expect(commandAt(cliProgram, 'context', action)).toBeDefined();
+      }
+      expect(
+        commandAt(cliProgram, 'context', 'read-batch').helpInformation(),
+      ).toContain('--file');
       expect(commandAt(cliProgram, 'context', 'glossary')).toBeDefined();
       expect(
         requiredOptions(commandAt(cliProgram, 'context', 'glossary')),
