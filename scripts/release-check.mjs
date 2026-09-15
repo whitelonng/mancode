@@ -81,6 +81,10 @@ try {
     'npm',
     ['run', 'prepublishOnly'],
     checkout,
+    {
+      MANCODE_CLI_BINARY: path.join(checkout, 'dist', 'cli.js'),
+      MANCODE_PROGRESS_CLI_BINARY: path.join(checkout, 'dist', 'cli.js'),
+    },
   );
   runCheck(
     checks,
@@ -245,8 +249,8 @@ try {
   await rm(temporaryRoot, { recursive: true, force: true });
 }
 
-function runCheck(checks, name, command, args, cwd) {
-  run(command, args, cwd, 'inherit');
+function runCheck(checks, name, command, args, cwd, extraEnv = {}) {
+  run(command, args, cwd, 'inherit', extraEnv);
   checks.push({ name, status: 'passed' });
 }
 
@@ -254,10 +258,11 @@ function runCaptured(command, args, cwd) {
   return run(command, args, cwd, 'pipe').trim();
 }
 
-function run(command, args, cwd, stdio) {
+function run(command, args, cwd, stdio, extraEnv = {}) {
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, ...extraEnv },
     stdio,
   });
   if (result.error) throw result.error;

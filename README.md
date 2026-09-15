@@ -18,7 +18,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.6-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.6" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.7-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.7" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
@@ -134,21 +134,19 @@ requirements、plan、review、verification 和完成门禁维持。
 
 模型可以灵活选择工具与实现步骤，但不能自行改写已批准的目标和验收标准。
 
-### v0.6.6 更新
+### v0.6.7 更新
 
-- `man` 的 `plan_only` 可在明确获准实施后，通过原任务的 `plan confirm` 恢复完整执行，保留计划、范围和任务标识。
-- `manba` 使用诊断需求、真实验证证据和 typed outcome 正式完成，不再要求不适用的 Man 计划或总审。
-- `manteam` 修复精确文件与排除路径的误判，保留重复认领、真实越界和 exclude 优先检查。
-- 受管 Solo 可登记正式审查与验收；运行时锁修复并发半写读取和初始化中断占锁，Windows CI 直接验证故障与强杀恢复。
-
-`manba` 的 `fixed`、`verified`、`no_repro` 要求必需证据通过；`manual_test_required`
-只记录仍待人工验证的事项，不表示已验证，也不替代父任务验收。
+- **索引优先的上下文**：先获取有界任务、文档和决策引用，再按版本读取所需正文；保留旧任务 policy 与兼容入口。
+- **可追溯的长期决策**：通过适用范围、条款替代和撤销关系区分当前有效、部分有效及历史记录，不按任务完成时间判定失效。
+- **每项目可视化进度**：新项目初始化生成 `项目进度.html`，包含任务看板、项目全貌、决策清单、演进时间线和避坑记录。
+- **按事件更新**：未开始、进行中、待审核和阻塞分栏展示；仅规划归入进行中并保留标记，完成任务默认折叠。页面渲染与空闲刷新不调用模型。
+- 修复 `context read <ref> --version <version>` 的参数解析，支持标准空格形式读取完整正文。
 
 <span id="安装方法"></span>
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.6.6。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.6.7。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
 需要 Node.js 22.5.0 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -210,12 +208,12 @@ mancode adapter upgrade --platform codex --dry-run # 只生成 staging 预览
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
-### 升级到 v0.6.6
+### 升级到 v0.6.7
 
 先结束旧版本正在执行的 mancode 写操作，并统一升级同一工作区使用的 CLI：
 
 ```bash
-npm install -g mancode@0.6.6
+npm install -g mancode@0.6.7
 cd your-project
 mancode adapter status --json
 mancode adapter upgrade --platform codex --dry-run --json
@@ -403,7 +401,27 @@ mancode context read <ref> --version <version> --purpose implement --session <id
 
 ### 可视化项目进度
 
-已有项目运行 `mancode progress init` 接入唯一进度页。`mancode progress preview` 打开前台本地预览，Ctrl-C 停止；`mancode progress refresh` 更新离线快照，`--shared` 生成仅共享内容的快照。关键任务事件提交后由代码更新页面，浏览器空闲检查不调用模型。Agent 不需要重复写 HTML 或轮询总结；普通 Solo 不因页面强制建任务。详见[进度页边界](docs/project-intelligence.md#每项目进度页)。
+新项目运行 `mancode init` 后，在项目根目录生成 `项目进度.html`；已有项目运行一次
+`mancode progress init` 接入。已有自定义页面会保留，未登记任务时显示空看板。
+
+五个视图分别展示当前任务、模块全貌、决策来由、演进时间线和避坑记录。看板按
+**未开始 / 进行中 / 待审核 / 阻塞**分栏；仅规划任务仍在进行中栏保留阶段标记，
+已完成任务默认折叠。页面只反映已登记事实，不把任务完成推断为已发布。
+
+[打开交互演示（虚构数据）](https://whitelonng.github.io/mancode/progress-demo.html)
+
+![mancode 项目任务看板演示](https://raw.githubusercontent.com/whitelonng/mancode/main/website/assets/project-progress.png)
+
+```bash
+mancode progress init                # 已有项目接入一次
+mancode progress preview             # 前台本地预览，Ctrl-C 停止
+mancode progress refresh             # 显式核对并更新离线快照
+mancode progress refresh --shared    # 仅包含共享内容的快照
+```
+
+关键任务事件提交后由代码更新页面，渲染与浏览器空闲检查不调用模型。Agent 无需重复写
+HTML 或轮询总结；普通 Solo 不因页面强制建任务。离线 HTML 可直接打开，无需服务。
+详见[进度页边界](docs/project-intelligence.md#每项目进度页)。
 
 ### 需求重构与 checkpoint 恢复
 
@@ -627,7 +645,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.6.6
+mancode v0.6.7
 
 Project:     my-app
 Runtime:     ready

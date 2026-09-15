@@ -492,8 +492,8 @@
           <h2>One task.<br />Another session.</h2>
           <p>
             mancode keeps goals, requirements, plans, validation results, and handoff notes under a
-            stable TaskRef. A new chat or CLI session can resume that task and load only the Context
-            Pack it needs, without depending on the previous window staying open.
+            stable TaskRef. A new chat or CLI session can resume that task, load bounded references,
+            and read the required bodies by version without keeping the previous window open.
           </p>
         </div>
 
@@ -508,12 +508,21 @@
             <strong role="cell">Resume</strong><span role="cell"><code>mancode context resume &lt;TaskRef&gt; --session &lt;id&gt; --client &lt;client&gt;</code></span><em role="cell">Explicit identity</em>
           </div>
           <div class="platform-row" role="row">
-            <strong role="cell">Load</strong><span role="cell">A purpose-specific Context Pack restores the useful task state.</span><em role="cell">Less noise</em>
+            <strong role="cell">Load</strong><span role="cell">A bounded index points to the task state and versioned bodies needed now.</span><em role="cell">Less noise</em>
           </div>
           <div class="platform-row" role="row">
             <strong role="cell">Separate</strong><span role="cell">Raw chat history is not copied, and client sessions remain isolated.</span><em role="cell">Clear boundary</em>
           </div>
         </div>
+      </section>
+
+
+      <section class="platforms-section" id="project-progress">
+        <div class="section-kicker reveal"><span>Project progress / v0.6.7</span><span>See the task. Understand the decision.</span></div>
+        <div class="section-title-row platform-title reveal"><h2>Every project.<br />One clear view.</h2><p>A task board, module overview, decisions, timeline, and lessons learned share the same registered project facts. Completions, blockers, and acceptance changes update the page. Rendering and idle refresh make no model calls.</p></div>
+        <div class="mode-guide-home reveal"><article><small>Context</small><h3>Index first. Read on demand.</h3><p>Start with bounded references and read required bodies by version. A growing project does not put every document into every conversation.</p></article><article><small>Decisions</small><h3>Keep reasons and applicability.</h3><p>Distinguish current, partially valid, and historical records. Follow sources to understand replacements and revocations.</p></article><article><small>Board</small><h3>Move work by status.</h3><p>Not started, in progress, in review, and blocked columns. Plan-only work stays marked; completed tasks are collapsed.</p></article><article><small>Local files</small><h3>Open locally. Preview on demand.</h3><p>New projects generate HTML during initialization. Existing projects run mancode progress init. Offline files need no server.</p></article></div>
+        <figure class="progress-showcase reveal"><a href="./progress-demo.html"><img src="./assets/project-progress.png" alt="Fictional customer collaboration project with not-started, in-progress, review, and blocked task columns" loading="lazy" width="2850" height="3010" /></a><figcaption>Actual template · Fictional demo data · Chinese UI · Task completion does not imply publication.</figcaption></figure>
+        <p><a class="button button-dark" href="./progress-demo.html">Explore all five views ↗</a> <a class="button button-dark" href="./docs.html#continuity">Read the documentation ↗</a></p>
       </section>
 
       <section class="install-section section-dark" id="install">
@@ -573,7 +582,7 @@
         <a href="https://github.com/whitelonng/mancode/blob/main/README.md">中文</a>
         <a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a>
       </div>
-      <span class="footer-status"><i></i> Continuity / v0.6.6</span>
+      <span class="footer-status"><i></i> Continuity / v0.6.7</span>
     </footer>
   </body>
 </html>

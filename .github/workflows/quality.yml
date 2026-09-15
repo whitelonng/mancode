@@ -31,4 +31,7 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
       - name: Test with coverage
+        env:
+          MANCODE_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
+          MANCODE_PROGRESS_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
         run: npm run test:coverage

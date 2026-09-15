@@ -318,6 +318,10 @@
   color: var(--docs-accent);
 }
 
+.docs-main p > code {
+  overflow-wrap: anywhere;
+}
+
 .docs-main code {
   color: var(--docs-accent);
   font-family: var(--mono);

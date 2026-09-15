@@ -177,21 +177,30 @@
         <div class="section-kicker reveal"><span>07 / 跨会话续接</span><span>换窗口，不丢任务脉络。</span></div>
         <div class="section-title-row platform-title reveal">
           <h2>一项任务。<br />下个会话继续。</h2>
-          <p>mancode 把目标、需求、计划、检查结果和交接信息保存在稳定 TaskRef 下。新聊天窗口或 CLI session 可以恢复这项任务，只加载当前目的需要的 Context Pack，不依赖旧窗口一直打开。</p>
+          <p>mancode 把目标、需求、计划、检查结果和交接信息保存在稳定 TaskRef 下。新聊天窗口或 CLI session 可以恢复这项任务，先加载当前目的需要的索引，再按版本补读正文，不依赖旧窗口一直打开。</p>
         </div>
         <div class="platform-table reveal" role="table" aria-label="跨会话任务续接">
           <div class="platform-row platform-head" role="row"><span role="columnheader">步骤</span><span role="columnheader">mancode 保留什么</span><span role="columnheader">边界</span></div>
           <div class="platform-row" role="row"><strong role="cell">保存</strong><span role="cell">稳定 TaskRef 关联需求、计划、结果和交接信息。</span><em role="cell">持久上下文</em></div>
           <div class="platform-row" role="row"><strong role="cell">恢复</strong><span role="cell"><code>mancode context resume &lt;TaskRef&gt; --session &lt;id&gt; --client &lt;client&gt;</code></span><em role="cell">显式身份</em></div>
-          <div class="platform-row" role="row"><strong role="cell">读取</strong><span role="cell">按目的生成 Context Pack，恢复真正有用的任务状态。</span><em role="cell">减少噪声</em></div>
+          <div class="platform-row" role="row"><strong role="cell">读取</strong><span role="cell">按目的查询有界索引，再读取所需正文与当前任务状态。</span><em role="cell">减少噪声</em></div>
           <div class="platform-row" role="row"><strong role="cell">隔离</strong><span role="cell">不复制原始聊天记录，不同客户端 session 仍然隔离。</span><em role="cell">边界清晰</em></div>
         </div>
+      </section>
+
+
+      <section class="platforms-section" id="project-progress">
+        <div class="section-kicker reveal"><span>项目进度 / v0.6.7</span><span>从任务状态，看到决策来由。</span></div>
+        <div class="section-title-row platform-title reveal"><h2>每个项目。<br />一页看清。</h2><p>任务看板、项目全貌、决策清单、演进时间线和避坑记录，来自同一份已登记项目事实。任务完成、阻塞或验收变化时更新页面；渲染与空闲刷新不调用模型。</p></div>
+        <div class="mode-guide-home reveal"><article><small>上下文</small><h3>先索引，再补读</h3><p>默认提供有界引用，执行前按版本读取必要正文。项目增长不等于整套文档进入每轮会话。</p></article><article><small>决策</small><h3>保留原因与有效范围</h3><p>当前有效、部分有效和历史记录分开呈现，沿来源查看替代与撤销依据。</p></article><article><small>看板</small><h3>任务按状态推进</h3><p>未开始、进行中、待审核与阻塞分栏。仅规划保留阶段标记，已完成默认折叠。</p></article><article><small>使用</small><h3>本地打开，按需预览</h3><p>新项目初始化生成 HTML；已有项目运行 mancode progress init。离线文件无需服务，预览随开随停。</p></article></div>
+        <figure class="progress-showcase reveal"><a href="./progress-demo.html"><img src="./assets/project-progress.png" alt="虚构客户协作项目的任务看板，包含未开始、进行中、待审核和阻塞四栏" loading="lazy" width="2850" height="3010" /></a><figcaption>真实模板 · 虚构演示数据 · 页面不把任务完成推断为已发布。</figcaption></figure>
+        <p><a class="button button-dark" href="./progress-demo.html">打开五个视图的交互演示 ↗</a> <a class="button button-dark" href="./docs.zh-CN.html#continuity">查看使用文档 ↗</a></p>
       </section>
 
       <section class="install-section section-dark" id="install"><div class="section-kicker reveal"><span>08 / 快速开始</span><span>安装一次，初始化一次，继续编码。</span></div><div class="install-grid"><div class="install-copy reveal"><p class="eyebrow">准备上场</p><h2>把 mancode<br />放进轮换。</h2><p>不需要账户、Dashboard、API Key 或新编辑器。原生支持 Windows CMD、PowerShell、Git Bash、macOS 与 Linux。</p><a class="button button-solid" href="./docs.zh-CN.html">阅读完整文档 ↗</a></div><div class="steps-terminal reveal"><div class="terminal-command"><span>01 / 安装</span><code>npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><div class="terminal-command"><span>02 / 进入项目</span><code>cd your-project</code><button type="button" data-copy="cd your-project">复制</button></div><div class="terminal-command"><span>03 / 初始化</span><code>mancode init</code><button type="button" data-copy="mancode init">复制</button></div><div class="terminal-ready"><i></i><span>solo 模式已就绪</span><b>00:03</b></div></div></div></section>
 
       <section class="final-cta"><div class="final-cta-mark" aria-hidden="true">M</div><p class="reveal">简单任务少一点仪式。<br />关键任务多一点纪律。</p><h2 class="reveal">别再替 AI<br />收拾臃肿。</h2><div class="final-actions reveal"><div class="command-bar command-light"><code><span>&gt;</span> npm install -g mancode</code><button type="button" data-copy="npm install -g mancode">复制</button></div><a class="button button-dark" href="https://github.com/whitelonng/mancode">GitHub 上查看 ↗</a></div></section>
     </main>
-    <footer class="site-footer"><a class="brand footer-brand" href="#top"><img src="./logo.png" alt="" /><span>mancode</span></a><p>AI 编码 Agent 工作流调度工具。<br />日常训练，关键任务季后赛。</p><div class="footer-links"><a href="https://github.com/whitelonng/mancode">GitHub</a><a href="./docs.zh-CN.html">中文文档</a><a href="./docs.html">English</a><a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a></div><span class="footer-status"><i></i> Continuity / v0.6.6</span></footer>
+    <footer class="site-footer"><a class="brand footer-brand" href="#top"><img src="./logo.png" alt="" /><span>mancode</span></a><p>AI 编码 Agent 工作流调度工具。<br />日常训练，关键任务季后赛。</p><div class="footer-links"><a href="https://github.com/whitelonng/mancode">GitHub</a><a href="./docs.zh-CN.html">中文文档</a><a href="./docs.html">English</a><a href="https://github.com/whitelonng/mancode/blob/main/LICENSE">AGPL-3.0</a></div><span class="footer-status"><i></i> Continuity / v0.6.7</span></footer>
   </body>
 </html>

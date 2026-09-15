@@ -2684,3 +2684,5 @@ html[lang^="zh"] .mode-guide-home h3 {
     line-height: 1.02;
   }
 }
+
+.progress-showcase{margin:32px 0 20px;max-width:960px}.progress-showcase img{display:block;width:100%;height:auto;border:1px solid #d9e2d5;border-radius:12px}.progress-showcase figcaption{margin-top:12px;font-size:13px;line-height:1.7;opacity:.75}

@@ -25,7 +25,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.6-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.6" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.7-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.7" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -200,27 +200,19 @@ and completion gates preserve its engineering commitments.
 The model can choose tools and implementation steps without rewriting approved
 goals or acceptance criteria.
 
-### v0.6.6 Updates
+### v0.6.7 Updates
 
-- Resume an authorized `man` plan-only task through its original `plan confirm`,
-  preserving the approved plan, scope, and TaskRef.
-- Complete `manba` from diagnostic requirements, actual verification evidence,
-  and a typed outcome, without an inapplicable Man plan or module review.
-- Fix exact-file claim/exclusion false positives in `manteam` while retaining
-  duplicate-claim, scope, and exclusion checks.
-- Record formal review and verification for governed Solo handoffs. Runtime locks
-  avoid partial-owner reads and abandoned initialization locks; Windows CI directly
-  exercises write faults and killed-process recovery.
-
-For `manba`, `fixed`, `verified`, and `no_repro` require passing required evidence.
-`manual_test_required` records explicitly outstanding manual checks; it does not
-mean the behavior was verified or satisfy a parent task's acceptance.
+- **Index-first context**: fetch bounded references to tasks, documents, and decisions, then read the required bodies by version. Existing task policies and compatibility paths remain supported.
+- **Traceable decisions**: applicability, clause replacements, and revocations distinguish current, partially valid, and historical records. Completing a task does not retire its decisions.
+- **Visual project progress**: new project initialization generates `项目进度.html` with a task board, module overview, decisions, timeline, and lessons learned.
+- **Event-driven updates**: tasks appear in not-started, in-progress, review, and blocked columns. Plan-only tasks remain marked in progress; completed tasks are collapsed. Rendering and idle refresh make no model calls.
+- Fix version argument parsing for `context read <ref> --version <version>`, including the standard space-separated form.
 
 <span id="installation"></span>
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.6. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.7. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
 Requires Node.js 22.5.0 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -292,13 +284,13 @@ mancode adapter upgrade --platform codex --dry-run # Stage a preview only
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
-### Upgrade to v0.6.6
+### Upgrade to v0.6.7
 
 Finish active mancode writes before upgrading and use one CLI version throughout
 the workspace:
 
 ```bash
-npm install -g mancode@0.6.6
+npm install -g mancode@0.6.7
 cd your-project
 mancode adapter status --json
 mancode adapter upgrade --platform codex --dry-run --json
@@ -523,7 +515,30 @@ Updated entries supporting `context-index-v1` fetch references first (at most 1,
 
 ### Visual Project Progress
 
-For an existing project, run `mancode progress init` to bind one progress page. `mancode progress preview` runs a foreground local preview until Ctrl-C; `mancode progress refresh` repairs the offline snapshot, and `--shared` produces a shared-only snapshot. Committed task milestones update the page through code, without model calls during rendering or idle browser checks. Agents do not rewrite HTML or poll for summaries, and ordinary Solo work needs no task registration. See [progress boundaries](docs/project-intelligence.md#每项目进度页).
+Running `mancode init` in a new project generates `项目进度.html` at the project root.
+Existing projects opt in once with `mancode progress init`. Custom pages are preserved;
+projects with no registered tasks show an empty board.
+
+Five views cover current tasks, modules, decision rationale, a timeline, and lessons
+learned. The board groups **not started / in progress / in review / blocked** tasks.
+Plan-only tasks stay marked in the in-progress column; completed tasks are collapsed.
+The page reflects registered facts and does not infer publication from task completion.
+
+[Open the interactive demo (fictional data; Chinese UI)](https://whitelonng.github.io/mancode/progress-demo.html)
+
+![mancode project task board demo](https://raw.githubusercontent.com/whitelonng/mancode/main/website/assets/project-progress.png)
+
+```bash
+mancode progress init                # Opt in an existing project once
+mancode progress preview             # Foreground local preview; Ctrl-C to stop
+mancode progress refresh             # Explicitly reconcile the offline snapshot
+mancode progress refresh --shared    # Export shared content only
+```
+
+Committed task milestones update the page through code. Rendering and idle browser
+checks make no model calls. Agents do not rewrite HTML or poll for summaries, and
+ordinary Solo work needs no task registration. Open the offline HTML without a server.
+See [progress boundaries](docs/project-intelligence.md#每项目进度页).
 
 ### Reframe and Checkpoint Recovery
 
@@ -823,7 +838,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.6
+mancode v0.6.7
 
 Project:     my-app
 Runtime:     ready
