@@ -157,7 +157,7 @@
 | P-AC-9 | 新会话/压缩恢复按需重读，已稳定阅读不被每轮重复灌入；版本变化显式提示失效 | 真实宿主观察 |
 | P-AC-10 | 端到端完成“定位任务 → 读批准依据 → 修改 → 验证 → 交接”，保留现有批准/scope/审查/完成门禁 | E2E + 真实宿主观察 |
 | P-AC-11 | 每个项目唯一绑定进度入口；重复初始化/接入不重复生成；既有自定义页面、旧 JSON 契约和用户内容保持受支持边界 | component + CLI 集成 |
-| P-AC-12 | 规划、开始、待审、验收、完成、暂停/放弃、外部阻塞、测试失败和发布失败准确分开展示；未登记工作与未知总范围不伪装为已覆盖 | component + workflow 集成 + browser |
+| P-AC-12 | 规划、开始、待审、验收、完成、暂停/放弃、外部阻塞、测试失败准确分开展示；本期发布状态显示未核实，不自动识别发布成功或失败；未登记工作与未知总范围不伪装为已覆盖 | component + workflow 集成 + browser |
 | P-AC-13 | 连续两次真实 CLI 状态变更后，打开的本地预览无需手动刷新，在默认 3 秒目标内显示最新已提交版本；断连、乱序、投影失败显示过期状态，重新连接恢复 | real_http + browser |
 | P-AC-14 | 不启动服务也能生成/更新离线快照，离线打开可用；所有视图在同一快照版本，标明生成时间和归档范围，无外部字体/脚本请求 | component + browser |
 | P-AC-15 | 初始化、修改、修复重试和多 writer 场景不截断 HTML、不丢失较新投影；生成失败不回滚权威，后续刷新能追平；中断恢复有可观察诊断 | component + E2E |
@@ -203,7 +203,7 @@
 | 演进时间线 | 已记录的批准、计划修订、检查点、验收、任务完成等关键事件，不复制每次工具调用 |
 | 避坑记录 | 有证据的失败路线与被否方案，关联具体适用场景，不自动把每次测试失败永久沉淀 |
 
-任务生命周期、交付阶段和异常原因分别映射。首页可用未开始、进行中、待审核、已验收、已完成、暂停、放弃等标签；plan_only 显示仅规划，不能说正在实施。已验收与完成/发布分开，不以单次测试通过或旧证据显示完成。只有既有权威明确表达的业务/外部决定阻塞才标为待用户处理；审查缺陷、测试失败、运行时故障、未发布分别显示实际原因，不自动等同业务阻塞。
+任务生命周期、交付阶段和异常原因分别映射。首页可用未开始、进行中、待审核、已验收、已完成、暂停、放弃等标签；plan_only 显示仅规划，不能说正在实施。已验收与完成/发布分开，不以单次测试通过或旧证据显示完成。只有既有权威明确表达的业务/外部决定阻塞才标为待用户处理；审查缺陷、测试失败、运行时故障分别显示实际原因，不自动等同业务阻塞。按用户确认，本期发布状态显示未核实，不新增发布结果证据格式、不自动识别发布成功或失败，也不为此后台联网；发布跟踪后续单独设计。
 
 数据损坏、状态映射不支持或证据失效时显示未知/需核对，不能取上次绿色状态冒充当前事实。所有顶部摘要、统计、列表和详情来自同一投影版本，避免标题仍写已完成而列表已回退。
 
@@ -248,28 +248,28 @@ Token 成本边界：页面生成和刷新没有模型调用；Agent 登记新�
 
 <!-- mancode:delivery-record:start -->
 Task: local:01M2J23Z0DPAGK9PNSZWBPD8E0
-Plan version: 3
-Review: blocked
-Verification: pending
+Plan version: 4
+Review: passed
+Verification: passed
 
 Reviewer declaration: independent
-Direction: Consolidated actual independent index/decision/document reviews, progress total review and targeted repairs, plus bilingual website diff review; all changes map to approved plan version 3. Overall acceptance remains incomplete for AC9 and AC12.
-Correctness: Final 167-file regression: 1502 tests passed; lint, typecheck, build, 16 compiled adapters and current real HTTP/browser checks passed. Independent I-R01..05, D-R01..02 and P-R01..08 findings were repaired and rechecked; their logs remain in the specified evidence directory. These earlier informal findings were not previously in this ledger, so no synthetic resolved IDs are submitted. Publication detection is a remaining feature gap, and genuine host recovery lacks observation.
+Direction: Consolidated independent module review of approved plan version 4, index/decision/document review, progress total review and concrete repairs, bilingual website diff, H-R01 real CLI parser repair and actual supported Codex host recovery observations. All required acceptance items now have observed evidence within their stated boundaries.
+Correctness: Final 168-file regression: 1503 tests passed; lint, typecheck, candidate build and 16 compiled platform adapters passed. Independent I-R01..05, D-R01..02, P-R01..08 and H-R01 repairs were rechecked; actual new Codex thread and real compaction recovery succeeded using standard --version arguments, with raw protocol retained. P-R09 was resolved by the explicit user decision to keep publication unverified in this phase. Browser and real HTTP/privacy/recovery/scale evidence passed. No unresolved implementation findings; the recovery observation is explicitly prompted and does not imply universal host enforcement.
 Proportionality: Reuse existing task and decision authority. Explicit immutable relationship opt-in, bounded index/body reads and reusable projections avoid adding a vector store or model polling. Filesystem/HTTP/locking checks address demonstrated privacy and recovery failures. Website changes only add the eight new CLI entries and usage text.
-Next: Keep task open. Decide how publication outcomes should be durably recorded within the approved authority model, implement and verify that remaining AC12 behavior, then obtain real fresh-host/compaction evidence for AC9. Unrelated untracked research must be handled separately before formal completion; do not include it in this task commit.
-- P-R09: open — AC12 requires publication failures to be distinguishable. Current authority exposes no durable publication outcome and the page only reports unobserved; automatic publication failure tracking remains unimplemented. Do not interpret the honest unknown label as fulfillment.
+Next: Commit remaining task-owned changes, complete delivery after authorized temporary isolation of unrelated research, immediately restore that research and verify file preservation. No publishing, deployment, or automatic upgrade of other projects.
+- P-R09: resolved — AC12 requires publication failures to be distinguishable. Current authority exposes no durable publication outcome and the page only reports unobserved; automatic publication failure tracking remains unimplemented. Do not interpret the honest unknown label as fulfillment.
 - AC-1: met — Bounded whole JSON, no default bodies: context-index, command and CLI contracts; final full regression passed.
 - AC-2: met — 10/1000/10000 fixtures, required selection and whole collection snapshot cursor invalidation: context-index tests.
 - AC-3: met — Declared document dependencies include global constraints and differently named storage sentinel; actual child-agent CLI trial used the rule before changing app.cjs.
 - AC-4: met — Immutable decision relations, partial clause projection, hidden successors and concurrent resolution; independent I-R01..I-R05 repairs closed.
 - AC-5: met — Plan/document bytes, privacy, checkout, collection members and stable double reads invalidate old versions; document and cross-clone contracts passed.
-- AC-6: met — Batch and single continuations preserve every body byte, including conditions and exceptions; measured complete reads include every continuation.
+- AC-6: met — Batch and single continuations preserve every body byte, including conditions and exceptions; measured complete reads include every continuation. H-R01 fixed root Commander interception; compiled CLI and actual host now accept standard space and equals forms, reject stale values, preserve root version commands.
 - AC-7: met — Privacy applies before visible output/cache, hidden successor cannot revive ancestor; privacy/decision/document contracts and independent review passed.
 - AC-8: met — Rebuildable cache, V2 fallback and unchanged historical policies; adapter and compiled platform contracts passed; ordinary queries need no new identity.
-- AC-9: unverified — Adapter contracts and stable batch reuse passed. Actual fresh host conversation and genuine host compaction recovery remain unverified.
+- AC-9: met — codex-ac9-report.md and raw audit: real fresh ephemeral Codex app-server thread, initial 6 complete reads, actual contextCompaction started/completed and successful turn, then index plus 6 complete versioned rereads restoring scope and cross-module exception; all 12 standard-space read invocations succeeded. Explicitly prompted recovery only; no claim about unprompted enforcement, other hosts, persisted restart or automatic token thresholds. Existing contracts cover stable batch reuse and stale versions.
 - AC-10: met — Actual child Agent located task, read approved scope and dependency constraints, changed only app.cjs, observed failure then 2 passing tests, handed results to parent; completion gate rejected missing review. This is a scoped host trial, not a cross-actor handoff or a claim of finished fixture governance.
 - AC-11: met — Unique binding, repeated init, custom HTML protection and V1 support: storage/CLI contracts.
-- AC-12: missing — Lifecycle and evidence mapping, including planned+plan_only, passed independent P08 review. Automatic publication-failure detection is NOT implemented: no durable local source exists; page honestly shows unobserved without checking a remote.
+- AC-12: met — User explicitly chose publication unverified for this phase, without new evidence schema or background remote queries. Updated plan AC12 and usage docs match the existing unobserved implementation, independently reviewed. Actual browser expanded a task and confirmed the message; lifecycle, evidence and planned+plan_only contracts passed.
 - AC-13: met — Two actual CLI changes appeared within 3 seconds through real HTTP; current browser live update 993 ms, disconnect visible, server failure/recovery contracts passed.
 - AC-14: met — Actual local and shared offline snapshots rendered; current browser recorded no external requests and consistent shared version.
 - AC-15: met — Atomic publication, Git exclusion, version CAS and interrupted commit recovery; independent P-R02/P-R06/P-R07 repairs and regression passed.
@@ -285,10 +285,10 @@ Next: Keep task open. Decide how publication outcomes should be durably recorded
 - AC-6: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
 - AC-7: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
 - AC-8: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
-- AC-9: automated=passed(surface=component); manual=pending(surface=unspecified); Executed argv in project root; captured exit code 0.
+- AC-9: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
 - AC-10: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
 - AC-11: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
-- AC-12: automated=passed(surface=component); manual=pending(surface=unspecified); Executed argv in project root; captured exit code 0.
+- AC-12: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
 - AC-13: automated=passed(surface=real_http); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
 - AC-14: automated=passed(surface=component); manual=passed(surface=manual_observation); Executed argv in project root; captured exit code 0.
 - AC-15: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.

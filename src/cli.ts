@@ -88,7 +88,9 @@ export function createCliProgram(): Command {
     .description(
       'AI coding agent harness. Modes: solo, man, manba, manteam, manps.',
     )
-    .version(VERSION);
+    .version(VERSION)
+    // Root flags stop at a subcommand, whose --version may take a digest.
+    .enablePositionalOptions();
 
   program
     .command('init')
