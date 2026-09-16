@@ -28,6 +28,7 @@ docs/*
 !docs/man-module-delivery-plan.md
 !docs/agent-guidance-simplification-plan.md
 !docs/context-index-memory-plan.md
+!docs/man-review-completeness-plan.md
 !docs/website-seo.md
 !docs/privacy-rule-sources.md
 !docs/privacy-upstream-license.txt
