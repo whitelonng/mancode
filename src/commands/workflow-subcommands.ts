@@ -16,6 +16,7 @@ export const WORKFLOW_SUBCOMMANDS = [
   'promote',
   'handoff',
   'delivery',
+  'execution',
 ] as const;
 
 export type WorkflowSubcommand = (typeof WORKFLOW_SUBCOMMANDS)[number];

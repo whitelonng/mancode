@@ -215,6 +215,20 @@ describe('opted-in man module delivery through the public workflow command', () 
     vi.restoreAllMocks();
   });
 
+  it('keeps cancelled-out staged changes pending even when the working tree equals HEAD', async () => {
+    await writeFile(path.join(root, 'app.cjs'), 'exports.run=()=>99;');
+    await git(['add', 'app.cjs']);
+    await writeFile(path.join(root, 'app.cjs'), 'exports.run=()=>2;');
+    const inspected = await inspectManDelivery(root, await snapshot());
+    expect(inspected.pendingCommit).toContain('app.cjs');
+    expect(inspected.finalization.blockers).toContainEqual(
+      expect.objectContaining({
+        code: 'uncommitted_changes',
+        files: expect.arrayContaining(['app.cjs']),
+      }),
+    );
+  });
+
   it('governed solo retains policy-3 delivery evidence, rejects stale and failed evidence, and completes the same assigned task', async () => {
     await rm(root, { recursive: true, force: true });
     await setup(false);

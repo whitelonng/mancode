@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import { replaceFileAtomically } from '../runtime/atomic-file.js';
 import { readCheckoutCodeHead } from '../runtime/project-runtime.js';
 import { digestCanonicalJson } from './canonical.js';
+import { evaluateExecutionGate } from './execution-gate.js';
 import type { ManEvidenceSubject } from './man-delivery-evidence.js';
 import {
   assertManPlanPath,
@@ -26,7 +27,7 @@ import { type ManProgressStatus, syncManProgressPage } from './man-progress.js';
 import { scanSharedText } from './privacy.js';
 import type { ReviewLedgerV1 } from './review-ledger.js';
 import type { StoredTaskSnapshot } from './store.js';
-import type { VerificationLedgerV1 } from './verification-ledger.js';
+import type { VerificationLedger } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
   isActiveSoloHandoff,
@@ -39,6 +40,7 @@ export type ManFinalizationBlockerCode =
   | 'plan_execution_required'
   | 'review_incomplete'
   | 'verification_incomplete'
+  | 'execution_incomplete'
   | 'delivery_record_stale'
   | 'inspection_failed'
   | 'committed_outside_scope'
@@ -268,7 +270,7 @@ export function assertManReviewCoverage(
 
 export function assertManVerificationSubjects(
   task: StoredTaskSnapshot,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   subject: ManEvidenceSubject,
 ): void {
   for (const check of verification.checks) {
@@ -536,13 +538,26 @@ export async function inspectManDelivery(
   const subject = await captureManSubject(root, task);
   const head = await readCheckoutCodeHead(root);
   const trackedDirty = (
-    await manGit(
-      root,
-      head === null
-        ? ['ls-files', '-z', '--cached']
-        : ['diff', '--name-only', '--relative', '-z', 'HEAD', '--', '.'],
-    )
+    await Promise.all([
+      manGit(
+        root,
+        head === null
+          ? ['ls-files', '-z', '--cached']
+          : [
+              'diff',
+              '--cached',
+              '--name-only',
+              '--relative',
+              '-z',
+              'HEAD',
+              '--',
+              '.',
+            ],
+      ),
+      manGit(root, ['diff', '--name-only', '--relative', '-z', '--', '.']),
+    ])
   )
+    .join('\0')
     .split('\0')
     .filter(Boolean);
   const untracked = (
@@ -592,22 +607,41 @@ export async function inspectManDelivery(
   const recordCurrent =
     parseManPlanDocument(bound.document).record ===
     renderManDeliveryRecord(task, subject).trim();
+  const executionGate = evaluateExecutionGate({
+    ...task,
+    currentSubject: subject,
+    ...(head ? { candidateSha: head } : {}),
+  });
+  const finalization = manDeliveryFinalization(
+    task,
+    subject,
+    recordCurrent,
+    outsideScope,
+    outsideScopeDirty,
+    pendingCommit,
+  );
+  if (executionGate.status === 'incomplete') {
+    finalization.status = 'incomplete';
+    finalization.blockers.push(
+      ...executionGate.blockers.map((blocker) => ({
+        code: 'execution_incomplete' as const,
+        status: blocker.code,
+        nextAction: blocker.nextAction,
+        diagnostic: blocker.missingEvidence,
+      })),
+    );
+  }
   return {
     subject,
+    head,
+    executionGate,
     source: bound.source,
     pendingCommit,
     outsideScopeDirty,
     outsideScope,
     upstream,
     publication: upstream === null ? 'unpublished' : 'unknown',
-    finalization: manDeliveryFinalization(
-      task,
-      subject,
-      recordCurrent,
-      outsideScope,
-      outsideScopeDirty,
-      pendingCommit,
-    ),
+    finalization,
   };
 }
 
@@ -696,7 +730,7 @@ export function renderManDeliveryRecord(
     ) ?? []),
     ...task.verification.checks.map((check) => {
       const component = (
-        item: VerificationLedgerV1['checks'][number]['automated'],
+        item: VerificationLedger['checks'][number]['automated'],
       ) =>
         item === null
           ? 'n/a'
@@ -829,6 +863,11 @@ export async function assertManDeliveryReady(
       `MANCODE_MAN_DELIVERY_EXECUTION_REQUIRED: ${plan.nextAction}`,
     );
   const verification = blocker('verification_incomplete');
+  const execution = blocker('execution_incomplete');
+  if (execution)
+    throw new Error(
+      `${execution.status}: ${execution.diagnostic}; ${execution.nextAction}`,
+    );
   if (verification)
     throw new Error(
       `MANCODE_MAN_VERIFICATION_INCOMPLETE: ${verification.status}; ${verification.nextAction}`,

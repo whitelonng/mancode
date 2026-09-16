@@ -74,11 +74,17 @@ import { digestCanonicalJson, sortUtf8StringSet } from './canonical.js';
 import {
   CURRENT_WRITER_CAPABILITIES,
   assertCompatibilityGate,
+  assertExecutionWriterCapability,
 } from './compatibility.js';
 import {
   type WorkflowCreationResolution,
   resolveWorkflowCreation,
 } from './creation-resolution.js';
+import {
+  type ExecutionPolicy,
+  initialExecutionState,
+  parseExecutionPolicy,
+} from './execution-ledger.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
 import { scanLegacyAuthority } from './layout.js';
 import { managedAdapterNames } from './manifest.js';
@@ -104,7 +110,7 @@ import {
   parseTaskRefValue,
 } from './task-ref.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   deriveVerificationLedgerStatus,
   parseVerificationLedger,
   verificationLedgerDigest,
@@ -121,6 +127,8 @@ export interface WorkflowCreateScope {
 }
 
 export interface CreateV3WorkflowInput {
+  /** Explicit opt-in for a new task only; no implicit old-task migration. */
+  executionPolicy?: ExecutionPolicy;
   /** Opt in a new man task; never silently upgrade existing tasks or other modes. */
   delivery?: boolean;
   projectRoot: string;
@@ -148,7 +156,7 @@ export interface CreatedV3Workflow {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   aggregate: TaskAggregateManifestV1;
   operation: OperationJournalV1;
   resolution: WorkflowCreationResolution;
@@ -160,7 +168,7 @@ interface InitialEntities {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   aggregate: TaskAggregateManifestV1;
 }
 
@@ -264,6 +272,7 @@ export async function createV3Workflow(
       ? await requireSharedCodeHead(projectRoot)
       : null;
   const entities = buildInitialEntities({
+    executionPolicy: input.executionPolicy,
     taskRef,
     task,
     displaySlug: input.displaySlug,
@@ -683,6 +692,7 @@ function resolveInitialParticipants(
 }
 
 function buildInitialEntities(input: {
+  executionPolicy?: ExecutionPolicy;
   taskRef: TaskRef;
   task: string;
   displaySlug: string | undefined;
@@ -698,6 +708,28 @@ function buildInitialEntities(input: {
   timestamp: string;
   planningPolicyVersion: number | null;
 }): InitialEntities {
+  const executionPolicy =
+    input.executionPolicy === undefined
+      ? null
+      : parseExecutionPolicy(input.executionPolicy);
+  if (executionPolicy !== null && input.taskRef.namespace !== 'local')
+    throw new Error('MANCODE_EXECUTION_SHARED_UNSUPPORTED');
+  if (
+    executionPolicy !== null &&
+    (input.workflowMode !== 'man' || input.planningPolicyVersion !== 3)
+  )
+    throw new Error('MANCODE_EXECUTION_DELIVERY_REQUIRED');
+  assertExecutionWriterCapability(
+    executionPolicy === null ? 1 : 2,
+    CURRENT_WRITER_CAPABILITIES,
+  );
+  if (
+    input.parent !== null &&
+    (executionPolicy !== null ||
+      input.parent.metadata.governance.policyVersions.verification === 2)
+  ) {
+    throw new Error('MANCODE_EXECUTION_CROSS_TASK_BUDGET_UNSUPPORTED');
+  }
   const scope = initialScope(input.parent, input.explicitScope);
   const requirementsDraft: RequirementsLedgerV1 = {
     schemaVersion: 1,
@@ -749,8 +781,13 @@ function buildInitialEntities(input: {
     ...reviewWithStatus,
     contentDigest: reviewLedgerDigest(reviewWithStatus),
   });
-  const verificationDraft: VerificationLedgerV1 = {
-    schemaVersion: 1,
+  const verificationDraft: VerificationLedger = {
+    ...(executionPolicy === null
+      ? { schemaVersion: 1 as const }
+      : {
+          schemaVersion: 2 as const,
+          execution: initialExecutionState(executionPolicy),
+        }),
     canonicalizationVersion: 'mancode-jcs-v1',
     taskRef: input.taskRef,
     revision: 1,
@@ -809,7 +846,7 @@ function buildInitialEntities(input: {
       policyVersions: {
         planning: input.planningPolicyVersion,
         review: 1,
-        verification: 1,
+        verification: executionPolicy === null ? 1 : 2,
       },
       reviewStatus: review.status,
       reviewLedgerDigest: review.contentDigest,

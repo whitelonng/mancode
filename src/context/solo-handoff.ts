@@ -1,5 +1,6 @@
 import type { OperationJournalV1 } from '../runtime/operation-journal.js';
 import { createTaskAuthorityFileRecoveryAction } from '../runtime/operation-recovery-payload.js';
+import { readCheckoutCodeHead } from '../runtime/project-runtime.js';
 import {
   completeProjectionIntent,
   enqueueSessionPointerProjection,
@@ -20,8 +21,12 @@ import {
   assertTaskCompletionGate,
   buildTaskAggregateManifest,
 } from './aggregate.js';
+import { prepareExecutionCompletion } from './execution-completion.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
-import { assertManDeliveryReady } from './man-delivery-runtime.js';
+import {
+  assertManDeliveryReady,
+  captureManSubject,
+} from './man-delivery-runtime.js';
 import {
   assertRequirementsScopeConsistent,
   requirementsAreReady,
@@ -168,6 +173,10 @@ export async function completeV3SoloHandoff(
   input: CompleteV3SoloHandoffInput,
 ): Promise<V3SoloHandoffResult> {
   const taskRef = assertLocalTaskRef(input.taskRef);
+  const expectedTaskRevision = await prepareExecutionCompletion({
+    ...input,
+    taskRef,
+  });
   const now = input.now ?? new Date();
   const operationId = input.operationId ?? createUlid(now.getTime());
   assertUlid(operationId, 'solo handoff operationId');
@@ -175,7 +184,7 @@ export async function completeV3SoloHandoff(
     projectRoot: input.projectRoot,
     taskRef,
     sessionId: input.sessionId,
-    expectedTaskRevision: input.expectedTaskRevision,
+    expectedTaskRevision,
     operationId,
     now,
   });
@@ -199,6 +208,17 @@ export async function completeV3SoloHandoff(
         latestCheckpoint: context.task.latestCheckpoint,
       },
       {
+        executionContext:
+          context.task.verification.schemaVersion === 2
+            ? {
+                currentSubject: await captureManSubject(
+                  input.projectRoot,
+                  context.task,
+                ),
+                candidateSha:
+                  (await readCheckoutCodeHead(input.projectRoot)) ?? undefined,
+              }
+            : undefined,
         activeChildTaskRefs: activeChildren,
         hasPendingRepairOperation: false,
         activeClaimCount: 0,

@@ -8,6 +8,7 @@ import {
   taskAggregateDigest,
 } from '../src/context/aggregate.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
+import { initialExecutionState } from '../src/context/execution-ledger.js';
 import {
   type RequirementsLedgerV1,
   requirementsLedgerDigest,
@@ -52,6 +53,41 @@ describe('task aggregate V3 contract', () => {
         },
       }),
     ).toThrow(/requirementsDigest must match/);
+  });
+
+  it('requires fresh execution context for V2 even when legacy checks are green', () => {
+    const input = aggregate();
+    input.verification = {
+      ...input.verification,
+      schemaVersion: 2,
+      execution: initialExecutionState({
+        version: 1,
+        budget: {
+          maxRuns: 1,
+          maxExecutionMs: 1000,
+          maxRepairAttempts: 0,
+          commandTimeoutMs: 1000,
+          ciTimeoutMs: 1000,
+        },
+        checks: [],
+        scenarios: [],
+        delivery: 'local',
+        ci: null,
+      }),
+    };
+    input.verification.contentDigest = verificationLedgerDigest(
+      input.verification,
+    );
+    input.metadata.governance.policyVersions.verification = 2;
+    input.metadata.governance.verificationLedgerDigest =
+      input.verification.contentDigest;
+    expect(() =>
+      assertTaskCompletionGate(input, {
+        activeChildTaskRefs: [],
+        hasPendingRepairOperation: false,
+        activeClaimCount: 0,
+      }),
+    ).toThrow('EXECUTION_CONTEXT_REQUIRED');
   });
 
   it('requires the entire aggregate and completion context to be ready', () => {

@@ -6,6 +6,7 @@ import {
   createTaskAuthorityFileRecoveryAction,
   createTaskHeadFenceRecoveryAction,
 } from '../runtime/operation-recovery-payload.js';
+import { readCheckoutCodeHead } from '../runtime/project-runtime.js';
 import { readProjectRuntimeContext } from '../runtime/project-runtime.js';
 import {
   enqueueCacheInvalidationProjection,
@@ -36,8 +37,12 @@ import {
   assertTaskCompletionGate,
   buildTaskAggregateManifest,
 } from './aggregate.js';
+import { prepareExecutionCompletion } from './execution-completion.js';
 import { type Ulid, assertUlid, createUlid } from './ids.js';
-import { assertManDeliveryReady } from './man-delivery-runtime.js';
+import {
+  assertManDeliveryReady,
+  captureManSubject,
+} from './man-delivery-runtime.js';
 import { V3ContextStore } from './store.js';
 import {
   assertTaskCodeHeadUnchanged,
@@ -79,6 +84,10 @@ export async function completeV3Task(
   input: CompleteV3TaskInput,
 ): Promise<CompletedV3Task> {
   const taskRef = parseTaskRefValue(input.taskRef);
+  const expectedTaskRevision = await prepareExecutionCompletion({
+    ...input,
+    taskRef,
+  });
   const now = input.now ?? new Date();
   const operationId = input.operationId ?? createUlid(now.getTime());
   assertUlid(operationId, 'task completion operationId');
@@ -86,7 +95,7 @@ export async function completeV3Task(
     projectRoot: input.projectRoot,
     taskRef,
     sessionId: input.sessionId,
-    expectedTaskRevision: input.expectedTaskRevision,
+    expectedTaskRevision,
     operationId,
     now,
   });
@@ -119,6 +128,17 @@ export async function completeV3Task(
         latestCheckpoint: context.task.latestCheckpoint,
       },
       {
+        executionContext:
+          context.task.verification.schemaVersion === 2
+            ? {
+                currentSubject: await captureManSubject(
+                  input.projectRoot,
+                  context.task,
+                ),
+                candidateSha:
+                  (await readCheckoutCodeHead(input.projectRoot)) ?? undefined,
+              }
+            : undefined,
         activeChildTaskRefs: activeChildren,
         hasPendingRepairOperation: false,
         activeClaimCount: activeClaims.length,

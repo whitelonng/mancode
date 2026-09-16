@@ -198,8 +198,9 @@ Git 忽略的未跟踪文件，包含删除和重命名。未暂存移动可能�
 `delivery review` 或相应旧 policy 协议登记，再读回状态。报告完成不能替代账本已应用；
 plan_only、已完成任务和只读请求均不获得新增写权限。
 
-本期交付审核入口、共享规则与检查对齐；持久化 audit outcome、TDD/修复预算门禁以及
-GitHub CI 自动完成门留待后续。现有旧任务、诊断和 child snapshot 兼容协议保持原义。
+独立 manba 审核仍提供报告，不持久化新的 audit outcome；已有 Man TaskRef 的审核复用
+原任务策略。新建本地 Man 任务可显式启用下文的执行门禁。现有旧任务、诊断和
+child snapshot 兼容协议保持原义。
 
 ## 状态与 revision
 
@@ -326,3 +327,63 @@ handoff 必须经过 `draft → offered → accepted|rejected|cancelled`。accep
 aggregate 的 code-head fast-forward rebind；完成后另一个 clone 才能 pull 并 resume。
 
 只有经过明确确认且通过隐私筛查的决策才能进入 shared memory。任务文本、绝对路径、凭据和宿主 session key 不应写入共享 transport。
+
+## 可选执行门禁
+
+新建本地 `man --delivery` 任务可显式加入 `--execution-policy <policy.json>`，使用 verification policy 2 / ledger V2。旧任务没有自动迁移；独立 manba 诊断保留原 outcome 语义。manba 对已有 Man TaskRef 的授权审核、修复以及受管 Solo handoff 共用该任务的记录。
+
+策略文件必须给出任务级有限预算。例如，下面的数值只是示例，不是产品默认或用户授权：
+
+```json
+{
+  "version": 1,
+  "budget": {
+    "maxRuns": 12,
+    "maxExecutionMs": 600000,
+    "maxRepairAttempts": 4,
+    "commandTimeoutMs": 60000,
+    "ciTimeoutMs": 60000
+  },
+  "checks": [{
+    "id": "component",
+    "acceptanceIds": ["AC-1"],
+    "argv": ["npm", "test", "--", "tests/export.test.ts"],
+    "cwd": ".",
+    "surface": "component"
+  }],
+  "scenarios": [{
+    "id": "export",
+    "acceptanceId": "AC-1",
+    "mode": "required",
+    "rationale": "新增可自动化的导出行为",
+    "alternativeCheckIds": [],
+    "testInputs": ["tests/export.test.ts"],
+    "configInputs": ["package.json", "package-lock.json", "vitest.config.ts"],
+    "targets": [{"file": "tests/export.test.ts", "name": "export returns the requested value"}]
+  }],
+  "delivery": "local",
+  "ci": null
+}
+```
+
+`testInputs` 应包含相关断言与辅助测试文件，`configInputs` 包含会影响测试含义的配置。首版适配 Vitest 3，目标名称是完整测试名。对文档或保持行为的重构，显式声明 `alternative` 及 `alternativeCheckIds`，或有理由的 `not_applicable`；不用制造假的 Red。缺省空 scenarios 不代表通过了 TDD。
+
+```bash
+mancode workflow create man "导出模块" --delivery --execution-policy .mancode/local/drafts/policy.json --session <SESSION> --client <CLIENT>
+mancode workflow execution <TASK_REF> inspect --json
+mancode workflow execution <TASK_REF> run --file .mancode/local/drafts/run.json --expected-revision <N> --session <SESSION> --client <CLIENT> --json
+```
+
+`run.json` 的 TDD 示例是 `{"purpose":"tdd_red","checkId":"component","scenarioId":"export"}`；实现后使用同一场景的 `tdd_green`，再跑 `purpose: "verification"` 的最终检查。runner 注入自己的结构化 reporter，记录真实执行身份和测试/config 内容身份。环境错误、语法错误、超时、no-tests、skip、重试后通过均不构成有效 Red；改断言后不能借旧 Red 配对。已有代码回放使用 `regression_replay`，不能冒称历史 test-first。测试是否真的覆盖目标行为仍需人工或 agent 审查。
+
+`delivery verify` 仍可用，但 argv、surface 和 `--acceptance` 必须与批准的一个 check 完整匹配。V2 不允许通过旧 verification apply 整表填 passed；`delivery confirm` / execution `manual-confirm` 只记录显式人工观察，不替代自动检查。
+
+每次实质修复之前调用 `attempt-reserve`，输入 `problemId`、`classification`、`hypothesis`、`evidence`；后续 run 引用该 `attemptId`。验证后 `attempt-finish` 输入 `attemptId`、`state`、`runIds`、`summary`。同根因两次失败后拒绝新修复，基础设施最多一次有依据的重试，任务总额度防止不断换问题名获得无限尝试。CLI 无法识别所有同义根因，也无法阻止宿主绕开命令编辑文件，宿主须遵守预约流程。`problem-merge` 合并问题时保留消耗。
+
+`run-inspect`、`run-cancel`、`run-recover` 接受 `{"runId":"<已有ID>"}`。预约/start/finish 各自使用短事务，命令不持有任务锁等待。POSIX worker 在超时、取消或父 CLI 断开时清理自己启动的原进程组；逃离该组的 daemon 不在保证范围。Windows 缺少可靠进程树归属机制，首版会在 spawn 前明确返回 windows_process_tree_unsupported，不能把旧 Windows 流程通过算作新门禁已支持。无法证明清理时保留 interrupted，不能靠 PID 猜测并杀进程。恢复只读回实际 receipt，不自动重放命令；journal 中断先使用已有 operation repair。receipt 永久丢失时，先 run-recover 保留 interrupted，再由 owner 用 run-reconcile 提交 {runId, approval} 明确结清该不确定记录；消耗保留，自动检查不会变成 passed，后续按有例外的验收展示。本地 receipt 位于 `.mancode/local/execution/<taskId>/<runId>`，不要删除它来重置预算。
+
+额度耗尽拦新执行，仍可查看、取消、恢复和提交批准决定。最后一次合法尝试成功允许完成。`budget-extend` 使用 `delta: {runs, executionMs, repairAttempts, problemFailures}`，可选 `problemId`；`exception-decide` 指定 `scenarioId`，可选 `expiresAt`；`contract-revise` 提交完整新 `policy`。这些输入都要求 `approval: {confirmed:true,source,reason,evidence}`，由原任务有权限的操作者确认，保留历史并让不再适用的证据失效。该声明是审计信息，不是经过宿主认证的人类批准凭证。不要为了绿色结果降低已批准的要求。跨任务继续同一次修复不能假装新任务清空预算；首版不提供自动跨任务预算转移。
+
+远端验收时，预先声明 `delivery: "remote_required"` 和 `ci`：repository、event、testedBinding，以及 workflows 中的 GitHub workflow 数字 ID、path、configurationSha（目标提交中 workflow 文件的 Git blob SHA）和 requiredJobs（包含完整 matrix job 名）。`ci-observe` 的输入是 `{"target": <CiContract>}`，target 再给出 candidateSha、testedSha、可选 runId，以及 PR 的 head/base/merge 身份。检查集合必须匹配批准策略。只有已审查 workflow 确实测试 run head 的 push 契约可使用 `approved_workflow_head`；未知 checkout 或 PR 实际测试对象保持 unverified。
+
+每次观察是有任务预算和请求上限的只读批次；pending、缺权限、限流、离线、歧义或缺 job 都不算通过。后续显式查询原目标，不自动 push、触发或重跑 CI。观察结束前重列同 SHA 运行集合并复查 attempt，避免查询中变化。remote_required 的 complete 与受管 handoff complete 在任务锁外再执行并记账一批最新观察，然后用新 revision 完成；最后一次额度用于这批观察且成功时可完成。先解决本地审查、提交和验收缺口，预算还应为最终观察预留。任务完成之后发生的远端变化仍需另行观察。运行成功退出与 CI 验收通过是两件事，读取 observation/gate 状态确认结果。

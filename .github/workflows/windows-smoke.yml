@@ -16,6 +16,8 @@ jobs:
       - run: npm ci
       - name: Lock publication and crash recovery
         run: npm run check:windows
+      - name: Bounded execution and structured TDD evidence
+        run: npx vitest run tests/execution-protocol.test.ts tests/execution-runner.test.ts tests/execution-worker.test.ts tests/tdd-evidence.test.ts tests/vitest-evidence-reporter.test.ts
       - name: CMD
         shell: cmd
         run: npm run test:windows-smoke

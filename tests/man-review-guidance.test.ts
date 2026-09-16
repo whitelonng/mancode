@@ -17,9 +17,21 @@ describe('Man review orchestration guidance', () => {
     expect(guidance).toContain('fails for the target behavior');
     expect(guidance).toContain('documentation does not need an artificial Red');
     expect(guidance).toContain('does not prove historical test-first');
-    expect(guidance).toContain('not persisted TDD gates');
+    expect(guidance).toContain('verification policy 1');
+    expect(guidance).toContain(
+      'policy 2 tasks enforce their declared scenarios',
+    );
     expect(guidance).toContain('newly built CLI');
     expect(guidance).toContain('never proves an unexecuted platform matrix');
     expect(guidance).toContain('governed Solo handoff');
+  });
+
+  it('offers explicit recovery and budgets without claiming a host file-write firewall', () => {
+    expect(guidance).toContain('--execution-policy <policy.json>');
+    expect(guidance).toContain('run-recover');
+    expect(guidance).toContain('does not intercept arbitrary host file edits');
+    expect(guidance).toContain(
+      'final permitted successful attempt can complete',
+    );
   });
 });

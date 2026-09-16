@@ -92,7 +92,7 @@ import { taskRootPath } from './task-locator.js';
 import { assertTaskCodeHeadUnchanged } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   parseVerificationLedger,
   verificationLedgerDigest,
 } from './verification-ledger.js';
@@ -123,7 +123,7 @@ export interface PromotedV3Task {
   destinationMetadata: WorkflowMetadataV3;
   destinationRequirements: RequirementsLedgerV1;
   destinationReview: ReviewLedgerV1;
-  destinationVerification: VerificationLedgerV1;
+  destinationVerification: VerificationLedger;
   destinationAggregate: TaskAggregateManifestV1;
   destinationTaskHead: TaskHeadFenceV1;
   quarantine: QuarantineCandidateV1;
@@ -157,7 +157,7 @@ interface PromotionEntities {
   destinationMetadata: WorkflowMetadataV3;
   destinationRequirements: RequirementsLedgerV1;
   destinationReview: ReviewLedgerV1;
-  destinationVerification: VerificationLedgerV1;
+  destinationVerification: VerificationLedger;
   destinationPlan: string | null;
   destinationAggregate: TaskAggregateManifestV1;
   destinationTaskHead: TaskHeadFenceV1;
@@ -233,6 +233,8 @@ export async function previewV3TaskPromotion(
   ) {
     throw new Error('MANCODE_JOIN_REQUIRED');
   }
+  if (task.verification.schemaVersion === 2)
+    throw new Error('MANCODE_EXECUTION_CROSS_TASK_UNSUPPORTED');
   assertPromotableReferencesForPreview(task);
   const contents = promotionPreviewContents(task);
   let quarantine = createQuarantineCandidate({
@@ -338,6 +340,8 @@ export async function promoteV3Task(
     if (destinationCoordination.pendingOperations.length > 0) {
       throw new Error('MANCODE_OPERATION_REPAIR_REQUIRED');
     }
+    if (sourceContext.task.verification.schemaVersion === 2)
+      throw new Error('MANCODE_EXECUTION_CROSS_TASK_UNSUPPORTED');
     await assertPromotionEligible(sourceContext, input.destinationWorkflowMode);
     if (
       (await readSharedActorProfile(
@@ -576,7 +580,7 @@ function buildPromotionEntities(input: {
     ...reviewDraft,
     contentDigest: reviewLedgerDigest(reviewDraft),
   });
-  const verificationDraft: VerificationLedgerV1 = {
+  const verificationDraft: VerificationLedger = {
     ...input.source.task.verification,
     taskRef: input.destinationTaskRef,
     revision: 1,

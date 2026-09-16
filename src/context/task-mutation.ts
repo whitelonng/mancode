@@ -20,7 +20,7 @@ import {
   reviewLedgerDigest,
 } from './review-ledger.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   assertVerificationLedgerTransition,
   parseVerificationLedger,
   verificationLedgerDigest,
@@ -54,11 +54,11 @@ export function markTaskReviewStale(
 }
 
 export function markTaskVerificationStale(
-  previous: VerificationLedgerV1,
+  previous: VerificationLedger,
   operationId: Ulid,
   updatedAt: string,
-): VerificationLedgerV1 {
-  const draft: VerificationLedgerV1 = {
+): VerificationLedger {
+  const draft: VerificationLedger = {
     ...previous,
     revision: previous.revision + 1,
     status: 'stale',

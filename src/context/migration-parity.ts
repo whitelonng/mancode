@@ -40,7 +40,7 @@ import {
   type VerificationLedgerStatus,
   type VerificationLedgerV1,
   deriveVerificationLedgerStatus,
-  parseVerificationLedger,
+  parseVerificationLedgerV1 as parseVerificationLedger,
   verificationLedgerDigest,
 } from './verification-ledger.js';
 import {

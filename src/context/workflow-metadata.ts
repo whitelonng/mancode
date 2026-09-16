@@ -54,7 +54,7 @@ export type WorkflowPolicyComponent = 'planning' | 'review' | 'verification';
 export const SUPPORTED_WORKFLOW_POLICY_VERSIONS = {
   planning: [1, 2, 3],
   review: [1, 2],
-  verification: [1],
+  verification: [1, 2],
 } as const;
 
 export class WorkflowPolicyVersionUnsupportedError extends Error {
@@ -370,6 +370,12 @@ export function assertWorkflowMetadataTransition(
   next: WorkflowMetadataV3,
   operation: WorkflowTransitionOperation,
 ): void {
+  if (
+    previous.governance.policyVersions.verification !==
+    next.governance.policyVersions.verification
+  ) {
+    throw new Error('MANCODE_VERIFICATION_POLICY_IMMUTABLE');
+  }
   if (next.revision !== previous.revision + 1) {
     throw new Error(
       'workflow metadata revision must increase exactly once per mutation',

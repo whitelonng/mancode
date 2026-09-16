@@ -1,6 +1,7 @@
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { mergeV3ChildResult } from '../context/child-result-merge.js';
+import { parseExecutionPolicy } from '../context/execution-ledger.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import { isManDelivery } from '../context/man-delivery-runtime.js';
 import { parseSchemaManifest } from '../context/manifest.js';
@@ -95,6 +96,7 @@ import {
   completeGitRefTask,
   updateGitRefWorkflow,
 } from '../team/git-ref-workflow-operation.js';
+import { executionCommand } from './execution.js';
 import { manDeliveryCommand } from './man-delivery.js';
 import { normalizeRequirementsInput } from './requirements-input.js';
 import {
@@ -119,6 +121,7 @@ export const EXIT_INVALID_ARG = 2;
 
 export interface WorkflowOptions {
   delivery?: boolean;
+  executionPolicy?: string;
   dryRun?: boolean;
   olderThan?: string;
   json?: boolean;
@@ -182,9 +185,23 @@ export async function workflow(
   args: string[] = [],
   options: WorkflowOptions = {},
 ): Promise<number> {
+  if (options.executionPolicy && subcommand !== 'create') {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXECUTION_POLICY_CREATE_ONLY',
+      'An execution policy can only be selected when creating a new task.',
+    );
+  }
   const v3Activation = await readV3ActivationState(rootDir);
   if (v3Activation === 'v3_active') {
     return workflowV3(rootDir, subcommand, args, options);
+  }
+  if (options.executionPolicy || subcommand === 'execution') {
+    return printV3Error(
+      options.json,
+      'MANCODE_EXECUTION_REQUIRES_CONTINUITY',
+      'Execution gates require an explicitly opted-in Continuity task.',
+    );
   }
   if (options.delivery || subcommand === 'delivery') {
     return printV3Error(
@@ -258,6 +275,7 @@ type WorkflowV3Handler = (
 
 const WORKFLOW_V3_HANDLERS = {
   delivery: manDeliveryCommand,
+  execution: executionCommand,
   create: workflowCreateV3,
   list: workflowListV3,
   show: workflowShowV3,
@@ -1556,6 +1574,14 @@ async function workflowCreateV3(
     });
     const result = await createV3Workflow({
       delivery: options.delivery,
+      executionPolicy: options.executionPolicy
+        ? parseExecutionPolicy(
+            await readWorkflowJsonInputFile(
+              project.projectRoot,
+              options.executionPolicy,
+            ),
+          )
+        : undefined,
       projectRoot: project.projectRoot,
       task,
       workflowMode: parsedWorkflowMode,

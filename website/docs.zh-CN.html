@@ -341,6 +341,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
               <code data-cli-command="workflow verify">mancode workflow verify</code> ·
               <code data-cli-command="workflow complete">mancode workflow complete</code> ·
               <code data-cli-command="workflow delivery">mancode workflow delivery</code> ·
+              <code data-cli-command="workflow execution">mancode workflow execution</code> ·
               <code data-cli-command="workflow scope">mancode workflow scope</code> ·
               <code data-cli-command="workflow reframe">mancode workflow reframe</code> ·
               <code data-cli-command="workflow archive">mancode workflow archive</code> ·
@@ -509,6 +510,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <p>三种选择都要求活动中的 <code>man</code> 工作流、已确认需求和 <code>plan.md</code>。使用 <code>workflow plan ... revise</code> 修订计划；每次成功写入都会返回下一个命令需要的 revision。</p>
           <p>新生成的 <code>man</code> 入口通过 <code>--delivery</code> 显式启用 planning policy 3。它在同一份可版本化计划中区分批准基线与交付记录，沿用项目计划目录约定，新项目默认 <code>doc/</code>。其他模式与旧任务保留原 policy；Solo handoff 继承原任务 policy 和交付要求。</p>
           <p><code>workflow delivery &lt;TaskRef&gt; inspect|verify|confirm|review|sync|check|publication</code> 支持一次模块总审、实际命令证据、人工确认、文档回写，以及提交与发布分离检查。写操作需要活动 session 和最新 expected revision。一个命令确实覆盖多个验收项时，可用 <code>--acceptance AC-1,AC-2</code> 一次登记，不重复运行。总审检查目标兑现、具体缺陷与不必要的复杂度，允许零 finding。无上游或推送失败是交付未发布，不是业务阻塞；这些机制不等于已经证明 agent 的语义判断或生产适用性。</p>
+          <p><code>workflow create man --delivery --execution-policy &lt;file&gt;</code> 为新建本地任务显式启用持久化执行门禁，旧任务保持原策略。策略声明有限的任务预算、批准命令、TDD 场景与本地或远端交付条件。<code>workflow execution &lt;TaskRef&gt; inspect|run|run-inspect|run-cancel|run-recover|run-reconcile|attempt-reserve|attempt-finish|budget-extend|exception-decide|contract-revise|problem-merge|ci-observe</code> 提供执行、恢复及批准记录；写操作使用 <code>--file</code>、session 和 expected revision。最后一次合法尝试成功可完成，额度耗尽仍可查看、取消、恢复或明确追加。Vitest 3 结构化证据区分断言失败与环境错误；GitHub 观察只读且有界，未证明的实际测试对象保持未验证。Windows 执行门禁首版在启动前明确报能力不可用；POSIX 清理保证限于原进程组。门禁不拦截任意宿主编辑，批准字段也不构成人类身份认证。</p>
 
           <h3>一条合法的 Continuity 顺序</h3>
           <p>Continuity 使用显式 TaskRef 和 expected revision。所有持久化变更都由 CLI 完成；不要手工编辑 metadata，也不要使用 legacy <code>--step</code> 协议。</p>

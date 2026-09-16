@@ -56,7 +56,7 @@ import { type ReviewLedgerV1, parseReviewLedger } from './review-ledger.js';
 import { type TaskLocation, locateTask, taskRootPath } from './task-locator.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   parseVerificationLedger,
 } from './verification-ledger.js';
 import {
@@ -81,7 +81,7 @@ export interface StoredTaskSnapshot {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   plan: StoredArtifactText | null;
   latestCheckpoint: CheckpointV1 | null;
   aggregate: TaskAggregateManifestV1 | null;

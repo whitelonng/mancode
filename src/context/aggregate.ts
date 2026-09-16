@@ -1,6 +1,8 @@
 import { type CheckpointV1, checkpointDigest } from '../team/checkpoints.js';
 import { digestCanonicalJson } from './canonical.js';
+import { evaluateExecutionGate } from './execution-gate.js';
 import { type Ulid, assertUlid } from './ids.js';
+import type { ManEvidenceSubject } from './man-delivery-evidence.js';
 import {
   type RequirementsLedgerV1,
   assertRequirementsScopeConsistent,
@@ -13,7 +15,7 @@ import {
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 import { assertKnownKeys, assertRecord } from './validation.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   assertVerificationLedgerAgainstContext,
   assertVerificationLedgerRequirements,
 } from './verification-ledger.js';
@@ -42,12 +44,16 @@ export interface TaskAggregateInput {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   planDigest: string | null;
   latestCheckpoint: CheckpointV1 | null;
 }
 
 export interface TaskCompletionContext {
+  executionContext?: {
+    currentSubject: ManEvidenceSubject;
+    candidateSha?: string;
+  };
   diagnosticOutcome?: WorkflowMetadataV3['outcome'];
   activeChildTaskRefs: TaskRef[];
   hasPendingRepairOperation: boolean;
@@ -223,6 +229,12 @@ export function assertTaskAggregateConsistency(
   input: TaskAggregateInput,
 ): void {
   const { metadata, requirements, review, verification } = input;
+  if (
+    (metadata.governance.policyVersions.verification === 2) !==
+    (verification.schemaVersion === 2)
+  ) {
+    throw new Error('MANCODE_EXECUTION_POLICY_LEDGER_MISMATCH');
+  }
   assertDigestOrNull(input.planDigest, 'task aggregate planDigest');
   assertSameTaskRef(metadata.taskRef, requirements.taskRef, 'requirements');
   assertSameTaskRef(metadata.taskRef, review.taskRef, 'review ledger');
@@ -244,6 +256,20 @@ export function assertTaskCompletionGate(
   assertTaskAggregateConsistency(input);
   const { metadata, requirements, review, verification } = input;
   assertRequirementsScopeConsistent(requirements);
+  if (verification.schemaVersion === 2) {
+    if (!context.executionContext)
+      throw new Error('MANCODE_EXECUTION_CONTEXT_REQUIRED');
+    const executionGate = evaluateExecutionGate({
+      verification,
+      requirements,
+      metadata,
+      ...context.executionContext,
+    });
+    if (executionGate.status === 'incomplete')
+      throw new Error(
+        `MANCODE_EXECUTION_INCOMPLETE: ${executionGate.blockers.map((item) => item.code).join(', ')}`,
+      );
+  }
   if (metadata.status !== 'in_progress' && metadata.status !== 'planned') {
     throw new Error('only active workflows may pass the task completion gate');
   }
@@ -371,7 +397,7 @@ function assertReviewCache(
 
 function assertVerificationCache(
   metadata: WorkflowMetadataV3,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
 ): void {

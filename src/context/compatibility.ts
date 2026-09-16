@@ -22,7 +22,8 @@ export type WriterCapability =
   | 'adapter-digest:1'
   | 'reframe-local:1'
   | 'privacy-policy:1'
-  | 'decision-relations:1';
+  | 'decision-relations:1'
+  | 'execution-gates:1';
 
 export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
   'planning-policy:1',
@@ -31,7 +32,20 @@ export const CURRENT_WRITER_CAPABILITIES: readonly WriterCapability[] = [
   'reframe-local:1',
   'privacy-policy:1',
   'decision-relations:1',
+  'execution-gates:1',
 ];
+
+/** Per-task capability: opt-in does not change unrelated project defaults. */
+export function assertExecutionWriterCapability(
+  policy: number | null,
+  capabilities: readonly WriterCapability[],
+): void {
+  if (policy === 2 && !capabilities.includes('execution-gates:1')) {
+    throw new CompatibilityGateError('MANCODE_WRITER_CAPABILITY_MISSING', {
+      missingCapabilities: ['execution-gates:1'],
+    });
+  }
+}
 
 export type CompatibilityFailureCode =
   | 'MANCODE_SCHEMA_EPOCH_MISMATCH'

@@ -4,6 +4,10 @@ import {
   parseArtifactRef,
 } from './artifact-ref.js';
 import { digestCanonicalJson } from './canonical.js';
+import {
+  type ExecutionState,
+  parseExecutionState,
+} from './execution-ledger.js';
 import { type Ulid, assertUlid } from './ids.js';
 import {
   type ManEvidenceSubject,
@@ -85,6 +89,13 @@ export interface VerificationLedgerV1 {
   updatedAt: string;
 }
 
+export interface VerificationLedgerV2
+  extends Omit<VerificationLedgerV1, 'schemaVersion'> {
+  schemaVersion: 2;
+  execution: ExecutionState;
+}
+export type VerificationLedger = VerificationLedgerV1 | VerificationLedgerV2;
+
 const COMPONENT_STATUSES = new Set<VerificationComponentStatus>([
   'pending',
   'passed',
@@ -107,7 +118,7 @@ const VERIFICATION_REQUIREMENTS = new Set<VerificationRequirement>([
 ]);
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
-export function parseVerificationLedger(
+export function parseVerificationLedgerV1(
   value: unknown,
   requirements?: RequirementsLedgerV1,
 ): VerificationLedgerV1 {
@@ -184,7 +195,39 @@ export function parseVerificationLedger(
   return ledger;
 }
 
-export function verificationLedgerDigest(ledger: VerificationLedgerV1): string {
+export function parseVerificationLedger(
+  value: unknown,
+  requirements?: RequirementsLedgerV1,
+): VerificationLedger {
+  assertRecord(value, 'verification ledger');
+  if (value.schemaVersion !== 2)
+    return parseVerificationLedgerV1(value, requirements);
+  const { execution, ...base } = value;
+  const legacy = parseVerificationLedgerV1(
+    {
+      ...base,
+      schemaVersion: 1,
+      contentDigest: verificationLedgerDigest({
+        ...base,
+        schemaVersion: 1,
+      } as unknown as VerificationLedgerV1),
+    },
+    requirements,
+  );
+  const ledger: VerificationLedgerV2 = {
+    ...legacy,
+    schemaVersion: 2,
+    execution: parseExecutionState(execution),
+    contentDigest: String(value.contentDigest),
+  };
+  if (ledger.contentDigest !== verificationLedgerDigest(ledger))
+    throw new Error(
+      'verification ledger contentDigest does not match canonical content',
+    );
+  return ledger;
+}
+
+export function verificationLedgerDigest(ledger: VerificationLedger): string {
   return digestCanonicalJson({
     schemaVersion: ledger.schemaVersion,
     canonicalizationVersion: ledger.canonicalizationVersion,
@@ -195,11 +238,12 @@ export function verificationLedgerDigest(ledger: VerificationLedgerV1): string {
     remediationRound: ledger.remediationRound,
     checks: ledger.checks,
     legacySource: ledger.legacySource,
+    ...(ledger.schemaVersion === 2 ? { execution: ledger.execution } : {}),
   });
 }
 
 export function deriveVerificationLedgerStatus(
-  ledger: VerificationLedgerV1,
+  ledger: VerificationLedger,
   context?: VerificationLedgerContext,
 ): VerificationLedgerStatus {
   if (context !== undefined && isVerificationStale(ledger, context)) {
@@ -218,7 +262,7 @@ export function deriveVerificationLedgerStatus(
 }
 
 export function assertVerificationLedgerAgainstContext(
-  ledger: VerificationLedgerV1,
+  ledger: VerificationLedger,
   context: VerificationLedgerContext,
 ): void {
   parseDigest(
@@ -242,7 +286,7 @@ export function assertVerificationLedgerAgainstContext(
 }
 
 export function assertVerificationLedgerRequirements(
-  ledger: VerificationLedgerV1,
+  ledger: VerificationLedger,
   requirements: RequirementsLedgerV1,
 ): void {
   if (!sameTaskRef(ledger.taskRef, requirements.taskRef)) {
@@ -287,8 +331,8 @@ export function assertVerificationLedgerRequirements(
 }
 
 export function assertVerificationLedgerTransition(
-  previous: VerificationLedgerV1,
-  next: VerificationLedgerV1,
+  previous: VerificationLedger,
+  next: VerificationLedger,
   contentInvalidated = false,
 ): void {
   if (next.revision !== previous.revision + 1) {
@@ -325,7 +369,7 @@ export function assertVerificationLedgerTransition(
   }
 }
 
-function assertVerificationLedgerShape(ledger: VerificationLedgerV1): void {
+function assertVerificationLedgerShape(ledger: VerificationLedger): void {
   const checkIds = new Set<string>();
   const criterionIds = new Set<string>();
   const displayIds = new Set<string>();
@@ -345,7 +389,7 @@ function assertVerificationLedgerShape(ledger: VerificationLedgerV1): void {
   }
 }
 
-function assertStoredVerificationStatus(ledger: VerificationLedgerV1): void {
+function assertStoredVerificationStatus(ledger: VerificationLedger): void {
   if (ledger.status === 'stale') return;
   const expectedStatus = deriveVerificationLedgerStatus(ledger);
   if (ledger.status !== expectedStatus) {
@@ -356,7 +400,7 @@ function assertStoredVerificationStatus(ledger: VerificationLedgerV1): void {
 }
 
 function isVerificationStale(
-  ledger: VerificationLedgerV1,
+  ledger: VerificationLedger,
   context: VerificationLedgerContext,
 ): boolean {
   return (
@@ -379,7 +423,7 @@ function parseLedgerStatus(value: unknown): VerificationLedgerStatus {
 function parseChecks(
   value: unknown,
   taskRef: TaskRef,
-): VerificationLedgerV1['checks'] {
+): VerificationLedger['checks'] {
   if (!Array.isArray(value)) {
     throw new Error('verification ledger checks must be an array');
   }
@@ -605,9 +649,7 @@ function parseEvidenceArtifactRef(
   return artifactRef;
 }
 
-function parseLegacySource(
-  value: unknown,
-): VerificationLedgerV1['legacySource'] {
+function parseLegacySource(value: unknown): VerificationLedger['legacySource'] {
   if (value === null) return null;
   assertRecord(value, 'verification ledger legacySource');
   assertKnownKeys(
@@ -638,7 +680,7 @@ function parseLegacySource(
 }
 
 function verificationComponents(
-  check: VerificationLedgerV1['checks'][number],
+  check: VerificationLedger['checks'][number],
 ): VerificationComponentStatus[] {
   return [check.automated, check.manual]
     .filter(

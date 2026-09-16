@@ -15,6 +15,7 @@ import {
   CURRENT_WRITER_CAPABILITIES,
   type CompatibilityOperation,
   assertCompatibilityGate,
+  assertExecutionWriterCapability,
 } from '../context/compatibility.js';
 import { type Ulid, assertUlid, createUlid } from '../context/ids.js';
 import { scanLegacyAuthority } from '../context/layout.js';
@@ -256,6 +257,10 @@ export async function openV3TaskOperation(
         ? readCheckoutCodeHead(projectRoot)
         : Promise.resolve(null),
     ]);
+    assertExecutionWriterCapability(
+      task.metadata.governance.policyVersions.verification,
+      CURRENT_WRITER_CAPABILITIES,
+    );
     if (task.aggregate === null || task.metadata.transitionState !== 'stable') {
       throw new Error('MANCODE_OPERATION_REPAIR_REQUIRED');
     }

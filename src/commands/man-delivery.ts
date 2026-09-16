@@ -39,6 +39,7 @@ import {
   isActiveSoloHandoff,
 } from '../context/workflow-metadata.js';
 import { openV3TaskOperation } from '../runtime/task-operation.js';
+import { executionDeliveryCommand } from './execution.js';
 import {
   printV3Error,
   printV3Result,
@@ -80,6 +81,16 @@ export async function manDeliveryCommand(
     let task = await project.store.readTaskSnapshot(taskRef);
     if (!isManDelivery(task.metadata))
       throw new Error('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
+    if (
+      task.verification.schemaVersion === 2 &&
+      (action === 'verify' || action === 'confirm')
+    )
+      return executionDeliveryCommand(
+        project.projectRoot,
+        ref,
+        action,
+        options,
+      );
     if (action === 'publication')
       return printV3Result(
         options.json,
@@ -94,6 +105,7 @@ export async function manDeliveryCommand(
       });
     if (action === 'check') {
       await assertManDeliveryReady(project.projectRoot, task);
+      const current = await inspectManDelivery(project.projectRoot, task);
       assertTaskCompletionGate(
         {
           ...task,
@@ -110,6 +122,10 @@ export async function manDeliveryCommand(
             await project.store.listActiveChildTaskRefs(taskRef),
           hasPendingRepairOperation: false,
           activeClaimCount: 0,
+          executionContext: {
+            currentSubject: current.subject,
+            ...(current.head ? { candidateSha: current.head } : {}),
+          },
         },
       );
       return printV3Result(options.json, {

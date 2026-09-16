@@ -111,3 +111,5 @@ examples/
 
 # Local-only publishing configuration
 .npmrc
+
+!docs/execution-gates-plan.md

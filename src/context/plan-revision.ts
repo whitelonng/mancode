@@ -49,7 +49,7 @@ import {
   taskMutationExpectedRevisions,
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
-import type { VerificationLedgerV1 } from './verification-ledger.js';
+import type { VerificationLedger } from './verification-ledger.js';
 import {
   type PlanDecision,
   type WorkflowMetadataV3,
@@ -79,7 +79,7 @@ export interface ReviseV3PlanInput {
 export interface RevisedV3Plan {
   metadata: WorkflowMetadataV3;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   planDigest: string;
   aggregate: TaskAggregateManifestV1;
   taskHeadFence: TaskHeadFenceV1 | null;
@@ -538,7 +538,7 @@ function updateMetadata(
   previous: WorkflowMetadataV3,
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   implementationScope: WorkflowMetadataV3['implementationScope'],
   authorityChanged: boolean,
   planDecision: V3PlanDecision | null,

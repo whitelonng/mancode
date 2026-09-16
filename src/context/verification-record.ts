@@ -19,6 +19,8 @@ import {
   type TaskAggregateManifestV1,
   buildTaskAggregateManifest,
 } from './aggregate.js';
+import type { ExecutionAction } from './execution-ledger.js';
+import { buildExecutionVerification } from './execution-mutation.js';
 import type { Ulid } from './ids.js';
 import {
   assertManVerificationSubjects,
@@ -32,7 +34,7 @@ import {
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   assertVerificationLedgerAgainstContext,
   assertVerificationLedgerRequirements,
   assertVerificationLedgerTransition,
@@ -62,19 +64,40 @@ export interface RecordV3VerificationInput {
 
 export interface RecordedV3Verification {
   metadata: WorkflowMetadataV3;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   aggregate: TaskAggregateManifestV1;
   taskHeadFence: TaskHeadFenceV1 | null;
   operation: OperationJournalV1;
 }
 
 /** Records a complete current verification ledger and refreshes metadata cache. */
-export async function recordV3Verification(
+export function recordV3Verification(
   input: RecordV3VerificationInput,
 ): Promise<RecordedV3Verification> {
+  return recordVerificationMutation(input);
+}
+
+export function recordV3Execution(
+  input: Omit<RecordV3VerificationInput, 'verification'> & {
+    action: ExecutionAction;
+  },
+): Promise<RecordedV3Verification> {
+  return recordVerificationMutation(
+    { ...input, verification: null },
+    input.action,
+  );
+}
+
+async function recordVerificationMutation(
+  input: RecordV3VerificationInput,
+  executionAction?: ExecutionAction,
+): Promise<RecordedV3Verification> {
   const taskRef = parseTaskRefValue(input.taskRef);
-  const submitted = parseVerificationLedger(input.verification);
-  if (!sameTaskRef(submitted.taskRef, taskRef)) {
+  let submitted =
+    executionAction === undefined
+      ? parseVerificationLedger(input.verification)
+      : null;
+  if (submitted !== null && !sameTaskRef(submitted.taskRef, taskRef)) {
     throw new Error('MANCODE_VERIFICATION_TASK_REF_MISMATCH');
   }
   const context = await openV3TaskOperation({
@@ -90,9 +113,20 @@ export async function recordV3Verification(
   let journal: OperationJournalV1 | null = null;
   try {
     assertSoloHandoffSession(context.task.metadata, context.session);
+    if (
+      executionAction === undefined &&
+      context.task.verification.schemaVersion === 2
+    )
+      throw new Error('MANCODE_EXECUTION_MANAGED_EVIDENCE_REQUIRED');
     const subject = isManDelivery(context.task.metadata)
       ? await captureManSubject(input.projectRoot, context.task)
       : null;
+    if (executionAction !== undefined) {
+      if (subject === null)
+        throw new Error('MANCODE_EXECUTION_DELIVERY_REQUIRED');
+      submitted = buildExecutionVerification(context, executionAction, subject);
+    }
+    if (submitted === null) throw new Error('MANCODE_EXECUTION_INPUT_REQUIRED');
     assertManVerificationSubjects(
       context.task,
       submitted,
@@ -111,15 +145,17 @@ export async function recordV3Verification(
       context.task.requirements,
       context.operationId,
       timestamp,
-      subject !== null &&
-        context.task.verification.checks.some((check) =>
-          [check.automated, check.manual].some(
-            (item) =>
-              item?.status === 'passed' &&
-              (item.subject?.contentDigest !== subject.contentDigest ||
-                item.subject.environment !== subject.environment),
-          ),
-        ),
+      executionAction?.type === 'contract.revise' ||
+        executionAction?.type === 'run.finish' ||
+        (subject !== null &&
+          context.task.verification.checks.some((check) =>
+            [check.automated, check.manual].some(
+              (item) =>
+                item?.status === 'passed' &&
+                (item.subject?.contentDigest !== subject.contentDigest ||
+                  item.subject.environment !== subject.environment),
+            ),
+          )),
     );
     const metadata = updateMetadata(
       context.task.metadata,
@@ -254,15 +290,15 @@ function assertVerificationEligible(
 }
 
 function createCurrentVerification(
-  previous: VerificationLedgerV1,
-  submitted: VerificationLedgerV1,
+  previous: VerificationLedger,
+  submitted: VerificationLedger,
   metadata: WorkflowMetadataV3,
   remediationRound: number,
   requirements: Parameters<typeof assertVerificationLedgerRequirements>[1],
   operationId: Ulid,
   updatedAt: string,
   contentInvalidated: boolean,
-): VerificationLedgerV1 {
+): VerificationLedger {
   if (
     submitted.requirementsDigest !== metadata.governance.requirementsDigest ||
     submitted.planVersion !== metadata.governance.planVersion ||
@@ -270,7 +306,7 @@ function createCurrentVerification(
   ) {
     throw new Error('MANCODE_VERIFICATION_CONTEXT_STALE');
   }
-  const draft: VerificationLedgerV1 = {
+  const draft: VerificationLedger = {
     ...submitted,
     taskRef: previous.taskRef,
     revision: previous.revision + 1,
@@ -297,7 +333,7 @@ function createCurrentVerification(
 
 function updateMetadata(
   previous: WorkflowMetadataV3,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {

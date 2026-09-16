@@ -45,7 +45,7 @@ import {
   parseVerificationLedger,
   verificationLedgerDigest,
 } from './verification-ledger.js';
-import type { VerificationLedgerV1 } from './verification-ledger.js';
+import type { VerificationLedger } from './verification-ledger.js';
 import {
   assertSoloHandoffSession,
   isActiveSoloHandoff,
@@ -70,7 +70,7 @@ export interface ApplyV3ReviewLedgerInput {
 export interface AppliedV3ReviewLedger {
   metadata: WorkflowMetadataV3;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   aggregate: TaskAggregateManifestV1;
   taskHeadFence: TaskHeadFenceV1 | null;
   operation: OperationJournalV1;
@@ -346,7 +346,7 @@ function createCurrentReview(
 function updateMetadata(
   previous: WorkflowMetadataV3,
   review: ReviewLedgerV1,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {

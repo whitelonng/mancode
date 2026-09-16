@@ -65,7 +65,7 @@ import {
   taskMutationExpectedRevisions,
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
-import type { VerificationLedgerV1 } from './verification-ledger.js';
+import type { VerificationLedger } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
   assertWorkflowMetadataTransition,
@@ -100,7 +100,7 @@ export interface ReframedV3Workflow {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   checkpoint: CheckpointV1;
   releasedClaims: ClaimV1[];
   archive: ReframeArchiveSummary;
@@ -667,7 +667,7 @@ function buildReframeCheckpoint(input: {
   taskRevision: number;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   summary?: string;
   nextAction?: string;
   branch: string | null;
@@ -710,7 +710,7 @@ function completeReframeMetadata(
   previous: WorkflowMetadataV3,
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   checkpoint: CheckpointV1,
   operationId: Ulid,
   updatedAt: string,

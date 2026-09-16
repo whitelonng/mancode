@@ -37,7 +37,7 @@ import {
   taskMutationExpectedRevisions,
 } from './task-mutation.js';
 import { type TaskRef, parseTaskRefValue, sameTaskRef } from './task-ref.js';
-import type { VerificationLedgerV1 } from './verification-ledger.js';
+import type { VerificationLedger } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
   assertWorkflowMetadataTransition,
@@ -61,7 +61,7 @@ export interface FinalizedV3Requirements {
   metadata: WorkflowMetadataV3;
   requirements: RequirementsLedgerV1;
   review: ReviewLedgerV1;
-  verification: VerificationLedgerV1;
+  verification: VerificationLedger;
   aggregate: TaskAggregateManifestV1;
   taskHeadFence: TaskHeadFenceV1 | null;
   operation: OperationJournalV1;
@@ -342,7 +342,7 @@ function updateMetadata(
   previous: WorkflowMetadataV3,
   requirements: RequirementsLedgerV1,
   review: ReviewLedgerV1,
-  verification: VerificationLedgerV1,
+  verification: VerificationLedger,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {

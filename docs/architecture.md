@@ -110,3 +110,11 @@ task revision、aggregate digest、owner 和 ownership epoch 都不得变化。�
 `src/privacy/` 提供有界 TypeScript 文本检测、校验及不可逆副本脱敏；输出只含规则、类别和偏移元数据。旧 `src/context/privacy.ts` 的持久化解析规则独立保留，避免新增检测改变旧实体摘要或解析语义。`src/context/privacy-policy*` 管理版本化共享策略、历史排除和恢复事务，写入、Context Pack、git-ref materialization及恢复分别在对应边界执行检查。
 
 `src/gateway/` 是可选的本机前台模型网关，处理支持的 Responses/Anthropic Messages HTTP/SSE 文本协议、有限生命周期的可逆映射与严格失败关闭。配置和token绑定本地用户、真实workspace及checkout，不进入共享权威；启用偏好、进程确认、配置摘要和路由观察分开呈现。网关不自动修改宿主provider，不代表任意Git、工具网络、图像或opaque协议块都受保护。具体范围与验证见[隐私使用指南](privacy-guide.md)和[验收记录](privacy-implementation-plan.md)。
+
+### 可选执行证据
+
+verification policy 2 只由新建本地 `man --delivery --execution-policy` 显式启用，使用 `VerificationLedgerV2.execution` 保存策略、run、attempt、decision 和 CI observation。V1 保持严格 schema 与原语义；旧 writer 必须在 journal 前拒绝新 policy/capability。V2 自动证据只通过语义 mutation 登记，不开放整表 apply。
+
+执行使用 `reserve → start → finish` 的短事务和已有 `verification_record` journal。独立 supervisor 在启动真实命令前等待 start 提交，持有有限时间/输出预算，并将身份与结果写入私有本地 receipt。Windows 首版在 spawn 前明确拒绝执行，POSIX 保证限于原进程组。CLI 崩溃后 recover 读取 receipt，不能把有副作用的执行放进 journal 自动重放。账本保存摘要与适用性；本地 receipt 不是第二套任务权威。
+
+完成门用新鲜 checkout subject 和 candidate SHA 计算场景 TDD、当前检查、未结束运行及精确 CI 缺口。历史 Red 不覆盖最终检查；预算达到上限只限制新增执行，合法最后一次成功不会被永久阻塞。例外/追加是保留历史的决定，不能重置计数或自动完成。原受管 handoff 继承门禁，报告式 manba 审核不创建任务或执行账本。

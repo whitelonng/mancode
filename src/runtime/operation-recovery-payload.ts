@@ -18,7 +18,7 @@ import { type TaskRef, parseTaskRefValue } from '../context/task-ref.js';
 import { sameTaskRef } from '../context/task-ref.js';
 import { assertKnownKeys, assertRecord } from '../context/validation.js';
 import {
-  type VerificationLedgerV1,
+  type VerificationLedger,
   parseVerificationLedger,
 } from '../context/verification-ledger.js';
 import {
@@ -831,7 +831,7 @@ export function parseTaskAuthorityContent(
   | WorkflowMetadataV3
   | RequirementsLedgerV1
   | ReviewLedgerV1
-  | VerificationLedgerV1
+  | VerificationLedger
   | { content: string } {
   if (typeof content !== 'string' || content.includes('\0')) {
     throw new Error('operation recovery task authority content is invalid');

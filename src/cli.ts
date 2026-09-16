@@ -349,6 +349,10 @@ export function createCliProgram(): Command {
       '--delivery',
       'Opt in a new man task to document-bound module delivery',
     )
+    .option(
+      '--execution-policy <path>',
+      'Explicit execution policy JSON for a new local man delivery task',
+    )
     .option('--review-domain <domain>', 'Review domain: quality or security')
     .option(
       '--report <path>',
