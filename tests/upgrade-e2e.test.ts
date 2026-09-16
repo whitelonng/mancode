@@ -186,6 +186,8 @@ suites('real CLI upgrade through npm and the target renderer', () => {
       } else if (testShell === 'powershell') {
         command = 'powershell.exe';
         env.MANCODE_UPGRADE_ARGV = JSON.stringify(args);
+        // Windows PowerShell returns the JSON array as one pipeline object.
+        // Assign it directly so splatting expands arguments, not a nested array.
         commandArgs = [
           '-NoLogo',
           '-NoProfile',
@@ -193,7 +195,7 @@ suites('real CLI upgrade through npm and the target renderer', () => {
           '-ExecutionPolicy',
           'Bypass',
           '-Command',
-          '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; $cliArgs = @(ConvertFrom-Json $env:MANCODE_UPGRADE_ARGV); & $env:MANCODE_UPGRADE_SHIM @cliArgs; exit $LASTEXITCODE',
+          '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; $cliArgs = ConvertFrom-Json $env:MANCODE_UPGRADE_ARGV; & $env:MANCODE_UPGRADE_SHIM @cliArgs; exit $LASTEXITCODE',
         ];
       } else if (testShell === 'cmd') {
         // Only fixed fixture arguments are accepted by this CMD test driver.
@@ -220,7 +222,9 @@ suites('real CLI upgrade through npm and the target renderer', () => {
       // CMD parses this prequoted command string itself; Node's default Windows
       // argv quoting would turn its quotes into literal backslash-quote pairs.
       windowsVerbatimArguments:
-        process.platform === 'win32' && testShell === 'cmd',
+        process.platform === 'win32' &&
+        testShell === 'cmd' &&
+        command !== process.execPath,
       timeout: 120_000,
       maxBuffer: 5 * 1024 * 1024,
     });
