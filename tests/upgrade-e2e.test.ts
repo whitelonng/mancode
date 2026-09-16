@@ -217,6 +217,10 @@ suites('real CLI upgrade through npm and the target renderer', () => {
     const result = await execute(command, commandArgs, {
       cwd,
       env,
+      // CMD parses this prequoted command string itself; Node's default Windows
+      // argv quoting would turn its quotes into literal backslash-quote pairs.
+      windowsVerbatimArguments:
+        process.platform === 'win32' && testShell === 'cmd',
       timeout: 120_000,
       maxBuffer: 5 * 1024 * 1024,
     });
