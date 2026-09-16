@@ -25,7 +25,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.8-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.8" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.9-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.9" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -200,6 +200,12 @@ and completion gates preserve its engineering commitments.
 The model can choose tools and implementation steps without rewriting approved
 goals or acceptance criteria.
 
+### v0.6.9 Updates
+
+- Add the numbered `mancode upgrade` menu to update the CLI, project rules and Skills, or inspect updates.
+- Interactive `mancode init` offers updates for initialized projects.
+- Support global npm and ordinary local installations, preserve tasks, policies and custom content outside managed blocks, and resume interrupted upgrades.
+
 ### v0.6.8 Updates
 
 - **Complete reviews and aligned checks**: `man` and `manba` share baseline, file coverage, and evidence checks. `review inspect` inventories actual changes; local and CI checks use the same project entry point.
@@ -214,7 +220,7 @@ The new execution runner reports capability unavailable before spawning on Windo
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.8. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.9. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
 Requires Node.js 22.5.0 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -286,7 +292,7 @@ mancode adapter upgrade --platform codex --dry-run # Stage a preview only
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
-### One-command upgrade (development branch, not yet released)
+### One-command upgrade (since v0.6.9)
 
 Run from your project root:
 
@@ -320,8 +326,8 @@ to continue the original operation. If CLI installation is unverified, repair it
 manager before running `mancode upgrade --project-only`. Reopen your Agent session afterward.
 Use `--json` with `--check` or `--yes`; JSON mode never prompts. Set the language with `--lang zh-CN|en`.
 
-**First update from an old CLI:** the published 0.6.8 does not include this command. After a release
-containing it becomes available, update once using the original package manager (`npm install -g mancode@latest`
+**First update from an old CLI:** 0.6.8 and earlier do not include this command.
+Update once using the original package manager (`npm install -g mancode@latest`
 for a global npm installation; preserve the dependency section for local installs), then run `mancode upgrade`.
 Do not reinitialize the project or delete `.mancode` to update its entries.
 
@@ -906,7 +912,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.8
+mancode v0.6.9
 
 Project:     my-app
 Runtime:     ready
