@@ -25,7 +25,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.7-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.7" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.8-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.8" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -200,19 +200,21 @@ and completion gates preserve its engineering commitments.
 The model can choose tools and implementation steps without rewriting approved
 goals or acceptance criteria.
 
-### v0.6.7 Updates
+### v0.6.8 Updates
 
-- **Index-first context**: fetch bounded references to tasks, documents, and decisions, then read the required bodies by version. Existing task policies and compatibility paths remain supported.
-- **Traceable decisions**: applicability, clause replacements, and revocations distinguish current, partially valid, and historical records. Completing a task does not retire its decisions.
-- **Visual project progress**: new project initialization generates `项目进度.html` with a task board, module overview, decisions, timeline, and lessons learned.
-- **Event-driven updates**: tasks appear in not-started, in-progress, review, and blocked columns. Plan-only tasks remain marked in progress; completed tasks are collapsed. Rendering and idle refresh make no model calls.
-- Fix version argument parsing for `context read <ref> --version <version>`, including the standard space-separated form.
+- **Complete reviews and aligned checks**: `man` and `manba` share baseline, file coverage, and evidence checks. `review inspect` inventories actual changes; local and CI checks use the same project entry point.
+- **Optional execution gates**: new local `man --delivery` tasks can declare TDD scenarios, repair budgets, and exact-commit GitHub CI requirements. Existing tasks retain their policies.
+- **Bounded execution and recovery**: timeouts, cancellation, and interruptions retain recoverable records. Exhausted budgets still allow inspection, cancellation, recovery, and explicit extensions; the last permitted successful attempt can complete.
+- **Trusted evidence**: structured Vitest Red/Green distinguishes assertion failures from environment errors. Only the dedicated observer supplies CI evidence; completion refreshes the selected run, attempt, and required checks.
+- Fix request budgets for multiple workflows, completion selection when one SHA has multiple runs, and test identities with nested working directories or custom Vitest roots.
+
+The new execution runner reports capability unavailable before spawning on Windows; existing Windows CLI and shell support remains. POSIX cleanup covers the original process group. Gates do not intercept arbitrary host file edits or authenticate human approval from declaration fields.
 
 <span id="installation"></span>
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.7. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.8. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
 Requires Node.js 22.5.0 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -284,13 +286,13 @@ mancode adapter upgrade --platform codex --dry-run # Stage a preview only
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
-### Upgrade to v0.6.7
+### Upgrade to v0.6.8
 
 Finish active mancode writes before upgrading and use one CLI version throughout
 the workspace:
 
 ```bash
-npm install -g mancode@0.6.7
+npm install -g mancode@0.6.8
 cd your-project
 mancode adapter status --json
 mancode adapter upgrade --platform codex --dry-run --json
@@ -486,6 +488,31 @@ handoffs should be based on the accepted target, authoritative baseline, actual
 read-back state, and task-owned diff. Rejected session-only proposals do not
 define delivery identity, and an external surface that cannot be read back must
 remain marked unverified.
+
+### Complete Reviews and Optional TDD Gates
+
+`/manba` can review a defined scope independently. When given an existing Man TaskRef, it reuses that task's policy, budget, and evidence. Collect a read-only change inventory with:
+
+```bash
+mancode review inspect --base <approved-baseline-commit> --json
+```
+
+An inventory is not a passing review. Review behavior, tests, CI, configuration, and missing evidence; a local pass does not prove remote CI passed.
+
+Explicitly opt a **new local** Man delivery task into machine gates:
+
+```bash
+mancode workflow create man "Add an export module" --delivery \
+  --execution-policy .mancode/local/drafts/policy.json \
+  --session <SESSION_ID> --client <CLIENT> --json
+mancode workflow execution <TASK_REF> inspect --json
+```
+
+The policy declares approved checks, finite task run/time/repair budgets, scenario-level TDD, and `local` or `remote_required` delivery. Use `run` to capture declared `tdd_red`, `tdd_green`, and final verification, and `ci-observe` to read exact-commit workflow/job evidence. Changed assertions or relevant configuration invalidate old TDD pairs. Label existing-code replay `regression_replay`; it does not prove historical test-first development.
+
+Infrastructure gets at most one automatic retry; two failed repairs of the same root cause stop new attempts. Time limits belong to the task. Use `run-inspect`, `run-cancel`, and `run-recover` after interruptions. Explicit budget extensions retain history; uncertain commands and remote CI are not automatically rerun. Independent reviews without a TaskRef create no execution ledger, and old tasks do not upgrade automatically. The new Windows execution runner remains unsupported.
+
+See [policy JSON, command inputs, and recovery](https://github.com/whitelonng/mancode/blob/main/docs/workflows.md#可选执行门禁).
 
 ## Continue Work Across Sessions
 
@@ -818,6 +845,8 @@ mancode migrate context --stage
 mancode migrate context --activate --confirm --session <id>
 mancode migrate context --rollback <operationId>
 mancode migrate context resolve <legacyTaskId> --expected-stage-revision <n> [--owner <actorId>] [--scope-file <path>]
+mancode review inspect --base <approved-base> --json
+mancode workflow execution <TaskRef> <inspect|run|run-inspect|run-cancel|run-recover|ci-observe>
 mancode manps [area]
 mancode design status --json
 mancode design context --json
@@ -838,7 +867,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.7
+mancode v0.6.8
 
 Project:     my-app
 Runtime:     ready
@@ -1326,6 +1355,8 @@ optional source TaskRefs. Mutations use privacy screening and revision CAS, so
 new terminology is not silently extracted or written into shared context.
 
 ## Remaining Work
+
+- Add reliable Windows process-tree cleanup and real-platform acceptance for the optional execution gates. This release refuses that runner before spawning on Windows.
 
 - Complete project-level entry discovery, command propagation, and two-window
   real-host session verification for ZCode, Kimi Code, Qoder, and DeepSeek Harness. Keep each

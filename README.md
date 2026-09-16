@@ -18,7 +18,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="许可证：AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm 版本" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.7-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.7" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.8-2f855a?style=flat-square" alt="状态：mancode Continuity v0.6.8" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="平台：Claude Code、Cursor、ChatGPT 桌面端 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder、DeepSeek Harness" />
 </p>
 
@@ -134,19 +134,21 @@ requirements、plan、review、verification 和完成门禁维持。
 
 模型可以灵活选择工具与实现步骤，但不能自行改写已批准的目标和验收标准。
 
-### v0.6.7 更新
+### v0.6.8 更新
 
-- **索引优先的上下文**：先获取有界任务、文档和决策引用，再按版本读取所需正文；保留旧任务 policy 与兼容入口。
-- **可追溯的长期决策**：通过适用范围、条款替代和撤销关系区分当前有效、部分有效及历史记录，不按任务完成时间判定失效。
-- **每项目可视化进度**：新项目初始化生成 `项目进度.html`，包含任务看板、项目全貌、决策清单、演进时间线和避坑记录。
-- **按事件更新**：未开始、进行中、待审核和阻塞分栏展示；仅规划归入进行中并保留标记，完成任务默认折叠。页面渲染与空闲刷新不调用模型。
-- 修复 `context read <ref> --version <version>` 的参数解析，支持标准空格形式读取完整正文。
+- **完整审查与检查对齐**：`man` 与 `manba` 共享基线、文件覆盖和证据复核规则；`review inspect` 收集实际改动，本地与 CI 使用统一检查入口。
+- **可选执行门禁**：新建本地 `man --delivery` 任务可显式声明 TDD 场景、修复预算和准确提交的 GitHub CI 条件，旧任务保留原策略。
+- **有限执行与恢复**：超时、取消和中断留下可恢复记录；额度耗尽后仍可查看、取消、恢复或明确追加，最后一次合法成功可以完成。
+- **可信证据**：Vitest 结构化 Red/Green 区分断言失败与环境错误；CI 仅接受专用观察器结果，完成前复查选定 run、attempt 和必需检查集合。
+- 修复多 workflow 查询预算、同 SHA 多 run 的完成选择，以及子目录与自定义 Vitest root 的路径匹配。
+
+新执行门禁在 Windows 上会在启动前明确报能力不可用；原 Windows CLI 与 shell 支持保留。POSIX 清理限于原进程组；门禁不拦截任意宿主文件编辑，也不把批准字段当成人类身份认证。
 
 <span id="安装方法"></span>
 
 ## 安装方法
 
-**状态**：mancode Continuity v0.6.7。Claude Code、Cursor、ChatGPT 桌面端中的
+**状态**：mancode Continuity v0.6.8。Claude Code、Cursor、ChatGPT 桌面端中的
 Codex、Codex CLI、GitHub Copilot、ZCode、Kimi Code、Qoder 和 DeepSeek Harness adapter 均已接入。
 
 需要 Node.js 22.5.0 或更高版本。原生支持 macOS、Linux、Windows CMD、
@@ -208,12 +210,12 @@ mancode adapter upgrade --platform codex --dry-run # 只生成 staging 预览
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
-### 升级到 v0.6.7
+### 升级到 v0.6.8
 
 先结束旧版本正在执行的 mancode 写操作，并统一升级同一工作区使用的 CLI：
 
 ```bash
-npm install -g mancode@0.6.7
+npm install -g mancode@0.6.8
 cd your-project
 mancode adapter status --json
 mancode adapter upgrade --platform codex --dry-run --json
@@ -375,6 +377,36 @@ mancode workflow delivery <TASK_REF> publication --json
 默认 `solo` 也执行同一个轻量清晰度判断：清晰、窄范围的需求直接做最小改动；会改变
 行为、范围、验收或关键约束的歧义必须先提问。涉及架构、owner/source of truth、迁移、
 跨模块或团队决策时，`solo` 推荐 `/man`，但不会自行切换模式。
+
+### 完整审核与可选 TDD 门禁
+
+`/manba` 可独立审核定义好的范围；已有 Man TaskRef 时复用原任务的策略、预算与证据。
+只读收集改动清单：
+
+```bash
+mancode review inspect --base <批准的基线提交> --json
+```
+
+清单不是审查通过证明。审查还需核对行为链、测试、CI、配置与缺失证据；本地通过不等于远端 CI 通过。
+
+需要机器门禁时，为**新建的本地** Man 交付任务显式提供策略：
+
+```bash
+mancode workflow create man "添加导出功能" --delivery \
+  --execution-policy .mancode/local/drafts/policy.json \
+  --session <SESSION_ID> --client <CLIENT> --json
+mancode workflow execution <TASK_REF> inspect --json
+```
+
+策略声明批准的检查、有限的任务次数/时间/修复预算、场景级 TDD，以及 `local` 或 `remote_required` 交付。
+用 `run` 捕获声明场景的 `tdd_red`、`tdd_green` 和最终验证；用 `ci-observe` 只读核对准确提交与必需 workflow/job。
+修改断言或相关配置后，旧 TDD 配对不能沿用；已有代码回放须标为 `regression_replay`，不冒充历史测试先行。
+
+基础设施最多自动重试一次，同根因两次失败修复后拦截新尝试；时间预算按任务约定。
+用 `run-inspect`、`run-cancel`、`run-recover` 处理运行中断，明确追加额度保留历史；不会自动重放不确定执行或重跑远端 CI。
+没有 TaskRef 的独立审查不创建执行账本，旧任务不自动升级。Windows 新执行器仍不支持。
+
+[策略 JSON、命令输入与恢复说明](https://github.com/whitelonng/mancode/blob/main/docs/workflows.md#可选执行门禁)。
 
 ## 跨会话继续工作
 
@@ -597,6 +629,8 @@ mancode workflow child ...
 mancode workflow promote ...
 mancode workflow handoff ...
 mancode workflow delivery <TaskRef> <inspect|check|publication|sync|verify|confirm|review>
+mancode review inspect --base <approved-base> --json
+mancode workflow execution <TaskRef> <inspect|run|run-inspect|run-cancel|run-recover|ci-observe>
 mancode manps [area]
 mancode design status --json
 mancode design context --json
@@ -645,7 +679,7 @@ transport 和各平台 bootstrap/原 mode 入口的实际就绪状态。编码 A
 以下是简化输出示例：
 
 ```text
-mancode v0.6.7
+mancode v0.6.8
 
 Project:     my-app
 Runtime:     ready
@@ -997,6 +1031,8 @@ git-ref transport 也只同步 mancode 协调权威，不负责同步业务代�
 self-review。
 
 ## 仍在推进
+
+- 补齐可选执行门禁的 Windows 进程树清理与真实平台验收；现版本在 Windows 启动前拒绝该执行器。
 
 - 完成 ZCode、Kimi Code、Qoder 和 DeepSeek Harness 的项目级入口、命令传播与双窗口 session 真实宿主验证；验证完成前继续标记为 provisional。
 - 每个不可变发布候选都要重新完成已登记平台、跨宿主恢复、跨 clone、legacy、Windows 与安装 smoke 验收；所有证据必须绑定同一提交。
