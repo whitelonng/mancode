@@ -3,10 +3,12 @@ import { runBoundedCommand } from '../runtime/execution-runner.js';
 import { readCheckoutCodeHead } from '../runtime/project-runtime.js';
 import { openV3TaskOperation } from '../runtime/task-operation.js';
 import { buildCiObserverArgv } from '../system/ci-observer.js';
+import { digestCanonicalJson } from './canonical.js';
 import { evaluateExecutionGate } from './execution-gate.js';
 import type { ExecutionAction } from './execution-ledger.js';
 import {
   assertExecutionActionAuthority,
+  ciObserverTarget,
   mutateV3Execution,
 } from './execution-mutation.js';
 import { createUlid } from './ids.js';
@@ -77,8 +79,46 @@ export async function prepareExecutionCompletion(
     throw new Error(
       `MANCODE_EXECUTION_INCOMPLETE: ${localBlockers.map((item) => item.code).join(', ')}`,
     );
-  const target = { ...ci, candidateSha, testedSha: candidateSha };
-  const argv = buildCiObserverArgv(target, policy.budget.ciTimeoutMs, 20);
+  const state = task.verification.execution;
+  // Preserve an exact, previously observed selection, then query it afresh. The
+  // observer still rejects a newer run, changed attempt or changed complete set.
+  const prior = [...state.ciObservations].reverse().find((item) => {
+    if (
+      item.policyDigest !== state.policyDigest ||
+      item.target.candidateSha !== candidateSha ||
+      item.target.testedSha !== candidateSha ||
+      item.observation.status !== 'passed'
+    )
+      return false;
+    const run = state.runs.find((run) => run.runId === item.runId);
+    if (
+      !run ||
+      run.purpose !== 'ci_observation' ||
+      run.state !== 'succeeded' ||
+      !run.applicable
+    )
+      return false;
+    try {
+      return (
+        digestCanonicalJson(ciObserverTarget(run, policy)) ===
+        digestCanonicalJson(item.target)
+      );
+    } catch {
+      return false;
+    }
+  });
+  const target = {
+    ...ci,
+    candidateSha,
+    testedSha: candidateSha,
+    workflows: ci.workflows.map((workflow) => {
+      const selected = prior?.observation.runs.find(
+        (run) => run.workflowId === workflow.id,
+      );
+      return selected ? { ...workflow, runId: selected.runId } : workflow;
+    }),
+  };
+  const argv = buildCiObserverArgv(target, policy.budget.ciTimeoutMs);
   const runId = createUlid();
   let revision = input.expectedTaskRevision;
   const mutate = async (action: ExecutionAction) => {

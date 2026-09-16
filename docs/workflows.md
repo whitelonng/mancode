@@ -367,6 +367,8 @@ aggregate 的 code-head fast-forward rebind；完成后另一个 clone 才能 pu
 ```
 
 `testInputs` 应包含相关断言与辅助测试文件，`configInputs` 包含会影响测试含义的配置。首版适配 Vitest 3，目标名称是完整测试名。对文档或保持行为的重构，显式声明 `alternative` 及 `alternativeCheckIds`，或有理由的 `not_applicable`；不用制造假的 Red。缺省空 scenarios 不代表通过了 TDD。
+场景的文件路径统一相对仓库根；检查可在子目录运行或使用自定义 Vitest root，专用 reporter 按执行器传入的真实仓库根登记目标，并拒绝越界目标。已有根目录报告仍可恢复；旧的子目录歧义报告不推断为通过。
+
 
 ```bash
 mancode workflow create man "导出模块" --delivery --execution-policy .mancode/local/drafts/policy.json --session <SESSION> --client <CLIENT>
@@ -385,5 +387,13 @@ mancode workflow execution <TASK_REF> run --file .mancode/local/drafts/run.json 
 额度耗尽拦新执行，仍可查看、取消、恢复和提交批准决定。最后一次合法尝试成功允许完成。`budget-extend` 使用 `delta: {runs, executionMs, repairAttempts, problemFailures}`，可选 `problemId`；`exception-decide` 指定 `scenarioId`，可选 `expiresAt`；`contract-revise` 提交完整新 `policy`。这些输入都要求 `approval: {confirmed:true,source,reason,evidence}`，由原任务有权限的操作者确认，保留历史并让不再适用的证据失效。该声明是审计信息，不是经过宿主认证的人类批准凭证。不要为了绿色结果降低已批准的要求。跨任务继续同一次修复不能假装新任务清空预算；首版不提供自动跨任务预算转移。
 
 远端验收时，预先声明 `delivery: "remote_required"` 和 `ci`：repository、event、testedBinding，以及 workflows 中的 GitHub workflow 数字 ID、path、configurationSha（目标提交中 workflow 文件的 Git blob SHA）和 requiredJobs（包含完整 matrix job 名）。`ci-observe` 的输入是 `{"target": <CiContract>}`，target 再给出 candidateSha、testedSha、可选 runId，以及 PR 的 head/base/merge 身份。检查集合必须匹配批准策略。只有已审查 workflow 确实测试 run head 的 push 契约可使用 `approved_workflow_head`；未知 checkout 或 PR 实际测试对象保持 unverified。
+
+CI 证据只能由专用 `ci-observe` 或完成观察产生；通用 `run` 不接受 `ci_observation`。
+预约、恢复、登记和门禁都会核对打包 observer 的命令及目标，旧的任意程序输出不能作为 CI 证明。
+同一 SHA 有多个运行时，显式选择最新 `runId`；完成观察沿用当前策略和候选提交下最近通过的选择，仍重新验证最新性、attempt 和完整运行集合。
+每批请求上限为 `min(1000, max(20, 2 + Σ(6 + max(10, ceil(requiredJobs / 100)))))`：
+按 workflow 预留身份/配置/结束刷新及 jobs 分页（至少十页）成本，同时受任务约定的时间限制。
+最小成本 `2 + Σ(6 + max(1, ceil(requiredJobs / 100)))` 超过 1000 时在预约前拒绝；
+实际额外 jobs 超出有限余量时仍保留未验证状态，不无限分页或省略身份检查。
 
 每次观察是有任务预算和请求上限的只读批次；pending、缺权限、限流、离线、歧义或缺 job 都不算通过。后续显式查询原目标，不自动 push、触发或重跑 CI。观察结束前重列同 SHA 运行集合并复查 attempt，避免查询中变化。remote_required 的 complete 与受管 handoff complete 在任务锁外再执行并记账一批最新观察，然后用新 revision 完成；最后一次额度用于这批观察且成功时可完成。先解决本地审查、提交和验收缺口，预算还应为最终观察预留。任务完成之后发生的远端变化仍需另行观察。运行成功退出与 CI 验收通过是两件事，读取 observation/gate 状态确认结果。

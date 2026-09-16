@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CiContract } from '../src/runtime/execution-protocol.js';
 import {
+  assertCiObserverInvocation,
   buildCiObserverArgv,
+  ciObserverRequestBudget,
   observeGitHubCi,
 } from '../src/system/ci-observer.js';
 
@@ -162,6 +164,35 @@ describe('bounded GitHub observation', () => {
     expect(result.reasons.length).toBeGreaterThan(0);
   });
 
+  it('accepts the explicitly selected latest same-SHA run but never an older selection', async () => {
+    const provider = fixture((route, value) => {
+      if (route.includes('/workflows/7/runs?')) {
+        const current = (
+          value.workflow_runs as Array<Record<string, unknown>>
+        )[0];
+        value.workflow_runs = [current, { ...current, id: 10, run_number: 2 }];
+        value.total_count = 2;
+      }
+    });
+    for (const runId of [11, 10, undefined]) {
+      const target = {
+        ...contract,
+        workflows: contract.workflows.map((workflow) => ({
+          ...workflow,
+          ...(runId === undefined ? {} : { runId }),
+        })),
+      };
+      const result = await observeGitHubCi(target, {
+        timeoutMs: 1000,
+        maxRequests: 20,
+        get: provider.get,
+      });
+      expect(result.status).toBe(runId === 11 ? 'passed' : 'unverified');
+      if (runId !== 11)
+        expect(result.reasons).toContain('CI_RUN_SELECTION_AMBIGUOUS_OR_STALE');
+    }
+  });
+
   it('rejects a newer same-target run appearing before observation finishes', async () => {
     const provider = fixture((route, value, call) => {
       if (route.includes('/workflows/7/runs?') && call > 1) {
@@ -172,11 +203,20 @@ describe('bounded GitHub observation', () => {
         value.total_count = 2;
       }
     });
-    const result = await observeGitHubCi(contract, {
-      timeoutMs: 1000,
-      maxRequests: 20,
-      get: provider.get,
-    });
+    const result = await observeGitHubCi(
+      {
+        ...contract,
+        workflows: contract.workflows.map((workflow) => ({
+          ...workflow,
+          runId: 11,
+        })),
+      },
+      {
+        timeoutMs: 1000,
+        maxRequests: 20,
+        get: provider.get,
+      },
+    );
     expect(result.status).toBe('unverified');
     expect(result.reasons).toContain('CI_RUN_SET_CHANGED_DURING_OBSERVATION');
   });
@@ -286,4 +326,106 @@ describe('bounded GitHub observation', () => {
       ).status,
     ).toBe('unverified');
   });
+});
+
+it('allocates a bounded production request budget for three workflows and paginated jobs', async () => {
+  const workflows = [1, 2, 3].map((id) => ({
+    id,
+    path: `.github/workflows/test${id}.yml`,
+    configurationSha: configSha,
+    requiredJobs: ['job-1', 'job-101'],
+  }));
+  const target = { ...contract, workflows };
+  // Production callers use the builder default, not a hand-expanded test allowance.
+  const argv = buildCiObserverArgv(target, 2000);
+  let calls = 0;
+  const get = async (route: string) => {
+    calls++;
+    if (route === 'repos/owner/project')
+      return { id: 5, full_name: 'owner/project' };
+    const run = (id: number) => ({
+      id: id * 10,
+      run_number: 1,
+      run_attempt: 1,
+      workflow_id: id,
+      path: `.github/workflows/test${id}.yml`,
+      head_sha: sha,
+      event: 'push',
+      repository: { id: 5 },
+      status: 'completed',
+      conclusion: 'success',
+    });
+    const list = route.match(/workflows\/(\d+)\/runs/);
+    if (list) return { total_count: 1, workflow_runs: [run(Number(list[1]))] };
+    const jobs = route.match(/runs\/(\d+)\/attempts\/1\/jobs.*page=(\d+)/);
+    if (jobs)
+      return {
+        total_count: 101,
+        jobs: Array.from({ length: jobs[2] === '1' ? 100 : 1 }, (_, i) => {
+          const id = i + (jobs[2] === '1' ? 1 : 101);
+          return {
+            id,
+            run_id: Number(jobs[1]),
+            run_attempt: 1,
+            head_sha: sha,
+            name: `job-${id}`,
+            status: 'completed',
+            conclusion: 'success',
+          };
+        }),
+      };
+    const detail = route.match(/runs\/(\d+)$/);
+    if (detail) return run(Number(detail[1]) / 10);
+    if (route.includes('/contents/')) return { sha: configSha };
+    throw new Error(route);
+  };
+  const observed = await observeGitHubCi(target, {
+    timeoutMs: 2000,
+    maxRequests: Number(argv[5]),
+    get,
+  });
+  expect(observed.status, observed.reasons.join(',')).toBe('passed');
+  expect(calls).toBe(25);
+  expect(Number(argv[5])).toBeLessThanOrEqual(1000);
+});
+
+it('keeps legacy bounded observer receipts valid across target key order, and rejects substitutions', () => {
+  const argv = buildCiObserverArgv(contract, 2000, 20);
+  argv[3] = JSON.stringify(
+    Object.fromEntries(Object.entries(contract).reverse()),
+  );
+  const run = { argv, runnerArgv: argv, cwd: '.', timeoutMs: 2000 };
+  expect(() => assertCiObserverInvocation(run, contract)).not.toThrow();
+  expect(() =>
+    assertCiObserverInvocation(
+      { ...run, argv: ['node', '-e', 'console.log("passed")', argv[3] ?? ''] },
+      contract,
+    ),
+  ).toThrow('CI_OBSERVER_REQUIRED');
+  expect(() =>
+    assertCiObserverInvocation(
+      { ...run, runnerArgv: ['node', 'custom.js'] },
+      contract,
+    ),
+  ).toThrow('CI_OBSERVER_REQUIRED');
+  expect(() =>
+    assertCiObserverInvocation(run, {
+      ...contract,
+      candidateSha: 'c'.repeat(40),
+    }),
+  ).toThrow('CI_OBSERVER_REQUIRED');
+  expect(() =>
+    assertCiObserverInvocation({ ...run, cwd: 'nested' }, contract),
+  ).toThrow('CI_OBSERVER_REQUIRED');
+  expect(() =>
+    ciObserverRequestBudget({
+      ...contract,
+      workflows: Array.from({ length: 143 }, (_, index) => ({
+        path: '.github/workflows/quality.yml',
+        configurationSha: configSha,
+        requiredJobs: ['test'],
+        id: index + 1,
+      })),
+    }),
+  ).toThrow('CI_REQUEST_CONTRACT_TOO_LARGE');
 });

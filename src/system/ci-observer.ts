@@ -2,6 +2,7 @@ import { execFile as execFileCallback } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { digestCanonicalJson } from '../context/canonical.js';
 import type {
   CIObservation,
   CiContract,
@@ -14,10 +15,70 @@ export function packagedCiObserverPath(): string {
     ? path.resolve(path.dirname(current), '../../dist/execution/ci-observer.js')
     : fileURLToPath(new URL('./execution/ci-observer.js', import.meta.url));
 }
+/** At most 1,000 GETs, including complete-set refreshes and bounded job pagination.
+ * Each workflow costs six non-job requests plus at least ten job pages; declared
+ * larger matrices receive their known page count. Unsupported sizes fail before launch.
+ */
+export function ciObserverRequestBudget(contract: CiContract): number {
+  const minimum =
+    2 +
+    contract.workflows.reduce(
+      (sum, workflow) =>
+        sum + 6 + Math.max(1, Math.ceil(workflow.requiredJobs.length / 100)),
+      0,
+    );
+  if (minimum > 1000) throw new Error('MANCODE_CI_REQUEST_CONTRACT_TOO_LARGE');
+  return Math.min(
+    1000,
+    Math.max(
+      20,
+      2 +
+        contract.workflows.reduce(
+          (sum, workflow) =>
+            sum +
+            6 +
+            Math.max(10, Math.ceil(workflow.requiredJobs.length / 100)),
+          0,
+        ),
+    ),
+  );
+}
+
+/** Only the packaged observer may produce CI evidence. Older bounded invocations
+ * remain recoverable, but arbitrary scripts, runner overrides and cwd changes do not.
+ */
+export function assertCiObserverInvocation(
+  input: {
+    argv: string[];
+    runnerArgv?: string[];
+    cwd: string;
+    timeoutMs: number;
+  },
+  target: CiContract,
+): void {
+  const requests = Number(input.argv[5]);
+  const expected = buildCiObserverArgv(target, input.timeoutMs, requests);
+  // JSON object ordering is not command identity. Preserve the exact receipt argv
+  // for executor digest checks, while comparing the embedded contract canonically.
+  expected[3] = input.argv[3] ?? '';
+  if (
+    input.cwd !== '.' ||
+    !Number.isSafeInteger(requests) ||
+    requests < 1 ||
+    requests > ciObserverRequestBudget(target) ||
+    JSON.stringify(input.argv) !== JSON.stringify(expected) ||
+    digestCanonicalJson(JSON.parse(input.argv[3] ?? 'null')) !==
+      digestCanonicalJson(target) ||
+    (input.runnerArgv !== undefined &&
+      JSON.stringify(input.runnerArgv) !== JSON.stringify(input.argv))
+  )
+    throw new Error('MANCODE_EXECUTION_CI_OBSERVER_REQUIRED');
+}
+
 export function buildCiObserverArgv(
   contract: CiContract,
   timeoutMs: number,
-  maxRequests: number,
+  maxRequests: number = ciObserverRequestBudget(contract),
 ): string[] {
   return [
     process.execPath,

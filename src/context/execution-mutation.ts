@@ -1,9 +1,16 @@
 import path from 'node:path';
 import { executionCommandDigest } from '../runtime/execution-runner.js';
 import type { OpenedV3TaskOperation } from '../runtime/task-operation.js';
+import { assertCiObserverInvocation } from '../system/ci-observer.js';
 import { packagedVitestReporterPath } from '../system/tdd-evidence.js';
 import { digestCanonicalJson } from './canonical.js';
-import { type ExecutionAction, reduceExecution } from './execution-ledger.js';
+import {
+  type ExecutionAction,
+  type ExecutionPolicy,
+  type ExecutionRun,
+  parseCiContract,
+  reduceExecution,
+} from './execution-ledger.js';
 import { createUlid } from './ids.js';
 import type { ManEvidenceSubject } from './man-delivery-evidence.js';
 import {
@@ -27,6 +34,35 @@ export type MutateV3ExecutionInput = Omit<
 > & { action: ExecutionAction };
 export function mutateV3Execution(input: MutateV3ExecutionInput) {
   return recordV3Execution(input);
+}
+
+/** Revalidates old receipts too; an executor receipt proves a command ran, not its provider. */
+export function ciObserverTarget(
+  run: Pick<ExecutionRun, 'argv' | 'runnerArgv' | 'cwd' | 'timeoutMs'>,
+  policy: ExecutionPolicy,
+) {
+  let target: ReturnType<typeof parseCiContract>;
+  try {
+    target = parseCiContract(JSON.parse(run.argv[3] ?? 'null'));
+    assertCiObserverInvocation(run, target);
+  } catch {
+    throw new Error('MANCODE_EXECUTION_CI_OBSERVER_REQUIRED');
+  }
+  const {
+    candidateSha: _candidate,
+    testedSha: _tested,
+    pr: _pr,
+    ...contract
+  } = target;
+  const comparable = {
+    ...contract,
+    workflows: target.workflows.map(
+      ({ runId: _runId, ...workflow }) => workflow,
+    ),
+  };
+  if (digestCanonicalJson(comparable) !== digestCanonicalJson(policy.ci))
+    throw new Error('MANCODE_EXECUTION_CI_CONTRACT_MISMATCH');
+  return target;
 }
 
 /** Reused before cancellation: authority must be checked before touching processes. */
@@ -100,6 +136,26 @@ export function buildExecutionVerification(
         ])
     )
       throw new Error('MANCODE_EXECUTION_RUNNER_ARGV_INVALID');
+  }
+  if (action.type === 'run.reserve' && action.purpose === 'ci_observation') {
+    ciObserverTarget(
+      {
+        ...action,
+        runnerArgv: action.runnerArgv ?? action.argv,
+        timeoutMs:
+          action.timeoutMs ?? previous.execution.policy.budget.ciTimeoutMs,
+      },
+      previous.execution.policy,
+    );
+  }
+  if (action.type === 'ci.observe') {
+    const run = previous.execution.runs.find(
+      (item) => item.runId === action.runId,
+    );
+    if (!run) throw new Error('MANCODE_EXECUTION_RUN_UNKNOWN');
+    const target = ciObserverTarget(run, previous.execution.policy);
+    if (digestCanonicalJson(target) !== digestCanonicalJson(action.target))
+      throw new Error('MANCODE_EXECUTION_CI_TARGET_MISMATCH');
   }
   if (action.type === 'run.start' || action.type === 'run.finish') {
     const run = previous.execution.runs.find(

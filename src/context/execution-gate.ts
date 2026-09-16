@@ -1,3 +1,4 @@
+import { assertCiObserverInvocation } from '../system/ci-observer.js';
 import { digestCanonicalJson } from './canonical.js';
 import {
   type ExecutionRun,
@@ -284,9 +285,17 @@ export function evaluateExecutionGate(
       const run = state.runs.find((item) => item.runId === latest.runId);
       valid =
         run !== undefined &&
+        run.purpose === 'ci_observation' &&
         current(run) &&
         run.state === 'succeeded' &&
         latest.observation.runs.length === state.policy.ci.workflows.length;
+      if (valid && run) {
+        try {
+          assertCiObserverInvocation(run, latest.target);
+        } catch {
+          valid = false;
+        }
+      }
       for (const workflow of state.policy.ci.workflows) {
         const matches = latest.observation.runs.filter(
           (run) =>

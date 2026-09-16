@@ -21,7 +21,7 @@ describe('fresh remote completion observation', () => {
       ...policy,
       version: 1,
       delivery: 'remote_required',
-      budget: { ...policy.budget, maxRuns: 2 },
+      budget: { ...policy.budget, maxRuns: 3 },
       checks: [
         {
           id: 'check',
@@ -35,14 +35,12 @@ describe('fresh remote completion observation', () => {
         repository: 'fixture/project',
         event: 'push',
         testedBinding: 'approved_workflow_head',
-        workflows: [
-          {
-            id: 1,
-            path: '.github/workflows/test.yml',
-            configurationSha: 'a'.repeat(40),
-            requiredJobs: ['test'],
-          },
-        ],
+        workflows: [1, 2, 3].map((id) => ({
+          id,
+          path: `.github/workflows/test${id}.yml`,
+          configurationSha: 'a'.repeat(40),
+          requiredJobs: ['test'],
+        })),
       },
     };
     const f = await fixture(true, remote as typeof policy);
@@ -136,6 +134,10 @@ describe('fresh remote completion observation', () => {
         };
         await input.onReady?.(identity);
         const target = JSON.parse(input.argv[3] ?? 'null');
+        expect(Number(input.argv[5])).toBeGreaterThanOrEqual(22);
+        expect(Number(input.argv[5])).toBeLessThanOrEqual(1000);
+        if (execute.mock.calls.length === 2)
+          expect(target.workflows[0].runId).toBe(10);
         const observation = {
           provider: 'github',
           repository: target.repository,
@@ -144,26 +146,24 @@ describe('fresh remote completion observation', () => {
           event: 'push',
           observedAt: new Date().toISOString(),
           status: 'passed',
-          runs: [
-            {
-              runId: 10,
-              attempt: 2,
-              workflowId: 1,
-              workflowPath: '.github/workflows/test.yml',
-              configurationSha: 'a'.repeat(40),
-              headSha: target.candidateSha,
-              status: 'completed',
-              conclusion: 'success',
-              jobs: [
-                {
-                  id: 3,
-                  name: 'test',
-                  status: 'completed',
-                  conclusion: 'success',
-                },
-              ],
-            },
-          ],
+          runs: (remote.ci?.workflows ?? []).map((workflow) => ({
+            runId: workflow.id * 10,
+            attempt: 2,
+            workflowId: workflow.id,
+            workflowPath: workflow.path,
+            configurationSha: workflow.configurationSha,
+            headSha: target.candidateSha,
+            status: 'completed',
+            conclusion: 'success',
+            jobs: [
+              {
+                id: workflow.id,
+                name: 'test',
+                status: 'completed',
+                conclusion: 'success',
+              },
+            ],
+          })),
           reasons: [],
         };
         return {
@@ -195,9 +195,14 @@ describe('fresh remote completion observation', () => {
       saved.verification.schemaVersion === 2 &&
         saved.verification.execution.runs.length,
     ).toBe(2);
+    const refreshed = await prepareExecutionCompletion({
+      ...base,
+      expectedTaskRevision: after,
+    });
+    expect(execute).toHaveBeenCalledTimes(2);
     await expect(
-      prepareExecutionCompletion({ ...base, expectedTaskRevision: after }),
+      prepareExecutionCompletion({ ...base, expectedTaskRevision: refreshed }),
     ).rejects.toThrow('CI_FRESH_OBSERVATION_BUDGET_REQUIRED');
-    expect(execute).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 });

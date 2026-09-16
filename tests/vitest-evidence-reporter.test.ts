@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -29,4 +29,27 @@ it('preserves collection/unhandled failures and exclusively binds the report to 
   await expect(reporter.onTestRunEnd([], [], 'passed')).rejects.toThrow(
     'MANCODE_VITEST_REPORT_BINDING_REQUIRED',
   );
+});
+
+it('rejects actual and symlinked test modules outside the executor project root', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'vitest-reporter-boundary-'));
+  const project = path.join(root, 'project');
+  await mkdir(project);
+  const outside = path.join(root, 'outside.test.ts');
+  await writeFile(outside, '');
+  vi.stubEnv('MANCODE_VITEST_REPORT', path.join(root, 'report.json'));
+  vi.stubEnv('MANCODE_EXECUTION_RUN_ID', 'run');
+  vi.stubEnv('MANCODE_EXECUTOR_ID', 'executor');
+  vi.stubEnv('MANCODE_VITEST_PROJECT_ROOT', project);
+  const reporter = new Reporter();
+  await expect(
+    reporter.onTestRunEnd([{ moduleId: outside }] as never, [], 'failed'),
+  ).rejects.toThrow('TARGET_OUTSIDE_PROJECT');
+  if (process.platform !== 'win32') {
+    const alias = path.join(project, 'alias.test.ts');
+    await symlink(outside, alias);
+    await expect(
+      reporter.onTestRunEnd([{ moduleId: alias }] as never, [], 'failed'),
+    ).rejects.toThrow('TARGET_OUTSIDE_PROJECT');
+  }
 });

@@ -12,6 +12,7 @@ import { createUlid } from '../src/context/ids.js';
 import type { RequirementsLedgerV1 } from '../src/context/requirements-ledger.js';
 import type { VerificationLedgerV2 } from '../src/context/verification-ledger.js';
 import type { WorkflowMetadataV3 } from '../src/context/workflow-metadata.js';
+import { buildCiObserverArgv } from '../src/system/ci-observer.js';
 
 const digest = digestCanonicalJson('gate fixture');
 const subject = { contentDigest: digest, environment: 'fixture' };
@@ -190,6 +191,92 @@ describe('execution completion gate', () => {
     expect(inspect(state).blockers.map((b) => b.code)).toContain(
       'MANCODE_CI_UNVERIFIED',
     );
+  });
+  it('rejects historical CI records produced by a generic command while retaining legitimate observer evidence', () => {
+    const sha = 'c'.repeat(40);
+    const ci = {
+      repository: 'acme/example',
+      event: 'push' as const,
+      testedBinding: 'approved_workflow_head' as const,
+      workflows: [
+        {
+          id: 10,
+          path: '.github/workflows/quality.yml',
+          configurationSha: 'a'.repeat(40),
+          requiredJobs: ['test'],
+        },
+      ],
+    };
+    const state = pass(
+      initialExecutionState({ ...policy, delivery: 'remote_required', ci }),
+    );
+    const target = { ...ci, candidateSha: sha, testedSha: sha };
+    const first = state.runs[0];
+    if (!first) throw new Error('fixture run missing');
+    const run = {
+      ...structuredClone(first),
+      runId: createUlid(),
+      purpose: 'ci_observation' as const,
+      checkId: null,
+      argv: buildCiObserverArgv(target, 1000, 20),
+      runnerArgv: buildCiObserverArgv(target, 1000, 20),
+    };
+    state.runs.push(run);
+    state.ciObservations.push({
+      observationId: createUlid(),
+      runId: run.runId,
+      policyDigest: state.policyDigest,
+      targetDigest: digestCanonicalJson(target),
+      target,
+      observation: {
+        provider: 'github',
+        repository: ci.repository,
+        candidateSha: sha,
+        testedSha: sha,
+        event: 'push',
+        observedAt: authority.now,
+        status: 'passed',
+        reasons: [],
+        runs: [
+          {
+            runId: 20,
+            attempt: 1,
+            workflowId: 10,
+            workflowPath: ci.workflows[0]?.path ?? '',
+            configurationSha: 'a'.repeat(40),
+            headSha: sha,
+            status: 'completed',
+            conclusion: 'success',
+            jobs: [
+              {
+                id: 30,
+                name: 'test',
+                status: 'completed',
+                conclusion: 'success',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const evaluate = () =>
+      evaluateExecutionGate({
+        verification: {
+          schemaVersion: 2,
+          execution: state,
+        } as VerificationLedgerV2,
+        requirements,
+        metadata,
+        currentSubject: subject,
+        candidateSha: sha,
+      });
+    expect(evaluate().status).toBe('passed');
+    run.argv = ['node', '-e', 'console.log("passed")', JSON.stringify(target)];
+    run.runnerArgv = run.argv;
+    expect(evaluate().blockers.map((item) => item.code)).toContain(
+      'MANCODE_CI_UNVERIFIED',
+    );
+    expect(state.ciObservations).toHaveLength(1);
   });
   it('accepts an ordered assertion Red/Green with stable tests and rejects changed test identity', () => {
     const scenario = {

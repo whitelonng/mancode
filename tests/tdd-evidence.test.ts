@@ -121,6 +121,79 @@ describe.skipIf(process.platform === 'win32')(
       ]);
     }, 20000);
 
+    it.each([false, true])(
+      'uses repository identities with nested cwd and custom Vitest root=%s',
+      async (customRoot) => {
+        const directory = customRoot ? 'custom' : 'nested';
+        const cwd = path.join(root, directory);
+        const testRoot = customRoot ? path.join(cwd, 'tests') : cwd;
+        await mkdir(testRoot, { recursive: true });
+        await writeFile(path.join(testRoot, 'behavior.test.ts'), testCode);
+        await writeFile(
+          path.join(testRoot, 'value.mjs'),
+          'export const value=1;',
+        );
+        await writeFile(
+          path.join(cwd, 'vitest.config.mjs'),
+          `export default {${customRoot ? "root: './tests'," : ''}test:{include:['behavior.test.ts'],maxWorkers:1,watch:false}};`,
+        );
+        const relative = path
+          .relative(root, testRoot)
+          .split(path.sep)
+          .join('/');
+        const nestedScenario = {
+          ...scenario,
+          targets: [
+            { file: `${relative}/behavior.test.ts`, name: 'matches behavior' },
+          ],
+          testInputs: [`${relative}/behavior.test.ts`],
+          configInputs: ['package.json', `${directory}/vitest.config.mjs`],
+        };
+        for (const phase of ['red', 'green']) {
+          if (phase === 'green')
+            await writeFile(
+              path.join(testRoot, 'value.mjs'),
+              'export const value=2;',
+            );
+          const before = await captureVitestIdentity(root, nestedScenario);
+          const runId = `${directory}-${phase}`;
+          const reportPath = path.join(root, `${runId}.json`);
+          const result = await runBoundedCommand({
+            runId,
+            projectRoot: cwd,
+            runDirectory: path.join(root, runId),
+            workerPath: worker,
+            timeoutMs: 15000,
+            maxOutputBytes: 65536,
+            argv: [
+              process.execPath,
+              path.resolve('node_modules/vitest/vitest.mjs'),
+              'run',
+              '--config',
+              path.join(cwd, 'vitest.config.mjs'),
+              '--reporter',
+              reporter,
+            ],
+            env: {
+              MANCODE_VITEST_REPORT: reportPath,
+              MANCODE_VITEST_PROJECT_ROOT: root,
+            },
+          });
+          const assessment = await readVitestAssessment({
+            reportPath,
+            run: result,
+            scenario: nestedScenario,
+            before,
+            after: await captureVitestIdentity(root, nestedScenario),
+          });
+          expect(assessment.assessment, JSON.stringify(assessment)).toBe(
+            phase === 'red' ? 'assertion_failure' : 'passed',
+          );
+        }
+      },
+      30000,
+    );
+
     it('keeps syntax errors, skipped tests and hook failures unverified', async () => {
       for (const [id, code] of [
         ['syntax', 'import ??? broken'],

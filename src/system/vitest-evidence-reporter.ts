@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   Reporter,
@@ -13,7 +13,7 @@ export default class VitestEvidenceReporter implements Reporter {
   private root = process.cwd();
   private context: Vitest | undefined;
   onInit(context: Vitest): void {
-    this.root = context.config.root;
+    this.root = process.env.MANCODE_VITEST_PROJECT_ROOT || context.config.root;
     this.context = context;
   }
   async onTestRunEnd(
@@ -35,7 +35,17 @@ export default class VitestEvidenceReporter implements Reporter {
       unhandledErrors: unhandledErrors.length,
       tests: [],
     };
+    const root = await realpath(
+      process.env.MANCODE_VITEST_PROJECT_ROOT || this.root,
+    );
     for (const module of modules) {
+      const relative = path.relative(root, await realpath(module.moduleId));
+      if (
+        relative === '..' ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+      )
+        throw new Error('MANCODE_VITEST_TARGET_OUTSIDE_PROJECT');
       report.collectionErrors += module.errors().length;
       for (const suite of module.children.allSuites())
         report.collectionErrors += suite.errors().length;
@@ -48,10 +58,7 @@ export default class VitestEvidenceReporter implements Reporter {
         const result = test.result();
         const errors = result.errors ?? [];
         report.tests.push({
-          file: path
-            .relative(this.root, module.moduleId)
-            .split(path.sep)
-            .join('/'),
+          file: relative.split(path.sep).join('/'),
           name: test.fullName,
           status: result.state,
           errorNames: errors.map((error) => error.name ?? 'UnknownError'),

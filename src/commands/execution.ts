@@ -11,6 +11,7 @@ import {
 } from '../context/execution-ledger.js';
 import {
   assertExecutionActionAuthority,
+  ciObserverTarget,
   mutateV3Execution,
 } from '../context/execution-mutation.js';
 import { createUlid } from '../context/ids.js';
@@ -317,7 +318,7 @@ export async function executionCommand(
           run.purpose === 'ci_observation' &&
           observed.result.status === 'succeeded'
         ) {
-          const target = parseCiContract(JSON.parse(run.argv[3] ?? 'null'));
+          const target = ciObserverTarget(run, executionState(task).policy);
           const observation = JSON.parse(observed.result.stdout);
           await mutate(
             { type: 'ci.observe', runId: run.runId, target, observation },
@@ -400,11 +401,7 @@ export async function executionCommand(
         throw new Error('MANCODE_EXECUTION_CI_CONTRACT_MISMATCH');
       if (candidateSha !== (await readCheckoutCodeHead(project.projectRoot)))
         throw new Error('MANCODE_EXECUTION_CI_TARGET_MISMATCH');
-      const argv = buildCiObserverArgv(
-        target,
-        state.policy.budget.ciTimeoutMs,
-        20,
-      );
+      const argv = buildCiObserverArgv(target, state.policy.budget.ciTimeoutMs);
       reserve = {
         type: 'run.reserve',
         purpose: 'ci_observation',
@@ -430,6 +427,8 @@ export async function executionCommand(
         ],
         'run request',
       );
+      if (input.purpose === 'ci_observation')
+        throw new Error('MANCODE_EXECUTION_CI_OBSERVER_REQUIRED');
       const check = state.policy.checks.find(
         (check) => check.id === input.checkId,
       );
@@ -496,6 +495,9 @@ export async function executionCommand(
                   'vitest.json',
                 ),
                 MANCODE_EXECUTION_RUN_ID: runId,
+                MANCODE_VITEST_PROJECT_ROOT: await realpath(
+                  project.projectRoot,
+                ),
               },
             }
           : {}),
