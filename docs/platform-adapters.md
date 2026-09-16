@@ -31,6 +31,21 @@ DeepSeek Harness 的 mode entry 只安装到 `.dsh/skills/`，不复用
 每个入口都标记为仅用户调用；在 host session 传播得到真实证据前，Continuity mutation
 继续要求显式 `--session`，不会把环境中的 `DSH_SESSION_ID` 自动升级为可信身份。
 
+## 简化更新入口（开发分支，尚未发布）
+
+`mancode upgrade` 提供数字菜单，统一编排 CLI 包更新与当前项目的 managed adapter 更新。
+`--project-only` 使用当前 CLI，离线可用；`--cli-only` 仅处理包；`--check --json` 不生成 staging。
+无交互执行使用 `--yes`，首次本地身份需要 `--name`。已初始化项目的交互 `init` 复用同一入口，
+非交互 `init`、显式平台与 legacy 分支保持原行为。
+
+项目平台取 manifest 的 `managedAdapters`，不是 `adapter upgrade --all` 的全部支持平台。
+升级命令封装原 staging、明确确认、session 和 journal；自建 session 成功后关闭，用户提供的
+session 保留。包和项目分别报告结果，没有跨阶段原子回滚。新 CLI 的候选预览与实际提交版本一致；
+安装结果未知时停止并给出原包管理器修复及 `upgrade --project-only` 指引。
+
+首版自动安装覆盖 npm 全局与普通本地依赖；其他来源只识别并给指引。新功能尚未发布，0.6.8 用户
+首次进入需要先通过原包管理器安装包含该功能的版本。下述底层预览／提交接口继续兼容。
+
 ## 内容完整性与升级
 
 `adapter status` 每次都从当前 renderer 重建 expected managed bytes，并与磁盘上的

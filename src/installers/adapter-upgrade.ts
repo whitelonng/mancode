@@ -700,7 +700,7 @@ function adapterUpgradePreviewPath(root: string, operationId: Ulid): string {
   );
 }
 
-async function removeAdapterUpgradePreview(
+export async function removeAdapterUpgradePreview(
   root: string,
   operationId: Ulid,
 ): Promise<void> {

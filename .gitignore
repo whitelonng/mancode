@@ -113,3 +113,4 @@ examples/
 .npmrc
 
 !docs/execution-gates-plan.md
+!docs/cli-upgrade-plan.md

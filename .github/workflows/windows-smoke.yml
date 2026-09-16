@@ -27,3 +27,30 @@ jobs:
       - name: Git Bash
         shell: bash
         run: npm run test:windows-smoke
+      - name: Upgrade through CMD
+        shell: cmd
+        env:
+          MANCODE_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
+          MANCODE_UPGRADE_REAL_TEST_ROOT: ${{ runner.temp }}
+          MANCODE_UPGRADE_TEST_SHELL: cmd
+        run: npx vitest run tests/upgrade-e2e.test.ts
+      - name: Upgrade through PowerShell
+        shell: powershell
+        env:
+          MANCODE_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
+          MANCODE_UPGRADE_REAL_TEST_ROOT: ${{ runner.temp }}
+          MANCODE_UPGRADE_TEST_SHELL: powershell
+        run: npx vitest run tests/upgrade-e2e.test.ts
+      - name: Upgrade through Git Bash
+        shell: bash
+        env:
+          MANCODE_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
+          MANCODE_UPGRADE_REAL_TEST_ROOT: ${{ runner.temp }}
+          MANCODE_UPGRADE_TEST_SHELL: bash
+        run: |
+          export MANCODE_UPGRADE_TEST_BASH="$(cygpath -w "$(command -v bash)")"
+          npx vitest run tests/upgrade-e2e.test.ts
+      - name: Real npm install cancellation and timeout
+        env:
+          MANCODE_UPGRADE_REAL_TEST_ROOT: ${{ runner.temp }}
+        run: npx vitest run tests/upgrade-package.test.ts

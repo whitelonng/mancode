@@ -210,6 +210,42 @@ mancode adapter upgrade --platform codex --dry-run # 只生成 staging 预览
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
+### 一键更新（开发分支，尚未发布）
+
+在项目根目录运行：
+
+```bash
+mancode upgrade
+```
+
+数字菜单提供：`1` 更新 CLI 和当前项目、`2` 仅更新项目规则与 Skills、`3` 仅更新 CLI、
+`4` 查看更新信息、`0` 退出。选择后会展示版本、安装位置和文件范围，确认一次即可执行。
+已初始化的项目交互运行 `mancode init` 也会显示更新选项。
+
+```bash
+mancode upgrade --project-only          # 用当前 CLI 更新项目，不需要联网
+mancode upgrade --cli-only              # 仅更新 CLI
+mancode upgrade --check --json          # 只检查，不生成项目预览
+mancode upgrade --project-only --yes    # 非交互更新项目
+mancode upgrade --yes                   # 非交互更新 CLI 和项目
+mancode upgrade --to X.Y.Z              # 指定准确版本，拒绝降级
+```
+
+自动包更新支持 npm 全局安装和普通 npm 本地依赖，保留本地依赖归属与版本声明风格。
+pnpm、Yarn、Bun、npm workspaces、源码 link 和临时 npx 安装会得到对应指引。
+项目更新仅处理 manifest 已登记的平台，保留托管区外内容、现有任务、批准计划和 policy。
+无本地身份时只需输入一次显示名；非交互使用 `--name "你的名字"`。已有 `--session/--client`
+仍可显式传入，不需要手动复制新的 operation ID。
+
+失败时输出 CLI 与项目各自的状态。修复原因后再次运行 `mancode upgrade` 可继续原操作；
+若提示 CLI 安装结果未知，先用原包管理器修复该安装，再执行 `mancode upgrade --project-only`。
+更新后重新打开 Agent 会话加载新入口。`--json` 不显示交互菜单；配合 `--check` 或 `--yes` 使用。
+`--lang zh-CN|en` 可指定语言。
+
+**老版本首次使用：** 已发布的 0.6.8 没有这个命令。包含此功能的新版本发布后，先通过原包管理器
+更新 CLI 一次（npm 全局安装使用 `npm install -g mancode@latest`；本地依赖保留原依赖归属），
+再运行 `mancode upgrade`。不要为了更新项目而重新初始化或删除 `.mancode`。
+
 ### 升级到 v0.6.8
 
 先结束旧版本正在执行的 mancode 写操作，并统一升级同一工作区使用的 CLI：
