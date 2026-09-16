@@ -72,6 +72,7 @@ import {
   teamTransportStatus,
 } from './commands/team.js';
 import { uninstall } from './commands/uninstall.js';
+import { upgrade, upgradeInternal } from './commands/upgrade.js';
 import { version } from './commands/version.js';
 import { WORKFLOW_SUBCOMMANDS } from './commands/workflow-subcommands.js';
 import { workflow } from './commands/workflow.js';
@@ -147,6 +148,45 @@ export function createCliProgram(): Command {
         interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
       });
       process.exitCode = code;
+    });
+
+  program
+    .command('upgrade')
+    .description('Update the CLI and current project rules and Skills')
+    .option(
+      '--project-only',
+      'Update registered project entries with this CLI, without network access',
+    )
+    .option('--cli-only', 'Update only the selected CLI installation')
+    .option('--to <version>', 'Install an exact published version')
+    .option(
+      '--yes',
+      'Apply the selected update without interactive confirmation',
+    )
+    .option('--check', 'Inspect available updates without changing the project')
+    .option('--json', 'Print a structured result without prompts')
+    .option('--lang <locale>', 'Language: zh-CN or en')
+    .option(
+      '--name <displayName>',
+      'Local display name when this project has no identity',
+    )
+    .option('--session <id>', 'Reuse an explicit session')
+    .option('--client <name>', 'Client of the explicit session')
+    .action(async (options) => {
+      process.exitCode = await upgrade(process.cwd(), options);
+    });
+
+  program
+    .command('upgrade-internal', { hidden: true })
+    .description('Versioned continuation used by the upgrade command')
+    .option('--protocol')
+    .option('--stage')
+    .option('--commit')
+    .option('--operation-id <id>')
+    .option('--session <id>')
+    .option('--client <name>')
+    .action(async (options) => {
+      process.exitCode = await upgradeInternal(process.cwd(), options);
     });
 
   program

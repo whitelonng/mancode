@@ -286,6 +286,45 @@ mancode adapter upgrade --platform codex --dry-run # Stage a preview only
 mancode adapter upgrade --platform codex --confirm --operation-id <operationId> --session <id> --client <client>
 ```
 
+### One-command upgrade (development branch, not yet released)
+
+Run from your project root:
+
+```bash
+mancode upgrade
+```
+
+The numbered menu offers `1` CLI and project, `2` project rules and Skills only, `3` CLI only,
+`4` inspect updates, and `0` exit. Review the version, installation path and affected files, then confirm once.
+Interactive `mancode init` also offers update options when the project is already initialized.
+
+```bash
+mancode upgrade --project-only          # Use the installed CLI; no network needed
+mancode upgrade --cli-only              # Update only the CLI
+mancode upgrade --check --json          # Inspect without project staging
+mancode upgrade --project-only --yes    # Unattended project update
+mancode upgrade --yes                   # Unattended CLI and project update
+mancode upgrade --to X.Y.Z              # Exact target; downgrades are rejected
+```
+
+Automatic package updates support npm global installations and ordinary npm local dependencies,
+preserving the dependency section and version range style. Other package managers, npm workspaces,
+source links and temporary npx installations receive installation-specific guidance.
+Only platforms registered in the project manifest are updated. Custom content outside managed blocks,
+existing tasks, approved plans and policies are preserved.
+
+If no local identity exists, enter a display name once, or pass `--name "Your name"` for unattended use.
+Explicit `--session/--client` remains supported; copying a new operation ID is unnecessary.
+Failures report CLI and project results separately. Resolve the cause and rerun `mancode upgrade`
+to continue the original operation. If CLI installation is unverified, repair it with the original package
+manager before running `mancode upgrade --project-only`. Reopen your Agent session afterward.
+Use `--json` with `--check` or `--yes`; JSON mode never prompts. Set the language with `--lang zh-CN|en`.
+
+**First update from an old CLI:** the published 0.6.8 does not include this command. After a release
+containing it becomes available, update once using the original package manager (`npm install -g mancode@latest`
+for a global npm installation; preserve the dependency section for local installs), then run `mancode upgrade`.
+Do not reinitialize the project or delete `.mancode` to update its entries.
+
 ### Upgrade to v0.6.8
 
 Finish active mancode writes before upgrading and use one CLI version throughout

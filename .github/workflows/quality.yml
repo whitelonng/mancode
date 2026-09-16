@@ -21,4 +21,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Project checks
+        env:
+          MANCODE_UPGRADE_REAL_TEST_ROOT: ${{ runner.temp }}
         run: npm run check
