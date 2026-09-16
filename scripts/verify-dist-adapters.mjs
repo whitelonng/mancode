@@ -40,7 +40,15 @@ try {
     '.github/prompts/manteam.prompt.md',
     '.qoder/commands/manteam.md',
   ]);
-  const generatedFiles = [...bootstrapFiles, ...manFiles, ...manteamFiles];
+  const manbaFiles = new Set([
+    '.claude/skills/manba/SKILL.md',
+    '.cursor/commands/manba.md',
+    '.agents/skills/manba/SKILL.md',
+    '.dsh/skills/manba/SKILL.md',
+    '.github/prompts/manba.prompt.md',
+    '.qoder/commands/manba.md',
+  ]);
+  const generatedFiles = [...bootstrapFiles, ...manFiles, ...manteamFiles, ...manbaFiles];
 
   for (const relativePath of generatedFiles) {
     const content = await readFile(
@@ -48,6 +56,21 @@ try {
       'utf8',
     );
     assertGeneratedContract(relativePath, content);
+    if (manFiles.has(relativePath) || manbaFiles.has(relativePath)) {
+      assertContainsAll(relativePath, content, [
+        'mancode review inspect --base <approved-base-ref> --json',
+        'Keep every actionable required finding',
+        'npm run check',
+        'unverified acceptance',
+      ]);
+    }
+    if (manbaFiles.has(relativePath)) {
+      assertContainsAll(relativePath, content, [
+        'A standalone audit needs no actor, session, TaskRef or workflow',
+        'An audit of a Man task never changes it into manba',
+        'does not replace its parent task acceptance',
+      ]);
+    }
     if (bootstrapFiles.has(relativePath)) {
       assertContainsAll(relativePath, content, [
         'accepted target',

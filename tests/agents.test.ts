@@ -186,7 +186,12 @@ describe('coaching staff agents', () => {
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/project-profile\.json/);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/本次 diff/);
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/证据/);
-      expect(FILM_ANALYST_OFFENSE_AGENT.body).toMatch(/最多 3 个/);
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('必修问题不设数量上限');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).not.toContain('最多 3 个新问题');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('测试、CI');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('删除和重命名');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('不强求新增行');
+      expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('确认误报保留撤销原因');
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain('授权一致性');
       expect(FILM_ANALYST_OFFENSE_AGENT.body).toContain(
         'functionalScope.inScope',
@@ -205,7 +210,12 @@ describe('coaching staff agents', () => {
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/权限与错误路径/);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/film-report-1\.md/);
       expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/duplicate/);
-      expect(FILM_ANALYST_DEFENSE_AGENT.body).toMatch(/最多 3 个/);
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toContain('必修问题不设数量上限');
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).not.toContain('最多 3 个新问题');
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toContain('测试、CI');
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toContain('删除和重命名');
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).toContain('不强求新增行');
+      expect(FILM_ANALYST_DEFENSE_AGENT.body).not.toContain('安全问题一律');
       expect(FILM_ANALYST_DEFENSE_AGENT.tools).not.toContain('Edit');
     });
   });

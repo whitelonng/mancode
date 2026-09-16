@@ -293,6 +293,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
             <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。组合使用 <code>--brief --json</code> 可获得精简的 Continuity 运行时视图。</p></article>
             <article class="command-card"><header><h3>mancode list-platforms</h3><span>发现</span></header><p>列出当前 CLI 支持的平台，并标出项目中已经配置的平台。</p></article>
             <article class="command-card"><header><h3>mancode workflow &lt;subcommand&gt;</h3><span>治理</span></header><p>创建和校验 Continuity 需求、计划、验证证据、评审、修复与完成状态。</p><ul><li>使用 <code>list</code> 和 <code>show &lt;namespace:ULID&gt; [--json]</code> 检查。</li><li>使用 <code>context compact --dry-run</code> 检查可回收的运行时记录；Continuity workflow authority 不会被 <code>workflow clean</code> 删除。</li></ul></article>
+            <article class="command-card"><header><h3>mancode review inspect --base &lt;ref&gt; [--json]</h3><span>Review</span></header><p>从明确基线分别采集 HEAD、暂存区与工作区的只读文件清单，按层保留被工作区还原掩盖的待提交改动。包含删除、重命名和未被忽略的未跟踪文件；不创建任务、不执行项目检查。退出码 0 只表示采集成功，不代表审查通过；无效基线或采集失败返回非零。</p></article>
             <article class="command-card"><header><h3>mancode manps [area]</h3><span>扫描</span></header><p>对 <code>all</code>、<code>deps</code>、<code>security</code>、<code>dead-code</code> 或 <code>config</code> 执行确定性健康扫描。</p><ul><li><code>--json</code> 输出机器可读结果。</li><li><code>--remediate</code> 显式进入修复路径；默认只扫描。</li></ul></article>
             <article class="command-card"><header><h3>mancode design status | context | configure | disable</h3><span>设计</span></header><p>检查有效 UI 指导，或修改带 revision 的项目设计策略。配置必须传入 <code>--expected-revision &lt;n&gt;</code>；experimental 还需要 <code>--confirm-experimental</code>。</p></article>
             <article class="command-card"><header><h3>mancode refresh-project</h3><span>重扫项目</span></header><p>在加入 Git、manifest、源码、框架或验证命令后刷新项目事实，并报告 stale adapter。</p></article>
@@ -313,6 +314,8 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
               <code data-cli-command="manps">mancode manps</code> ·
               <code data-cli-command="refresh-project">mancode refresh-project</code> ·
               <code data-cli-command="refresh-style">mancode refresh-style</code> ·
+              <code data-cli-command="review">mancode review</code> ·
+              <code data-cli-command="review inspect">mancode review inspect --base &lt;ref&gt; --json</code> ·
               <code data-cli-command="version">mancode version</code>
             </td></tr>
             <tr><td>适配器与策略</td><td>

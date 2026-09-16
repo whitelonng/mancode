@@ -42,6 +42,7 @@ import { registerProgressCommands } from './commands/progress.js';
 import { projectUpgrade } from './commands/project.js';
 import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
+import { reviewInspect } from './commands/review.js';
 import { status } from './commands/status.js';
 import {
   teamCheckpoint,
@@ -223,6 +224,16 @@ export function createCliProgram(): Command {
     });
 
   registerPrivacyCommands(program);
+  program
+    .command('review')
+    .description('Inspect a review subject without changing task authority')
+    .command('inspect')
+    .description('Inventory an explicit Git baseline through the working tree')
+    .requiredOption('--base <ref>', 'Approved baseline commit or ref')
+    .option('--json', 'Output the read-only inventory as JSON')
+    .action(async (options) => {
+      process.exitCode = await reviewInspect(options, process.cwd());
+    });
   registerProgressCommands(program, {
     readNotification: readProgressNotification,
     onBound: async (root, controller) => {

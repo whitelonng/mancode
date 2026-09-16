@@ -41,11 +41,9 @@ describe('release candidate check', () => {
     expect(packageMetadata.scripts['release:check']).toBe(
       'node scripts/release-check.mjs',
     );
-    expect(packageMetadata.scripts.prepublishOnly).toContain(
-      'npm audit --audit-level=high',
-    );
-    expect(packageMetadata.scripts.prepublishOnly).toContain(
-      'npm run test:coverage',
+    expect(packageMetadata.scripts.prepublishOnly).toBe('npm run check');
+    expect(packageMetadata.scripts.check).toBe(
+      'node scripts/project-checks.mjs quality',
     );
   });
 });

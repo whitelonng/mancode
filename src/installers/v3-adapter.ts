@@ -17,13 +17,16 @@ import {
   INTERFACE_EMOJI_ICON_GUIDANCE,
   VISUAL_DIRECTION_SELECTION_GUIDANCE,
 } from '../context/design-guidance.js';
+import { MAN_REVIEW_GUIDANCE } from './man-review-guidance.js';
 import {
   extractManagedBlock,
   hasManagedBlock,
   removeManagedBlock,
   replaceManagedBlock,
 } from './managed-block.js';
+import { MANBA_REVIEW_GUIDANCE } from './manba-review-guidance.js';
 import type { PlatformName } from './registry.js';
+import { REVIEW_GUIDANCE } from './review-guidance.js';
 
 /**
  * This is the schema of the generated bootstrap, not a product version.  The
@@ -1614,6 +1617,14 @@ export function renderV3ModeEntry(
       '6. Restore the existing task and its original policy, requirements, approved plan, stage records and unresolved findings before choosing the next action. A new session does not create a new delivery task or erase a plan_only decision; read the matching original mode entry if the task belongs to another mode, and mansolo for an explicit solo_handoff.',
       `7. For an existing task, follow the bounded context protocol below with \`mancode context index --purpose ${definition.contextPurpose} ${sessionArguments}\`; include \`--task <namespace:ULID>\` when it is not yet bound. For a new task, create it through the mode action first, then read the returned TaskRef's index.`,
     ];
+  } else if (mode === 'manba') {
+    authoritySteps = [
+      `1. ${statusGuidance} Never read or write the legacy authority file.`,
+      '2. First distinguish an explicit audit request (`manba 审核` or `manba review`) from diagnosis. A standalone audit needs no actor, session, TaskRef or workflow; use the audit action below directly. Do not bind an unrelated current task or run the diagnostic creation/completion steps for that report.',
+      `3. An audit of an explicitly supplied existing TaskRef reads its original mode, policy, approved plan and review context with \`mancode context index --task <namespace:ULID> --purpose review --json\`; preserve its active pointer and authority. Use the bounded context protocol only for that task's records. A report-only audit does not require a new session.`,
+      `4. Only for requested diagnostic work or an authorized evidence mutation, ensure actor identity and the matching session. ${sessionCreationGuidance} ${sessionClientGuidance}`,
+      `5. For diagnosis, reuse its diagnostic TaskRef or create one through the mode action, then read \`mancode context index --purpose implement ${sessionArguments}\`. An audit of a Man task never changes it into manba.`,
+    ];
   } else {
     authoritySteps = [
       `1. ${statusGuidance} Never read or write the legacy authority file.`,
@@ -1716,6 +1727,8 @@ const V3_MODE_DEFINITIONS: Record<
     purpose: 'clarify, plan, implement, verify, and review governed work',
     contextPurpose: 'plan',
     actions: [
+      ...MAN_REVIEW_GUIDANCE,
+      ...REVIEW_GUIDANCE,
       '- For a read-only project orientation, inspect and answer directly; do not create governance records.',
       '- Governed man work retains evidence-based discovery, persistent requirements and decisions, confirmed planning, stage continuity, implementation, verification, review and repair through the original completion gates. Choose the investigation, tools and implementation within that boundary; do not omit a required stage or silently switch to ordinary Solo.',
       '- For a new task, run `mancode workflow create man "<task>" --delivery --session <id>`. This explicitly enables document-bound module delivery (planning policy 3); never silently upgrade an existing task. Other modes and Solo handoff retain their contracts.',
@@ -1759,10 +1772,14 @@ const V3_MODE_DEFINITIONS: Record<
     ],
   },
   manba: {
-    description: 'Diagnose and verify a bug through mancode.',
-    purpose: 'reproduce, diagnose, fix, and verify a regression',
+    description:
+      'Review a defined scope or diagnose and verify a bug through mancode.',
+    purpose:
+      'review an explicit scope, or reproduce, diagnose, fix, and verify a regression',
     contextPurpose: 'implement',
     actions: [
+      ...MANBA_REVIEW_GUIDANCE,
+      ...REVIEW_GUIDANCE,
       '- For a new diagnostic task, run `mancode workflow create manba "<task>" --session <id>`.',
       '- Before changing code, establish the expected behavior from reproducible evidence, tests, documentation, history, or the current semantic owner. If the bug goal is clear but the correct behavior cannot be established, ask one focused question and wait instead of inventing product behavior.',
       `- ${AUTHORIZED_ACTION_GUIDANCE} Do not treat an explicit but unsound fix instruction as sufficient evidence; route unresolved governance decisions through /man.`,

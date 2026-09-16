@@ -25,6 +25,7 @@ import { ACCEPTED_STATE_NARRATIVE_GUIDANCE } from '../src/context/accepted-state
 import { parseSchemaManifest } from '../src/context/manifest.js';
 import { upgradeV3Adapters } from '../src/installers/adapter-upgrade.js';
 import type { PlatformName } from '../src/installers/registry.js';
+import { REVIEW_GUIDANCE } from '../src/installers/review-guidance.js';
 import {
   V3_ADAPTER_PLATFORMS,
   V3_ADAPTER_VERSION,
@@ -533,6 +534,12 @@ describe('V3 adapter bootstrap integration', () => {
         }
         if (mode === 'manba') {
           expect(entry).toContain(
+            'A standalone audit needs no actor, session, TaskRef or workflow',
+          );
+          expect(entry).toContain(
+            'An audit of a Man task never changes it into manba',
+          );
+          expect(entry).toContain(
             'establish the expected behavior from reproducible evidence',
           );
           expect(entry).toContain(
@@ -545,6 +552,14 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain(
             'does not replace its parent task acceptance',
           );
+        }
+        if (mode === 'man' || mode === 'manba') {
+          for (const instruction of REVIEW_GUIDANCE) {
+            expect(entry).toContain(instruction);
+          }
+          expect(entry).not.toContain('with at most three new findings');
+          expect(entry).toContain('same root cause');
+          expect(entry).toContain('unverified acceptance');
         }
         if (mode === 'manps') {
           expect(entry).toContain(

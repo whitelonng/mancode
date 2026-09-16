@@ -4,6 +4,7 @@ import {
   INTERFACE_EMOJI_ICON_GUIDANCE,
   VISUAL_DIRECTION_SELECTION_GUIDANCE,
 } from '../context/design-guidance.js';
+import { REVIEW_GUIDANCE } from './review-guidance.js';
 
 /**
  * Mode skill names — used for .agents/skills/ (Codex + ZCode), .dsh/skills/,
@@ -661,6 +662,8 @@ const MODE_META: Record<ModeName, ModeMeta> = {
       'Diagnose bugs and validate real user flows with targeted regression checks.',
     intro: '# mancode manba — Diagnosis and Real Validation',
     workflow: [
+      "For an explicit `manba 审核` or `manba review` request, produce a report for the named baseline and scope before considering the diagnostic workflow below. A standalone audit does not create a diagnostic task or alter mode pointers, and does not use fixed/verified/no_repro to mean review completion. Reviewing an existing task preserves that task's policy, authority and permissions; record formal evidence only through its supported review commands when authorized. Default to reporting findings without editing code.",
+      ...REVIEW_GUIDANCE,
       '## Five-step workflow (simulate roles in one conversation)',
       '',
       'Use `mancode workflow create manba "<task>" --json`; when called from',
@@ -701,7 +704,8 @@ const MODE_META: Record<ModeName, ModeMeta> = {
       'Step 4 — Plan gate: recommend based on risk and let the user choose (1) hand the confirmed plan to lightweight solo via `mancode workflow handoff <taskId> --to solo`, (2) continue full governed execution via `mancode workflow decide <taskId> --plan-decision governed_execution` before Step 5, (3) keep the plan only via `mancode workflow decide <taskId> --plan-decision plan_only`, or (4) revise. Do not implement before this choice. Before either execution path, echo the plan version, delivery, stack, inclusions, exclusions, validation, and residual assumptions.',
       'Step 5 — State material assumptions and verifiable success criteria, then implement the smallest direct change inside both the confirmed plan and implementation scope. Reuse existing code and dependencies; do not add speculative features, one-off abstractions, configurability, adjacent cleanup, or unrelated defenses. A newly discovered out-of-scope need authorizes only NEEDS_REALIGNMENT until the user approves reframe. If an upgraded already-running local man task has no executable scope, show the complete boundary and wait for explicit approval, then rerun plan revise with the exact unchanged current plan plus --scope-file; this compatibility bind stales old evidence and cannot change behavior or an already executable boundary.',
       'Step 6 — Run `workflow verify <taskId> init`, execute detected build/lint/typecheck/test and smoke checks, and record every required acceptance ID with reproducible evidence; automated passed/failed records include the command and exit code. Use require-manual when a foreground browser, device, or human judgment is necessary; stop for explicit user confirmation before confirm-manual. The CLI blocks Step 7 and review until all checks pass. Then write `review-scope.md` and initialize targeted or full review. An explicit user review skip uses `workflow review <taskId> skip --reason <reason>` at Step 6, never generic skipped metadata.',
-      'Step 7 — Run one quality review limited to the changed diff and direct impact. Compare every changed path and behavior with confirmed requirements, acceptance IDs, and implementation scope; any unauthorized behavior, path outside include, or path matching exclude is a blocker. Findings require changed-line evidence and user impact, with at most three new findings. Record stable blocker IDs through `workflow review ... complete`; do not fix yet.',
+      ...REVIEW_GUIDANCE,
+      'Step 7 — Run one quality review covering the complete changed diff and direct impact, including tests, CI, configuration, deletions and renames. Compare every changed path and behavior with confirmed requirements, acceptance IDs, and implementation scope; any unauthorized behavior, path outside include, or path matching exclude is a blocker. Findings require causal evidence and user impact; retain every actionable required finding, including omissions or defects in unchanged affected callers. Record stable blocker IDs through `workflow review ... complete`; do not fix yet.',
       'Step 8 — Only full review runs the security/boundary reviewer. It must read Film #1, mark the same root cause duplicate, and stay within security, permissions, recovery, resources, and boundaries. A targeted review treats the second domain as not applicable; it is never recorded as a skipped step.',
       'Step 9 — If open blockers exist, fix them in one remediation round and record resolved IDs through `workflow review ... remediate`; remediation invalidates all earlier acceptance evidence, so re-run and re-record every required check at Step 9 without re-running completed reviewers. Build `summary.md`, commit, and PR copy from the accepted target, authoritative baseline, observed final state, and task-owned diff; preserve excluded scope, failed verification, blockers, migration or rollback, and audit facts. Set completed only when verification and required review domains are complete and blockers are zero.',
       '',

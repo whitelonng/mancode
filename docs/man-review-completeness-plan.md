@@ -1,271 +1,88 @@
 <!-- mancode:plan-baseline:start -->
-# man 审查完整性、CI 验收与有界修复方案
+# man / manba 完整审核与检查对齐
 
-日期：2026-09-16。状态：方案待评审，仅规划，未授权实施。
+TaskRef：`local:01M2MEJFAJ5BCFX8MNCP99JMPF`。日期：2026-09-16。
 
-TaskRef：`local:01M2MEJFAJ5BCFX8MNCP99JMPF`。
+用户批准方案 B，并选择首期实现完整审核和检查对齐；后续再加持久化硬门禁。原规划研究已由 reframe 归档，Git 历史保留原文。本计划替代仅规划的执行边界。
 
-本次目标是整理方案并说明现有 TDD 能力。本文中的新字段、状态展示、检查入口和门禁均为设计建议，不表示当前 CLI 已支持，也不表示用户已批准实施。当前绑定的 implementationScope 仅包含本文及 `.gitignore` 中本文件的单项白名单；实施需另行确认需求、验收与文件范围。白名单沿用既有计划文档惯例，用于本地版本化，不授权推送。
+## 目标与边界
 
-## 1. 目标与现状
+- man：保留一次模块总审与既有 completion gates，补全文件和行为覆盖、测试有效性、项目级检查及实际环境差异。
+- manba：原诊断保持不变；显式审核支持一次性报告，默认不修源码、不创建诊断任务、不借 typed outcome 宣称验收。已有 Man TaskRef 维持原任务权限、mode、policy 与账本。
+- 共用审查协议与只读 `mancode review inspect --base <ref> --json` 清单。明确基线，不猜 PR base；覆盖至 HEAD 与当前工作区，包括删除、重命名、未跟踪文件。无 Git、无有效基线或采集失败必须显式失败。清单不等于完成语义审查。
+- 本项目统一 `npm run check`（Quality）和 `npm run check:windows`（Windows 准备检查），CI 保留原矩阵与真实 shell 冒烟。
+- 风险适配 TDD 与有界修复先做流程指导；基础设施重试最多一次，同根因两次修复失败停止自动编辑，时间预算按任务约定。
+- 本次不新增 audit purpose/outcome、TDD/预算/远端 CI 机器门禁、模型服务、OCR 依赖或权威数据库，不推送、合并或发布。
 
-完整审查应当能回答：审了哪些内容、依据什么契约、验证在哪个环境运行、有哪些尚未证明的行为、为何可以结束。不能承诺零缺陷，也不以问题数量、评分、轮数或 CI 绿灯代替证据。
+## 依据
 
-### 1.1 三项调研发现
+[架构](architecture.md)、[工程约定](engineering.md)、[工作流](workflows.md) 定义现有 authority、journal 和兼容边界。根目录没有已发现的 `架构/`，不假设私有设计。
 
-| ID | 类型 / 依据 | 已观察事实 | 对方案的影响 |
-| --- | --- | --- | --- |
-| F-1 | acceptance / repository_fact | `man-delivery-runtime.ts` 的完成门绑定现有审查、验收证据及提交范围；publication 查询的是上游是否包含提交，没有检查对应 CI。`man-delivery.ts` 执行调用方给出的 argv，不自动证明已覆盖项目必需检查。 | 分开任务行为验收、项目检查与远端提交验收；补足覆盖关系，不能把任意成功命令当交付证明。 |
-| F-2 | technical / repository_fact | 当前 Continuity 入口由 `src/installers/v3-adapter.ts` 生成，要求一次模块总审；旧 `src/templates/agents/film-analyst-*.ts`、`src/templates/skills/man.ts` 和 `src/installers/mode-skills.ts` 中仍有“最多 3 个新问题”等限制。 | 先明确入口与 policy，再统一新增规则的语义。旧模板存在不证明当前任务使用了它；不能把历史失败直接归因于该限制。 |
-| F-3 | acceptance / repository_fact | 既有模块交付设计提及 TDD/失败先行，但现有 verification evidence 没有 Red/Green 阶段、关联及顺序检查。历史 CI 还暴露版本标识、Windows 路径断言及锁读取失败。 | 明确当前是验证驱动、支持部分失败先行；提出按行为和风险采用 TDD 的流程及证据机制。 |
+F-1（acceptance / repository_fact）：现有完成门有当前 review/verification，publication 只确认上游包含提交；因此本地结果不能冒充准确 SHA 的远端 CI 结果。
 
-三项发现均进入本次方案分析和验收 AC-1～AC-4。涉及未来运行时行为的建议尚无执行权，不能把推荐写成已批准的产品需求。
+F-2（technical / repository_fact）：当前入口由 v3-adapter 生成，部分 legacy 模板仍限制三个问题；共享质量指导需消除矛盾，但不迁移旧任务 policy。
 
-现有能力应保留：scope 检查、内容/环境证据新鲜度、准确观察面、稳定 finding ID、修复后的复验、一次模块总审、旧 policy 兼容。本文是在这些能力上补缺口。
+F-3（acceptance / repository_fact）：Quality 和 Windows 分别定义步骤；统一脚本避免本地遗漏，但不能以本机运行替代平台矩阵。
 
-### 1.2 实际 CI 证据
+OCR 分析固定于 [a694be568d9b9a935b2ba11a867d5a91d7ffd833](https://github.com/alibaba/open-code-review/tree/a694be568d9b9a935b2ba11a867d5a91d7ffd833)。借鉴完整待审集合、关联分组、按风险取上下文、finding 定位/去重/事实复核。不照搬排除测试、只看新增行、限制发现数量或固定多轮审查。
 
-- [Quality 34743055340](https://github.com/whitelonng/mancode/actions/runs/34743055340)：网站版本文本与预期不符，另有 privacy/transport 契约断言失败。说明关联交付文件和全量契约不能仅凭局部通过推断。
-- [Windows 34741298417](https://github.com/whitelonng/mancode/actions/runs/34741298417)：测试把实际 Windows 路径与 POSIX 固定路径比较。测试本身也可能错误。
-- [Quality 34736105598](https://github.com/whitelonng/mancode/actions/runs/34736105598)：跨 clone 测试出现 `MANCODE_LOCK_CORRUPT`，涉及锁读写与集成路径。仅凭日志不能穷尽根因或判断偶发性。
-- 本次查询的最近 CI 已成功。这些是历史失败样本；没有当时完整的本地命令和环境证据，不断言每次都是漏跑测试。
+## 设计契约
 
-### 1.3 架构依据与约束
+审查清单和报告为可读产物，不是新 authority。文件清单包括变更类型和路径；reviewer 将文件关联行为链与验收，记录已审、缺口及排除理由。任何工具失败、预算耗尽、未验证环境必须可见，不能用空清单或命令 exit 0 声称审核通过。
 
-以 [架构](architecture.md)、[工程约定](engineering.md)、[工作流](workflows.md)、[模块交付设计](man-module-delivery-plan.md) 为依据。本次没有发现根目录 `架构/`，因此不假设额外私有架构约束。
+man / manba 使用相同规则：检查实现、调用方、测试、CI/config/deps、生成源和契约文档；检查新增、删除、重命名；按仓库契约选择规则；必修 finding 不截断，保留稳定 ID、因果证据和误报撤销原因。一次总审后仅定向复核真实修复和新风险。
 
-Task Aggregate 与既有 review/verification ledger 继续承载任务权威；计划是可读投影，项目脚本定义可执行检查，GitHub 是远端运行结果的来源。新证据通过公共 CLI 与既有 journal/CAS 写入，不能旁路编辑权威文件。
+原 Man 任务通过现有 delivery review（或对应旧 policy 的合法 review 协议）登记结果，读回状态；不向严格 ledger 塞未支持字段。plan_only、完成任务、只读请求不获得额外写权限，不默认建立 child。独立审核报告区分覆盖完成、问题和未验证项。
 
-## 2. 借鉴 Open Code Review 的具体机制
+TDD：可复现缺陷优先先证实目标失败，再最小修复、回归；新增自动化行为适用时测试先行；不把依赖/语法/网络故障当 Red，不以改弱断言获得 Green；纯文档和行为不变重构不制造失败。回放旧版本回归不冒称历史 test-first。
 
-分析基线：[a694be568d9b9a935b2ba11a867d5a91d7ffd833](https://github.com/alibaba/open-code-review/tree/a694be568d9b9a935b2ba11a867d5a91d7ffd833)。本次为源码分析，未运行模型对照评测。
+CI 失败先分实现缺陷、测试/CI 错误、基础设施、偶发性、预存失败、契约冲突；必须依据契约修复，不删测试或降阈值换绿灯。保留尝试摘要，跨会话不清零。以上次数和时间约定本次为流程规则，非机器保证。
 
-| 机制 | 取舍 | man 的落点 |
-| --- | --- | --- |
-| 程序生成待审文件集合、为未分组文件兜底 | 借鉴 | 从批准 baseHead 到实际待审内容生成覆盖清单；每个文件都有审查结果或明确排除理由。 |
-| 相关文件分组、按组提供有限上下文 | 借鉴但补全全局视角 | 按行为链路组织实现、调用方、测试和配置；组间契约由总审收口。分组不是已审证明。 |
-| 根据语言、文件类型匹配检查规则 | 借鉴 | 叠加仓库契约、任务风险和文件角色，优先项目规则；不复制不适用的风格偏好。 |
-| Agent 动态读取文件、搜索调用方和其他 diff | 借鉴 | reviewer 自己追查必要上下文，不能只接收实现者总结；未知项保留未验证。 |
-| 评论片段与真实 diff 定位、修正错误位置 | 借鉴 | 验证路径、侧别和行号，支持新增、删除、重命名；遗漏行为可关联验收项和缺失入口，不强求一行新增代码。 |
-| 多轮审查携带已有发现、避免重复 | 有条件采用 | 大改或出现具体覆盖缺口时补审；保留一次总审，修复后做定向复核，不固定叠加三轮。 |
-| 评论事实复核与去重 | 借鉴原则，不照搬过滤策略 | 按证据处理误报，撤销必须有原因；风险类别不自动证明正确，也不因无法立即复现被静默删除。 |
-| 覆盖与运行失败记录、预算控制 | 借鉴 | 未审文件、工具失败、上下文/时间耗尽是可见缺口，不能当无问题通过。 |
-| 默认排除测试文件、聚焦新增行 | 不照搬 | 测试、CI、依赖、schema、文档契约与删除代码均进入影响分析；生成文件可排除，但要检查生成源及产物一致性。 |
+检查脚本顺序执行 lint、typecheck、build、dist adapters、audit、coverage，使用新 dist 的两项 CLI 环境变量并透传失败。Windows 共用 build + 原锁契约，保留 CMD/PowerShell/Bash 真运行。release-check 的额外发布验证保留。
 
-对应源码：[选择](https://github.com/alibaba/open-code-review/blob/a694be568d9b9a935b2ba11a867d5a91d7ffd833/internal/agent/selection.go)、[分组](https://github.com/alibaba/open-code-review/blob/a694be568d9b9a935b2ba11a867d5a91d7ffd833/internal/agent/grouping.go)、[主审查](https://github.com/alibaba/open-code-review/blob/a694be568d9b9a935b2ba11a867d5a91d7ffd833/internal/config/template/prompts/main_task_system.md)、[复核](https://github.com/alibaba/open-code-review/blob/a694be568d9b9a935b2ba11a867d5a91d7ffd833/internal/config/template/prompts/review_filter_task_user.md)。
+## 分工与阶段
 
-首期不直接引入 OCR 作为依赖，不搭建新的模型调用服务，也不增加一套并行治理状态。学习机制，优先复用现有宿主 reviewer 和工具。
+1. 主 agent：需求/范围绑定、共同 review guidance、CLI/adapter 接线、文档和集成；不直接编辑子 agent 文件。
+2. man agent：man 专属指导、legacy man/film review 质量语义、项目检查脚本/package/CI及相关测试。
+3. manba agent：只读 review command/subject helper、manba 专属指导及相关测试。
+4. 集成：主 agent接入两个模块，检查 adapter生成与dist产物、全量验证；子 agent交叉检查对方变更，修复后定向复核。
 
-## 3. 推荐的完整流程
+单 owner 文件边界由 implementationScope 的明确文件清单和本分工约束；不修改 workflow/ledger/outcome schema。补齐中英文网站命令文档；正式 adapter 升级产生的 AGENTS.md 托管投影纳入范围，不手动篡改。无未解决阻塞决策。
 
-```text
-确认需求与不变量
-  → 明确验收、风险、必需检查和交付目标
-  → 适用行为先做 Red，再最小实现到 Green
-  → 定向回归与项目必需检查
-  → 一次完整模块审查：覆盖、行为链路、测试与检查本身
-  → 必要修复 + 受影响复验 + 定向复核
-  → 核实最终提交内容和证据适用性
-  → 已授权推送
-  → 查询准确提交/集成对象的必需 CI
-  → 通过后远端验收；失败则分类诊断，达到停止条件就保留未完成
-```
+## 验收与证据
 
-纯本地任务止于本地交付。远端验收是事先声明的交付目标；不自动把无 GitHub、无上游的项目阻塞，也不自动创建 remote、合并或部署。
+- AC-1：所有现有平台生成入口拥有共用规则且保留 mode 权限、诊断、单次总审契约。adapter/template/dist tests。
+- AC-2：review inspect 覆盖 rename/delete/untracked/特殊路径，base/Git错误失败，不产生任务或源码写入。真实临时 Git 仓库与 CLI 契约。
+- AC-3：共享检查保留步骤、失败传播、新dist环境及CI矩阵/shell。脚本执行与配置契约测试。
+- AC-4：对应契约先运行，再lint/typecheck/build/dist和完整测试覆盖。本机未执行的远端环境明确保留未验证；不降低已有验收。
 
-### 3.1 审查覆盖清单
+- AC-5：在 `/Users/whitelonng/code/mancode测试` 的新隔离子目录运行真实候选CLI：HEAD/index/worktree抵消场景、错误出口和生成入口，保留既有资料。
 
-清单是从实际 diff 派生的数据，审查结论写入现有 review evidence 的受控扩展，不另建权威数据库。
-
-- 文件级：路径、变更类型、角色、风险理由、对应行为/验收项、审查状态及证据引用。
-- 行为级：入口 → 关键调用链 → 持久化/外部边界 → 返回/用户可见行为。
-- 必查角色：实现、测试、公共 API/schema、配置、构建与生成源、迁移、CI、声明行为的文档。
-- 排除项：二进制、vendor、生成产物等写明理由与替代验证；敏感文件不把原文送入模型，用安全的本地检查与脱敏证据证明。
-- 不以文件分配、已读标记或表格填满声称语义覆盖；每个必需验收仍要关联可核查路径与真实证据。
-- 摘要可以只展示最重要三项，但必修 finding 不截断；同根因合并，保留涉及的所有路径和影响。
-
-### 3.2 一次总审的六个检查面
-
-| 检查面 | 具体问题 |
-| --- | --- |
-| 目标与范围 | 是否漏做、做偏、超出 scope；删除的行为是否仍属于契约？ |
-| 行为与跨模块契约 | 调用方、写入方、读取方、CLI 和生成适配器是否一致；数据源是否唯一？ |
-| 失败与安全边界 | 权限、异常、取消、超时、资源释放、并发、中断和恢复是否符合不变量？ |
-| 测试有效性 | 能否区分错误与正确实现；是否过度 mock、自证实现、依赖测试顺序或硬编码平台？ |
-| 交付与环境 | 新构建产物、依赖锁定、运行时版本、工作目录、CI 条件和真实宿主证据是否匹配？ |
-| 比例与复杂度 | 是否无依据增加抽象、重试、兜底、配置，是否吞掉根因？ |
-
-优先一个未参与实现的 reviewer。高风险任务在计划中明确需要独立审查及证据；能力不足保持缺口，不把主代理换一个角色名称伪装独立。`reviewer: independent` 仍只是声明，必须附实际宿主任务/过程来源，不声称密码学身份认证。
-
-对测试、锁、迁移等高风险改动，要求一个具体反例或失败场景；正常路径通过不能代替。纯文本小改使用窄检查，不强制全套安全清单。
-
-### 3.3 Finding 复核
-
-finding 至少包含稳定 ID、严重度、契约依据、因果链、触发条件、用户影响和证据。分开“已证实缺陷”“必要验收未验证”“可选建议”。
-
-复核可以读完整相关上下文、引用已有测试或请求定向验证。确定误报时保留撤销原因；保留已有 resolved 生命周期，不能直接丢掉旧问题。定位失败只影响评论锚点，不自动删除缺陷。高风险可疑项没有证实时保留风险/未验证结论，不虚构必现漏洞，也不凭类别永久豁免事实检查。
-
-## 4. 本地与 CI 的检查一致性
-
-### 4.1 单一检查定义
-
-建议在本项目提供一个跨平台 Node 检查入口，由 npm script 暴露，CI 复用它。下列是设计要求，不是已经存在的新命令。
-
-- 当前 Quality 必需步骤：lint、typecheck、build、test:dist、audit、test:coverage。执行次序和失败结果由入口明确记录，构建先于产物测试。
-- coverage 运行时对齐 CI 的 `MANCODE_CLI_BINARY`、`MANCODE_PROGRESS_CLI_BINARY`，指向本次刚构建的 `dist/cli.js`，避免源码/旧产物错配。
-- Linux Node 22/24 与 Windows Node 22、CMD/PowerShell/Git Bash 是环境矩阵，脚本共用不代表 macOS 一次运行已覆盖所有平台。
-- 开发中先运行同名契约测试及受影响验证；最终交付在干净的隔离 checkout 用 lockfile 安装依赖、重建产物并跑项目必需检查。不能清理用户工作区来换取“干净”。
-- 最终代码、测试、依赖、检查配置或相关环境变化时重新判断证据适用性；最终改动后必须再次检查必要差异。仅记录文字变化不机械重跑全量测试。
-- 对其他项目，从真实脚本和 CI 契约识别检查，不硬编码 npm/GitHub 为 man 的通用前提。不自动执行仓库提供的任意字符串；按既有授权解析为明确 argv。
-
-现有 `prepublishOnly`、release-check 与新入口应复用公共步骤，保留发布独有的 pack、安装 smoke、宿主/Beta 等门禁，不能把模块交付升级成每次都跑完整发布演练。
-
-### 4.2 防止检查定义漂移
-
-变更 CI、检查脚本或过滤规则时，审查必需步骤和环境矩阵是否被缩减。新增契约测试验证“某步骤失败时整体不通过”“失败输出保留”“CI 引用正确入口及产物”。CI 自身改动应独立于业务修复说明理由，不能因失败便自动改 expected、skip、阈值或 continue-on-error。
-
-项目检查是跨验收项的交付条件，不要为填证据槽把同一全量命令重复运行多次。
-
-## 5. 准确提交的远端验收
-
-保留三个不同事实：本地已验证、提交已发布、远端已验收。新增能力不得悄悄改变现有 publication 的含义。
-
-建议要求远端验收的新任务采用显式的新能力/策略声明；启用时 finalization 必须读取远端证据。纯本地及历史任务按原契约完成，不补造或追溯改写历史通过记录。具体版本号在实施设计时确定。
-
-证据至少关联：仓库身份、候选提交 SHA、检查定义版本、预期 workflow/job/matrix 集合、run ID、attempt、事件类型、实际被测 SHA、结论及获取时间。验证完整集合和可信来源，不能拿无关名称相同的成功 check 放行。
-
-- push 检查绑定该次候选提交，不使用“分支最近一次成功”。
-- PR 的 merge commit 检查同时记录 head/base/merge 的关系，不能把不同集成对象当成同一个 SHA 的测试；目标分支改变后重新确认适用性。
-- rerun 记录 attempt，不能挑旧成功覆盖当前失败；取消、超时、尚未完成、查询失败、无权限、缺少预期 job 都保持失败或未验证。
-- skipped/neutral 不能默认等于通过；确实不适用的 job 必须由事先声明的适用规则解释。空检查集合不能自动全绿。
-- 部分 workflow 成功不能遮盖另一个必需 workflow 失败；不要求无关可选 workflow 阻止交付。
-- 轮询有间隔和时间上限。到期保存待验证状态，不能无期限占用会话。只有用户授权后才创建长期监控或通知。
-- run URL 和脱敏摘要进入任务证据，token、机密日志、环境密钥不得进入共享记录。
-
-本地任务允许本地完成；要求远端验收的任务在 CI 未通过前保持可修复的非终态。不要先完成不可恢复的 workflow，再让失败后的修复失去所属任务。基础设施等待是交付验证状态，不能一律伪装为业务需求阻塞。
-
-## 6. CI 错误与修复循环的停止条件
-
-需求、批准的契约和可复现行为共同用于判断；实现、测试、CI 都可能出错。CI 失败阻止通过声明，不自动产生改代码或降标准的权限。
-
-| 分类 | 必需诊断 | 可继续动作 | 禁止替代 |
-| --- | --- | --- | --- |
-| 实现缺陷 | 断言对应的契约及具体失败链路 | 范围内最小修复，补回归，复核影响 | 放宽断言掩盖实现问题 |
-| 测试/CI 配置错误 | 比较契约、平台语义、实际输出，证明检查错误 | 在已有授权范围内纠正检查，并证明纠正后仍能拦住真实错误 | 删测试、skip、降阈值只为变绿 |
-| 基础设施故障 | runner、网络、服务、权限等日志 | 等待恢复或有限重试 | 修改业务逻辑适配暂时故障 |
-| 偶发/并发失败 | 时序、种子、资源、运行环境及失败证据 | 可控调度/故障注入，定位根因 | 多次重跑直到偶然绿灯 |
-| 预存失败或无关故障 | 与批准基线或独立最小复现对照 | 报告适用范围、隔离诊断 | 偷偷纳入无关修复或默认放行 |
-| 契约冲突/未知 | 指出互相矛盾的要求和决策影响 | 暂停受影响动作，走确认或 reframe | 根据现有代码反推“正确需求” |
-
-建议首期采用以下可评审边界，实施前确认，不视为已生效默认值：
-
-1. 基础设施自动重试最多 1 次，且需有暂时故障依据；第一次重试仍失败就停止重试。用户已有授权决定是否允许远端 rerun。
-2. 同一根因累计两次实质修复仍未解决，停止自动编辑，转入有界只读诊断。无新证据时，即使没到两次也停止重复尝试。
-3. 诊断最多再投入 15 分钟，形成原因、已尝试动作、仍缺证据和推荐下一步；预算耗尽不等于通过。
-4. 远端观察单批最长 15 分钟，按退避间隔查询；上限到达即返回待验证，而非虚报超时失败或自动启用后台监控。
-5. 计数按稳定 finding/根因归属跨会话保留，不能通过改文件、换代理、改名或重开会话清零。展示工作区/任务总体耗时，避免在多个故障间轮转绕过预算。
-6. 恢复自动修复需要明确的新证据支持不同假设，并处于原范围和剩余预算内；耗尽预算后由用户明确选择继续、缩小或暂停。改变目标、验收、scope 按既有确认协议处理。
-
-问题处置摘要至少包含失败签名、分类、日志来源、假设、动作、结果、尝试计数和下一步。优先附着既有 finding/operation/checkpoint，不建立逐工具调用账本。
-
-仅因触及安全、锁、依赖或 CI 文件不重复索取已存在的授权；真正需要确认的是契约变化、新影响或预算耗尽后的继续决定。
-
-## 7. 当前 TDD 能力与建议流程
-
-### 7.1 当前事实
-
-当前不是所有任务都强制执行的严格 TDD：
-
-- `AGENTS.md` 要求修改 src 后先跑对应同名契约测试。这是验证顺序，不能证明测试写在实现之前。
-- `docs/man-module-delivery-plan.md` 规定可复现缺陷及适合的行为测试采用 TDD/失败先行，不要求文档修改套用。
-- manba 要求先确定预期行为，再诊断和真实验证，但没有对每次修复机器强制 Red → Green。
-- `VerificationComponentEvidence` 记录结果、命令、内容/环境和观察面等；没有 Red/Green 配对与先后顺序检查。最终通过不能证明测试曾有效失败。
-
-因此可以准确称为“有测试与验证门禁，部分任务采用失败先行”，不能宣称全部功能都经过 TDD。也不能仅凭当前 schema 判断历史上每次开发实际是否采用过 TDD。
-
-### 7.2 推荐按行为应用 Red → Green → Refactor
-
-1. **定义行为**：先写清输入、输出、不变量和必要失败路径，关联验收 ID；依据来自需求/契约，不能照着当前实现抄 expected。
-2. **Red**：新增或使用可复现测试，在未修复实现上运行，确认失败原因就是目标行为缺失/错误。依赖没装、语法错误、配置失效、测试未发现不算有效 Red。
-3. **Green**：最小实现后运行同一行为断言，证明通过。为变绿修改断言语义时重新审查契约，不能沿用原 Red 证明。
-4. **Refactor**：仅在确有必要时重构，保留行为断言并跑直接回归；不强制制造重构工作。
-5. **扩大验证**：跑受影响集成/真实入口与项目必需检查，再进入模块总审及适用的远端验收。
-
-| 变更 | 推荐要求 |
-| --- | --- |
-| 可复现 bug | 原则上有回归测试或等价的真实失败复现，先失败再修复。 |
-| 新增可自动化行为 | 优先行为测试先行；覆盖正常与关键负向路径，不按每个私有函数强制加测试。 |
-| 锁、并发、恢复、迁移、权限 | 除普通 Red/Green，还需确定性竞争/中断注入、旧数据/旧客户端或拒绝路径证据；明确风险对应场景。 |
-| 保持行为的重构 | 已有特征测试可先绿再重构；不故意破坏正确代码制造 Red。新增缺失行为仍按行为测试处理。 |
-| 文档、布局、无法本地复现的宿主行为 | 使用比例适当的人工/真实宿主检查，明确 TDD 不适用或缺少条件；不伪造 Red。 |
-
-测试本身需要审查：它在什么错误实现下会失败，mock 是否绕过核心路径，断言是否有独立契约依据。必要时对关键断言做窄范围故障注入或已知错误样例，不全库强制 mutation testing。
-
-### 7.3 拟议的证据扩展
-
-未来 Red/Green 记录通过公共命令捕获，关联验收/场景 ID、命令、观察面、测试版本、实现版本、结果和失败原因。机器验证关联及顺序；语义相关性仍由审查判断。
-
-Red 是预期失败的过程证据，不覆盖最终 verification slot 为 failed，也不能替代最终通过证据。Green 必须关联同一行为断言；断言发生实质变化后重新建立对应关系。代码重构后按影响复验。
-
-历史任务没有 Red 记录就如实标为未知，不能补造。第一阶段可保留真实命令输出和 review 引用；只有运行时扩展完成且经过契约测试后，才能称为机器执行的 TDD 门禁。
-
-## 8. 实施路线与取舍
-
-同一目标有两个主要方案：只增强提示词成本低，但无法可靠约束漏检、旧证据和 CI 完成；新增独立 OCR 服务可提供审查引擎，但增加模型配置、调度和双重状态，且仍需补 CI/TDD。
-
-推荐：在现有 mancode 运行时与宿主入口上分阶段增强。检查执行和证据关联由程序负责，语义审查由 reviewer 与真实验收负责。
-
-| 阶段 | 内容与依赖 | 候选模块/路径 | 阶段验收 |
-| --- | --- | --- | --- |
-| S1 审查契约 | 无新 schema；统一覆盖、测试审查、TDD 适用范围与有界诊断；明确新旧入口 | `src/installers/v3-adapter.ts`、相关 `src/templates/agents/`、`src/templates/skills/`、`src/installers/mode-skills.ts`、`docs/workflows.md`、`docs/engineering.md` | 新入口含完整规则；旧任务协议未静默变化；相关模板/安装契约测试通过。 |
-| S2 项目检查对齐 | 与 S1 可独立实施；建立共享入口和最终干净 checkout 检查 | `scripts/` 的检查入口、`package.json`、`.github/workflows/quality.yml`、`.github/workflows/windows-smoke.yml`、相关脚本契约测试 | 本地与 CI 的检查集合一致；任何必需步骤失败不可吞掉；产物和环境绑定准确。 |
-| S3 证据与有界修复 | 依赖 S1；通过明确兼容能力扩展现有 ledger，不旁路写记录 | `src/context/man-delivery-evidence.ts`、`verification-ledger.ts`、`review-ledger.ts`、`man-delivery-runtime.ts`、`src/commands/man-delivery.ts` 与必要 mutation/operation | 缺覆盖、失效证据、无 Red 关联或耗尽预算不能错误通过；预期 Red 不破坏最终结果。 |
-| S4 远端验收 | 依赖 S2/S3；先支持明确 GitHub 来源，保留 provider 边界而不构建通用平台框架 | 交付命令、远端只读查询实现、runtime/finalization、上下文投影和相关测试 | 正确 SHA、事件及矩阵才通过；缺失/失败/旧 run/超时不放行；纯本地不受影响。 |
-| S5 联合验证 | 依赖 S1～S4 | 对应 contract、跨 clone/恢复/CLI 测试，真实授权分支 CI | 同一候选通过 Linux/Windows；错误 CI 能停止且可诊断；跨会话不丢失计数与缺口。 |
-
-这些是未来候选路径，不是当前 implementationScope。预计主要复杂度在 S3/S4 的证据生命周期和兼容测试；S1/S2 先交付可见收益，但不能提前宣传运行时强制能力。
-
-### 8.1 兼容和回退
-
-- 新门禁只用于明确启用的新任务；已有 man、manteam、旧 policy、已完成记录不自动改语义。受管 Solo handoff 继承其原任务已启用的门禁，普通 Solo 保持轻量。
-- 新持久字段必须有 reader/writer 能力与 schema/版本校验；旧 reader 能拒绝不支持的数据，不能静默丢字段。具体 schema 变化属于实施设计待确认项。
-- 复用 operation journal/CAS 和 repair，增加中断恢复、旧快照读取、拒绝不支持 writer 的测试。
-- 入口从生成源修改，经正式 adapter upgrade 分发；不能只手改本地 `.agents/skills/man/SKILL.md`。
-- 回退停止向新任务启用能力；已启用任务保留证据和失败状态，不能删除 CI/TDD 记录或降级为无门禁。必要的豁免须显式授权并记录。
-
-### 8.2 必需验收场景（未来实现）
-
-1. diff 中第 4 个必修问题仍保留；测试/删除/CI 文件不被静默漏审；同根因去重保留关联路径。
-2. 声称已读文件但缺少必需验收证据仍不通过；明确误报可留理由撤销。
-3. 检查脚本中任一步失败，最终结果失败；使用旧 dist、错误环境或缺失必需步骤不能误报完整通过。
-4. 旧 SHA 成功、新 SHA 失败、矩阵只过一项、同名无关 check、缺 job、skipped、无权限、取消、rerun、PR base 漂移都不会错误放行。
-5. CI 本身断言错时，纠正后能通过正确行为并拒绝错误行为；放宽阈值/禁用测试不会被当成普通修复自动接受。
-6. 同一问题跨会话两次修复失败后不继续盲改；基础设施重试上限、诊断和观察上限生效；恢复需要保留的证据及授权。
-7. Red 因目标行为失败、Green 同一断言通过；语法/环境失败不冒充 Red；修改 expected 后原配对失效；重构与文档例外不要求造假。
-8. 新门禁拒绝缺证据，旧任务仍按原策略读取/完成；受管 handoff 不绕过；write 中断后可 repair，未完成终态仍可继续修复。
-9. 真实 Linux Node 22/24、Windows Node 22 shell/锁路径验证，必要跨 clone 与 CLI 产物检查。真实外部检查缺失时明确未验证，mock 不替代实际接通。
-
-## 9. 本次规划验收与待确认事项
-
-| 本次验收 | 文档覆盖 |
-| --- | --- |
-| AC-1 现状与 OCR 取舍 | 第 1～2 节，源码与真实历史日志。 |
-| AC-2 完整审核及有界 CI 修复 | 第 3～6 节，覆盖、环境、准确提交、分类及停止恢复。 |
-| AC-3 当前及建议 TDD | 第 7 节，区分实际能力与未来机器门禁。 |
-| AC-4 可实施分期和边界 | 第 8～9 节，依赖、候选模块、兼容与验收场景。 |
-
-完成规划只表示文档已整理和检查，不表示未来验收场景已运行或用户已批准方案。后续实施前须确认：
-
-1. 采用上述分阶段方案，及实际执行阶段/文件范围。
-2. 哪些新任务要求远端验收，哪些高风险任务要求独立 reviewer。
-3. 建议的一次基础设施重试、两次失败修复、15 分钟诊断/观察预算是否适合使用场景。
-4. TDD 强制适用范围、受控例外及新增持久证据的兼容版本策略。
-
-这些不阻塞交付当前提案；它们阻止的是在没有相应批准的情况下改变运行时行为。用户仅要求规划，因此不执行 S1～S5，不推送或创建 PR。
+所有自动化验收 observation surface 为 component。记录真实命令，不为填槽重复同一套测试。必要网络不可用时保留检查失败/未验证，不改成通过。
 <!-- mancode:plan-baseline:end -->
 
 <!-- mancode:delivery-record:start -->
-本次只交付方案。已核对当前代码、模式入口、检查配置和本会话读取的历史 CI 日志；未运行 OCR 模型评测，未实施拟议功能。实现验收与远端验收尚未开始。
+Task: local:01M2MEJFAJ5BCFX8MNCP99JMPF
+Plan version: 5
+Review: passed
+Verification: passed
 
-规划验证：已完成内容自审、四个唯一有序区块标记检查、本地引用检查、代码围栏配对与 whitespace diff 检查。仅文档和该文档的 Git 白名单变化，未运行源码测试；这不是对未来实现的验收。计划已通过公共 CLI 绑定，停留在计划评审阶段，未登记实施批准。
+Reviewer declaration: independent
+Direction: 完整diff按AC-1至AC-5核对；两个开发agent交叉审查对方模块及共同接线，主agent整合。共享质量规则未改变旧policy/诊断outcome，文件范围含获批的双语文档和官方adapter生成投影。
+Correctness: R-1由独立agent真实Git复现，再由作者新增3个Red回归修复到Green，交叉复核10测试通过；R-2用Copilot原语法契约复验；R-3补双语命令文档并通过原网站完整性契约。完整173文件1533测试成功；指定目录真实候选CLI五类场景通过且authority不变。
+Proportionality: 只读Git分层inventory、共用提示规则和固定检查脚本，无新持久化schema/模型服务/远端CI硬门禁；未使用任意脚本作为验收替代。真实CLI使用临时隔离fixture，并不声称真实Windows矩阵或所有宿主对话已验证。
+Next: 同步交付记录、提交任务改动、通过现有delivery check后完成本地交付；不推送。
+- R-1: resolved — review-subject.ts只比较base到worktree；base safe→index broken→worktree safe时输出空清单，但commit将包含broken。须覆盖HEAD/index/worktree并标记层。
+- R-2: resolved — mode-skills.ts新增硬编码/manba使Copilot生成入口含不支持的slash命令；tests/copilot-adapter.test.ts:258复现失败，须使用平台调用语法。
+- R-3: resolved — src/cli.ts新增review及review inspect后website中英文命令目录未同步，tests/website-docs.test.ts:92失败；须按批准扩展文件边界补文档，不删契约。
+- AC-1: met — 八平台adapter契约、原诊断兼容测试及22个dist生成入口通过；共同规则和mode专属权限均验证。
+- AC-2: met — review-subject 10项真实Git测试及compiled CLI集成通过；layers保留HEAD/index/worktree抵消、不同状态、特殊路径、失败出口和只读行为。
+- AC-3: met — project-checks完整顺序、每步真实exit7透传、fresh dist环境、原Node/OS/shell矩阵契约通过；npm run check实际执行成功。
+- AC-4: met — npm run check：lint/typecheck/build/22dist adapters/audit --audit-level=high/coverage成功；173测试文件1533测试通过，行覆盖86.82%。审计保留3 moderate，未降低原high阈值。
+- AC-5: met — /Users/whitelonng/code/mancode测试/review-20260916-Ew4f4g/report.json及commands.json：5类真实macOS候选CLI场景通过；实际Man task/session/ledger全量快照不变。
+- AC-1: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-2: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-3: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-4: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
+- AC-5: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
 <!-- mancode:delivery-record:end -->

@@ -15,6 +15,14 @@ export const MAN_SKILL: SkillSpec = {
 
 delivery requirements 的每个必需验收项都必须用 \`verificationSurfaces\` 按 automated/manual slot 声明期望 observation surface；delivery 验证输入再声明实际 surface：\`unit\`、\`component\`、\`handler\`、\`real_http\`、\`browser\`、\`device\`、\`external_service\` 或 \`manual_observation\`。例如真实 HTTP 的期望和实际都必须是 \`real_http\`；不能从命令名猜测，也不能把 handler/mock/截图当成真实 HTTP。缺少或不匹配的证据保持未验证。完成前以 \`delivery check --json\` 的结构化 finalization blockers 为准，先解决 review、verification、delivery record、scope 和未提交变更，再运行 \`workflow complete\`；范围外未提交文件必须先移出、stash 或单独提交，不能混入本任务提交。没有 upstream 或 push 失败表示未发布，不是业务阻塞。include/exclude 只接收 repo-relative path 或 glob，语义范围写在 requirements；计划路径越界时按 CLI 给出的具体路径修正，不要靠猜测词表扩大防御。
 
+## 完整审核与检查对齐
+
+审核始终使用原任务、批准基线和既有 policy。用 \`mancode review inspect --base <明确基线> --json\` 收集清单；不能猜测 PR base，清单也不代表完成语义审查。覆盖全部实现、测试、CI、配置、依赖、生成源、契约文档、删除和重命名；按行为链路分组并补齐未分组文件，主动读取正文、调用方和组间契约。报告保留已审、未审、排除理由、检查失败和环境缺口。文件表完整、工具退出 0 或 reviewer 自述不能代替验收证据。
+
+调用 manba 的审核流程不创建诊断 child、不切换 mode、不授予修复权。只在真正需要独立根因诊断时使用原 child 协议；父快照失效后不能循环重建子任务，也不能拿子 outcome 代替父验收。delivery 保留一次模块总审及必要定向复核；旧任务保留原有领域、step、账本和完成协议，不叠加另一套总审。新增清单内容写入报告或已支持证据文本，不向严格 ledger 增加未支持字段。
+
+从真实项目脚本与 CI 确定必需检查，优先复用共同入口。mancode 项目用 \`npm run check\` 执行 lint、typecheck、build、dist adapters、audit 和 coverage，并使用本次构建的 CLI；\`npm run check:windows\` 运行 Windows 准备检查，CI 仍执行真实 CMD、PowerShell 和 Git Bash 冒烟。本机通过不能冒充未运行的平台矩阵；发布状态也不代表准确提交的远端 CI 已通过。
+
 ## 计划职责与技术选择关卡
 
 把 \`/man\` 作为正式计划入口：先对齐需求并产出可确认的计划，不因计划完成而自动进入完整实施。计划关卡必须让用户选择只保留计划、交给默认 \`solo\` 轻量实施、继续完整 \`/man\` 或修改计划。
@@ -68,6 +76,8 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 
 ### Step 5: 实施
 
+按风险采用轻量 TDD：可复现 bug 优先先让回归测试因目标行为失败，再最小修复、运行同一行为断言和受影响回归；新增自动化行为适用时测试先行，锁、并发和恢复补可控失败场景。依赖、语法或网络故障不算有效 Red，改弱断言不算 Green。保持行为的重构复用已有通过测试，文档修改不制造失败；旧版本回放只能证明回归测试有效，不能冒称历史测试先行。这里是流程指导，不是运行时强制的 TDD 门禁。
+
 调用 \`head-coach\` 按确认计划实施。先明确仍存在的实质假设和可验证成功标准；每一处改动都必须追溯到已确认范围、技术决策或验收 ID。只改为满足计划所必需的文件，不顺手重构、格式化、清理相邻代码或增加未请求功能。多文件、新模块或高风险任务可建议 worktree，必须先获用户同意。实施完成后通过 CLI 更新至 Step 6。
 
 若升级前已经进入执行阶段的本地 Man 任务缺少可执行 \`implementationScope\`，完成门仍会拒绝。先向用户展示完整边界并等待明确确认，再使用内容完全不变的当前 plan 和 \`--scope-file\` 重新执行 plan revise。这个兼容补绑只允许递增 plan authority 并使旧 review/verification 失效；不得修改 plan、行为、验收或已经可执行的边界。
@@ -76,13 +86,13 @@ Plan Coach 必须证明所有选项解决同一个 goal、验收边界和 scope�
 
 先运行 \`mancode workflow verify <taskId> init\`，再按 \`requirements.json\` 的每个验收 ID 记录真实结果。自动 passed/failed 必须使用 \`mancode workflow verify <taskId> record --acceptance AC-N --method automated --result passed|failed --evidence "<摘要>" --command "<实际命令>" --exit-code <退出码> [--evidence-file <报告>]\`；CLI 校验 passed 的退出码为 0、failed 为非 0。需要真实浏览器、设备或人的判断时，使用 \`mancode workflow verify <taskId> require-manual --acceptance AC-N --evidence "<自动化不能覆盖的原因>"\`；CLI 会阻塞主任务。明确告诉用户具体实测步骤并停下，只有收到用户明确确认后才使用 \`mancode workflow verify <taskId> confirm-manual --acceptance AC-N --evidence "<用户确认原文>"\`。此证据用于审计，不代表 CLI 能认证操作者身份。不得用页面加载、控制提示、截图、代码阅读或 reviewer 代替核心交互验收。
 
-运行实际 build/lint/typecheck/test 和 smoke test。相同代码、环境、命令下相同错误签名失败两次，停止盲试并诊断根因。需要复杂复现或回归时，用 \`mancode workflow create manba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；\`manual_test_required\` 仍必须走上述人工确认。所有 required 验收及 hybrid 的两个部分都 passed 后，CLI 才允许进入 Step 7 或启动 review；计划版本或结构化需求变化会使旧验证失效。
+运行实际项目必需检查和 smoke test。失败先分类：实现缺陷、测试/CI 错误、基础设施、偶发并发、预存失败或契约冲突；按真实契约诊断，不删测试、放宽断言、降低阈值或关闭检查换取绿灯。基础设施有暂时故障依据时最多自动重试一次；同根因两次实质修复失败后停止自动编辑，没有新证据时提前停止。时间预算按任务约定。用现有报告或 checkpoint 保留假设、动作、结果和次数，跨会话不因换名清零；本次为流程约定，不声称运行时强制预算。需要复杂复现或回归时，用 \`mancode workflow create manba "<问题>" --parent-task <taskId> --json\` 创建子 workflow；父任务保持 Step 6。子任务 fixed/verified/no_repro 后恢复本任务；\`manual_test_required\` 仍必须走上述人工确认。所有 required 验收及 hybrid 的两个部分都 passed 后，CLI 才允许进入 Step 7 或启动 review；计划版本或结构化需求变化会使旧验证失效。
 
 验证后基于**实际 diff**写 \`review-scope.md\`：base、改动文件、需求、已跑验证、硬风险和审查深度。鉴权、支付、敏感数据、迁移/删除、公开 API、未可信输入、并发、跨服务或基础设施命中任一项时用完整审查 \`full\`；否则用定向审查 \`targeted\`。运行 \`mancode workflow review <taskId> init --review-depth targeted --review-domain quality\` 或 \`--review-depth full\`。只有用户明确要求跳过审查时才运行 \`mancode workflow review <taskId> skip --reason "<用户理由>"\`；CLI 会记录原因并累计 \`review\`，不得通过通用 skipped 参数绕过。
 
 ### Step 7: Film #1 代码质量审查与修复
 
-未跳过 review 时调用 \`film-analyst-offense\`，先把实际 diff 对照 \`confirmedScope\`、\`excludedScope\`、\`technicalDecisions\`、\`acceptanceCriteria\` 和 \`implementationScope\` 做授权一致性审查，再检查行为正确性、复用、复杂度和测试，写 \`film-report-1.md\`。实现被拒绝、延期、未讨论、无法追溯到已确认行为，或改动路径落在 include 外 / 匹配 exclude 的内容一律作为 🔴 scope blocker。每条 finding 必须引用改动行、给出证据和用户影响；最多 3 个新 finding。用稳定 ID（如 Q1）标记 🔴 blocker，并运行 \`mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1,Q2\`；没有 blocker 时传空字符串。此时不修复，先完成所需审查领域，再更新至 Step 8。
+未跳过 review 时调用 \`film-analyst-offense\`，先把实际 diff 对照 \`confirmedScope\`、\`excludedScope\`、\`technicalDecisions\`、\`acceptanceCriteria\` 和 \`implementationScope\` 做授权一致性审查，再检查行为正确性、复用、复杂度和测试，写 \`film-report-1.md\`。实现被拒绝、延期、未讨论、无法追溯到已确认行为，或改动路径落在 include 外 / 匹配 exclude 的内容一律作为 🔴 scope blocker。每条 finding 必须给出契约依据、触发条件、因果证据和用户影响，引用真实位置；删除或遗漏行为可定位旧侧、调用方或验收项，不强求新增行。必修 finding 不设数量上限，摘要不截断问题；同根因合并保留关联路径，确认误报保留撤销原因。用稳定 ID（如 Q1）标记 🔴 blocker，并运行 \`mancode workflow review <taskId> complete --review-domain quality --report film-report-1.md --blockers Q1,Q2\`；没有 blocker 时传空字符串。此时不修复，先完成所需审查领域，再更新至 Step 8。
 
 ### Step 8: Film #2 安全与边界审查
 

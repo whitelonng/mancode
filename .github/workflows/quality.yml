@@ -20,18 +20,5 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - name: Lint
-        run: npm run lint
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Build
-        run: npm run build
-      - name: Verify compiled adapters
-        run: npm run test:dist
-      - name: Dependency audit
-        run: npm audit --audit-level=high
-      - name: Test with coverage
-        env:
-          MANCODE_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
-          MANCODE_PROGRESS_CLI_BINARY: ${{ github.workspace }}/dist/cli.js
-        run: npm run test:coverage
+      - name: Project checks
+        run: npm run check

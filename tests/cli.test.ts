@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -9,6 +9,59 @@ import { VERSION } from '../src/version.js';
 
 // Explicit candidate build prevents a test from invoking the installed governance CLI.
 const binary = process.env.MANCODE_CLI_BINARY;
+it.runIf(Boolean(binary))(
+  'collects review inventory through the compiled CLI without initializing authority',
+  async () => {
+    if (!binary)
+      throw new Error('MANCODE_CLI_BINARY must name the compiled candidate');
+    const root = await mkdtemp(path.join(tmpdir(), 'mancode-review-cli-'));
+    const exec = promisify(execFile);
+    try {
+      await exec('git', ['init', '--quiet'], { cwd: root });
+      await exec(
+        'git',
+        [
+          '-c',
+          'user.name=Review fixture',
+          '-c',
+          'user.email=review@example.invalid',
+          'commit',
+          '--quiet',
+          '--allow-empty',
+          '-m',
+          'base',
+        ],
+        { cwd: root },
+      );
+      await writeFile(path.join(root, 'pending.txt'), 'untracked change');
+      const result = await exec(
+        process.execPath,
+        [binary, 'review', 'inspect', '--base', 'HEAD', '--json'],
+        { cwd: root },
+      );
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        kind: 'review_inventory',
+        reviewStatus: 'not_reviewed',
+        files: [{ path: 'pending.txt', status: 'untracked' }],
+      });
+      await expect(
+        exec(
+          process.execPath,
+          [binary, 'review', 'inspect', '--base', 'missing-base', '--json'],
+          { cwd: root },
+        ),
+      ).rejects.toMatchObject({ code: 1 });
+      await expect(
+        exec(process.execPath, [binary, 'review', 'inspect', '--json'], {
+          cwd: root,
+        }),
+      ).rejects.toMatchObject({ code: 1 });
+      expect((await readdir(root)).sort()).toEqual(['.git', 'pending.txt']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 it.runIf(Boolean(binary))(
   'parses context read digest options without intercepting them as the root version flag',
   async () => {

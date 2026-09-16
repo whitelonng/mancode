@@ -103,6 +103,25 @@ local、single 的 man 可在明确获准实施后，通过原 `plan confirm` �
 
 ## 验证
 
+本项目的本地 Quality 验收入口是 `npm run check`：按顺序运行 lint、typecheck、build、
+dist adapter 验证、依赖 audit 和 coverage；两个测试 CLI 环境变量固定指向本次构建的
+`dist/cli.js`。GitHub Quality 的 Node 22/24 矩阵及 prepublishOnly 复用这个入口。
+依赖/网络失败仍为失败，不能跳过后声称整套检查通过。
+
+`npm run check:windows` 复用 Windows 的构建和锁契约测试；Windows CI 继续分别在
+CMD、PowerShell 和 Git Bash 中执行 smoke。其他系统运行准备检查不证明 Windows 已通过。
+`release:check` 保留额外的发布、打包安装与跨 clone 验证，不要求每次日常修复重复发布演练。
+
+完整审查必须包含测试、CI、配置、依赖、生成源和契约文档，追查受影响调用方及删除行为。
+使用明确的批准基线运行 `mancode review inspect --base <ref> --json` 可取得只读文件清单；
+成功只表示采集，报告仍须说明行为覆盖、发现与未验证项。必修问题不限制数量，修复后做
+定向复核；本地通过、上游包含提交和准确提交的远端 CI 通过是不同证据。
+
+TDD 按风险执行：可复现缺陷先确认目标失败再修复；适用的新行为测试先行；文档和保持
+行为的重构不制造 Red。CI 失败先核对契约和根因，不能删测试或降阈值换绿灯。基础设施
+最多自动重试一次，同根因两次实质修复失败后停止自动编辑，时间预算由具体任务约定。
+这些是流程指导，本期没有新增持久化 TDD、尝试计数或远端 CI 完成门。
+
 从最窄验证开始，再按风险扩大：
 
 ```bash
