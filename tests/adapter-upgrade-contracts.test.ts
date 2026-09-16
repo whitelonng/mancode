@@ -571,20 +571,21 @@ describe('adapter managed-content digest and upgrade', () => {
     },
   );
 
-  it('recovers every registered-platform target from its write-before and write-after boundary', async () => {
-    const discovery = await upgradeV3Adapters({
-      projectRoot: root,
-      platforms: V3_ADAPTER_PLATFORMS,
-      dryRun: true,
-      operationId: id(20),
-      now: NOW,
-    });
-    const targets = discovery.filePlans.map((plan) => plan.target);
-    expect(targets.length).toBeGreaterThan(1);
-    expect(new Set(targets).size).toBe(targets.length);
+  it.each(['before', 'after'] as const)(
+    'recovers every registered-platform target from its write-%s boundary',
+    async (boundary) => {
+      const discovery = await upgradeV3Adapters({
+        projectRoot: root,
+        platforms: V3_ADAPTER_PLATFORMS,
+        dryRun: true,
+        operationId: id(20),
+        now: NOW,
+      });
+      const targets = discovery.filePlans.map((plan) => plan.target);
+      expect(targets.length).toBeGreaterThan(1);
+      expect(new Set(targets).size).toBe(targets.length);
 
-    let caseIndex = 0;
-    for (const boundary of ['before', 'after'] as const) {
+      let caseIndex = 0;
       for (const [targetIndex, target] of targets.entries()) {
         const caseRoot = path.join(root, `${boundary}-${caseIndex}`);
         await mkdir(caseRoot, { recursive: true });
@@ -655,8 +656,9 @@ describe('adapter managed-content digest and upgrade', () => {
         }
         caseIndex += 1;
       }
-    }
-  }, 60_000);
+    },
+    60_000,
+  );
 });
 
 async function bootstrapAdapterCase(
