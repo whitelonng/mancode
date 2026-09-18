@@ -49,7 +49,7 @@ All declared input fields are required; extra fields are rejected. Flat fields s
 mancode secret action approve --file send-notice.action.json
 ```
 
-The command displays the exact captured package/runtime identity, project, secret revisions, input requirements, fixed configuration, destination, side effects and budgets. Type `approve` to confirm that snapshot. Candidate scripts do not gain access automatically. Timeout must be explicit, at most 300 seconds; 60 seconds is recommended. Output budget is at most 256 KiB.
+The command displays the captured executable, selected entry, package file identities, non-system runtime library identities, project, secret revisions, credential-slot mappings, input requirements, fixed configuration, destination, side effects and budgets. Type `approve` to confirm that snapshot. Candidate scripts do not gain access automatically. Timeout must be explicit, at most 300 seconds; 60 seconds is recommended. Output budget is at most 256 KiB.
 
 ## Agent usage
 
@@ -65,7 +65,7 @@ Example request:
 {"recipient":{"$secret":"contact-email"},"subject":"Synthetic test","body":"Test message"}
 ```
 
-The program receives one UTF-8 JSON object with separate `data`, `credentials` and `fixed` namespaces. Only approved reference slots are replaced. An executor must not turn secrets into downstream argv/env, workspace files or logs. It must not daemonize or escape the process group. Raw stdout/stderr are discarded within the approved output budget.
+The program receives one UTF-8 JSON object with separate `data`, `credentials` and `fixed` namespaces. Only approved reference slots are replaced. An executor must not turn secrets into downstream argv/env, workspace files or logs. It must not daemonize or escape the process group. Raw stdout/stderr are discarded within the approved output budget. Each call receives a private temporary directory outside the immutable package through `TMPDIR`. It is removed after handled success, failure, timeout or cancellation. A runner killed abruptly or a host crash can leave that directory behind; cleanup is not secure erasure, and executors must still avoid writing secrets to temporary files. The fixed working directory and `HOME` remain the package snapshot and must not be modified.
 
 A successful receipt reports `executor_succeeded`, which means protocol exit 0, not proof of delivery. Failures after start report `outcome_unknown`; do not automatically retry an operation that may already have happened. Exit classes: 0 success, 2 rejected/storage/authentication failure, 3 executor failure/output limit, 4 timeout/cancellation, 5 platform/keystore unavailable. Diagnostics use fixed codes only.
 

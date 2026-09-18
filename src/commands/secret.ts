@@ -230,23 +230,27 @@ export function registerSecretCommands(program: Command): void {
           false,
           async (vault) => {
             const prepared = await prepareAction(vault, spec);
+            const approvedSpec = prepared.action.spec;
             console.log(
               JSON.stringify(
                 {
-                  name: spec.name,
-                  version: spec.version,
-                  executable: spec.executable,
+                  name: approvedSpec.name,
+                  version: approvedSpec.version,
+                  executable: approvedSpec.executable,
+                  entry: approvedSpec.entry,
                   executableDigest: prepared.action.executableDigest,
+                  runtimeFiles: prepared.action.runtimeFiles,
                   files: prepared.action.files,
                   workspace: prepared.action.workspaceId,
                   bindings: prepared.action.bindings,
-                  fields: spec.fields,
-                  fixed: spec.fixed,
-                  target: spec.target,
-                  effects: spec.effects,
-                  output: spec.output,
-                  timeoutMs: spec.timeoutMs,
-                  outputBytes: spec.outputBytes,
+                  fields: approvedSpec.fields,
+                  credentials: approvedSpec.credentials,
+                  fixed: approvedSpec.fixed,
+                  target: approvedSpec.target,
+                  effects: approvedSpec.effects,
+                  output: approvedSpec.output,
+                  timeoutMs: approvedSpec.timeoutMs,
+                  outputBytes: approvedSpec.outputBytes,
                 },
                 null,
                 2,

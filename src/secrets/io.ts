@@ -81,9 +81,15 @@ export async function regularFile(
   );
   try {
     const st = await handle.stat();
-    if (st.ino !== before.ino || st.dev !== before.dev || !st.isFile())
+    if (
+      st.ino !== before.ino ||
+      st.dev !== before.dev ||
+      !st.isFile() ||
+      st.size > max
+    )
       fail('INPUT_INVALID');
-    const data = Buffer.alloc(max + 1);
+    // Read one extra byte to reject growth instead of accepting a truncated file.
+    const data = Buffer.alloc(st.size + 1);
     let total = 0;
     while (total < data.length) {
       const { bytesRead } = await handle.read(
@@ -95,8 +101,9 @@ export async function regularFile(
       if (!bytesRead) break;
       total += bytesRead;
     }
-    if (total > max) fail('INPUT_INVALID');
-    return data.subarray(0, total);
+    if (total > st.size) fail('INPUT_INVALID');
+    // A subarray would retain the original allocation even if the file shrank.
+    return Buffer.from(data.subarray(0, total));
   } finally {
     await handle.close();
   }

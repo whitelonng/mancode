@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFile, lstat, rename } from 'node:fs/promises';
+import { appendFile, lstat, mkdtemp, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { parseAction, verifyExecutor } from './actions.js';
 import { regularFile, strictJson } from './io.js';
@@ -37,7 +37,9 @@ export async function runSecret(
       const payload = resolveInput(spec, data, secrets);
       for (const s of Object.values(secrets)) s.value = '';
       let code: SecretCode | undefined;
+      let temporary: string | undefined;
       try {
+        temporary = await mkdtemp(path.join(context.directory, 'run-'));
         code = await new Promise<SecretCode | undefined>((resolve) => {
           let done = false;
           let total = 0;
@@ -51,7 +53,7 @@ export async function runSecret(
               PATH: '/usr/bin:/bin',
               LANG: 'en_US.UTF-8',
               HOME: executor.cwd,
-              TMPDIR: executor.cwd,
+              TMPDIR: temporary,
             },
             stdio: ['pipe', 'pipe', 'pipe'],
           });
@@ -105,6 +107,7 @@ export async function runSecret(
         });
       } finally {
         payload.fill(0);
+        if (temporary) await rm(temporary, { recursive: true, force: true });
       }
       const receipt: Receipt = {
         schemaVersion: 1,

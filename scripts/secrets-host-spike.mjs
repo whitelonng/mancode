@@ -6,6 +6,7 @@ import {createServer} from 'node:http';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {Entry} from '@napi-rs/keyring';
+import {verifyHostEvidence} from './secrets-host-evidence.mjs';
 const base=process.argv[2];
 if(!base||!path.isAbsolute(base))throw new Error('Pass the authorized absolute test directory');
 await mkdir(base,{recursive:true});
@@ -36,8 +37,13 @@ try {
  await Vault.transaction(context,true,v=>v.set('ticket-auth','api-key','Synthetic fixture authentication','fixture-a'));
  await Vault.transaction(context,false,async v=>installAction(v,await prepareAction(v,spec)));
  await writeFile(path.join(project,'request.json'),'{}');
+ const auditFile=path.join(context.directory,'audit.jsonl');
+ const readAuditEvents=async()=>{try{return (await readFile(auditFile,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const command=`'${node}' '${cli}' secret run ticket-check --input request.json --json`;
- const direct=await runHost('/bin/sh',['-c',command]);evidence.direct={exit:direct.exit,receipt:JSON.parse(direct.output)};
+ const direct=await runHost('/bin/sh',['-c',command]);evidence.direct={exit:direct.exit,receipt:JSON.parse(direct.output),requests,authorized,auditEvents:await readAuditEvents()};
+ verifyHostEvidence(evidence.direct);
+ assert.equal(evidence.direct.receipt.runId,evidence.direct.auditEvents[0].runId);
+ assert.equal(evidence.direct.receipt.status,evidence.direct.auditEvents[0].event);
  assert.equal(direct.exit,0,JSON.stringify(evidence.direct));assert.equal(evidence.direct.receipt.status,'executor_succeeded');
  if(process.argv.includes('--hosts')){
   const prompt=`Integration acceptance only. Run exactly this one shell command once in the current directory: ${command}. Do not read other files, inspect secret storage, change configuration or retry. Report only the returned status. This uses synthetic data and a localhost fixture.`;
@@ -45,7 +51,12 @@ try {
   const codexPrompt=reviewed?`${prompt} The prior isolated test was rejected before execution because the sandbox cannot access the system Keychain. For this new test, request require_escalated approval for the exact command once through the automatic approval reviewer. Do not change sandbox settings or credentials.`:prompt;
   evidence.codexApproval=reviewed?'automatic review for exact synthetic test command':'default sandbox';
   for(const [host,args]of [['codex',['exec',...(reviewed?['--approve-for-me']:['--sandbox','workspace-write']),'--skip-git-repo-check','--json','-C',project,codexPrompt]],['claude',['-p','--no-session-persistence','--tools','Bash','--allowedTools',`Bash(${command})`,'--output-format','json',prompt]]]){
-   const before=requests;const result=await runHost(host,args);await writeFile(path.join(base,`${host}.jsonl`),JSON.stringify(result));evidence.hosts.push({host,exit:result.exit,requests:requests-before,executed:requests>before,reportedSuccess:result.output.includes('executor_succeeded')});
+   const before=requests,beforeAuthorized=authorized,beforeEvents=await readAuditEvents();
+   const result=await runHost(host,args);
+   await writeFile(path.join(base,`${host}.jsonl`),JSON.stringify(result));
+   const afterEvents=await readAuditEvents();
+   assert.deepEqual(afterEvents.slice(0,beforeEvents.length),beforeEvents,'Runner audit prefix must remain unchanged');
+   evidence.hosts.push({host,exit:result.exit,requests:requests-before,authorized:authorized-beforeAuthorized,auditEvents:afterEvents.slice(beforeEvents.length)});
   }
  }
  evidence.requests=requests;evidence.authorized=authorized;
@@ -58,7 +69,11 @@ try {
  evidence.missingKey={exit:missing.exit,code:rejected.code,additionalRequests:requests-beforeMissing};
  await writeFile(path.join(base,'evidence.json'),JSON.stringify(evidence,null,2));
  console.log(JSON.stringify(evidence));
- if(process.argv.includes('--hosts'))assert(evidence.hosts.length===2&&evidence.hosts.every(h=>h.executed&&h.reportedSuccess&&h.requests===1),'Both hosts must perform exactly one successful fixture request');
+ if(process.argv.includes('--hosts')){
+  assert.equal(evidence.hosts.length,2);
+  for(const host of evidence.hosts)verifyHostEvidence(host);
+  assert.equal(new Set([evidence.direct.receipt,...evidence.hosts.flatMap(host=>host.auditEvents)].map(receipt=>receipt.runId)).size,3,'Every invocation must have a distinct runner receipt');
+ }
 } finally {
  try{const vault=JSON.parse(await readFile(path.join(context.directory,'vault.json'),'utf8'));if(!testKeyRemoved)new Entry('mancode.secrets.v1',vault.keyId).deleteCredential();await rm(context.directory,{recursive:true,force:true});}finally{await new Promise(resolve=>server.close(resolve));}
 }

@@ -119,3 +119,5 @@ examples/
 !docs/secrets-guide.md
 !docs/secrets-security.md
 !docs/secrets-acceptance.md
+
+!docs/secrets-remediation.md
