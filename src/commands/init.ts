@@ -43,8 +43,10 @@ import {
   primaryUiLibrary,
 } from '../system/project-profile.js';
 import { scanAesthetics } from '../system/scan-aesthetics.js';
+import type { UpgradePrompter } from '../system/upgrade-onboarding.js';
 import { ALL_AGENTS } from '../templates/agents/index.js';
 import { VERSION } from '../version.js';
+import { upgrade } from './upgrade.js';
 import { initializeV3Project } from './v3-init.js';
 
 /**
@@ -91,6 +93,8 @@ export interface MancodeState {
 }
 
 export interface InitOptions {
+  /** Injectable existing-project update menu. */
+  upgradePrompter?: UpgradePrompter;
   /** --force: 覆盖已有配置 */
   force?: boolean;
   /** --yes: 跳过通用项目确认；CI 仍需显式指定平台 */
@@ -736,6 +740,19 @@ async function initializeV3(
         Object.keys(manifest.managedAdapters) as PlatformName[],
       );
       if (options.platform === undefined) {
+        if (
+          options.fromCli &&
+          options.interactive &&
+          !options.yes &&
+          (!options.prompter || options.upgradePrompter)
+        ) {
+          return upgrade(rootDir, {
+            interactive: true,
+            initializedMenu: true,
+            lang: options.lang,
+            prompter: options.upgradePrompter,
+          });
+        }
         console.log('ℹ️  mancode is already initialized.');
         console.log(
           '   Privacy choices are preserved; use `mancode privacy` commands to change them.',

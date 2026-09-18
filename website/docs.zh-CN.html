@@ -95,7 +95,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./index.zh-CN.html" aria-label="mancode 首页"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">文档 / v0.6.8</span>
+      <span class="docs-wordmark">文档 / v0.6.9</span>
       <div class="docs-top-links">
         <a href="./index.zh-CN.html">官网</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -287,6 +287,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <div class="command-list">
             <article class="command-card"><header><h3>mancode init</h3><span>初始化</span></header><p>创建 <code>.mancode/</code>，识别项目，在适用时扫描样式 token，并安装平台适配器。</p><ul><li>选项：<code>--force</code>、<code>--yes</code>、<code>--team</code>、<code>--no-team</code>、<code>--platform &lt;list&gt;</code>、<code>--empty</code>、<code>--lang &lt;locale&gt;</code>。<code>--style &lt;name&gt;</code> 仅适用于 legacy。</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>适配器</span></header><p>初始化后通过 journaled upgrade 路径安装一个平台。</p><ul><li><code>--confirm --operation-id &lt;operationId&gt;</code> 和 active session 授权发布预览中的 managed 写入。</li><li><code>--minimal</code> 保留用于 legacy 兼容。</li></ul></article>
+            <article class="command-card"><header><h3>mancode upgrade</h3><span>v0.6.9</span></header><p>数字菜单：1 更新 CLI 和项目，2 仅项目规则与 Skills，3 仅 CLI，4 查看信息，0 退出。已初始化项目的交互 init 也提供更新选项。</p><ul><li><code>--project-only</code> 离线更新已登记平台；<code>--cli-only</code> 仅更新包；<code>--check --json</code> 只检查。</li><li><code>--yes</code> 非交互执行；首次身份用 <code>--name</code>，固定版本用 <code>--to X.Y.Z</code>。</li><li>自动包更新支持 npm 全局与普通本地依赖。保留任务、policy 和托管区外内容。</li><li>0.6.8 无此命令：先用原包管理器更新到 0.6.9 或更新版本。安装结果未知时先修复 CLI，再运行 <code>upgrade --project-only</code>。</li></ul></article>
             <article class="command-card"><header><h3>mancode adapter status | upgrade</h3><span>修复</span></header><p>比较 managed-content digest，用 <code>--dry-run</code> 生成 staging，并且只用 <code>--confirm --operation-id &lt;operationId&gt;</code> 发布该次预览。</p></article>
             <article class="command-card"><header><h3>mancode project upgrade --policy 2</h3><span>策略</span></header><p>预览或提交项目的 Policy 2 默认值，不重写已有 workflow；提交需要预览返回的 operation ID 和 active session。</p></article>
             <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>检查</span></header><p>报告项目事实、当前模式和工作流、平台就绪状态，以及适用时的 Claude hook 注册情况。组合使用 <code>--brief --json</code> 可获得精简的 Continuity 运行时视图。</p></article>
@@ -306,6 +307,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
           <table class="docs-table"><thead><tr><th>命令族</th><th>公开命令入口</th></tr></thead><tbody>
             <tr><td>初始化与检查</td><td>
               <code data-cli-command="init">mancode init</code> ·
+              <code data-cli-command="upgrade">mancode upgrade</code> ·
               <code data-cli-command="install">mancode install</code> ·
               <code data-cli-command="status">mancode status</code> ·
               <code data-cli-command="list-platforms">mancode list-platforms</code> ·

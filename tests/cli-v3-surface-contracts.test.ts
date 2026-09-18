@@ -69,6 +69,19 @@ describe('V3 CLI command surface', () => {
       expect(commandAt(cliProgram, 'operation', 'abort')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'status')).toBeDefined();
       expect(commandAt(cliProgram, 'adapter', 'upgrade')).toBeDefined();
+      const upgradeHelp = commandAt(cliProgram, 'upgrade').helpInformation();
+      for (const option of [
+        '--project-only',
+        '--cli-only',
+        '--check',
+        '--yes',
+        '--to',
+        '--json',
+        '--name',
+      ])
+        expect(upgradeHelp).toContain(option);
+      expect(cliProgram.helpInformation()).toContain('upgrade');
+      expect(cliProgram.helpInformation()).not.toContain('upgrade-internal');
       expect(commandAt(cliProgram, 'design', 'status')).toBeDefined();
       expect(commandAt(cliProgram, 'design', 'context')).toBeDefined();
       expect(

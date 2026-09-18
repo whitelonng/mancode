@@ -1,7 +1,5 @@
-# ===================================
-# mancode .gitignore
-# ===================================
-
+# ============================# mancode .gitignore
+# ============================
 # 内部法律文档（包含借鉴对象名，不公开）
 LEGAL.md
 *.backup
@@ -121,3 +119,4 @@ examples/
 !docs/secrets-acceptance.md
 
 !docs/secrets-remediation.md
+!docs/cli-upgrade-plan.md

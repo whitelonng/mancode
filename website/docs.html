@@ -95,7 +95,7 @@
 
     <header class="docs-topbar">
       <a class="brand" href="./" aria-label="mancode home"><img src="./logo.png" alt="" /><span>mancode</span><i aria-hidden="true"></i></a>
-      <span class="docs-wordmark">Documentation / v0.6.8</span>
+      <span class="docs-wordmark">Documentation / v0.6.9</span>
       <div class="docs-top-links">
         <a href="./">Website</a>
         <a href="https://github.com/whitelonng/mancode">GitHub</a>
@@ -287,6 +287,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <div class="command-list">
             <article class="command-card"><header><h3>mancode init</h3><span>Start</span></header><p>Creates <code>.mancode/</code>, detects the project, scans style tokens where relevant, and installs adapters.</p><ul><li>Options: <code>--force</code>, <code>--yes</code>, <code>--team</code>, <code>--no-team</code>, <code>--platform &lt;list&gt;</code>, <code>--empty</code>, <code>--lang &lt;locale&gt;</code>. <code>--style &lt;name&gt;</code> is legacy-only.</li></ul></article>
             <article class="command-card"><header><h3>mancode install [platform]</h3><span>Adapter</span></header><p>Installs one adapter through the journaled upgrade path after initialization.</p><ul><li><code>--confirm --operation-id &lt;operationId&gt;</code> and an active session authorize the previewed managed writes.</li><li><code>--minimal</code> remains available for legacy compatibility.</li></ul></article>
+            <article class="command-card"><header><h3>mancode upgrade</h3><span>v0.6.9</span></header><p>A numbered menu: 1 CLI and project, 2 project rules and Skills, 3 CLI only, 4 inspect, 0 exit. Interactive init also offers updates for initialized projects.</p><ul><li><code>--project-only</code> updates registered platforms offline; <code>--cli-only</code> updates the package; <code>--check --json</code> only inspects.</li><li>Use <code>--yes</code> unattended, <code>--name</code> for a first identity, and <code>--to X.Y.Z</code> for an exact version.</li><li>Automatic package updates support npm global and ordinary local installs. Tasks, policies and custom content outside managed blocks are preserved.</li><li>0.6.8 lacks this command: update to 0.6.9 or later with the original package manager. Repair an unverified CLI installation before running <code>upgrade --project-only</code>.</li></ul></article>
             <article class="command-card"><header><h3>mancode adapter status | upgrade</h3><span>Repair</span></header><p>Compares managed-content digests, stages changes with <code>--dry-run</code>, and publishes that exact preview only with <code>--confirm --operation-id &lt;operationId&gt;</code>.</p></article>
             <article class="command-card"><header><h3>mancode project upgrade --policy 2</h3><span>Policy</span></header><p>Previews or commits the project Policy 2 default without rewriting existing workflows. A commit requires the preview's operation ID and an active session.</p></article>
             <article class="command-card"><header><h3>mancode status [--json] [--brief]</h3><span>Inspect</span></header><p>Reports project facts, current mode and workflow, adapter readiness, and Claude hook registration where applicable. Combine <code>--brief --json</code> for the compact Continuity runtime view.</p></article>
@@ -306,6 +307,7 @@ $manteam</code></pre><button type="button" data-copy-code>Copy</button></div></a
           <table class="docs-table"><thead><tr><th>Family</th><th>Public command entries</th></tr></thead><tbody>
             <tr><td>Setup and inspection</td><td>
               <code data-cli-command="init">mancode init</code> ·
+              <code data-cli-command="upgrade">mancode upgrade</code> ·
               <code data-cli-command="install">mancode install</code> ·
               <code data-cli-command="status">mancode status</code> ·
               <code data-cli-command="list-platforms">mancode list-platforms</code> ·
