@@ -43,6 +43,7 @@ import { projectUpgrade } from './commands/project.js';
 import { refreshProject } from './commands/refresh-project.js';
 import { refreshStyle } from './commands/refresh-style.js';
 import { reviewInspect } from './commands/review.js';
+import { registerSecretCommands } from './commands/secret.js';
 import { status } from './commands/status.js';
 import {
   teamCheckpoint,
@@ -216,6 +217,7 @@ export function createCliProgram(): Command {
     });
 
   registerPrivacyCommands(program);
+  registerSecretCommands(program);
   program
     .command('review')
     .description('Inspect a review subject without changing task authority')
