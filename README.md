@@ -869,6 +869,7 @@ mancode privacy enable --dry-run --json
 
 本地模型代理网关已退役；旧用户请按[退役指南](docs/privacy-gateway-retirement.md)恢复客户端连接。`privacy status --json` 现在使用版本 2，仅报告共享策略。
 
+Secrets V1 使用 macOS Keychain 和本地加密保险箱保存受保护文本，通过已确认的 Node 执行器使用。用户在独立终端录入；Agent 提交结构化引用，收到固定状态回执，无需模型网关或额外模型 API Key。执行器与目标系统仍接触明文，同账号恶意程序不在隔离保证内。操作、宿主权限和限制见 [Secrets 指南](docs/secrets-guide.md)。
 
 mancode **CLI** 本地优先，不发送遥测；官网另使用 Umami 访问统计，两者独立，详见[网站统计说明](https://github.com/whitelonng/mancode/blob/main/docs/website-seo.md)。
 

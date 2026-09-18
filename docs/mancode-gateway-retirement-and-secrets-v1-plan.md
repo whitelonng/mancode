@@ -930,11 +930,18 @@ Node 子进程与加密接口另外核对了仓库声明的最低版本 22.5.0 �
 <!-- mancode:delivery-record:start -->
 Task: local:01M2ST28SJZ21FNV3R2J984MYK
 Plan version: 3
-Review: stale
-Verification: pending
+Review: passed
+Verification: passed
 
-Next: finish relevant verification, then review the complete module.
+Reviewer declaration: independent
+Direction: 按批准基线78d7e8b核对完整网关删除、CLI/init/status、构建与依赖、Secrets存储与执行、adapter和文档测试。原研究16文件已完整备份移出；README既有一行修改保留于独立stash及补丁。任务治理、团队与公共隐私生产模块未修改。
+Correctness: 独立总审后定向复核：R-A1历史文档定位、R-A2能力计数、R-S1保留键、R-S2多余解密、R-S3 Unicode退格均修复。新增PTY回显时序、Mach-O install ID与rpath、子进程ready取消证据经复核，无未关闭阻断缺陷。真实Keychain锁定/人工拒绝未实测；组件错误注入覆盖失败关闭，真实缺失密钥测试零业务请求；不宣称该未实测环境已验证。
+Proportionality: 删除独立网关，不改共享格式；V1限定macOS Keychain、固定Node包、认证批准、严格JSON、stdin、有限时间/输出与固定回执。复用锁和标准密码库，无网络网关、任意shell或明文兜底。文件/网络回读、同账号访问和旧合法快照回放明确列为边界。
+Next: 提交D阶段接入与验收资料，检查公共完成门；不推送、不发布npm。其他操作系统/Node矩阵与真实Keychain锁定拒绝仍保留未实测标记。
+- AC-G: met — G01-G22：独立A回归与完整项目check；retirement/init/privacy/共享及团队测试，真实tarball与完整/omitoptional安装均通过；许可保留，旧配置不读不删不改provider，原有修改分别备份。详见docs/secrets-acceptance.md和退役指南。
+- AC-S: met — S01-S28组件验收：58项契约通过；真实PTY隐藏录入/多行/取消/批准/执行、认证篡改、更新撤销、EACCES和registry部分失败、竞争写入、快照替换、原生依赖改变、argv/env检查、已启动子进程取消、实际HTTP副作用后超时。S19/S20/S22/S23/S26为已确认边界。S03锁定/拒绝的组件错误注入通过，真实系统这两个环境分支未实测，不混同成功/密钥缺失。
+- AC-H: met — 用户指定测试项目Ticket fixture及Node适配器已审查，真实macOS Keychain；Codex0.153.4与Claude2.1.142各一次认证GET完成。默认Codex沙箱先拒绝，精确命令正常自动审批后成功，未关闭沙箱/改provider。真实删除测试密钥后退出5、零新增请求。所有测试仅合成数据。
 - AC-G: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
 - AC-S: automated=passed(surface=component); manual=n/a; Executed argv in project root; captured exit code 0.
-- AC-H: automated=pending(surface=unspecified); manual=n/a; No evidence yet.
+- AC-H: automated=passed(surface=external_service); manual=n/a; Executed argv in project root; captured exit code 0.
 <!-- mancode:delivery-record:end -->

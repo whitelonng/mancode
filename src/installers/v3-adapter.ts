@@ -1530,6 +1530,8 @@ export function renderV3Bootstrap(platform: PlatformName): string {
   return [
     '# mancode bootstrap',
     '',
+    'Protected values: use `mancode secret list --json` for project aliases and `mancode secret action list --json` for approved inputs. Submit structured secret references only through `mancode secret run <action> --input <file> --json`. Ask the user to configure missing secrets/actions in an independent local terminal; never ask for real values in chat or create plaintext copies. This local CLI interface does not intercept other tools or model connections.',
+    '',
     V3_ADAPTER_MANAGED_MARKER,
     '',
     `- Platform: ${platformLabel}. This file is a non-authoritative bootstrap.`,

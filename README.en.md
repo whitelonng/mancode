@@ -1139,6 +1139,7 @@ The local model gateway is retired; follow the [retirement guide](docs/privacy-g
 to restore existing client connections. `privacy status --json` now uses version 2
 and reports only shared policy.
 
+Secrets V1 stores protected text using macOS Keychain and a local encrypted vault, then supplies it to an approved Node executor. Humans enter values in an independent terminal; Agents submit structured references and receive fixed status receipts. No model gateway or additional model API key is needed. Executors and target systems still see plaintext, and malicious same-user code is outside the isolation guarantee. See the [Secrets guide](docs/secrets-guide.md) for setup, host permissions and limitations.
 
 The mancode **CLI** is local-first and sends no telemetry. The website separately
 uses Umami visitor analytics; see [website analytics](https://github.com/whitelonng/mancode/blob/main/docs/website-seo.md).

@@ -116,3 +116,6 @@ examples/
 
 !docs/mancode-gateway-retirement-and-secrets-v1-plan.md
 !docs/privacy-gateway-retirement.md
+!docs/secrets-guide.md
+!docs/secrets-security.md
+!docs/secrets-acceptance.md
