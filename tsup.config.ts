@@ -11,6 +11,7 @@ export default defineConfig({
   format: ['esm'],
   target: 'node22',
   platform: 'node',
+  external: ['@napi-rs/keyring'],
   dts: true,
   clean: true,
   sourcemap: true,
