@@ -57,7 +57,8 @@
     "docs/privacy-guide.md",
     "docs/privacy-implementation-plan.md",
     "docs/privacy-rule-sources.md",
-    "docs/privacy-upstream-license.txt"
+    "docs/privacy-upstream-license.txt",
+    "docs/privacy-gateway-retirement.md"
   ],
   "scripts": {
     "build": "tsup",

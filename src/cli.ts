@@ -109,14 +109,6 @@ export function createCliProgram(): Command {
       'Leave shared enhanced privacy disabled on first init',
     )
     .option(
-      '--gateway-privacy',
-      'Enable this user/checkout gateway preference on first init',
-    )
-    .option(
-      '--no-gateway-privacy',
-      'Leave the local gateway preference disabled on first init',
-    )
-    .option(
       '--style <name>',
       'Legacy aesthetic style (only supported with mancode init --legacy)',
     )
@@ -133,7 +125,7 @@ export function createCliProgram(): Command {
           ? command.parent.rawArgs
           : [];
       if (
-        ['shared-privacy', 'gateway-privacy'].some(
+        ['shared-privacy'].some(
           (name) => args.includes(`--${name}`) && args.includes(`--no-${name}`),
         )
       ) {

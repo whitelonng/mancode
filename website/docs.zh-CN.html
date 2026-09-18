@@ -169,14 +169,13 @@
           <h2>文件与隐私</h2>
           <p>mancode CLI 本地运行，只扫描当前项目，不发送遥测。它不会擅自改写项目的 <code>.gitignore</code>，因此哪些生成上下文应该进入版本控制，需要由你的团队明确决定。</p>
           <h3>可选的增强隐私保护</h3>
-          <p><code>privacy scan</code> 从 UTF-8 文件或 stdin 读取，只报告规则、类别与偏移；返回码 0 无命中、1 有命中、2 失败。<code>privacy preview</code> 生成不可逆的新副本，不覆盖原件或既有目标。首次初始化分别询问 <code>--shared-privacy</code>、<code>--gateway-privacy</code>；<code>--no-shared-privacy</code>、<code>--no-gateway-privacy</code> 明确关闭对应选项。非交互未指定时关闭，重复初始化保留选择。</p>
+          <p><code>privacy scan</code> 从 UTF-8 文件或 stdin 读取，只报告规则、类别与偏移；返回码 0 无命中、1 有命中、2 失败。<code>privacy preview</code> 生成不可逆的新副本，不覆盖原件或既有目标。首次初始化只询问共享保护；使用 <code>--shared-privacy</code> 或 <code>--no-shared-privacy</code> 明确选择。非交互默认关闭，重复初始化保留选择。</p>
           <div class="code-wrap"><pre><code><span class="command-prompt">$</span> mancode privacy scan --file notes.txt --json
 <span class="command-prompt">$</span> mancode privacy preview --file notes.txt --output notes.redacted.txt --json
 <span class="command-prompt">$</span> mancode privacy enable --dry-run --json
 <span class="command-prompt">$</span> mancode privacy enable --expected-revision 0 --session &lt;session-id&gt; --client codex --json</code></pre><button type="button" data-copy-code>复制</button></div>
           <p>共享策略通过 revision/digest 权威和可恢复事务更新。dry-run 用安全摘要报告本地与远端阻挡项，不显示原值。不可变的敏感决策和 checkpoint 在 <code>privacy disable</code> 后仍被排除；关闭也保留升级格式和原基础检查。敏感远端 actor/claim/handoff 历史要求保留基础保护，或明确新建 workspace 迁移清理后的内容。活跃敏感 checkpoint 必须先替换成安全 checkpoint 并同步，再启用增强策略。</p>
-          <p>可选前台网关要求已初始化的 workspace 和 checkout。用 <code>privacy gateway enable --upstream openai --env-key OPENAI_API_KEY --client-host codex-cli/0.153.4</code> 配置，<code>privacy gateway print-config --host codex</code> 查看显式接入片段，再执行 <code>privacy gateway run</code>。Anthropic 对应用 <code>--upstream anthropic --env-key ANTHROPIC_API_KEY --client-host claude-code/2.1.142</code> 和 <code>--host claude</code>。设置仅在本机保存；开启不会改 provider 或登录配置。<code>privacy status --json</code> 分别报告策略、配置、进程与路由观察。</p>
-          <p>已验证范围是指定 CLI 的 HTTP/SSE 文本往返和精确 Claude Read schema，不代表桌面、订阅、云、任意工具或 opaque block 均受保护。迁移、恢复和协议限制详见<a href="https://github.com/whitelonng/mancode/blob/main/docs/privacy-guide.md">隐私使用指南</a>。</p>
+          <p>模型代理网关已退役。<code>privacy status --json</code> 使用版本 2，仅报告共享策略。旧用户升级前请阅读<a href="https://github.com/whitelonng/mancode/blob/main/docs/privacy-gateway-retirement.md">退役指南</a>。</p>
           <table class="docs-table artifact-table"><thead><tr><th>路径</th><th>包含什么</th><th>提交前怎么处理</th></tr></thead><tbody>
             <tr><td><code>.mancode/schema.json</code><br /><code>.mancode/shared/</code><br /><code>.mancode/local/</code></td><td>Continuity 权威、项目策略、会话、工作流元数据和本地运行时记录。只有显式使用 <code>--legacy</code> 初始化后才会出现旧 <code>state.json</code>。</td><td>共享前检查工作流证据和本地记录；原始宿主 session key 不会持久化。</td></tr>
             <tr><td><code>.mancode/shared/context/project.json</code><br /><code>.mancode/local/cache/style-tokens.json</code></td><td>识别出的技术栈、验证命令和本地 UI token。</td><td>检查是否带有内部项目信息，再权衡复现能力与暴露范围。</td></tr>
@@ -386,6 +385,7 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
               <code data-cli-command="operation abort">mancode operation abort</code>
             </td></tr>
             <tr><td>隐私保护</td><td>
+
               <code data-cli-command="privacy">mancode privacy</code> ·
               <code data-cli-command="privacy scan">mancode privacy scan</code> ·
               <code data-cli-command="privacy preview">mancode privacy preview</code> ·
@@ -395,13 +395,6 @@ $manteam</code></pre><button type="button" data-copy-code>复制</button></div><
               <code data-cli-command="privacy policy">mancode privacy policy</code> ·
               <code data-cli-command="privacy policy upgrade">mancode privacy policy upgrade</code> ·
               <code data-cli-command="privacy policy apply">mancode privacy policy apply</code> ·
-              <code data-cli-command="privacy gateway">mancode privacy gateway</code> ·
-              <code data-cli-command="privacy gateway enable">mancode privacy gateway enable</code> ·
-              <code data-cli-command="privacy gateway disable">mancode privacy gateway disable</code> ·
-              <code data-cli-command="privacy gateway status">mancode privacy gateway status</code> ·
-              <code data-cli-command="privacy gateway doctor">mancode privacy gateway doctor</code> ·
-              <code data-cli-command="privacy gateway run">mancode privacy gateway run</code> ·
-              <code data-cli-command="privacy gateway print-config">mancode privacy gateway print-config</code>
             </td></tr>
             <tr><td>团队协调</td><td>
               <code data-cli-command="team">mancode team</code> ·

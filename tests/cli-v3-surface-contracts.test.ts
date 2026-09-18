@@ -30,10 +30,6 @@ describe('V3 CLI command surface', () => {
       expect(commandAt(cliProgram, 'privacy', 'scan')).toBeDefined();
       expect(commandAt(cliProgram, 'privacy', 'enable')).toBeDefined();
       expect(commandAt(cliProgram, 'privacy', 'status')).toBeDefined();
-      expect(commandAt(cliProgram, 'privacy', 'gateway', 'run')).toBeDefined();
-      expect(
-        commandAt(cliProgram, 'privacy', 'gateway', 'doctor'),
-      ).toBeDefined();
       expect(commandAt(cliProgram, 'privacy', 'disable')).toBeDefined();
       expect(commandAt(cliProgram, 'privacy', 'policy', 'apply')).toBeDefined();
       expect(
@@ -42,7 +38,7 @@ describe('V3 CLI command surface', () => {
       expect(commandAt(cliProgram, 'init').helpInformation()).toContain(
         '--shared-privacy',
       );
-      expect(commandAt(cliProgram, 'init').helpInformation()).toContain(
+      expect(commandAt(cliProgram, 'init').helpInformation()).not.toContain(
         '--gateway-privacy',
       );
       expect(commandAt(cliProgram, 'context', 'session', 'new')).toBeDefined();
@@ -139,7 +135,7 @@ describe('V3 CLI command surface', () => {
     const previous = process.exitCode;
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      for (const flag of ['shared-privacy', 'gateway-privacy']) {
+      for (const flag of ['shared-privacy']) {
         await createCliProgram().parseAsync([
           'node',
           'mancode',

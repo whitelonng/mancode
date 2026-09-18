@@ -109,7 +109,7 @@ task revision、aggregate digest、owner 和 ownership epoch 都不得变化。�
 
 `src/privacy/` 提供有界 TypeScript 文本检测、校验及不可逆副本脱敏；输出只含规则、类别和偏移元数据。旧 `src/context/privacy.ts` 的持久化解析规则独立保留，避免新增检测改变旧实体摘要或解析语义。`src/context/privacy-policy*` 管理版本化共享策略、历史排除和恢复事务，写入、Context Pack、git-ref materialization及恢复分别在对应边界执行检查。
 
-`src/gateway/` 是可选的本机前台模型网关，处理支持的 Responses/Anthropic Messages HTTP/SSE 文本协议、有限生命周期的可逆映射与严格失败关闭。配置和token绑定本地用户、真实workspace及checkout，不进入共享权威；启用偏好、进程确认、配置摘要和路由观察分开呈现。网关不自动修改宿主provider，不代表任意Git、工具网络、图像或opaque协议块都受保护。具体范围与验证见[隐私使用指南](privacy-guide.md)和[验收记录](privacy-implementation-plan.md)。
+模型代理网关已退役；CLI 不再转发模型请求。共享扫描和策略仍保留，见[退役指南](privacy-gateway-retirement.md)。
 
 ### 可选执行证据
 

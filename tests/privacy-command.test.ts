@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { configurePrivacyGateway } from '../src/commands/privacy-gateway.js';
 import { privacyPolicyCommand } from '../src/commands/privacy-policy.js';
 import {
   privacyPreview,
@@ -11,7 +10,6 @@ import {
   privacyStatus,
 } from '../src/commands/privacy.js';
 import { initializeV3Project } from '../src/commands/v3-init.js';
-import { gatewayLocation } from '../src/gateway/config.js';
 import { MAX_SCAN_BYTES } from '../src/privacy/detect.js';
 
 let root: string;
@@ -210,26 +208,23 @@ describe('privacy scan and preview commands', () => {
     ).toBe(0);
   });
 
-  it('aggregates actual states and reports corrupt local settings without echoing their content', async () => {
+  it('reports only shared status and ignores corrupt retired settings', async () => {
     const home = path.join(root, 'home');
-    await fs.mkdir(home);
-    vi.spyOn(os, 'homedir').mockReturnValue(home);
-    await initializeV3Project({ projectRoot: root, sharedPrivacy: true });
-    await configurePrivacyGateway(root, { enabled: true });
-    expect(await privacyStatus(root, { json: true })).toBe(0);
-    expect(JSON.parse(output.at(-1) ?? '{}')).toMatchObject({
-      shared: { enabled: true, state: 'enabled' },
-      gateway: { enabled: true, runtime: 'stopped', routeVerified: false },
-    });
-    const location = await gatewayLocation(root);
+    const old = path.join(home, '.mancode/privacy-gateway/obsolete');
+    await fs.mkdir(old, { recursive: true });
     await fs.writeFile(
-      path.join(location.directory, 'config.json'),
+      path.join(old, 'config.json'),
       'sensitive-broken-content',
     );
-    expect(await privacyStatus(root, { json: true })).toBe(2);
-    expect(JSON.parse(output.at(-1) ?? '{}').gateway.configurationStatus).toBe(
-      'invalid',
-    );
+    vi.spyOn(os, 'homedir').mockReturnValue(home);
+    await initializeV3Project({ projectRoot: root, sharedPrivacy: true });
+    expect(await privacyStatus(root, { json: true })).toBe(0);
+    const report = JSON.parse(output.at(-1) ?? '{}');
+    expect(Object.keys(report).sort()).toEqual(['schemaVersion', 'shared']);
+    expect(report).toMatchObject({
+      schemaVersion: 2,
+      shared: { enabled: true, state: 'enabled' },
+    });
     expect(output.join(' ')).not.toContain('sensitive-broken-content');
     expect(output.join(' ')).not.toContain(home);
   });

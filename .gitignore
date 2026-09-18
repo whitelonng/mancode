@@ -113,3 +113,6 @@ examples/
 .npmrc
 
 !docs/execution-gates-plan.md
+
+!docs/mancode-gateway-retirement-and-secrets-v1-plan.md
+!docs/privacy-gateway-retirement.md

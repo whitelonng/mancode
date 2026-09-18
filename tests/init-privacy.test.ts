@@ -1,18 +1,22 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import * as readline from 'node:readline/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EXIT_ALREADY_INITIALIZED,
-  EXIT_INIT_FAILED,
   EXIT_OK,
   EXIT_USER_CANCEL,
   init,
 } from '../src/commands/init.js';
-import { readPrivacyGatewayStatus } from '../src/commands/privacy-gateway.js';
 import { readPrivacyPolicyStatus } from '../src/context/privacy-policy.js';
-import { readGatewayConfig } from '../src/gateway/config.js';
 import type { InitPrompter } from '../src/system/init-onboarding.js';
+import { createTerminalPrompter } from '../src/system/init-onboarding.js';
+
+vi.mock('node:readline/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof readline>()),
+  createInterface: vi.fn(),
+}));
 
 let base: string;
 let root: string;
@@ -41,71 +45,36 @@ const prompter = (
 });
 
 describe('first-init privacy choices', () => {
-  it.each([
-    [false, false],
-    [true, false],
-    [false, true],
-    [true, true],
-  ])(
-    'persists shared=%s gateway=%s only on first init',
-    async (sharedPrivacy, gatewayPrivacy) => {
+  it.each([false, true])(
+    'persists shared=%s only on first init',
+    async (sharedPrivacy) => {
       expect(
         await init(root, {
           fromCli: true,
           empty: true,
           platform: 'codex',
           sharedPrivacy,
-          gatewayPrivacy,
         }),
       ).toBe(EXIT_OK);
-      const gatewayBefore = await readGatewayConfig(root);
-      expect((await readPrivacyGatewayStatus(root)).enabled).toBe(
-        gatewayPrivacy,
-      );
       const before = await fs.readFile(
         path.join(root, '.mancode/schema.json'),
         'utf8',
       );
       expect((await readPrivacyPolicyStatus(root)).enabled).toBe(sharedPrivacy);
       expect(
-        await init(root, {
-          fromCli: true,
-          sharedPrivacy: !sharedPrivacy,
-          gatewayPrivacy: !gatewayPrivacy,
-        }),
+        await init(root, { fromCli: true, sharedPrivacy: !sharedPrivacy }),
       ).toBe(EXIT_ALREADY_INITIALIZED);
       expect(
         await fs.readFile(path.join(root, '.mancode/schema.json'), 'utf8'),
       ).toBe(before);
       expect((await readPrivacyPolicyStatus(root)).enabled).toBe(sharedPrivacy);
-      expect(await readGatewayConfig(root)).toEqual(gatewayBefore);
-      if (!gatewayPrivacy) expect(await fs.readdir(userHome)).toEqual([]);
+      expect(await fs.readdir(userHome)).toEqual([]);
     },
   );
-
-  it('keeps the initialized shared project when local gateway settings fail', async () => {
-    await fs.writeFile(path.join(userHome, '.mancode'), 'not a directory');
-    expect(
-      await init(root, {
-        fromCli: true,
-        empty: true,
-        platform: 'codex',
-        sharedPrivacy: true,
-        gatewayPrivacy: true,
-      }),
-    ).toBe(EXIT_INIT_FAILED);
-    expect((await readPrivacyPolicyStatus(root)).enabled).toBe(true);
-    expect(
-      JSON.parse(
-        await fs.readFile(path.join(root, '.mancode/schema.json'), 'utf8'),
-      ).activationState,
-    ).toBe('v3_active');
-  });
 
   it('keeps new defaults disabled for --yes and never opens privacy questions', async () => {
     const select = vi.fn(async () => ({
       sharedPrivacy: true,
-      gatewayPrivacy: true,
     }));
     expect(
       await init(root, {
@@ -122,7 +91,7 @@ describe('first-init privacy choices', () => {
     expect(await fs.readdir(userHome)).toEqual([]);
   });
 
-  it('asks both choices before mutation and cancellation leaves no project', async () => {
+  it('asks before mutation and cancellation leaves no project', async () => {
     const select = vi.fn(async () => null);
     expect(
       await init(root, {
@@ -138,10 +107,9 @@ describe('first-init privacy choices', () => {
     expect(await fs.readdir(userHome)).toEqual([]);
   });
 
-  it('respects an explicit choice while asking only the unresolved scope', async () => {
+  it('respects an explicit shared choice without prompting', async () => {
     const select = vi.fn(async () => ({
       sharedPrivacy: true,
-      gatewayPrivacy: false,
     }));
     expect(
       await init(root, {
@@ -153,12 +121,80 @@ describe('first-init privacy choices', () => {
         prompter: prompter(select),
       }),
     ).toBe(EXIT_OK);
-    expect(select).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sharedPrivacy: false,
-        gatewayPrivacy: undefined,
-      }),
-    );
+    expect(select).not.toHaveBeenCalled();
     expect((await readPrivacyPolicyStatus(root)).enabled).toBe(false);
   });
+
+  it.each(['zh-CN', 'en'] as const)(
+    'asks only about shared protection in %s',
+    async (lang) => {
+      const question = vi.fn().mockResolvedValue('y');
+      vi.mocked(readline.createInterface).mockReturnValue({
+        question,
+        close: vi.fn(),
+      } as unknown as readline.Interface);
+      expect(
+        await init(root, {
+          fromCli: true,
+          empty: true,
+          platform: 'codex',
+          interactive: true,
+          lang,
+          prompter: createTerminalPrompter(),
+        }),
+      ).toBe(EXIT_OK);
+      expect(question).toHaveBeenCalledOnce();
+      expect((await readPrivacyPolicyStatus(root)).enabled).toBe(true);
+      expect(await fs.readdir(userHome)).toEqual([]);
+      expect(question.mock.calls[0]?.[0]).not.toMatch(/gateway|网关|API Key/i);
+      expect(vi.mocked(console.log).mock.calls.flat().join('\n')).not.toContain(
+        'privacy gateway',
+      );
+    },
+  );
+
+  it.each(['n', '', 'q'])(
+    'does not configure a gateway or print a startup command for %j',
+    async (answer) => {
+      const question = vi.fn().mockResolvedValue(answer);
+      vi.mocked(readline.createInterface).mockReturnValue({
+        question,
+        close: vi.fn(),
+      } as unknown as readline.Interface);
+      expect(
+        await init(root, {
+          fromCli: true,
+          empty: true,
+          platform: 'codex',
+          interactive: true,
+          prompter: createTerminalPrompter(),
+        }),
+      ).toBe(answer === 'q' ? EXIT_USER_CANCEL : EXIT_OK);
+      expect(question).toHaveBeenCalledOnce();
+      expect(await fs.readdir(userHome)).toEqual([]);
+      expect(vi.mocked(console.log).mock.calls.flat().join('\n')).not.toContain(
+        'mancode privacy gateway run',
+      );
+      if (answer === 'q') expect(await fs.readdir(root)).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    'does not ask another question when sharedPrivacy=%s is explicit',
+    async (sharedPrivacy) => {
+      const select = vi.fn(async () => null);
+      expect(
+        await init(root, {
+          fromCli: true,
+          empty: true,
+          platform: 'codex',
+          interactive: true,
+          sharedPrivacy,
+          prompter: prompter(select),
+        }),
+      ).toBe(EXIT_OK);
+      expect(select).not.toHaveBeenCalled();
+      expect((await readPrivacyPolicyStatus(root)).enabled).toBe(sharedPrivacy);
+    },
+  );
 });

@@ -16,8 +16,7 @@ export interface InitPrompter {
   selectPrivacyProtection?(context: {
     locale: InitLocale;
     sharedPrivacy?: boolean;
-    gatewayPrivacy?: boolean;
-  }): Promise<{ sharedPrivacy: boolean; gatewayPrivacy: boolean } | null>;
+  }): Promise<{ sharedPrivacy: boolean } | null>;
   confirmGenericProject(context: {
     rootDir: string;
     locale: InitLocale;
@@ -206,7 +205,7 @@ export async function detectPlatformHints(
 
 export function createTerminalPrompter(): InitPrompter {
   return {
-    async selectPrivacyProtection({ locale, sharedPrivacy, gatewayPrivacy }) {
+    async selectPrivacyProtection({ locale, sharedPrivacy }) {
       const rl = createInterface({ input: stdin, output: stdout });
       try {
         const choose = async (question: string): Promise<boolean | null> => {
@@ -223,17 +222,7 @@ export function createTerminalPrompter(): InitPrompter {
               ? '开启项目共享内容增强保护？作用于 mancode 共享写入和输出；以后关闭也不降级项目格式 [y/N/q]: '
               : 'Enable project-shared content protection? Covers mancode shared writes/outputs; disabling does not downgrade the project format [y/N/q]: ',
           ));
-        if (shared === null) return null;
-        const gateway =
-          gatewayPrivacy ??
-          (await choose(
-            locale === 'zh-CN'
-              ? '为本用户在当前 checkout 开启 AI 网关偏好？需另外启动并接入客户端才保护请求 [y/N/q]: '
-              : 'Enable the AI gateway preference for this user and checkout? Start it and connect the client separately to protect requests [y/N/q]: ',
-          ));
-        return gateway === null
-          ? null
-          : { sharedPrivacy: shared, gatewayPrivacy: gateway };
+        return shared === null ? null : { sharedPrivacy: shared };
       } catch {
         return null;
       } finally {

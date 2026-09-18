@@ -99,7 +99,6 @@ export interface InitOptions {
   team?: boolean;
   /** First initialization only; explicit opt-in, separate scopes. */
   sharedPrivacy?: boolean;
-  gatewayPrivacy?: boolean;
   /** --style <name>: 指定审美风格（MVP-2）*/
   style?: string;
   /** --platform <platform>: initial adapter platform (MVP-3) */
@@ -227,11 +226,7 @@ export async function init(
     return EXIT_NOT_A_PROJECT_DIR;
   }
 
-  if (
-    authority === 'legacy' &&
-    (options.sharedPrivacy !== undefined ||
-      options.gatewayPrivacy !== undefined)
-  ) {
+  if (authority === 'legacy' && options.sharedPrivacy !== undefined) {
     console.error(
       'Privacy initialization options require journaled mancode initialization.',
     );
@@ -780,24 +775,20 @@ async function initializeV3(
   let scratchBackup: string | null = null;
   try {
     let sharedPrivacy = options.sharedPrivacy ?? false;
-    let gatewayPrivacy = options.gatewayPrivacy ?? false;
     if (
       !existingV3 &&
       options.interactive &&
       !options.yes &&
-      (options.sharedPrivacy === undefined ||
-        options.gatewayPrivacy === undefined)
+      options.sharedPrivacy === undefined
     ) {
       const prompter = options.prompter ?? createTerminalPrompter();
       const selection = await prompter.selectPrivacyProtection?.({
         locale: detectInitLocale(options.lang) ?? 'en',
         sharedPrivacy: options.sharedPrivacy,
-        gatewayPrivacy: options.gatewayPrivacy,
       });
       if (selection === null) return EXIT_USER_CANCEL;
       if (selection !== undefined) {
         sharedPrivacy = options.sharedPrivacy ?? selection.sharedPrivacy;
-        gatewayPrivacy = options.gatewayPrivacy ?? selection.gatewayPrivacy;
       }
     }
     if (!existingV3) {
@@ -856,22 +847,6 @@ async function initializeV3(
     console.log(`   operation: ${result.journal.operationId}`);
     if (scratchBackup !== null) {
       await restoreScratchBackup(rootDir, scratchBackup);
-    }
-    if (gatewayPrivacy) {
-      try {
-        const { configurePrivacyGateway } = await import(
-          './privacy-gateway.js'
-        );
-        await configurePrivacyGateway(rootDir, { enabled: true });
-        console.log(
-          '   Gateway preference enabled for this checkout; start and connect it explicitly.',
-        );
-      } catch {
-        console.error(
-          'MANCODE_PRIVACY_GATEWAY_LOCAL_SETTINGS_FAILED: project initialization succeeded; retry `mancode privacy gateway enable`.',
-        );
-        return EXIT_INIT_FAILED;
-      }
     }
     if (options.team !== undefined) {
       console.log(

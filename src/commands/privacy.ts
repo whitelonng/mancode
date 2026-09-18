@@ -9,10 +9,6 @@ import { MAX_SCAN_BYTES, scanSensitiveText } from '../privacy/detect.js';
 import { redactSensitiveText } from '../privacy/redact.js';
 import { RULESET_VERSION } from '../privacy/rules.js';
 import type { ScanResult } from '../privacy/types.js';
-import {
-  readPrivacyGatewayStatus,
-  registerPrivacyGatewayCommands,
-} from './privacy-gateway.js';
 import { registerPrivacyPolicyCommands } from './privacy-policy.js';
 
 export interface PrivacyScanOptions {
@@ -222,32 +218,16 @@ export async function privacyStatus(
   root: string,
   options: { json?: boolean } = {},
 ): Promise<number> {
-  const [shared, gateway] = await Promise.all([
-    readPrivacyPolicyStatus(root),
-    readPrivacyGatewayStatus(root),
-  ]);
-  if (options.json)
-    console.log(JSON.stringify({ schemaVersion: 1, shared, gateway }));
+  const shared = await readPrivacyPolicyStatus(root);
+  if (options.json) console.log(JSON.stringify({ schemaVersion: 2, shared }));
   else {
     console.log(
       `Shared enhanced privacy: ${shared.state}; revision: ${shared.revision ?? 'unavailable'}.`,
     );
-    console.log(
-      `Gateway preference: ${gateway.configurationStatus === 'invalid' ? 'unavailable' : gateway.enabled ? 'enabled' : 'disabled'}; configuration: ${gateway.configurationStatus}; runtime: ${gateway.runtime}.`,
-    );
-    console.log(
-      'Client route verification: unverified. Configuration and process health alone do not prove coverage.',
-    );
     if (shared.error !== null)
       console.log(`Shared policy error: ${shared.error}.`);
-    if (gateway.error !== undefined)
-      console.log(`Gateway error: ${gateway.error}.`);
   }
-  return shared.state === 'error' ||
-    gateway.configurationStatus === 'invalid' ||
-    gateway.runtime === 'unconfirmed'
-    ? 2
-    : 0;
+  return shared.state === 'error' ? 2 : 0;
 }
 
 export function registerPrivacyCommands(program: Command): Command {
@@ -279,14 +259,11 @@ export function registerPrivacyCommands(program: Command): Command {
   }
   privacy
     .command('status')
-    .description(
-      'Inspect shared policy, local settings, process health and route evidence',
-    )
+    .description('Inspect project-shared privacy policy')
     .option('--json', 'Output safe structured status')
     .action(async (options) => {
       process.exitCode = await privacyStatus(process.cwd(), options);
     });
   registerPrivacyPolicyCommands(privacy);
-  registerPrivacyGatewayCommands(privacy);
   return privacy;
 }

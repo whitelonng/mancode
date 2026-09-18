@@ -1,6 +1,6 @@
 # Privacy protection
 
-mancode offers three separate surfaces: text scanning, project-shared content protection, and an optional local model gateway. New capabilities are opt-in. Existing basic shared-content checks continue to apply.
+mancode offers text scanning and project-shared content protection. New capabilities are opt-in. Existing basic shared-content checks continue to apply.
 
 ## Scan and preview
 
@@ -16,20 +16,18 @@ Preview never overwrites an existing target or source. It writes a separate irre
 
 Detection uses explicit shapes plus selected checksums. A clean result does not prove that all credentials or personal data are absent. Unsupported identifier formats, encoded content and application-specific secrets may require additional rules. Rule sources and limitations are documented in [privacy-rule-sources.md](privacy-rule-sources.md).
 
-Named credentials include assignments such as `client_password="synthetic phrase"` and `DB_PASSWORD=synthetic-value`. Supported quoted values are protected through the matching closing quote, including spaces and escaped quotes; an unfinished quote protects the remaining input. Metrics such as `token_count` and `password_length` are not credential names. This same scanner protects previews, enhanced shared writes and supported gateway prose fields.
+Named credentials include assignments such as `client_password="synthetic phrase"` and `DB_PASSWORD=synthetic-value`. Supported quoted values are protected through the matching closing quote, including spaces and escaped quotes; an unfinished quote protects the remaining input. Metrics such as `token_count` and `password_length` are not credential names. This same scanner protects previews and enhanced shared writes.
 
 ## First initialization
 
 ```sh
-mancode init --platform codex --shared-privacy --gateway-privacy
-mancode init --platform codex --no-shared-privacy --no-gateway-privacy --yes
+mancode init --platform codex --shared-privacy
+mancode init --platform codex --no-shared-privacy --yes
 ```
 
-Interactive first initialization asks separately about shared enhanced protection and this user's gateway preference for the current checkout. Choose `q` to cancel before the new project is written. Explicit flags answer only their corresponding question. Supplying both positive and negative forms is a parameter error.
+Interactive first initialization asks whether to enable enhanced project-shared protection. Answering `y` enables it; `n` or Enter leaves it disabled; `q` cancels before project mutation. Explicit shared flags skip the question. Both positive and negative flags together are a parameter error. Non-interactive initialization and `--yes` leave unspecified protection disabled. Repeating initialization preserves the existing choice. Legacy initialization rejects these options rather than migrating authority.
 
-Non-interactive first initialization leaves unspecified enhancements disabled. `--yes` skips questions and does not enable privacy features or redirect network traffic. Repeating `init`, including with opposite flags, preserves existing choices. Legacy initialization rejects these options instead of implicitly migrating authority.
-
-Shared policy participates in the journaled project initialization. Gateway settings are written afterward to user-local storage; if that step fails, the project remains initialized and the command reports the local-settings failure. Retry the gateway command directly. Enabling a gateway preference does not start a server or change a client provider.
+`privacy status --json` returns `{schemaVersion: 2, shared}`. Shared errors exit 2; normal states exit 0. The command never reads retired gateway settings or probes their ports. The model gateway and its initialization flags have been removed. See [retirement and client migration](privacy-gateway-retirement.md).
 
 ## Activate shared policy
 
@@ -49,28 +47,8 @@ Remote actor profiles, claims and handoffs are immutable coordination history. I
 
 The project manifest, policy and exclusions are revision/digest bound. Git-ref policy changes first use the remote manifest's CAS, then commit local authority through a recoverable journal. Concurrent changes and stale clones fail closed. Other clones must receive the tracked `.mancode/schema.json` and `.mancode/shared/context/privacy-*.json` authority files through the repository's normal checkout before their next sync. Old local caches are discarded when their policy differs. Interrupted policy writes block ordinary writes until operation recovery establishes the committed state. Disabling keeps the upgraded local/remote schema and minimum client version 0.6.5.
 
-## Configure the optional gateway
+## Protection boundaries
 
-Run these commands inside a project already initialized by `mancode init`. Gateway configuration and execution require its real workspace and checkout identity. Reading gateway status in an uninitialized directory reports missing configuration and creates no project authority.
+Project-shared policy is versioned authority and must be changed through policy commands. Disabling enhanced protection does not downgrade format, remove historical exclusions, restore redacted copies or disable basic checks. Rules still include Maskit-derived detection; their source and license notices remain distributed.
 
-```sh
-mancode privacy gateway enable --upstream openai --env-key OPENAI_API_KEY --client-host codex-cli/0.153.4 --json
-mancode privacy gateway print-config --host codex
-mancode privacy gateway run
-mancode privacy gateway doctor --json
-mancode privacy gateway disable --json
-```
-
-Use `--upstream anthropic --env-key ANTHROPIC_API_KEY --client-host claude-code/2.1.142` and `print-config --host claude` for the corresponding Claude Code API-key flow. `run` stays in the foreground. Configuration fragments are explicit instructions for the user; mancode does not edit host provider/login settings. Host versions are checked when starting a bound gateway; an unknown host remains unverified. Keep gateway/client secrets in the documented local environment or private settings, never in command arguments or shared project files.
-
-The gateway handles supported OpenAI Responses and Anthropic Messages HTTP/SSE text fields. Strict JSON rejects duplicate keys, invalid escapes and limit violations; unknown supported-endpoint payload shapes and processing failures fail closed. Incremental SSE restoration preserves event boundaries, typed identities, completion and usage fields. In-memory mappings have a 15-minute TTL, 4 MiB/4,096-entry bounds, and isolation by checkout, user, upstream and gateway instance; request limits are 1 MiB and eight active requests. Scanning runs outside the main event loop. Disabling allows a bounded five-second drain and then cancels remaining requests.
-
-Supported prose fields in tool schemas are scanned; schema constraints and opaque protocol blocks are not rewritten. Executable token restoration is limited to the exact captured Claude Code 2.1.142 Read schema. Its real-host test used a synthetic temporary file under the host's ordinary permissions; other executable tools are blocked when restoration would be required. SSE audit observation follows semantic channels; `after_emit` observation is not a blocking filter. HTTP audit coverage is reported as partial and does not claim complete semantic observation.
-
-## Shared policy and gateway boundaries
-
-Project-shared policy is versioned authority and must be changed through the policy commands. Editing a live policy file is not a supported configuration shortcut. Disabling enhanced protection does not downgrade project format, remove history, restore redacted copies or turn off the pre-existing basic checks.
-
-Gateway settings and mappings belong to the local user and checkout. They must not be committed with task content. A running port or `enabled: true` setting does not prove the client routes its requests through the intended instance. `routeVerified` remains false; `routeObservedAt` and the host binding describe observations by the current instance and do not establish coverage of all traffic. Unsupported protocols and processing failures must fail closed; disabling the gateway does not create a plaintext proxy or silently restore a provider configuration.
-
-Protection covers content handled by the corresponding mancode boundary. It does not imply coverage of arbitrary Git operations, direct file access, tool-originated network traffic, images, encrypted blocks or every host connection. Real-host compatibility and production concurrency require separate evidence; see [privacy-implementation-plan.md](privacy-implementation-plan.md) for the current verified scope.
+Protection covers content handled by the corresponding mancode boundary. It does not cover arbitrary Git operations, direct file access, tool-originated traffic, images or encrypted blocks. mancode does not route model requests or modify provider/login settings.
