@@ -1,10 +1,12 @@
 // Synthetic-only PTY acceptance. Never feed real credentials through this probe.
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdir,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {Entry} from '@napi-rs/keyring';
+import {assertNoTerminalEcho} from './secrets-terminal-evidence.mjs';
 const base=process.argv[2];
 assert(base&&path.isAbsolute(base),'Pass an authorized absolute test directory');
 await mkdir(base,{recursive:true});
@@ -44,25 +46,29 @@ def interact(args,steps):
         if child.poll() is None:child.kill();child.wait()
         os.close(master)
 cases=[('email','fixture@example.test'),('phone','+1 555 0100'),('api-key','synthetic-test-token'),('text','synthetic-秘密\nmultiline')]
-evidence=[]
+evidence=[];echo_checks=[]
 for kind,value in cases:
     status,out=interact(['secret','set','terminal-'+kind],[(b'Type (',(kind+'\n').encode()),(b'Neutral purpose',b'Synthetic terminal acceptance\n'),(b'Ctrl+C cancels): ',value.encode()+b'\x04')])
     assert status==0,'set failed'
-    assert value.encode() not in out,'hidden input echoed'
+    echo_checks.append({'output':out.decode('utf-8'),'values':[value]})
     evidence.append({'type':kind,'exit':status,'echo':False})
 status,out=interact(['secret','set','terminal-cancel'],[(b'Type (',b'text\n'),(b'Neutral purpose',b'Synthetic cancellation\n'),(b'Ctrl+C cancels): ',b'cancelled-synthetic\x03')])
-assert status==4 and b'CANCELLED' in out and b'cancelled-synthetic' not in out
+assert status==4 and b'CANCELLED' in out
+echo_checks.append({'output':out.decode('utf-8'),'values':['cancelled-synthetic']})
 status,out=interact(['secret','action','approve','--file','tty.action.json'],[(b'Type approve to install this exact snapshot: ',b'approve\n')])
 assert status==0,'human approval failed'
-for _,value in cases:assert value.encode() not in out,'approval exposed secret'
+echo_checks.append({'output':out.decode('utf-8'),'values':[value for _,value in cases]})
 result=subprocess.run([node,cli,'secret','run','terminal-check','--input','request.json','--json'],cwd=project,capture_output=True)
 assert result.returncode==0 and json.loads(result.stdout)['status']=='executor_succeeded'
-print(json.dumps({'cases':evidence,'cancelled':True,'humanApproval':True,'approvedActionRun':True}))
+print(json.dumps({'cases':evidence,'cancelled':True,'humanApproval':True,'approvedActionRun':True,'echoChecks':echo_checks}))
 `;
 try {
  const result=spawnSync('python3',['-c',python,node,cli,project],{encoding:'utf8',timeout:180000});
  assert.equal(result.status,0,result.stderr);
- const evidence=JSON.parse(result.stdout);
+ const {echoChecks,...evidence}=JSON.parse(result.stdout);
+ for(const check of echoChecks)for(const value of check.values)assertNoTerminalEcho(check.output,value);
+ evidence.echoCheck={policy:'normalized-newlines-and-nonempty-lines',valuesChecked:echoChecks.reduce((total,check)=>total+check.values.length,0)};
+ for(const [key,file]of [['cliSha256',cli],['terminalScriptSha256',path.join(root,'scripts/secrets-terminal-spike.mjs')],['echoVerifierSha256',path.join(root,'scripts/secrets-terminal-evidence.mjs')]])evidence[key]=createHash('sha256').update(await readFile(file)).digest('hex');
  await Vault.transaction(context,false,async v=>{
   assert.equal(v.secret('terminal-text').value,'synthetic-秘密\nmultiline');
   assert.throws(()=>v.secret('terminal-cancel'));

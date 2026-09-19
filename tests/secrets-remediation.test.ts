@@ -266,26 +266,43 @@ describe.skipIf(process.platform !== 'darwin')(
       }
     });
 
-    it('cleans its temporary directory when the child cannot start', async () => {
-      await approve();
-      let temporary: string | undefined;
-      vi.spyOn(childProcess, 'spawn').mockImplementationOnce(
-        (_file, args, options) => {
-          temporary = options?.env?.TMPDIR;
-          return actualSpawn(
-            path.join(root, 'missing-executable'),
-            args as string[],
-            options,
-          );
-        },
-      );
-      expect(await runSecret(context, 'fixture', input)).toMatchObject({
-        code: 'EXECUTOR_FAILED',
-      });
-      expect(temporary).toBeDefined();
-      await expect(readdir(temporary as string)).rejects.toMatchObject({
-        code: 'ENOENT',
-      });
-    });
+    it.each(['ENOENT', 'EACCES'])(
+      'rejects without an unknown outcome and cleans temporary files on spawn %s',
+      async (expectedError) => {
+        await approve();
+        let temporary: string | undefined;
+        let spawned = false;
+        let startupError: string | undefined;
+        vi.spyOn(childProcess, 'spawn').mockImplementationOnce(
+          (_file, args, options) => {
+            temporary = options?.env?.TMPDIR;
+            const child = actualSpawn(
+              expectedError === 'ENOENT'
+                ? path.join(root, 'missing-executable')
+                : path.join(spec.packagePath, spec.entry),
+              args as string[],
+              options,
+            );
+            child.once('spawn', () => {
+              spawned = true;
+            });
+            child.once('error', (error: NodeJS.ErrnoException) => {
+              startupError = error.code;
+            });
+            return child;
+          },
+        );
+        expect(await runSecret(context, 'fixture', input)).toMatchObject({
+          status: 'rejected',
+          code: 'EXECUTOR_FAILED',
+        });
+        expect(spawned).toBe(false);
+        expect(startupError).toBe(expectedError);
+        expect(temporary).toBeDefined();
+        await expect(readdir(temporary as string)).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
+      },
+    );
   },
 );

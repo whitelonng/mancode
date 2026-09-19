@@ -113,7 +113,11 @@ export async function runSecret(
         schemaVersion: 1,
         runId,
         action,
-        status: code ? 'outcome_unknown' : 'executor_succeeded',
+        status: code
+          ? started
+            ? 'outcome_unknown'
+            : 'rejected'
+          : 'executor_succeeded',
         ...(code ? { code } : {}),
       };
       await audit(context, receipt);
