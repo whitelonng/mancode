@@ -130,6 +130,8 @@ adapter schema，因此不单独提升 renderer schema version。
 
 `AGENTS.md` / `CLAUDE.md` 的常驻 bootstrap 负责发现入口、区分普通 Solo 与已有治理任务，以及共同的授权和真实报告边界。限定于新 `/man` 模块交付策略的文档交接和工程执行规则放在完整 `man` 入口中；恢复旧任务时仍按其原 policy 适用。项目计划目录优先沿用明确约定，默认 `doc/`。普通 Solo 无需正式计划或审核账本，Solo handoff 则保留原任务承诺。
 
+常驻 bootstrap 只放不变量和一行触发条件：context 读取协议在模式入口，secrets 与 progress 的用法在对应命令的 `--help`，UI 细则来自 `mancode design context --json`。`tests/fixtures/guidance-budget.json` 记录各平台 bootstrap 与模式入口的 token 上限；精简后调低，增加内容必须显式修改该文件。
+
 `man` 入口保留持久需求、发现编号、计划确认、文件范围、阶段接续、相关集成验证和审核修复闭环。模型可在已确认边界内选择实现方法，规则整理不改变完成门禁。状态只保存在既有 Continuity 权威中，不写入 bootstrap 或第二套提示词状态。
 
 新 man 入口显式使用 `workflow create man --delivery`，引导一次模块总审、真实验证、文档回写和提交/发布分离。受管 `mansolo` 交接继承任务原 policy 下的正式审查和验收门禁；普通 Solo 仍不创建治理状态。`manba` 使用诊断需求、当前验证证据和 typed outcome 完成，不要求 Man 计划或模块总审。详细数据格式与限制见 [新 man 模块交付](./workflows.md#新-man一次模块审核与文档交付)。仅更新源码不会改写已安装文件；现有项目仍走上文的 adapter upgrade 预览和确认流程。

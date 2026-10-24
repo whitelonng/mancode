@@ -135,6 +135,21 @@ describe('V3 CLI command surface', () => {
       expect(renderedHelp(commandAt(cliProgram, 'workflow'))).toContain(
         WORKFLOW_SUBCOMMANDS.join(', '),
       );
+      expect(renderedHelp(commandAt(cliProgram, 'secret'))).toContain(
+        'Agent usage',
+      );
+      expect(renderedHelp(commandAt(cliProgram, 'secret'))).toContain(
+        'mancode secret run <action> --input <file> --json',
+      );
+      expect(renderedHelp(commandAt(cliProgram, 'secret'))).toContain(
+        'agents only list and run',
+      );
+      expect(renderedHelp(commandAt(cliProgram, 'progress'))).toContain(
+        'Agent usage',
+      );
+      expect(renderedHelp(commandAt(cliProgram, 'progress'))).toContain(
+        'Never inject the page HTML or full page JSON into agent',
+      );
       expect(WORKFLOW_SUBCOMMANDS).toEqual(
         expect.arrayContaining(['update', 'archive']),
       );

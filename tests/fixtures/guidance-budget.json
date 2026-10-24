@@ -1,0 +1,69 @@
+{
+  "encoding": "cl100k_base",
+  "budgets": {
+    "claude-code": {
+      "bootstrap": 1887,
+      "manba": 3060,
+      "man": 7669,
+      "manteam": 1953,
+      "manps": 771,
+      "mansolo": 1607
+    },
+    "codex": {
+      "bootstrap": 1947,
+      "manba": 3125,
+      "man": 7743,
+      "manteam": 2018,
+      "manps": 771,
+      "mansolo": 1669
+    },
+    "cursor": {
+      "bootstrap": 1872,
+      "manba": 3041,
+      "man": 7633,
+      "manteam": 1935,
+      "manps": 766,
+      "mansolo": 1592
+    },
+    "copilot": {
+      "bootstrap": 1880,
+      "manba": 3053,
+      "man": 7654,
+      "manteam": 1946,
+      "manps": 771,
+      "mansolo": 1602
+    },
+    "zcode": {
+      "bootstrap": 1947,
+      "manba": 3125,
+      "man": 7743,
+      "manteam": 2018,
+      "manps": 771,
+      "mansolo": 1669
+    },
+    "kimi-code": {
+      "bootstrap": 1947,
+      "manba": 3125,
+      "man": 7743,
+      "manteam": 2018,
+      "manps": 771,
+      "mansolo": 1669
+    },
+    "qoder": {
+      "bootstrap": 1953,
+      "manba": 3053,
+      "man": 7653,
+      "manteam": 1947,
+      "manps": 771,
+      "mansolo": 1602
+    },
+    "dsh": {
+      "bootstrap": 1883,
+      "manba": 3067,
+      "man": 7667,
+      "manteam": 1961,
+      "manps": 785,
+      "mansolo": 1616
+    }
+  }
+}

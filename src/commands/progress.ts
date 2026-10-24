@@ -46,7 +46,18 @@ export function registerProgressCommands(
 ): void {
   const progress = program
     .command('progress')
-    .description('View a read-only project progress page');
+    .description('View a read-only project progress page')
+    .addHelpText(
+      'after',
+      `
+Agent usage: run these only when the operator asks. \`init\` binds the page for an
+existing project; \`preview\` runs in the foreground until Ctrl-C; \`refresh\` repairs
+the offline snapshot (\`--shared\` for a shared-only snapshot). Record facts at task
+milestones through existing workflow mutations; committed events update the page
+without model calls. Never inject the page HTML or full page JSON into agent
+context, poll it with an agent, or turn ordinary Solo work into tasks for the page.
+`,
+    );
   progress
     .command('init')
     .description(

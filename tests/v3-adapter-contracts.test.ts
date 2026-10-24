@@ -186,18 +186,37 @@ describe('V3 adapter bootstrap integration', () => {
       ).toBeLessThan(
         bootstrap.indexOf('mancode context show --purpose orient'),
       );
-      expect(bootstrap).toContain('format: context-index-v1');
+      const manEntry = await readFile(
+        v3ModeEntryPath(root, platform, 'man'),
+        'utf8',
+      );
+      expect(manEntry).toContain('format: context-index-v1');
+      expect(bootstrap).not.toContain('format: context-index-v1');
       expect(bootstrap).toContain('task.workflowMode');
       expect(bootstrap).toContain('task.policyVersions');
-      expect(bootstrap).toContain(
+      expect(manEntry).toContain(
         'mancode context read <ref> --version <version>',
       );
-      expect(bootstrap).toContain('after context compaction');
-      expect(bootstrap).toContain('--snapshot <snapshot>');
+      expect(bootstrap).not.toContain(
+        'mancode context read <ref> --version <version>',
+      );
+      expect(manEntry).toContain('after context compaction');
+      expect(bootstrap).toContain(
+        'after context compaction, refresh the index and re-read needed approved constraints',
+      );
+      expect(manEntry).toContain('--snapshot <snapshot>');
+      expect(bootstrap).not.toContain('--snapshot <snapshot>');
+      expect(manEntry).toContain('Default to references');
+      expect(bootstrap).not.toContain('Default to references');
+      expect(manEntry).toContain('relatedDocument');
+      expect(bootstrap).not.toContain('relatedDocument');
       expect(bootstrap).toContain(
         'unavailable/stale/privacy error is not permission',
       );
-      expect(bootstrap).toContain(
+      expect(manEntry).toContain(
+        'not a verified host injection or file-write guard',
+      );
+      expect(bootstrap).not.toContain(
         'not a verified host injection or file-write guard',
       );
       expect(bootstrap).toContain(
@@ -212,19 +231,23 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain('--session <id>');
       expect(bootstrap).toContain('mancode status --brief --json');
       expect(bootstrap).toContain('mancode design context --json');
-      expect(bootstrap).toContain('present 2-3 distinct product-appropriate');
+      expect(bootstrap).toContain('`guidance` and `constraints`');
+      expect(bootstrap).toContain('present 2-3 distinct directions');
       expect(bootstrap).toContain(
-        'wait for the user to choose before implementation',
+        'without an operator-selected visual direction',
       );
+      expect(bootstrap).toContain('wait for the choice');
       expect(bootstrap).toContain(
-        'do not count as a selected visual direction',
+        'broad adjectives such as clean, modern or premium are not a selection',
       );
-      expect(bootstrap).toContain('Continue directly for scoped UI fixes');
+      expect(bootstrap).toContain('continue directly for scoped UI fixes');
       expect(bootstrap).toContain('Never use emoji as interface icons');
       expect(bootstrap).toContain(
         'Emoji remain allowed inside user-authored content',
       );
       expect(bootstrap).toContain('never fall back to emoji');
+      expect(bootstrap).toContain('mancode secret --help');
+      expect(bootstrap).toContain('never ask for real secret values in chat');
       expect(bootstrap).toContain(
         'snapshot already obtained in this conversation',
       );
@@ -362,9 +385,13 @@ describe('V3 adapter bootstrap integration', () => {
           'Preserve existing policy, revision, plan approval',
         );
         expect(entry).toContain('Do not refresh every tool call');
-        expect(entry).toContain('mancode progress preview');
-        expect(entry).toContain('without model calls');
-        expect(entry).toContain('Never inject the HTML or full page JSON');
+        expect(entry).not.toContain('mancode progress preview');
+        expect(entry).not.toContain('without model calls');
+        expect(entry).not.toContain('Never inject the HTML or full page JSON');
+        expect(bootstrap).not.toContain('mancode progress preview');
+        expect(bootstrap).not.toContain(
+          'Never inject the HTML or full page JSON',
+        );
         expect(entry).toContain('Only an older CLI without index support');
         if (
           platform === 'claude-code' ||
