@@ -123,7 +123,22 @@ async function safe(action: () => Promise<void>): Promise<void> {
 export function registerSecretCommands(program: Command): void {
   const secret = program
     .command('secret')
-    .description('Local protected text and approved status-only actions');
+    .description('Local protected text and approved status-only actions')
+    .addHelpText(
+      'after',
+      `
+Agent usage:
+  mancode secret list --json            project aliases
+  mancode secret action list --json     approved inputs
+  mancode secret run <action> --input <file> --json
+                                        submit structured secret references only this way
+Only the operator runs \`secret set\` and \`secret action approve\`, in an independent
+local terminal; agents only list and run. If a needed secret or action is missing,
+ask the operator to configure it instead of working out how to approve it.
+Never ask for real values in chat or create plaintext copies. This local CLI
+interface does not intercept other tools or model connections.
+`,
+    );
   secret
     .command('set <name>')
     .description('Enter protected text in an independent local terminal')
