@@ -524,6 +524,13 @@ describe('V3 CLI command contracts', () => {
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         error: { code: 'MANCODE_TASK_REQUIRED' },
       });
+      const taskRequired = JSON.parse(String(logs.mock.calls.at(-1)?.[0])) as {
+        error: { recovery?: string };
+      };
+      expect(taskRequired.error.recovery).toContain('context resume');
+      expect(taskRequired.error.recovery).toContain(
+        'does not make the current session stale',
+      );
 
       expect(
         await contextReconcileTaskHead(root, `shared:${id(10)}`, {
@@ -535,6 +542,9 @@ describe('V3 CLI command contracts', () => {
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         error: { code: 'MANCODE_EXPECTED_REVISION_REQUIRED' },
       });
+      expect(
+        JSON.parse(String(logs.mock.calls.at(-1)?.[0])).error,
+      ).not.toHaveProperty('recovery');
 
       expect(
         await contextReconcileTaskHead(root, `shared:${id(10)}`, {
@@ -1092,6 +1102,12 @@ describe('V3 CLI command contracts', () => {
       expect(JSON.parse(String(logs.mock.calls.at(-1)?.[0]))).toMatchObject({
         error: { code: 'MANCODE_SESSION_REQUIRED' },
       });
+      const sessionRequired = JSON.parse(
+        String(logs.mock.calls.at(-1)?.[0]),
+      ) as { error: { recovery?: string } };
+      expect(sessionRequired.error.recovery).toContain(
+        '--session <id> --client <client>',
+      );
     } finally {
       logs.mockRestore();
       errors.mockRestore();

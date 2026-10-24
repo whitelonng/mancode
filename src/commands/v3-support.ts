@@ -158,18 +158,33 @@ export function printV3Result(
   return EXIT_V3_OK;
 }
 
+// Recovery text states facts and next commands only; it never grants authority.
+const V3_ERROR_RECOVERY: Readonly<Record<string, string>> = {
+  MANCODE_TASK_REQUIRED:
+    'Ordinary Solo work needs no mancode task, so continue it without Continuity state. To continue governed work, bind an existing task with `mancode context resume <namespace:ULID> --session <id> --client <client>`; do not probe workflow subcommands to work around this error. This error does not make the current session stale.',
+  MANCODE_SESSION_REQUIRED:
+    'Pass `--session <id> --client <client>` on every Continuity mutation; an `export` in one shell command does not persist to later commands. Reuse the session ID shown by `mancode status --brief --json`, or create one once with `mancode context session new --client <client>` for governed work only.',
+};
+
 export function printV3Error(
   json: boolean | undefined,
   code: string,
   message: string,
   exitCode: number = EXIT_V3_BLOCKED,
 ): number {
-  const result = { schemaVersion: 1, error: { code, message } };
+  const recovery = Object.hasOwn(V3_ERROR_RECOVERY, code)
+    ? V3_ERROR_RECOVERY[code]
+    : undefined;
+  const result = {
+    schemaVersion: 1,
+    error: recovery ? { code, message, recovery } : { code, message },
+  };
   if (json) {
     console.log(JSON.stringify(result));
   } else {
     console.error(`✗  ${code}`);
     console.error(`   ${message}`);
+    if (recovery) console.error(`   Next: ${recovery}`);
   }
   return exitCode;
 }

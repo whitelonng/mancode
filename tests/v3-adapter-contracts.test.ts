@@ -319,10 +319,11 @@ describe('V3 adapter bootstrap integration', () => {
         'A plain-language Solo request is not a TaskRef and needs no Context Pack.',
       );
       expect(bootstrap).toContain('mancode team identity create --name');
-      expect(bootstrap).toContain(
+      expect(bootstrap).not.toContain(
         '`task: null` and `MANCODE_TASK_REQUIRED` do not make a session stale',
       );
-      expect(bootstrap).toContain(
+      expect(bootstrap).toContain('`task: null` does not make it stale');
+      expect(bootstrap).not.toContain(
         'Do not probe workflow subcommands to work around `MANCODE_TASK_REQUIRED`',
       );
       expect(bootstrap).toContain(
@@ -331,7 +332,7 @@ describe('V3 adapter bootstrap integration', () => {
       expect(bootstrap).toContain(
         'before the operator explicitly requests task work, do not run `mancode init`, `mancode migrate`, `mancode workflow`',
       );
-      expect(bootstrap).toContain(
+      expect(bootstrap).not.toContain(
         'an `export` inside one command tool does not persist to later command tools',
       );
       expect(bootstrap).toContain(
