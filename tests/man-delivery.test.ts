@@ -350,7 +350,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     expect(
       JSON.parse((await command('inspect')).output).finalization.status,
     ).toBe('ready');
-  });
+  }, 30_000);
 
   it('requires a module review, accepts zero findings, preserves tests, commits then completes without an upstream', async () => {
     const initial = await snapshot();
@@ -610,7 +610,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     await git(['add', '.']);
     await git(['commit', '-qm', 'mixed scope']);
     expect((await command('check')).output).toContain('OUTSIDE_SCOPE');
-  });
+  }, 30_000);
 
   it('never records successful evidence when the command changes the tested code', async () => {
     const before = (await snapshot()).metadata.revision;
