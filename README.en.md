@@ -25,7 +25,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://www.npmjs.com/package/mancode"><img src="https://img.shields.io/npm/v/mancode?style=flat-square" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.10-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.10" />
+  <img src="https://img.shields.io/badge/status-Continuity%20v0.6.11-2f855a?style=flat-square" alt="Status: mancode Continuity v0.6.11" />
   <img src="https://img.shields.io/badge/platforms-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Copilot%20%7C%20ZCode%20%7C%20Kimi%20Code%20%7C%20Qoder%20%7C%20DeepSeek%20Harness-5865F2?style=flat-square" alt="Platforms: Claude Code, Cursor, Codex in ChatGPT desktop and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, DeepSeek Harness" />
 </p>
 
@@ -198,6 +198,13 @@ and completion gates preserve its engineering commitments.
 The model can choose tools and implementation steps without rewriting approved
 goals or acceptance criteria.
 
+### v0.6.11 Updates
+
+- Slim the resident platform bootstrap by moving context-reading details and feature usage into the relevant mode entries and command help, with token budgets to limit guidance growth.
+- Update development dependencies to resolve high and critical audit findings, and adjust timeouts for slow tests.
+- Preserve the original macOS Secrets stop reason when process-group cleanup reports `EPERM`.
+- Keep the existing platform support scope; pending live-host, Beta, and dedicated-environment Secrets checks remain pending.
+
 ### v0.6.10 Updates
 
 - Retire the local model proxy gateway. Existing users should restore client connections using the [retirement guide](docs/privacy-gateway-retirement.md).
@@ -225,7 +232,7 @@ The new execution runner reports capability unavailable before spawning on Windo
 
 ## Installation
 
-**Status**: mancode Continuity v0.6.10. Claude Code, Cursor, Codex in the ChatGPT
+**Status**: mancode Continuity v0.6.11. Claude Code, Cursor, Codex in the ChatGPT
 desktop app and CLI, GitHub Copilot, ZCode, Kimi Code, Qoder, and DeepSeek Harness adapters are included.
 
 Requires Node.js 22.5.0 or newer. macOS, Linux, Windows CMD, PowerShell, and Git Bash
@@ -917,7 +924,7 @@ platform bootstrap and original mode entry. Coding agents should combine
 Simplified output:
 
 ```text
-mancode v0.6.10
+mancode v0.6.11
 
 Project:     my-app
 Runtime:     ready

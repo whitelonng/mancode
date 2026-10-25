@@ -451,7 +451,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     ).toBe(0);
     output.mockRestore();
     expect((await snapshot()).metadata.status).toBe('completed');
-  });
+  }, 30_000);
 
   it('records command failures and rejects stale evidence after same-HEAD changes, then resets other stale slots', async () => {
     await finishEvidence();
@@ -474,7 +474,7 @@ describe('opted-in man module delivery through the public workflow command', () 
     await finishEvidence();
     expect((await review()).code).toBe(0);
     expect((await snapshot()).verification.status).toBe('passed');
-  });
+  }, 30_000);
 
   it('does not accept missing goal coverage or unknown acceptance IDs and keeps repairs out of business blocked state', async () => {
     await finishEvidence();
