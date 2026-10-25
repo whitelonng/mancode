@@ -95,7 +95,7 @@ describe('V3 claim acquisition', () => {
       taskRef: workflow.taskRef,
       state: 'active',
       revision: 1,
-      taskRevisionAtAcquire: 3,
+      taskRevisionAtAcquire: 5,
       lastOperationId: id(13),
     });
     expect(result.operation).toMatchObject({
@@ -109,7 +109,7 @@ describe('V3 claim acquisition', () => {
     );
     await expect(readOperationJournal(home, id(13))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`claim:${id(12)}`]: 0,
       },
     });

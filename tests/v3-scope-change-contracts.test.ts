@@ -134,7 +134,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
 
     expect(changed).toMatchObject({
       metadata: {
-        revision: 5,
+        revision: 7,
         transitionState: 'stable',
         implementationScope: {
           source: 'explicit',
@@ -154,7 +154,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
         checkpointId: id(16),
         operationId: id(18),
         kind: 'scope_changed',
-        taskRevision: 4,
+        taskRevision: 6,
         governance: { planVersion: 3 },
       },
       terminatedClaims: [
@@ -178,13 +178,13 @@ describe('V3 journaled workflow scope change and re-claim', () => {
           revision: 2,
           ownerActorId: actors.ownerActorId,
           predecessorClaimId: authClaim.claim.claimId,
-          taskRevisionAtAcquire: 5,
-          lastValidatedTaskRevision: 5,
+          taskRevisionAtAcquire: 7,
+          lastValidatedTaskRevision: 7,
         },
       ],
       taskHeadFence: {
-        fenceRevision: 4,
-        taskRevision: 5,
+        fenceRevision: 6,
+        taskRevision: 7,
         lastOperationId: id(18),
       },
       operation: { type: 'scope_change_reclaim', state: 'committed' },
@@ -200,14 +200,14 @@ describe('V3 journaled workflow scope change and re-claim', () => {
     );
     await expect(readOperationJournal(home, id(18))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`review:${workflow.taskRef.taskId}`]: 3,
         [`verification:${workflow.taskRef.taskId}`]: 3,
         [`checkpoint:${id(16)}`]: 0,
         [`claim:${id(12)}`]: 1,
         [`claim:${id(14)}`]: 1,
         [`claim:${id(17)}`]: 0,
-        [`task_head:${workflow.taskRef.taskId}`]: 3,
+        [`task_head:${workflow.taskRef.taskId}`]: 5,
       },
       entityLocks: expect.arrayContaining([
         `checkpoint:${id(16)}`,
@@ -345,7 +345,7 @@ describe('V3 journaled workflow scope change and re-claim', () => {
       };
       expect(payload).toMatchObject({
         metadata: {
-          revision: 5,
+          revision: 7,
           implementationScope: { modules: ['auth'] },
           governance: {
             planVersion: 3,

@@ -15,9 +15,16 @@ export interface ProjectConfigV1 {
     /** Monotonic authority generation; every transport switch creates a new domain. */
     epoch: number;
   };
+  /**
+   * Planning policy 4: whether `--unattended-waiver` may approve a plan. Absent
+   * means allowed for local single tasks and forbidden for shared/team tasks.
+   */
+  unattendedWaiver?: UnattendedWaiverPolicy;
   lastOperationId: Ulid | null;
   updatedAt: string;
 }
+
+export type UnattendedWaiverPolicy = 'allowed' | 'forbidden';
 
 export interface TeamPolicyV1 {
   schemaVersion: 1;
@@ -53,6 +60,7 @@ export function parseProjectConfig(value: unknown): ProjectConfigV1 {
       'revision',
       'workspaceId',
       'transport',
+      'unattendedWaiver',
       'lastOperationId',
       'updatedAt',
     ],
@@ -62,11 +70,21 @@ export function parseProjectConfig(value: unknown): ProjectConfigV1 {
     throw new Error('project config schemaVersion must be 1');
   }
   assertUlid(value.workspaceId, 'project config workspaceId');
+  if (
+    value.unattendedWaiver !== undefined &&
+    value.unattendedWaiver !== 'allowed' &&
+    value.unattendedWaiver !== 'forbidden'
+  ) {
+    throw new Error('project config unattendedWaiver is invalid');
+  }
   return {
     schemaVersion: 1,
     revision: parsePositiveInteger(value.revision, 'project config revision'),
     workspaceId: value.workspaceId,
     transport: parseTransport(value.transport),
+    ...(value.unattendedWaiver === undefined
+      ? {}
+      : { unattendedWaiver: value.unattendedWaiver }),
     lastOperationId: parseUlidOrNull(
       value.lastOperationId,
       'project config lastOperationId',

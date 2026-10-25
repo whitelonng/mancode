@@ -31,6 +31,10 @@ DeepSeek Harness 的 mode entry 只安装到 `.dsh/skills/`，不复用
 每个入口都标记为仅用户调用；在 host session 传播得到真实证据前，Continuity mutation
 继续要求显式 `--session`，不会把环境中的 `DSH_SESSION_ID` 自动升级为可信身份。
 
+## 计划审批门禁与模式入口
+
+man、manteam 和 mansolo 的模式入口描述 planning policy 4 的审批流程：先 `workflow plan <TaskRef> present`，把计划展示给操作者并等待回复，再用 `confirm ... --operator-reply "<原话>"` 确认；Solo handoff 与 `plan_only` 续接同样需要 present 和回复。`--unattended-waiver` 只在本会话确实没有操作者（headless、CI）时使用，项目配置 `unattendedWaiver: allowed | forbidden` 决定是否允许（缺省：本地单人任务允许，manteam 与 shared 任务禁用）。入口文字不能替代 CLI 校验：门禁无法证明回复真的来自操作者，只能保证计划先完整展示、批准与计划版本绑定并留档，进度页会对 `unattended_waiver` 批准和“批准后范围变化”显示提示，详见 [workflows.md](workflows.md)。planning 1–3 的旧任务不受影响。升级入口后需要执行一次 `adapter upgrade` 以刷新受管文本。
+
 ## 简化更新入口（开发分支，尚未发布）
 
 `mancode upgrade` 提供数字菜单，统一编排 CLI 包更新与当前项目的 managed adapter 更新。

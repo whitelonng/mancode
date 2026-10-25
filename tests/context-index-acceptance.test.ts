@@ -17,7 +17,6 @@ import {
 } from '../src/context/context-index.js';
 import { contextPackTokenCounter } from '../src/context/context-pack.js';
 import { createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
 import { V3ContextStore } from '../src/context/store.js';
@@ -27,6 +26,7 @@ import { updateV3Workflow } from '../src/context/workflow-update.js';
 import { createSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
 import { createAuthorizationBasis } from '../src/team/authorization.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const roots: string[] = [];
 afterEach(async () => {

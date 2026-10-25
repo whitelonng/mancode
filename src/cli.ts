@@ -372,6 +372,14 @@ export function createCliProgram(): Command {
       '--plan-decision <decision>',
       'Plan gate choice: plan_only or governed_execution',
     )
+    .option(
+      '--operator-reply <text>',
+      'Operator reply to the presented plan (plan confirm or solo handoff on planning policy 4)',
+    )
+    .option(
+      '--unattended-waiver',
+      'Approve a presented plan with no operator present (recorded as unattended_waiver)',
+    )
     .option('--to <mode>', 'Workflow handoff target (solo)')
     .option('--complete', 'Complete an active solo handoff')
     .option(

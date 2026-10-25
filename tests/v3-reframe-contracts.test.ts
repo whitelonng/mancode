@@ -8,7 +8,6 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { reframeV3Workflow } from '../src/context/reframe.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import {
@@ -45,6 +44,7 @@ import { acquireV3Claim } from '../src/team/claim-acquisition.js';
 import { createV3HandoffDraft } from '../src/team/handoff-operation.js';
 import { parseProjectConfig } from '../src/team/policy.js';
 import { confirmManteamPlan } from './helpers/manteam-plan.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-21T12:00:00.000Z');

@@ -33,6 +33,7 @@ import type {
 import { decisionContextValue, projectDecisions } from './decision-record.js';
 import { type LegacyAuthorityScan, scanLegacyAuthority } from './layout.js';
 import type { ManagedAdapter } from './manifest.js';
+import { planApprovalWarningCodes } from './plan-gate.js';
 import {
   type PendingOperationRecord,
   type StoredCoordinationSnapshot,
@@ -737,6 +738,12 @@ function activeTaskProjection(task: StoredTaskSnapshot) {
       requirementsStatus: governance.requirementsStatus,
       planVersion: governance.planVersion,
       planDecision: governance.planDecision,
+      ...(governance.planApproval === undefined
+        ? {}
+        : {
+            planApprovalSource: governance.planApproval.approvalSource,
+            planApprovalWarnings: planApprovalWarningCodes(task.metadata),
+          }),
       policyVersions: governance.policyVersions,
       reviewStatus: governance.reviewStatus,
       verificationStatus: governance.verificationStatus,

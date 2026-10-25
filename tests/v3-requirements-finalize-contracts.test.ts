@@ -8,7 +8,6 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { assertTaskCompletionGate } from '../src/context/aggregate.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import {
   finalizeV3Requirements,
   saveV3RequirementsDraft,
@@ -53,6 +52,7 @@ import {
 } from '../src/team/actor.js';
 import { acquireV3Claim } from '../src/team/claim-acquisition.js';
 import { CONFIRMED_MANTEAM_PLAN } from './helpers/manteam-plan.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const execFile = promisify(execFileCallback);
 const NOW = new Date('2026-07-17T10:00:00.000Z');
@@ -990,7 +990,7 @@ describe('V3 requirements finalization operation', () => {
     });
     expect(completed).toMatchObject({
       metadata: {
-        revision: 7,
+        revision: 9,
         status: 'completed',
         currentStep: 9,
         transitionState: 'stable',
@@ -1005,8 +1005,8 @@ describe('V3 requirements finalization operation', () => {
         },
       ],
       taskHeadFence: {
-        fenceRevision: 6,
-        taskRevision: 7,
+        fenceRevision: 8,
+        taskRevision: 9,
         lastOperationId: id(98),
       },
       operation: { type: 'task_complete', state: 'committed' },
@@ -1028,9 +1028,9 @@ describe('V3 requirements finalization operation', () => {
     );
     await expect(readOperationJournal(home, id(98))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${created.taskRef.taskId}`]: 5,
+        [`task:shared:${created.taskRef.taskId}`]: 7,
         [`claim:${acquired.claim.claimId}`]: 1,
-        [`task_head:${created.taskRef.taskId}`]: 5,
+        [`task_head:${created.taskRef.taskId}`]: 7,
       },
       entityLocks: expect.arrayContaining([
         `task:shared:${created.taskRef.taskId}`,

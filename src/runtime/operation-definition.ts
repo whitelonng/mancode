@@ -52,6 +52,7 @@ export const OPERATION_AUTHORIZATION_ACTIONS: Record<
     'shared_metadata_plan_mutation',
   ],
   plan_revision: ['local_workflow_mutation', 'shared_metadata_plan_mutation'],
+  plan_present: ['local_workflow_mutation', 'shared_metadata_plan_mutation'],
   review_remediation: [
     'local_workflow_mutation',
     'shared_ledger_evidence',
@@ -228,6 +229,12 @@ export const OPERATION_DEFINITIONS: Record<
       ['review:', 'verification:', 'task:'],
       ['task:'],
     ),
+    write('update-task-head-fence', ['task_head:', 'task:'], ['task:']),
+    commit('commit', ['task_head:', 'task:'], ['task:']),
+  ]),
+  plan_present: definition('plan_present', 'write-metadata', true, false, [
+    prepare('validate', ['task:'], ['task:']),
+    write('write-metadata', ['task:'], ['task:']),
     write('update-task-head-fence', ['task_head:', 'task:'], ['task:']),
     commit('commit', ['task_head:', 'task:'], ['task:']),
   ]),

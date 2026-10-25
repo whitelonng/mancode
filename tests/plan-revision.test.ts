@@ -9,6 +9,7 @@ import { normalizeRequirementsInput } from '../src/commands/requirements-input.j
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { workflow } from '../src/commands/workflow.js';
 import { createUlid } from '../src/context/ids.js';
+import { presentV3Plan } from '../src/context/plan-present.js';
 import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
@@ -37,6 +38,10 @@ import {
   createSharedActorProfile,
   publishSharedActorProfile,
 } from '../src/team/actor.js';
+import {
+  confirmPlanForTest,
+  reviseV3PlanForTest,
+} from './helpers/plan-gate.js';
 
 const roots: string[] = [];
 const plan =
@@ -170,13 +175,11 @@ async function fixture(
   if (current.plan === null) throw new Error('Fixture plan missing');
   const planContent = current.plan.content;
   if (options.pendingClear) await mkdir(sessionLock);
-  const planned = await reviseV3Plan({
+  const planned = await confirmPlanForTest({
     projectRoot: root,
     taskRef,
     sessionId,
-    expectedTaskRevision: revised.metadata.revision,
-    plan: planContent,
-    planDecision: 'plan_only',
+    decision: 'plan_only',
   });
   if (options.pendingClear) await rm(sessionLock, { recursive: true });
   return {
@@ -238,11 +241,25 @@ describe('explicit plan-only execution resumption', () => {
             'Planning complete; operator approved execution.',
           ),
         );
+      // Policy 2 (delivery=false) has no gate; the delivery policy requires it.
+      const gateRevisions = delivery ? 1 : 0;
+      if (delivery) {
+        const presented = await capture(() =>
+          workflow(f.root, 'plan', [f.ref, 'present'], {
+            ...options,
+            expectedRevision: String(before.metadata.revision),
+          }),
+        );
+        expect(presented.code, presented.output).toBe(0);
+      }
       const confirmed = await capture(() =>
         workflow(f.root, 'plan', [f.ref, 'confirm'], {
           ...options,
-          expectedRevision: String(before.metadata.revision),
+          expectedRevision: String(before.metadata.revision + gateRevisions),
           planDecision: 'governed_execution',
+          ...(delivery
+            ? { operatorReply: 'Yes, start implementing the presented plan.' }
+            : {}),
         }),
       );
       expect(confirmed.code, confirmed.output).toBe(0);
@@ -251,7 +268,7 @@ describe('explicit plan-only execution resumption', () => {
         taskRef: before.metadata.taskRef,
         status: 'in_progress',
         currentStep: 5,
-        revision: before.metadata.revision + 1,
+        revision: before.metadata.revision + 1 + gateRevisions,
         implementationScope: before.metadata.implementationScope,
         governance: {
           planDecision: 'governed_execution',
@@ -312,11 +329,11 @@ describe('explicit plan-only execution resumption', () => {
       expectedTaskRevision: active.metadata.revision,
       plan: f.planContent,
     };
-    await expect(reviseV3Plan(input)).rejects.toThrow(
+    await expect(reviseV3PlanForTest(input)).rejects.toThrow(
       'MANCODE_PLAN_REQUIREMENTS_OR_DECISION_INVALID',
     );
     await expect(
-      reviseV3Plan({ ...input, planDecision: 'governed_execution' }),
+      reviseV3PlanForTest({ ...input, planDecision: 'governed_execution' }),
     ).resolves.toMatchObject({
       metadata: {
         currentStep: 5,
@@ -339,7 +356,7 @@ describe('explicit plan-only execution resumption', () => {
         client: 'vitest',
         identitySource: 'explicit',
       });
-      const continued = await reviseV3Plan({
+      const continued = await reviseV3PlanForTest({
         projectRoot: f.root,
         taskRef: f.taskRef,
         sessionId: next.sessionId,
@@ -432,7 +449,7 @@ describe('explicit plan-only execution resumption', () => {
         activeTaskRef: f.taskRef,
         lastSeenRevision: f.planned.metadata.revision,
       });
-      const continued = await reviseV3Plan({
+      const continued = await reviseV3PlanForTest({
         projectRoot: f.root,
         taskRef: f.taskRef,
         sessionId: f.sessionId,
@@ -542,14 +559,17 @@ describe('explicit plan-only execution resumption', () => {
         coordination: sharedMode === 'man' ? 'single' : 'team',
       });
       await expect(
-        reviseV3Plan({
-          projectRoot: f.root,
-          taskRef: f.taskRef,
-          sessionId: f.sessionId,
-          expectedTaskRevision: before.metadata.revision,
-          plan: f.planContent,
-          planDecision: 'governed_execution',
-        }),
+        reviseV3PlanForTest(
+          {
+            projectRoot: f.root,
+            taskRef: f.taskRef,
+            sessionId: f.sessionId,
+            expectedTaskRevision: before.metadata.revision,
+            plan: f.planContent,
+            planDecision: 'governed_execution',
+          },
+          { tolerateIneligiblePresent: true },
+        ),
       ).rejects.toThrow('MANCODE_PLAN_RESUME_LOCAL_MAN_ONLY');
       expect(await f.snapshot()).toEqual(before);
     },
@@ -583,14 +603,17 @@ describe('explicit plan-only execution resumption', () => {
         ? /planVersion.*positive integer/
         : 'MANCODE_PLAN_RESUME_NOT_ELIGIBLE';
     await expect(
-      reviseV3Plan({
-        projectRoot: f.root,
-        taskRef: f.taskRef,
-        sessionId: f.sessionId,
-        expectedTaskRevision: metadata.revision,
-        plan: f.planContent,
-        planDecision: 'governed_execution',
-      }),
+      reviseV3PlanForTest(
+        {
+          projectRoot: f.root,
+          taskRef: f.taskRef,
+          sessionId: f.sessionId,
+          expectedTaskRevision: metadata.revision,
+          plan: f.planContent,
+          planDecision: 'governed_execution',
+        },
+        { tolerateIneligiblePresent: true },
+      ),
     ).rejects.toThrow(expectedError);
     expect(await readFile(metadataPath, 'utf8')).toBe(damaged);
     expect(await listProjectionIntents(f.root)).toEqual([]);
@@ -600,7 +623,7 @@ describe('explicit plan-only execution resumption', () => {
     const f = await fixture({ delivery: false });
     const before = await f.snapshot();
     await expect(
-      reviseV3Plan({
+      reviseV3PlanForTest({
         projectRoot: f.root,
         taskRef: f.taskRef,
         sessionId: f.sessionId,
@@ -644,9 +667,9 @@ describe('explicit plan-only execution resumption', () => {
         plan: f.planContent,
         planDecision: 'governed_execution' as const,
       };
-      await expect(reviseV3Plan(input)).rejects.toThrow(
-        'MANCODE_PLAN_RESUME_NOT_ELIGIBLE',
-      );
+      await expect(
+        reviseV3PlanForTest(input, { tolerateIneligiblePresent: true }),
+      ).rejects.toThrow('MANCODE_PLAN_RESUME_NOT_ELIGIBLE');
       expect((await f.snapshot()).metadata).toEqual(changed.metadata);
       if (status === 'blocked') {
         const unblocked = await updateV3Workflow({
@@ -657,7 +680,7 @@ describe('explicit plan-only execution resumption', () => {
           status: 'in_progress',
         });
         await expect(
-          reviseV3Plan({
+          reviseV3PlanForTest({
             ...input,
             expectedTaskRevision: unblocked.metadata.revision,
           }),
@@ -678,13 +701,16 @@ describe('explicit plan-only execution resumption', () => {
       plan: f.planContent,
       planDecision: 'governed_execution' as const,
     };
-    const started = await reviseV3Plan(input);
+    const started = await reviseV3PlanForTest(input);
     const before = await f.snapshot();
     await expect(
-      reviseV3Plan({
-        ...input,
-        expectedTaskRevision: started.metadata.revision,
-      }),
+      reviseV3PlanForTest(
+        {
+          ...input,
+          expectedTaskRevision: started.metadata.revision,
+        },
+        { tolerateIneligiblePresent: true },
+      ),
     ).rejects.toThrow('MANCODE_EXECUTION_SCOPE_ALREADY_BOUND');
     expect(await f.snapshot()).toEqual(before);
   });
@@ -698,7 +724,7 @@ describe('explicit plan-only execution resumption', () => {
       async function (taskRef) {
         const snapshot = await originalRead.call(this, taskRef);
         if (taskRef.taskId === f.taskRef.taskId && ++reads === 2) {
-          const continued = await reviseV3Plan({
+          const continued = await reviseV3PlanForTest({
             projectRoot: f.root,
             taskRef: f.taskRef,
             sessionId: f.sessionId,
@@ -719,7 +745,7 @@ describe('explicit plan-only execution resumption', () => {
         )
       ).state,
     ).toBe('converged');
-    expect(resumedRevision).toBe(f.planned.metadata.revision + 1);
+    expect(resumedRevision).toBe(f.planned.metadata.revision + 2);
     expect(await readSession(f.root, f.sessionId)).toMatchObject({
       activeTaskRef: f.taskRef,
       lastSeenRevision: resumedRevision,
@@ -830,7 +856,7 @@ describe('explicit plan-only execution resumption', () => {
     'keeps %s projection evidence fail closed',
     async (invalid) => {
       const f = await fixture();
-      const started = await reviseV3Plan({
+      const started = await reviseV3PlanForTest({
         projectRoot: f.root,
         taskRef: f.taskRef,
         sessionId: f.sessionId,
@@ -866,6 +892,12 @@ describe('explicit plan-only execution resumption', () => {
     'recovers the resumed decision and its pointer at $crashAfter',
     async (crash) => {
       const f = await fixture({ pendingClear: true });
+      await presentV3Plan({
+        projectRoot: f.root,
+        taskRef: f.taskRef,
+        sessionId: f.sessionId,
+        expectedTaskRevision: f.planned.metadata.revision,
+      });
       const before = await f.snapshot();
       const operationId = createUlid();
       await expect(
@@ -877,6 +909,7 @@ describe('explicit plan-only execution resumption', () => {
             expectedTaskRevision: before.metadata.revision,
             plan: f.planContent,
             planDecision: 'governed_execution',
+            operatorReply: 'Approved: start implementing.',
             operationId,
           }),
         ),

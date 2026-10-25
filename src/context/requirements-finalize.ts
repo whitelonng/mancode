@@ -20,6 +20,7 @@ import {
   buildTaskAggregateManifest,
 } from './aggregate.js';
 import type { Ulid } from './ids.js';
+import { isManDelivery } from './man-delivery-runtime.js';
 import {
   type RequirementsLedgerV1,
   assertManDeliveryVerificationSurfaces,
@@ -130,8 +131,7 @@ async function writeV3Requirements(
     assertRequirementsFinalizeEligible(context.task.metadata);
     if (
       action === 'finalize' &&
-      context.task.metadata.workflowMode === 'man' &&
-      context.task.metadata.governance.policyVersions.planning === 3 &&
+      isManDelivery(context.task.metadata) &&
       context.task.metadata.governance.planDecision !== 'solo_handoff'
     ) {
       assertManDeliveryVerificationSurfaces(submitted);

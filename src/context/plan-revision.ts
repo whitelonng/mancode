@@ -33,6 +33,11 @@ import {
   readBoundManPlan,
 } from './man-delivery-runtime.js';
 import { assertManteamPlanContent } from './manteam-plan.js';
+import {
+  assertPlanApprovalInputAbsent,
+  decisionTextsOf,
+  resolvePlanApproval,
+} from './plan-gate.js';
 import { assertSharedTextSafe } from './privacy.js';
 import {
   type RequirementsLedgerV1,
@@ -51,11 +56,13 @@ import {
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import type { VerificationLedger } from './verification-ledger.js';
 import {
+  type PlanApprovalRecord,
   type PlanDecision,
   type WorkflowMetadataV3,
   assertExecutableImplementationScope,
   assertWorkflowMetadataTransition,
   implementationScopeIsExecutable,
+  isPlanGated,
   parseWorkflowMetadata,
 } from './workflow-metadata.js';
 
@@ -72,6 +79,12 @@ export interface ReviseV3PlanInput {
   implementationScope?: unknown;
   /** Omitting the decision leaves the workflow at the step-four plan gate. */
   planDecision?: V3PlanDecision;
+  /**
+   * Planning policy 4 only: the operator's reply to the presented plan.
+   * Exactly one of this or `unattendedWaiver` must accompany a plan decision.
+   */
+  operatorReply?: string;
+  unattendedWaiver?: boolean;
   operationId?: Ulid;
   now?: Date;
 }
@@ -156,6 +169,18 @@ export async function reviseV3Plan(
       context.task.requirements,
       executionScopeBinding || executionResumption,
     );
+    if (
+      isPlanGated(context.task.metadata) &&
+      !executionScopeBinding &&
+      planDecision !== null &&
+      (planChanged || scopeChanged)
+    ) {
+      // Revise and confirm are separate steps under the plan gate: a decision
+      // may only be recorded against the exact plan that was presented.
+      throw new Error(
+        'MANCODE_PLAN_DECISION_ON_REVISE_REJECTED: revise the plan or scope first, run workflow plan present, then confirm with the operator reply',
+      );
+    }
     if (planDecision === 'governed_execution') {
       assertExecutableImplementationScope(implementationScope);
       if (isManDelivery(context.task.metadata)) {
@@ -178,6 +203,34 @@ export async function reviseV3Plan(
       planDecision === 'governed_execution'
     ) {
       assertManteamPlanContent(plan);
+    }
+    // Gate evaluation follows every structural check so those errors surface first.
+    let planApproval: PlanApprovalRecord | undefined;
+    if (
+      isPlanGated(context.task.metadata) &&
+      !executionScopeBinding &&
+      planDecision !== null
+    ) {
+      planApproval = resolvePlanApproval({
+        metadata: context.task.metadata,
+        requirements: context.task.requirements,
+        planDigest: context.task.plan?.digest ?? null,
+        decision: planDecision,
+        approval: {
+          operatorReply: input.operatorReply,
+          unattendedWaiver: input.unattendedWaiver,
+        },
+        decisionTexts: decisionTextsOf(context.project.confirmedDecisions),
+        unattendedWaiverPolicy: context.project.config.unattendedWaiver,
+        actorId: context.session.actorId,
+        sessionId: context.session.sessionId,
+        confirmedAt: context.now.toISOString(),
+      });
+    } else {
+      assertPlanApprovalInputAbsent(context.task.metadata, {
+        operatorReply: input.operatorReply,
+        unattendedWaiver: input.unattendedWaiver,
+      });
     }
     if (
       context.task.plan?.content === plan &&
@@ -216,6 +269,7 @@ export async function reviseV3Plan(
       authorityChanged,
       planDecision,
       executionScopeBinding,
+      planApproval,
       context.operationId,
       timestamp,
     );
@@ -543,6 +597,7 @@ function updateMetadata(
   authorityChanged: boolean,
   planDecision: V3PlanDecision | null,
   executionScopeBinding: boolean,
+  planApproval: PlanApprovalRecord | undefined,
   operationId: Ulid,
   updatedAt: string,
 ): WorkflowMetadataV3 {
@@ -574,6 +629,7 @@ function updateMetadata(
       planDecision: executionScopeBinding
         ? previous.governance.planDecision
         : planDecision,
+      ...(planApproval === undefined ? {} : { planApproval }),
       reviewStatus: authorityChanged
         ? 'stale'
         : previous.governance.reviewStatus,

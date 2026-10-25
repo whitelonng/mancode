@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeV3Project } from '../src/commands/v3-init.js';
 import { digestCanonicalJson } from '../src/context/canonical.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import {
   REQUIREMENT_DIMENSIONS,
@@ -35,6 +34,7 @@ import { createV3Workflow } from '../src/context/workflow-create.js';
 import { parseWorkflowMetadata } from '../src/context/workflow-metadata.js';
 import { createSession, readSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const NOW = new Date('2026-07-17T20:00:00.000Z');
 

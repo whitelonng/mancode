@@ -10,7 +10,6 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { workflow } from '../src/commands/workflow.js';
 import * as mutation from '../src/context/execution-mutation.js';
 import { createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
 import { V3ContextStore } from '../src/context/store.js';
@@ -20,6 +19,7 @@ import * as runner from '../src/runtime/execution-runner.js';
 import { createSession } from '../src/runtime/session.js';
 import * as observer from '../src/system/ci-observer.js';
 import { createLocalActor } from '../src/team/actor.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const execFile = promisify(execFileCallback);
 const roots: string[] = [];
