@@ -153,7 +153,7 @@ describe('V3 workflow create operation', () => {
       sharedPrivacyConfirmed: true,
     });
     expect(created.taskRef.namespace).toBe('shared');
-    expect(created.metadata.governance.policyVersions.planning).toBe(1);
+    expect(created.metadata.governance.policyVersions.planning).toBe(4);
     const runtime = await readProjectRuntimeContext(root);
     const home = resolveTaskEntityHomeStore(
       runtime.entityHomeStoreContext,

@@ -4,66 +4,66 @@
     "claude-code": {
       "bootstrap": 1887,
       "manba": 3060,
-      "man": 7669,
-      "manteam": 1953,
+      "man": 7804,
+      "manteam": 2008,
       "manps": 771,
-      "mansolo": 1607
+      "mansolo": 1631
     },
     "codex": {
       "bootstrap": 1947,
       "manba": 3125,
-      "man": 7743,
-      "manteam": 2018,
+      "man": 7879,
+      "manteam": 2073,
       "manps": 771,
-      "mansolo": 1669
+      "mansolo": 1692
     },
     "cursor": {
       "bootstrap": 1872,
       "manba": 3041,
-      "man": 7633,
-      "manteam": 1935,
+      "man": 7766,
+      "manteam": 1990,
       "manps": 766,
-      "mansolo": 1592
+      "mansolo": 1616
     },
     "copilot": {
       "bootstrap": 1880,
       "manba": 3053,
-      "man": 7654,
-      "manteam": 1946,
+      "man": 7788,
+      "manteam": 2001,
       "manps": 771,
-      "mansolo": 1602
+      "mansolo": 1626
     },
     "zcode": {
       "bootstrap": 1947,
       "manba": 3125,
-      "man": 7743,
-      "manteam": 2018,
+      "man": 7879,
+      "manteam": 2073,
       "manps": 771,
-      "mansolo": 1669
+      "mansolo": 1692
     },
     "kimi-code": {
       "bootstrap": 1947,
       "manba": 3125,
-      "man": 7743,
-      "manteam": 2018,
+      "man": 7879,
+      "manteam": 2073,
       "manps": 771,
-      "mansolo": 1669
+      "mansolo": 1692
     },
     "qoder": {
       "bootstrap": 1953,
       "manba": 3053,
-      "man": 7653,
-      "manteam": 1947,
+      "man": 7787,
+      "manteam": 2002,
       "manps": 771,
-      "mansolo": 1602
+      "mansolo": 1626
     },
     "dsh": {
       "bootstrap": 1883,
       "manba": 3067,
-      "man": 7667,
-      "manteam": 1961,
+      "man": 7801,
+      "manteam": 2016,
       "manps": 785,
-      "mansolo": 1616
+      "mansolo": 1640
     }
   }
 }

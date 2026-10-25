@@ -5,6 +5,7 @@ import { parseExecutionPolicy } from '../context/execution-ledger.js';
 import { type Ulid, assertUlid } from '../context/ids.js';
 import { isManDelivery } from '../context/man-delivery-runtime.js';
 import { parseSchemaManifest } from '../context/manifest.js';
+import { presentV3Plan } from '../context/plan-present.js';
 import { reviseV3Plan } from '../context/plan-revision.js';
 import {
   previewV3TaskPromotion,
@@ -29,7 +30,10 @@ import {
 } from '../context/task-ref.js';
 import { recordV3Verification } from '../context/verification-record.js';
 import { createV3Workflow } from '../context/workflow-create.js';
-import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
+import {
+  type WorkflowMetadataV3,
+  isPlanGated,
+} from '../context/workflow-metadata.js';
 import { updateV3Workflow } from '../context/workflow-update.js';
 import { resolveTaskEntityHomeStore } from '../runtime/entity-home-store.js';
 import {
@@ -151,6 +155,8 @@ export interface WorkflowOptions {
   resolved?: string;
   requirementsStatus?: string;
   planDecision?: string;
+  operatorReply?: string;
+  unattendedWaiver?: boolean;
   to?: string;
   complete?: boolean;
   file?: string;
@@ -734,7 +740,7 @@ async function workflowSoloHandoffV3(
     return printV3Error(
       options.json,
       'MANCODE_SOLO_HANDOFF_ARGUMENT_INVALID',
-      'Use: workflow handoff <local:ULID> --to solo --expected-revision <n>, or workflow handoff <local:ULID> --complete --expected-revision <n>.',
+      'Use: workflow handoff <local:ULID> --to solo --expected-revision <n> [--operator-reply "<text>" | --unattended-waiver], or workflow handoff <local:ULID> --complete --expected-revision <n>.',
       EXIT_INVALID_ARG,
     );
   }
@@ -743,6 +749,17 @@ async function workflowSoloHandoffV3(
       options.json,
       'MANCODE_SOLO_HANDOFF_ARGUMENT_INVALID',
       '--complete and --to cannot be combined.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  if (
+    options.complete === true &&
+    (options.operatorReply !== undefined || options.unattendedWaiver === true)
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_SOLO_HANDOFF_ARGUMENT_INVALID',
+      '--operator-reply and --unattended-waiver apply only to --to solo.',
       EXIT_INVALID_ARG,
     );
   }
@@ -771,6 +788,8 @@ async function workflowSoloHandoffV3(
             taskRef: parseTaskRef(task),
             sessionId: session.sessionId,
             expectedTaskRevision,
+            operatorReply: options.operatorReply,
+            unattendedWaiver: options.unattendedWaiver,
           });
     return printV3Result(options.json, {
       schemaVersion: 1,
@@ -1267,11 +1286,14 @@ async function workflowPlanV3(
 ): Promise<number> {
   const task = args[0];
   const action = args[1];
-  if (!task || (action !== 'revise' && action !== 'confirm')) {
+  if (
+    !task ||
+    (action !== 'revise' && action !== 'confirm' && action !== 'present')
+  ) {
     return printV3Error(
       options.json,
       'MANCODE_PLAN_ARGUMENT_INVALID',
-      'Use: workflow plan <namespace:ULID> revise --expected-revision <n> --file <path> [--scope-file <path>], or confirm --expected-revision <n> --plan-decision <plan_only|governed_execution>.',
+      'Use: workflow plan <namespace:ULID> revise --expected-revision <n> --file <path> [--scope-file <path>], present --expected-revision <n>, or confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> [--operator-reply "<text>" | --unattended-waiver].',
       EXIT_INVALID_ARG,
     );
   }
@@ -1283,6 +1305,9 @@ async function workflowPlanV3(
       'Plan mutation requires --expected-revision <positive integer>.',
       EXIT_INVALID_ARG,
     );
+  }
+  if (action === 'present') {
+    return workflowPlanPresentV3(rootDir, task, expectedTaskRevision, options);
   }
   if (action === 'revise' && !options.file) {
     return printV3Error(
@@ -1308,6 +1333,17 @@ async function workflowPlanV3(
       EXIT_INVALID_ARG,
     );
   }
+  if (
+    action === 'revise' &&
+    (options.operatorReply !== undefined || options.unattendedWaiver === true)
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_APPROVAL_INPUT_UNEXPECTED',
+      '--operator-reply and --unattended-waiver apply only to workflow plan confirm.',
+      EXIT_INVALID_ARG,
+    );
+  }
   try {
     const project = await readV3CommandProject(rootDir);
     const taskRef = parseTaskRef(task);
@@ -1317,13 +1353,23 @@ async function workflowPlanV3(
       options.sync,
     );
     const session = await resolveV3CommandSession(project, options);
+    const current = await project.store.readTaskSnapshot(taskRef);
+    if (
+      action === 'revise' &&
+      options.planDecision !== undefined &&
+      isPlanGated(current.metadata)
+    ) {
+      throw new Error(
+        'MANCODE_PLAN_DECISION_ON_REVISE_REJECTED: plan revise cannot record a plan decision under planning policy 4; revise, run workflow plan present, then confirm with the operator reply',
+      );
+    }
     const plan =
       action === 'revise'
         ? await readWorkflowInputFile(
             project.projectRoot,
             options.file as string,
           )
-        : (await project.store.readTaskSnapshot(taskRef)).plan?.content;
+        : current.plan?.content;
     if (plan === undefined || plan === null) {
       throw new Error('MANCODE_PLAN_FILE_REQUIRED');
     }
@@ -1341,12 +1387,13 @@ async function workflowPlanV3(
       expectedTaskRevision,
       plan,
       planSource:
-        action === 'revise' &&
-        isManDelivery((await project.store.readTaskSnapshot(taskRef)).metadata)
+        action === 'revise' && isManDelivery(current.metadata)
           ? options.file
           : undefined,
       implementationScope,
       planDecision: parseV3PlanDecision(options.planDecision),
+      operatorReply: options.operatorReply,
+      unattendedWaiver: options.unattendedWaiver,
     });
     return printV3Result(options.json, {
       schemaVersion: 1,
@@ -1364,6 +1411,64 @@ async function workflowPlanV3(
       error instanceof Error
         ? error.message
         : 'Unable to revise the mancode plan.',
+    );
+  }
+}
+
+async function workflowPlanPresentV3(
+  rootDir: string,
+  task: string,
+  expectedTaskRevision: number,
+  options: WorkflowOptions,
+): Promise<number> {
+  if (
+    options.planDecision !== undefined ||
+    options.file !== undefined ||
+    options.scopeFile !== undefined ||
+    options.operatorReply !== undefined ||
+    options.unattendedWaiver === true
+  ) {
+    return printV3Error(
+      options.json,
+      'MANCODE_PLAN_ARGUMENT_INVALID',
+      'workflow plan present takes only --expected-revision, --session and --client.',
+      EXIT_INVALID_ARG,
+    );
+  }
+  try {
+    const project = await readV3CommandProject(rootDir);
+    const taskRef = parseTaskRef(task);
+    assertDeferredGitRefSyncOption(
+      project.project.config.transport.mode,
+      taskRef.namespace === 'shared',
+      options.sync,
+    );
+    const session = await resolveV3CommandSession(project, options);
+    const result = await presentV3Plan({
+      projectRoot: project.projectRoot,
+      taskRef,
+      sessionId: session.sessionId,
+      expectedTaskRevision,
+    });
+    return printV3Result(options.json, {
+      schemaVersion: 1,
+      taskRef: result.metadata.taskRef,
+      revision: result.metadata.revision,
+      idempotent: result.idempotent,
+      presentation: result.presentation,
+      summary: result.summary,
+      instruction: result.instruction,
+      aggregate: result.aggregate,
+      taskHeadFence: result.taskHeadFence,
+      operation: result.operation,
+    });
+  } catch (error) {
+    return printV3Error(
+      options.json,
+      v3ErrorCode(error, 'MANCODE_V3_PLAN_PRESENT_FAILED'),
+      error instanceof Error
+        ? error.message
+        : 'Unable to present the mancode plan.',
     );
   }
 }

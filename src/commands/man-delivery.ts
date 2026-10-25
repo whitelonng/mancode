@@ -19,6 +19,10 @@ import {
   syncManDeliveryRecord,
 } from '../context/man-delivery-runtime.js';
 import {
+  planApprovalSummary,
+  planApprovalWarnings,
+} from '../context/plan-gate.js';
+import {
   type ReviewLedgerV1,
   deriveReviewLedgerStatus,
   reviewLedgerDigest,
@@ -34,6 +38,7 @@ import {
   verificationLedgerDigest,
 } from '../context/verification-ledger.js';
 import { recordV3Verification } from '../context/verification-record.js';
+import type { WorkflowMetadataV3 } from '../context/workflow-metadata.js';
 import {
   assertSoloHandoffSession,
   isActiveSoloHandoff,
@@ -99,6 +104,7 @@ export async function manDeliveryCommand(
     if (action === 'inspect')
       return printV3Result(options.json, {
         ...(await inspectManDelivery(project.projectRoot, task)),
+        ...planApprovalField(task.metadata),
         acceptanceCriteria: task.requirements.acceptanceCriteria,
         review: task.review,
         verification: task.verification,
@@ -130,6 +136,7 @@ export async function manDeliveryCommand(
       );
       return printV3Result(options.json, {
         delivery: 'ready_for_complete',
+        ...planApprovalField(task.metadata),
         publication: 'not_checked',
         note: 'complete rechecks operation authority; upstream publication requires an actual push result',
       });
@@ -523,4 +530,14 @@ function reviewInput(
   };
   const current = { ...draft, status: deriveReviewLedgerStatus(draft) };
   return { ...current, contentDigest: reviewLedgerDigest(current) };
+}
+
+function planApprovalField(metadata: WorkflowMetadataV3) {
+  const planApproval = planApprovalSummary(metadata);
+  if (planApproval === undefined) return {};
+  const warnings = planApprovalWarnings(metadata);
+  return {
+    planApproval,
+    ...(warnings.length === 0 ? {} : { planApprovalWarnings: warnings }),
+  };
 }

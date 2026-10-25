@@ -28,14 +28,22 @@ import {
   captureManSubject,
 } from './man-delivery-runtime.js';
 import {
+  type PlanApprovalInput,
+  assertPlanApprovalInputAbsent,
+  decisionTextsOf,
+  resolvePlanApproval,
+} from './plan-gate.js';
+import {
   assertRequirementsScopeConsistent,
   requirementsAreReady,
 } from './requirements-ledger.js';
 import { type TaskRef, parseTaskRefValue } from './task-ref.js';
 import {
+  type PlanApprovalRecord,
   type WorkflowMetadataV3,
   assertExecutableImplementationScope,
   assertWorkflowMetadataTransition,
+  isPlanGated,
   parseWorkflowMetadata,
 } from './workflow-metadata.js';
 
@@ -44,6 +52,9 @@ export interface StartV3SoloHandoffInput {
   taskRef: TaskRef;
   sessionId: Ulid;
   expectedTaskRevision: number;
+  /** Planning policy 4 only: same present-then-approve gate as plan confirm. */
+  operatorReply?: string;
+  unattendedWaiver?: boolean;
   operationId?: Ulid;
   now?: Date;
 }
@@ -89,8 +100,26 @@ export async function startV3SoloHandoff(
   try {
     assertSoloStartEligible(context);
     const timestamp = context.now.toISOString();
+    const planApproval = isPlanGated(context.task.metadata)
+      ? resolvePlanApproval({
+          metadata: context.task.metadata,
+          requirements: context.task.requirements,
+          planDigest: context.task.plan?.digest ?? null,
+          decision: 'solo_handoff',
+          approval: {
+            operatorReply: input.operatorReply,
+            unattendedWaiver: input.unattendedWaiver,
+          },
+          decisionTexts: decisionTextsOf(context.project.confirmedDecisions),
+          unattendedWaiverPolicy: context.project.config.unattendedWaiver,
+          actorId: context.session.actorId,
+          sessionId: context.session.sessionId,
+          confirmedAt: timestamp,
+        })
+      : assertNoApprovalInput(context.task.metadata, input);
     const metadata = activeSoloMetadata(
       context.task.metadata,
+      planApproval,
       context.session.sessionId,
       context.operationId,
       timestamp,
@@ -392,8 +421,17 @@ function assertSoloCompletionEligible(
   }
 }
 
+function assertNoApprovalInput(
+  metadata: WorkflowMetadataV3,
+  input: PlanApprovalInput,
+): undefined {
+  assertPlanApprovalInputAbsent(metadata, input);
+  return undefined;
+}
+
 function activeSoloMetadata(
   previous: WorkflowMetadataV3,
+  planApproval: PlanApprovalRecord | undefined,
   sessionId: Ulid,
   operationId: Ulid,
   updatedAt: string,
@@ -407,6 +445,7 @@ function activeSoloMetadata(
     governance: {
       ...previous.governance,
       planDecision: 'solo_handoff',
+      ...(planApproval === undefined ? {} : { planApproval }),
     },
     soloExecution: {
       state: 'active',

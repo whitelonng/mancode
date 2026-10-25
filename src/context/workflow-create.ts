@@ -116,7 +116,9 @@ import {
   verificationLedgerDigest,
 } from './verification-ledger.js';
 import {
+  PLAN_GATE_POLICY_VERSION,
   type WorkflowMetadataV3,
+  isDeliveryPlanningPolicy,
   parseWorkflowMetadata,
 } from './workflow-metadata.js';
 
@@ -291,14 +293,14 @@ export async function createV3Workflow(
         : 1,
     timestamp,
     planningPolicyVersion: input.delivery
-      ? 3
+      ? PLAN_GATE_POLICY_VERSION
       : parent === null
-        ? project.manifest.manifestVersion !== 1 && workflowMode === 'man'
-          ? project.manifest.workflowPolicyDefaults.planning
-          : 1
-        : parent.metadata.governance.policyVersions.planning === 3
-          ? 2
-          : parent.metadata.governance.policyVersions.planning,
+        ? project.manifest.manifestVersion !== 1 && workflowMode === 'manteam'
+          ? PLAN_GATE_POLICY_VERSION
+          : project.manifest.manifestVersion !== 1 && workflowMode === 'man'
+            ? project.manifest.workflowPolicyDefaults.planning
+            : 1
+        : childPlanningPolicyVersion(parent.metadata),
   });
   const homeStore = resolveTaskEntityHomeStore(
     runtime.entityHomeStoreContext,
@@ -716,7 +718,8 @@ function buildInitialEntities(input: {
     throw new Error('MANCODE_EXECUTION_SHARED_UNSUPPORTED');
   if (
     executionPolicy !== null &&
-    (input.workflowMode !== 'man' || input.planningPolicyVersion !== 3)
+    (input.workflowMode !== 'man' ||
+      !isDeliveryPlanningPolicy(input.planningPolicyVersion))
   )
     throw new Error('MANCODE_EXECUTION_DELIVERY_REQUIRED');
   assertExecutionWriterCapability(
@@ -1276,4 +1279,13 @@ function isNotFound(error: unknown): error is NodeJS.ErrnoException {
     'code' in error &&
     (error as NodeJS.ErrnoException).code === 'ENOENT'
   );
+}
+
+/** A manba child never inherits delivery or plan-gate semantics from its parent. */
+function childPlanningPolicyVersion(parent: WorkflowMetadataV3): number | null {
+  const version = parent.governance.policyVersions.planning;
+  if (isDeliveryPlanningPolicy(version)) {
+    return parent.workflowMode === 'manteam' ? 1 : 2;
+  }
+  return version;
 }

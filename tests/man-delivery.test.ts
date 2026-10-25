@@ -15,17 +15,19 @@ import {
   renderManDeliveryRecord,
   syncManDeliveryRecord,
 } from '../src/context/man-delivery-runtime.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import { REQUIREMENT_DIMENSIONS } from '../src/context/requirements-ledger.js';
 import { reviewLedgerDigest } from '../src/context/review-ledger.js';
 import { applyV3ReviewLedger } from '../src/context/review-remediation.js';
-import { startV3SoloHandoff } from '../src/context/solo-handoff.js';
 import { V3ContextStore } from '../src/context/store.js';
 import type { TaskRef } from '../src/context/task-ref.js';
 import { createV3Workflow } from '../src/context/workflow-create.js';
 import { createSession } from '../src/runtime/session.js';
 import { createLocalActor } from '../src/team/actor.js';
+import {
+  reviseV3PlanForTest as reviseV3Plan,
+  startSoloForTest as startV3SoloHandoff,
+} from './helpers/plan-gate.js';
 
 const execFile = promisify(execFileCallback);
 const plan =
@@ -354,7 +356,7 @@ describe('opted-in man module delivery through the public workflow command', () 
 
   it('requires a module review, accepts zero findings, preserves tests, commits then completes without an upstream', async () => {
     const initial = await snapshot();
-    expect(initial.metadata.governance.policyVersions.planning).toBe(3);
+    expect(initial.metadata.governance.policyVersions.planning).toBe(4);
     expect((await command('sync')).code).toBe(0);
     expect(await readFile(path.join(root, '项目进度.html'), 'utf8')).toContain(
       '进行中',

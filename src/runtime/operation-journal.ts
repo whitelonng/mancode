@@ -15,6 +15,7 @@ export type OperationType =
   | 'requirements_draft'
   | 'requirements_finalize'
   | 'plan_revision'
+  | 'plan_present'
   | 'review_remediation'
   | 'verification_record'
   | 'task_complete'
@@ -95,6 +96,7 @@ const OPERATION_TYPES = new Set<OperationType>([
   'requirements_draft',
   'requirements_finalize',
   'plan_revision',
+  'plan_present',
   'review_remediation',
   'verification_record',
   'task_complete',

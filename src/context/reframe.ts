@@ -728,6 +728,9 @@ function completeReframeMetadata(
       requirementsStatus: 'needs_clarification',
       requirementsDigest: requirements.contentDigest,
       planDecision: null,
+      // The reframed task needs a fresh present and approval (planning policy 4).
+      planPresentation: undefined,
+      planApproval: undefined,
       reviewStatus: review.status,
       reviewLedgerDigest: review.contentDigest,
       verificationStatus: verification.status,

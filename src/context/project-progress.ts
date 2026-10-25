@@ -1,6 +1,7 @@
 import { digestCanonicalJson } from './canonical.js';
 import { decisionContextValue, projectDecisions } from './decision-record.js';
 import type { ManEvidenceSubject } from './man-delivery-evidence.js';
+import { planApprovalWarningCodes } from './plan-gate.js';
 import { assertPrivacyValueAllowed } from './privacy-guard.js';
 import { redactSharedText } from './privacy.js';
 import {
@@ -50,6 +51,8 @@ export interface ProgressTask {
   next: string | null;
   /** Absent in older disposable caches; absence also means unobserved. */
   publication?: 'unobserved';
+  /** Plan-gate warning codes (UNATTENDED_WAIVER, PLAN_APPROVAL_SCOPE_CHANGED). */
+  approvalWarnings?: string[];
   updatedAt: string;
   source: string;
   acceptance: Array<{ id: string; text: string; state: string }>;
@@ -220,6 +223,9 @@ export function projectProgressTask(
     issue,
     next: checkpointCurrent ? safe(checkpoint.nextAction) : null,
     publication: 'unobserved',
+    ...(planApprovalWarningCodes(m).length === 0
+      ? {}
+      : { approvalWarnings: planApprovalWarningCodes(m) }),
     updatedAt: m.updatedAt,
     source: formatTaskRef(m.taskRef),
     acceptance: task.requirements.acceptanceCriteria.map((criterion) => {

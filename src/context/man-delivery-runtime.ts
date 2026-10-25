@@ -24,6 +24,7 @@ import {
   replaceManDeliveryRecord,
 } from './man-delivery-plan.js';
 import { type ManProgressStatus, syncManProgressPage } from './man-progress.js';
+import { planApprovalWarnings } from './plan-gate.js';
 import { scanSharedText } from './privacy.js';
 import type { ReviewLedgerV1 } from './review-ledger.js';
 import type { StoredTaskSnapshot } from './store.js';
@@ -31,10 +32,10 @@ import type { VerificationLedger } from './verification-ledger.js';
 import {
   type WorkflowMetadataV3,
   isActiveSoloHandoff,
+  isDeliveryPlanningPolicy,
 } from './workflow-metadata.js';
 
 const execFile = promisify(execFileCallback);
-export const MAN_DELIVERY_POLICY = 3;
 
 export type ManFinalizationBlockerCode =
   | 'plan_execution_required'
@@ -61,7 +62,7 @@ export interface ManDeliveryFinalization {
 export function isManDelivery(metadata: WorkflowMetadataV3): boolean {
   return (
     metadata.workflowMode === 'man' &&
-    metadata.governance.policyVersions.planning === MAN_DELIVERY_POLICY
+    isDeliveryPlanningPolicy(metadata.governance.policyVersions.planning)
   );
 }
 
@@ -708,6 +709,14 @@ export function renderManDeliveryRecord(
   return [
     `Task: ${task.metadata.taskRef.namespace}:${task.metadata.taskRef.taskId}`,
     `Plan version: ${task.metadata.governance.planVersion}`,
+    ...(task.metadata.governance.planApproval === undefined
+      ? []
+      : [
+          `Plan approval: ${task.metadata.governance.planApproval.approvalSource}`,
+          ...planApprovalWarnings(task.metadata).map(
+            (warning) => `Plan approval warning: ${warning}`,
+          ),
+        ]),
     `Review: ${reviewStale ? 'stale' : task.review.status}`,
     `Verification: ${verificationStatus}`,
     '',

@@ -121,7 +121,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
         handoffId: id(14),
         state: 'draft',
         revision: 1,
-        taskRevision: 5,
+        taskRevision: 7,
         ownershipEpochAtOffer: 1,
         claimIds: [claim.claim.claimId],
         checkpointRef: { artifactId: id(15) },
@@ -175,20 +175,20 @@ describe('V3 local-coordination handoff draft and transition', () => {
     );
     await expect(readOperationJournal(home, id(17))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 5,
+        [`task:shared:${workflow.taskRef.taskId}`]: 7,
         [`handoff:${id(14)}`]: 0,
       },
     });
     await expect(readOperationJournal(home, id(18))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 5,
+        [`task:shared:${workflow.taskRef.taskId}`]: 7,
         [`handoff:${id(14)}`]: 1,
       },
     });
     expect(
       (await new V3ContextStore(root).readTaskSnapshot(workflow.taskRef))
         .metadata,
-    ).toMatchObject({ revision: 5, ownerActorId: actors.ownerActorId });
+    ).toMatchObject({ revision: 7, ownerActorId: actors.ownerActorId });
   });
 
   it('transfers owner and claims only after the offered handoff is accepted', async () => {
@@ -260,7 +260,7 @@ describe('V3 local-coordination handoff draft and transition', () => {
     });
     expect(accepted).toMatchObject({
       metadata: {
-        revision: 7,
+        revision: 9,
         transitionState: 'stable',
         ownerActorId: actors.receiverActorId,
         ownershipEpoch: 2,
@@ -286,14 +286,14 @@ describe('V3 local-coordination handoff draft and transition', () => {
           state: 'active',
           revision: 2,
           ownerActorId: actors.receiverActorId,
-          taskRevisionAtAcquire: 7,
+          taskRevisionAtAcquire: 9,
           ownershipEpochAtAcquire: 2,
           predecessorClaimId: claim.claim.claimId,
         },
       ],
       taskHeadFence: {
-        fenceRevision: 5,
-        taskRevision: 7,
+        fenceRevision: 7,
+        taskRevision: 9,
         ownershipEpoch: 2,
         lastOperationId: id(40),
       },
@@ -307,12 +307,12 @@ describe('V3 local-coordination handoff draft and transition', () => {
     );
     await expect(readOperationJournal(home, id(40))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 5,
+        [`task:shared:${workflow.taskRef.taskId}`]: 7,
         [`handoff:${id(34)}`]: 2,
         [`claim:${claim.claim.claimId}`]: 1,
         [`claim:${id(39)}`]: 0,
-        [`checkpoint:${id(35)}`]: 4,
-        [`task_head:${workflow.taskRef.taskId}`]: 4,
+        [`checkpoint:${id(35)}`]: 6,
+        [`task_head:${workflow.taskRef.taskId}`]: 6,
       },
       entityLocks: expect.arrayContaining([
         `handoff:${id(34)}`,

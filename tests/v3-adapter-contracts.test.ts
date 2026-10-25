@@ -447,7 +447,7 @@ describe('V3 adapter bootstrap integration', () => {
           expect(entry).toContain('without making a duplicate');
           expect(entry).toContain('The bound plan must not exist only in chat');
           expect(entry).toContain('task-owned plan commit');
-          expect(entry).toContain('For delivery policy 3 only');
+          expect(entry).toContain('For delivery policy 3 or 4 only');
           expect(entry).toContain('被忽略不代表本地不可读');
           expect(entry).toContain('Do not invent the architecture');
           expect(entry).toContain('credentials, accounts or secrets');
@@ -872,6 +872,11 @@ describe('V3 adapter bootstrap integration', () => {
     expect(man).toContain(
       'confirm --expected-revision <n> --plan-decision <plan_only|governed_execution> --session <id> --client <active-client>',
     );
+    expect(man).toContain(
+      'workflow plan <namespace:ULID> present --expected-revision <n>',
+    );
+    expect(man).toContain('--operator-reply');
+    expect(man).toContain('only for sessions with no operator present');
     expect(man).toContain(
       'workflow reframe <namespace:ULID> --expected-revision <n> --checkpoint-id <fresh-ULID>',
     );

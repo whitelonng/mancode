@@ -49,10 +49,43 @@ export type PlanDecision =
   | 'governed_execution'
   | null;
 
+export type PlanApprovalSource = 'operator_reply' | 'unattended_waiver';
+
+/** Binds one `plan present` to the exact plan, scope and requirements shown. */
+export interface PlanPresentationRecord {
+  planVersion: number;
+  planDigest: string;
+  scopeDigest: string;
+  requirementsDigest: string;
+  presentedAt: string;
+  actorId: Ulid;
+  sessionId: Ulid;
+  operationId: Ulid;
+}
+
+/** Audit record of the approval that set `planDecision` under the plan gate. */
+export interface PlanApprovalRecord {
+  approvalSource: PlanApprovalSource;
+  operatorReply?: string;
+  decision: Exclude<PlanDecision, null>;
+  planVersion: number;
+  planDigest: string;
+  scopeDigest: string;
+  requirementsDigest: string;
+  presentedAt: string;
+  presentationOperationId: Ulid;
+  confirmedAt: string;
+  actorId: Ulid;
+  sessionId: Ulid;
+}
+
+/** Planning policy 4 requires present-then-confirm for plan decisions. */
+export const PLAN_GATE_POLICY_VERSION = 4;
+
 export type WorkflowPolicyComponent = 'planning' | 'review' | 'verification';
 
 export const SUPPORTED_WORKFLOW_POLICY_VERSIONS = {
-  planning: [1, 2, 3],
+  planning: [1, 2, 3, 4],
   review: [1, 2],
   verification: [1, 2],
 } as const;
@@ -114,6 +147,9 @@ export interface WorkflowMetadataV3 {
     requirementsDigest: string;
     planVersion: number;
     planDecision: PlanDecision;
+    /** Planning policy 4 only; absent on older tasks so they round-trip unchanged. */
+    planPresentation?: PlanPresentationRecord;
+    planApproval?: PlanApprovalRecord;
     policyVersions: {
       planning: number | null;
       review: number | null;
@@ -141,6 +177,18 @@ export interface WorkflowMetadataV3 {
   } | null;
   startedAt: string;
   updatedAt: string;
+}
+
+/** True when plan decisions must go through present and an operator reply. */
+export function isPlanGated(metadata: WorkflowMetadataV3): boolean {
+  return (
+    metadata.governance.policyVersions.planning === PLAN_GATE_POLICY_VERSION
+  );
+}
+
+/** Policy 3 and 4 both mean document-bound man module delivery. */
+export function isDeliveryPlanningPolicy(version: number | null): boolean {
+  return version === 3 || version === PLAN_GATE_POLICY_VERSION;
 }
 
 /**
@@ -382,8 +430,8 @@ export function assertWorkflowMetadataTransition(
     );
   }
   if (
-    (previous.governance.policyVersions.planning === 3 ||
-      next.governance.policyVersions.planning === 3) &&
+    (isDeliveryPlanningPolicy(previous.governance.policyVersions.planning) ||
+      isDeliveryPlanningPolicy(next.governance.policyVersions.planning)) &&
     previous.governance.policyVersions.planning !==
       next.governance.policyVersions.planning
   ) {
@@ -579,6 +627,8 @@ function parseGovernance(value: unknown): WorkflowMetadataV3['governance'] {
       'requirementsDigest',
       'planVersion',
       'planDecision',
+      'planPresentation',
+      'planApproval',
       'policyVersions',
       'reviewStatus',
       'reviewLedgerDigest',
@@ -620,6 +670,12 @@ function parseGovernance(value: unknown): WorkflowMetadataV3['governance'] {
       'workflow metadata governance planVersion',
     ),
     planDecision: parsePlanDecision(value.planDecision),
+    ...(value.planPresentation === undefined
+      ? {}
+      : { planPresentation: parsePlanPresentation(value.planPresentation) }),
+    ...(value.planApproval === undefined
+      ? {}
+      : { planApproval: parsePlanApproval(value.planApproval) }),
     policyVersions: parsePolicyVersions(value.policyVersions),
     reviewStatus: value.reviewStatus as ReviewStatus,
     reviewLedgerDigest: parseDigest(
@@ -630,6 +686,140 @@ function parseGovernance(value: unknown): WorkflowMetadataV3['governance'] {
     verificationLedgerDigest: parseDigest(
       value.verificationLedgerDigest,
       'workflow metadata governance verificationLedgerDigest',
+    ),
+  };
+}
+
+function parsePlanPresentation(value: unknown): PlanPresentationRecord {
+  assertRecord(value, 'workflow metadata planPresentation');
+  assertKnownKeys(
+    value,
+    [
+      'planVersion',
+      'planDigest',
+      'scopeDigest',
+      'requirementsDigest',
+      'presentedAt',
+      'actorId',
+      'sessionId',
+      'operationId',
+    ],
+    'workflow metadata planPresentation',
+  );
+  return {
+    planVersion: parsePositiveInteger(
+      value.planVersion,
+      'workflow metadata planPresentation planVersion',
+    ),
+    planDigest: parseDigest(
+      value.planDigest,
+      'workflow metadata planPresentation planDigest',
+    ),
+    scopeDigest: parseDigest(
+      value.scopeDigest,
+      'workflow metadata planPresentation scopeDigest',
+    ),
+    requirementsDigest: parseDigest(
+      value.requirementsDigest,
+      'workflow metadata planPresentation requirementsDigest',
+    ),
+    presentedAt: parseTimestamp(
+      value.presentedAt,
+      'workflow metadata planPresentation presentedAt',
+    ),
+    actorId: parseUlid(
+      value.actorId,
+      'workflow metadata planPresentation actorId',
+    ),
+    sessionId: parseUlid(
+      value.sessionId,
+      'workflow metadata planPresentation sessionId',
+    ),
+    operationId: parseUlid(
+      value.operationId,
+      'workflow metadata planPresentation operationId',
+    ),
+  };
+}
+
+function parsePlanApproval(value: unknown): PlanApprovalRecord {
+  assertRecord(value, 'workflow metadata planApproval');
+  assertKnownKeys(
+    value,
+    [
+      'approvalSource',
+      'operatorReply',
+      'decision',
+      'planVersion',
+      'planDigest',
+      'scopeDigest',
+      'requirementsDigest',
+      'presentedAt',
+      'presentationOperationId',
+      'confirmedAt',
+      'actorId',
+      'sessionId',
+    ],
+    'workflow metadata planApproval',
+  );
+  if (
+    value.approvalSource !== 'operator_reply' &&
+    value.approvalSource !== 'unattended_waiver'
+  ) {
+    throw new Error('workflow metadata planApproval approvalSource is invalid');
+  }
+  const decision = parsePlanDecision(value.decision);
+  if (decision === null) {
+    throw new Error('workflow metadata planApproval decision is invalid');
+  }
+  if (value.approvalSource === 'operator_reply') {
+    parseNonEmptyString(
+      value.operatorReply,
+      'workflow metadata planApproval operatorReply',
+    );
+  } else if (value.operatorReply !== undefined) {
+    throw new Error(
+      'workflow metadata planApproval waiver cannot carry an operatorReply',
+    );
+  }
+  return {
+    approvalSource: value.approvalSource,
+    ...(value.operatorReply === undefined
+      ? {}
+      : { operatorReply: value.operatorReply as string }),
+    decision,
+    planVersion: parsePositiveInteger(
+      value.planVersion,
+      'workflow metadata planApproval planVersion',
+    ),
+    planDigest: parseDigest(
+      value.planDigest,
+      'workflow metadata planApproval planDigest',
+    ),
+    scopeDigest: parseDigest(
+      value.scopeDigest,
+      'workflow metadata planApproval scopeDigest',
+    ),
+    requirementsDigest: parseDigest(
+      value.requirementsDigest,
+      'workflow metadata planApproval requirementsDigest',
+    ),
+    presentedAt: parseTimestamp(
+      value.presentedAt,
+      'workflow metadata planApproval presentedAt',
+    ),
+    presentationOperationId: parseUlid(
+      value.presentationOperationId,
+      'workflow metadata planApproval presentationOperationId',
+    ),
+    confirmedAt: parseTimestamp(
+      value.confirmedAt,
+      'workflow metadata planApproval confirmedAt',
+    ),
+    actorId: parseUlid(value.actorId, 'workflow metadata planApproval actorId'),
+    sessionId: parseUlid(
+      value.sessionId,
+      'workflow metadata planApproval sessionId',
     ),
   };
 }
@@ -753,11 +943,37 @@ function parseLegacyCompatibility(
 }
 
 function assertWorkflowMetadataShape(metadata: WorkflowMetadataV3): void {
+  const planning = metadata.governance.policyVersions.planning;
   if (
-    metadata.governance.policyVersions.planning === 3 &&
-    metadata.workflowMode !== 'man'
+    (planning === 3 && metadata.workflowMode !== 'man') ||
+    (planning === PLAN_GATE_POLICY_VERSION &&
+      metadata.workflowMode !== 'man' &&
+      metadata.workflowMode !== 'manteam')
   ) {
     throw new Error('MANCODE_MAN_DELIVERY_MODE_REQUIRED');
+  }
+  if (
+    planning !== PLAN_GATE_POLICY_VERSION &&
+    (metadata.governance.planPresentation !== undefined ||
+      metadata.governance.planApproval !== undefined)
+  ) {
+    throw new Error('MANCODE_PLAN_GATE_POLICY_REQUIRED');
+  }
+  const approval = metadata.governance.planApproval;
+  if (
+    planning === PLAN_GATE_POLICY_VERSION &&
+    metadata.governance.planDecision !== null &&
+    approval === undefined
+  ) {
+    throw new Error('MANCODE_PLAN_APPROVAL_RECORD_REQUIRED');
+  }
+  if (
+    approval !== undefined &&
+    approval.decision !== metadata.governance.planDecision
+  ) {
+    throw new Error(
+      'workflow metadata governance planApproval decision mismatch',
+    );
   }
   if (metadata.workflowMode === 'man') {
     if (metadata.coordination !== 'single' || metadata.parent !== null) {
@@ -939,6 +1155,11 @@ function parseNonNegativeInteger(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer`);
   }
+  return value;
+}
+
+function parseUlid(value: unknown, label: string): Ulid {
+  assertUlid(value, label);
   return value;
 }
 

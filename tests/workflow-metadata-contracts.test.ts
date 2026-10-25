@@ -169,11 +169,11 @@ describe('workflow metadata V3 contract', () => {
         ...rawMetadata(),
         governance: {
           ...rawMetadata().governance,
-          policyVersions: { planning: 4, review: 1, verification: 1 },
+          policyVersions: { planning: 5, review: 1, verification: 1 },
         },
       }),
     ).toThrow(
-      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=4 supported=1,2,3 requiredWriter=>0.4.0/,
+      /MANCODE_POLICY_VERSION_UNSUPPORTED: component=planning observed=5 supported=1,2,3,4 requiredWriter=>0.4.0/,
     );
     expect(() =>
       parseWorkflowMetadata({

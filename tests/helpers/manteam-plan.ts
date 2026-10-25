@@ -1,5 +1,4 @@
 import { type Ulid, createUlid } from '../../src/context/ids.js';
-import { reviseV3Plan } from '../../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../../src/context/requirements-finalize.js';
 import {
   REQUIREMENT_DIMENSIONS,
@@ -8,6 +7,7 @@ import {
   requirementsLedgerDigest,
 } from '../../src/context/requirements-ledger.js';
 import type { TaskRef } from '../../src/context/task-ref.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './plan-gate.js';
 
 /** A complete human-readable plan used by collaboration fixtures. */
 export const CONFIRMED_MANTEAM_PLAN = `# Ownership lanes
@@ -45,6 +45,8 @@ export async function confirmManteamPlan(input: {
   sessionId: Ulid;
   requirements: RequirementsLedgerV1;
   now: Date;
+  /** False stops after the unconfirmed plan revision, before present/confirm. */
+  confirm?: boolean;
 }): Promise<{ taskRevision: number }> {
   const finalized = await finalizeV3Requirements({
     projectRoot: input.projectRoot,
@@ -65,7 +67,9 @@ export async function confirmManteamPlan(input: {
     sessionId: input.sessionId,
     expectedTaskRevision: finalized.metadata.revision,
     plan: CONFIRMED_MANTEAM_PLAN,
-    planDecision: 'governed_execution',
+    ...(input.confirm === false
+      ? {}
+      : { planDecision: 'governed_execution' as const }),
     operationId: createUlid(),
     now: input.now,
   });

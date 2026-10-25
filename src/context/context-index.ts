@@ -20,7 +20,8 @@ import {
   projectDecisions,
 } from './decision-record.js';
 import { scanLegacyAuthority } from './layout.js';
-import { readBoundManPlan } from './man-delivery-runtime.js';
+import { isManDelivery, readBoundManPlan } from './man-delivery-runtime.js';
+import { planApprovalWarningCodes } from './plan-gate.js';
 import { assertPrivacyValueAllowed } from './privacy-guard.js';
 import type { PrivacyPolicySnapshot } from './privacy-policy.js';
 import { redactSharedText } from './privacy.js';
@@ -57,6 +58,8 @@ export interface ContextIndexSnapshot {
     workflowMode: StoredTaskSnapshot['metadata']['workflowMode'];
     policyVersions: StoredTaskSnapshot['metadata']['governance']['policyVersions'];
     planDecision: string | null;
+    planApprovalSource?: string;
+    planApprovalWarnings?: string[];
   } | null;
   gaps: string[];
   absenceDisclosure?: boolean;
@@ -208,6 +211,15 @@ export function projectContextIndex(
         workflowMode: metadata.workflowMode,
         policyVersions: metadata.governance.policyVersions,
         planDecision: metadata.governance.planDecision,
+        ...(metadata.governance.planApproval === undefined
+          ? {}
+          : {
+              planApprovalSource:
+                metadata.governance.planApproval.approvalSource,
+              ...(planApprovalWarningCodes(metadata).length === 0
+                ? {}
+                : { planApprovalWarnings: planApprovalWarningCodes(metadata) }),
+            }),
       };
       add(
         `${ref}/requirements`,
@@ -369,9 +381,7 @@ export async function loadContextIndexSnapshot(
     const task =
       taskRef === null ? null : await store.readTaskSnapshot(taskRef);
     const boundPlan =
-      task?.plan &&
-      task.metadata.workflowMode === 'man' &&
-      task.metadata.governance.policyVersions.planning === 3
+      task?.plan && isManDelivery(task.metadata)
         ? (await readBoundManPlan(store.projectRoot, task)).document
         : undefined;
     const documents = await loadContextDocuments(store.projectRoot, {

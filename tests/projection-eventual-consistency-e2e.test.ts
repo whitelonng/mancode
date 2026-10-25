@@ -7,7 +7,6 @@ import { initializeV3Project } from '../src/commands/v3-init.js';
 import { createV3Checkpoint } from '../src/context/checkpoint-create.js';
 import { CURRENT_WRITER_CAPABILITIES } from '../src/context/compatibility.js';
 import { type Ulid, createUlid } from '../src/context/ids.js';
-import { reviseV3Plan } from '../src/context/plan-revision.js';
 import { finalizeV3Requirements } from '../src/context/requirements-finalize.js';
 import {
   REQUIREMENT_DIMENSIONS,
@@ -36,6 +35,7 @@ import {
 import { createLocalActor, readSharedActorProfile } from '../src/team/actor.js';
 import { listTeamEvents, teamEventDirectory } from '../src/team/events.js';
 import { joinTeam } from '../src/team/join.js';
+import { reviseV3PlanForTest as reviseV3Plan } from './helpers/plan-gate.js';
 
 const NOW = new Date('2026-07-18T10:00:00.000Z');
 const ACTOR_ID = id(4);

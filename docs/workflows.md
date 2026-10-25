@@ -102,8 +102,23 @@ policy 3 的每个必需验收项还要按证据槽位声明精确的期望观�
 mancode workflow create man "导出模块" --delivery --session <SESSION_ID> --client <CLIENT> --json
 # 按已有 requirements 协议完成澄清和 finalize 后：
 mancode workflow plan <TASK_REF> revise --file docs/export.md --scope-file scope.json --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
-mancode workflow plan <TASK_REF> confirm --plan-decision governed_execution --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
+mancode workflow plan <TASK_REF> present --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
+# 把 present 输出的计划摘要展示给操作者，等待其回复，再确认：
+mancode workflow plan <TASK_REF> confirm --plan-decision governed_execution --operator-reply "<操作者对该计划的回复>" --expected-revision <N> --session <SESSION_ID> --client <CLIENT> --json
 ```
+
+#### 计划审批门禁（planning policy 4）
+
+`--delivery` 创建的新 man 任务和新建的 manteam 任务使用 planning policy 4。这类任务的 plan decision 必须先 present 再 confirm：
+
+- `plan present`：写入 journal 的变更（revision 加一）。记录一条 present，绑定当前 planVersion、计划 digest、实施范围 digest 和 requirements digest，并输出计划摘要（范围、验收标准、计划文件）和一句"展示给操作者并等待回复后再 confirm"。同一组内容重复 present 是幂等的：返回已有记录，不产生新 revision。只能用于 Step 4 尚未决定的任务，或 `plan_only` 续接前。
+- `plan confirm`：必须有与当前计划、范围、需求一致的 present；在 confirm 之前，任何 revise、范围或需求变化都会使它失效（`MANCODE_PLAN_PRESENTATION_STALE`）。同时必须且只能提供 `--operator-reply "<原话>"`（去空白后非空、至多 2000 字符；shared 任务还要通过隐私筛查）或 `--unattended-waiver`。回复不得与任务里人写的文字重复：只比较 goal、范围条目（inScope/outOfScope）、requirements 与验收标准的描述、技术决定与默认值的描述，以及已确认决定的标题和说明；枚举值、ID、digest 不参与比较，也不与上一次审批的回复比较（`plan_only` 之后续接可以再次回复“Approved.”）。比较前统一大小写、空白和结尾标点，所以 "<goal>." 也算重复（`MANCODE_PLAN_OPERATOR_REPLY_REUSED`）。每次 present 只能支撑一次批准，重复使用报 `MANCODE_PLAN_PRESENTATION_CONSUMED`。present 之前会校验已绑定的计划文档，文档漂移时直接失败且不写入。
+- 审批记录写入 `governance.planApproval`，含 `approvalSource`（`operator_reply` 或 `unattended_waiver`）、回复原文、presentedAt、confirmedAt 及绑定的版本和 digest。`delivery inspect`、`delivery check`、交付记录、context index 和进度页都会显示审批信息；`unattended_waiver` 会被醒目标出（`UNATTENDED_WAIVER`）。批准记录不会被事后失效：它只记录当时批准的各项 digest。批准之后如果实施范围变化（例如 manteam 的 `workflow scope change`），inspect/check、交付记录、context index 和进度页会提示 `PLAN_APPROVAL_SCOPE_CHANGED`；本轮没有给 scope change 增加新的审批门禁。
+- 堵上的绕过路径：`plan revise` 不能再带 `--plan-decision`（`MANCODE_PLAN_DECISION_ON_REVISE_REJECTED`）；`handoff --to solo` 和 `plan_only` 转 `governed_execution` 需要同样的 present 与回复或豁免；reframe 会清空 decision、present 和审批记录，之后重新走一遍。
+- 团队任务：manteam 和 shared 任务只有任务 owner 可以 present 和 confirm（沿用 `shared_metadata_plan_mutation` 授权）；present 先检查 owner，即使已有相同的 present 记录，参与者也会得到 `MANCODE_TASK_OWNER_REQUIRED`。
+- 无人值守豁免：`--unattended-waiver` 只能在本会话确实没有操作者时（如 headless、CI）使用，绝不能替代向在场操作者提问，也不要为了通过门禁编造回复。项目配置 `.mancode/shared/config.json` 的 `unattendedWaiver: "allowed" | "forbidden"` 控制是否允许：缺省时本地单人任务允许、manteam 和 shared 任务禁用；显式 `allowed` 可以对 shared 项目放开，显式 `forbidden` 可以对本地项目禁用。禁用时报 `MANCODE_UNATTENDED_WAIVER_FORBIDDEN`。模型自己也能改这个配置，所以它只能挡住"顺手使用"，事后靠 `unattended_waiver` 标记发现。同类限制：手工把本地任务 metadata 的 planning 从 4 改成 3 就能绕过门禁；`plan_only` 续接批准时会覆盖第一次的审批记录（只保留最新一条）。
+- 兼容：planning 1–3 的任务保持原语义，不需要 present，`--operator-reply` / `--unattended-waiver` 会被拒绝（`MANCODE_PLAN_GATE_NOT_ENABLED`），`revise` 仍可带 `--plan-decision`；旧元数据逐字节保持不变。旧版 CLI 读取 policy 4 任务会报 `MANCODE_POLICY_VERSION_UNSUPPORTED`，团队成员需要同步升级。
+- 门禁能证明什么、不能证明什么：它不能证明回复确实来自操作者。present 与 confirm 只是两次 CLI 调用，模型可以自己 present 后立刻填一句"操作者原话"。它做到的是：计划必须先完整展示；计划、范围、需求一变，展示和审批都作废；审批依据（或无人值守豁免）与计划版本绑定留档，便于事后审核；并去掉了一次调用即可自批的几条路径。
 
 每步使用上一结果的新 revision。`scope.json` 的 include 要覆盖计划文件及获授权的进度页面；exclude 仍优先。无 Git 仍能规划和绑定文档，但不能声称版本化交付完成。
 
@@ -226,9 +241,13 @@ mancode workflow requirements local:<ULID> finalize \
 mancode workflow plan local:<ULID> revise \
   --file plan.md --scope-file scope.json \
   --expected-revision 2 --session <SESSION_ID>
+mancode workflow plan local:<ULID> present --expected-revision 3 --session <SESSION_ID>
 mancode workflow plan local:<ULID> confirm \
-  --plan-decision governed_execution --expected-revision 3 --session <SESSION_ID>
+  --plan-decision governed_execution --operator-reply "<操作者回复>" \
+  --expected-revision 4 --session <SESSION_ID>
 ```
+
+以上 `present` 与 `--operator-reply` 适用于 planning policy 4 的任务（见上文“计划审批门禁”）；planning 1–3 的任务直接 `confirm`，不带这两项。
 
 `plan revise` 必须通过 `--file <plan.md>` 读取 Markdown 计划。准备执行时同时通过
 `--scope-file <scope.json>` 绑定 `{ include, exclude, modules }`；`include` 是非空的

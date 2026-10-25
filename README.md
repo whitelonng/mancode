@@ -665,7 +665,8 @@ mancode workflow show <namespace:ULID> --json
 mancode context resume <local:ULID|shared:ULID> --session <id>
 mancode workflow requirements <namespace:ULID> finalize --file <requirements.json> --expected-revision <n> --session <id>
 mancode workflow plan <namespace:ULID> revise --file <plan.md> --scope-file <scope.json> --expected-revision <n> --session <id>
-mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|governed_execution> --expected-revision <n> --session <id>
+mancode workflow plan <namespace:ULID> present --expected-revision <n> --session <id>   # planning policy 4: show the plan to the operator, wait for their reply
+mancode workflow plan <namespace:ULID> confirm --plan-decision <plan_only|governed_execution> [--operator-reply "<text>" | --unattended-waiver] --expected-revision <n> --session <id>
 mancode workflow scope change <shared:ULID> --file <scope.json> --expected-revision <n> --session <id>
 mancode workflow update <namespace:ULID> --status <status> --expected-revision <n> --session <id>
 mancode workflow review <namespace:ULID> apply --file <review-ledger.json> --expected-revision <n> --session <id>

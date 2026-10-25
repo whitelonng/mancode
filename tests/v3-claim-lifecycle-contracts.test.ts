@@ -98,7 +98,7 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(15))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`claim:${claim.claim.claimId}`]: 2,
       },
     });
@@ -143,7 +143,7 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(25))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 3,
+        [`task:shared:${workflow.taskRef.taskId}`]: 5,
         [`claim:${claim.claim.claimId}`]: 1,
         [`claim:${id(24)}`]: 0,
       },
@@ -183,17 +183,17 @@ describe('V3 local claim lifecycle operations', () => {
       now: NOW,
     });
     expect(revalidated).toMatchObject({
-      metadata: { revision: 7, transitionState: 'stable' },
+      metadata: { revision: 9, transitionState: 'stable' },
       claim: {
         claimId: claim.claim.claimId,
         state: 'active',
         revision: 2,
-        taskRevisionAtAcquire: 3,
-        lastValidatedTaskRevision: 7,
+        taskRevisionAtAcquire: 5,
+        lastValidatedTaskRevision: 9,
         lastOperationId: id(37),
       },
       checkpoint: null,
-      taskHeadFence: { fenceRevision: 5, taskRevision: 7 },
+      taskHeadFence: { fenceRevision: 7, taskRevision: 9 },
       operation: { type: 'claim_revalidation', state: 'committed' },
     });
     const runtime = await readProjectRuntimeContext(root);
@@ -203,9 +203,9 @@ describe('V3 local claim lifecycle operations', () => {
     );
     await expect(readOperationJournal(home, id(37))).resolves.toMatchObject({
       expectedRevisions: {
-        [`task:shared:${workflow.taskRef.taskId}`]: 5,
+        [`task:shared:${workflow.taskRef.taskId}`]: 7,
         [`claim:${claim.claim.claimId}`]: 1,
-        [`task_head:${workflow.taskRef.taskId}`]: 4,
+        [`task_head:${workflow.taskRef.taskId}`]: 6,
       },
       entityLocks: expect.arrayContaining([
         `claim:${claim.claim.claimId}`,
