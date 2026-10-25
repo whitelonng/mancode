@@ -505,6 +505,27 @@ describe.skipIf(process.platform !== 'darwin')(
         });
       },
     );
+    it('keeps the stop reason when a later group signal reports EPERM', async () => {
+      await writeFile(
+        path.join(root, 'package/main.cjs'),
+        "process.stdout.write('x'.repeat(100000));setInterval(()=>{},1000)",
+      );
+      await setup();
+      const kill = process.kill.bind(process);
+      let groupSignals = 0;
+      // macOS returns EPERM when signalling a group whose leader exited but is not yet reaped.
+      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+        if (typeof pid === 'number' && pid < 0 && ++groupSignals > 1) {
+          throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+        }
+        return kill(pid, signal);
+      });
+      expect(await run()).toMatchObject({
+        status: 'outcome_unknown',
+        code: 'OUTPUT_LIMIT',
+      });
+      expect(groupSignals).toBeGreaterThan(1);
+    });
     it('honors cancellation before decrypting', async () => {
       await setup();
       const c = new AbortController();
