@@ -45,6 +45,7 @@ export async function runSecret(
           let total = 0;
           let failure: SecretCode | undefined;
           let killTimer: ReturnType<typeof setTimeout> | undefined;
+          let stopRequested = false;
           const child = spawn(executor.executable, [executor.entry], {
             cwd: executor.cwd,
             shell: false,
@@ -62,12 +63,17 @@ export async function runSecret(
               try {
                 process.kill(-child.pid, sig);
               } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== 'ESRCH')
-                  failure = 'EXECUTOR_FAILED';
+                const errno = (error as NodeJS.ErrnoException).code;
+                // macOS reports EPERM for a group whose leader exited but is not yet reaped.
+                const gone =
+                  errno === 'ESRCH' ||
+                  (errno === 'EPERM' && (stopRequested || done));
+                if (!gone) failure ??= 'EXECUTOR_FAILED';
               }
           };
           const stop = (why: SecretCode) => {
-            if (done) return;
+            if (done || stopRequested) return;
+            stopRequested = true;
             failure ??= why;
             child.stdin.destroy();
             kill('SIGTERM');
